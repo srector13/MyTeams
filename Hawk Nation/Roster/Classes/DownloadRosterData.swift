@@ -7,10 +7,8 @@
 //
 
 import Foundation
-import SwiftyJSON
-import Alamofire
 
-struct BasketballPlayer: Identifiable {
+struct BasketballPlayer: Identifiable, Hashable, Sendable {
     var id = UUID()
     var playerID: String
     var name: String
@@ -25,7 +23,8 @@ struct BasketballPlayer: Identifiable {
     var status: String
     var lastName: String
 }
-struct FootBallPlayer: Identifiable {
+
+struct FootBallPlayer: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var numberInt: Int
@@ -41,7 +40,8 @@ struct FootBallPlayer: Identifiable {
     var lastName: String
     var team: String
 }
-struct SoccerPlayer: Identifiable {
+
+struct SoccerPlayer: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var number: String
@@ -70,9 +70,9 @@ struct SoccerPlayer: Identifiable {
     var shotsFaced: Int
     var goalsConceded: Int
     var lastName: String
-    
 }
-struct BaseballPlayer: Identifiable {
+
+struct BaseballPlayer: Identifiable, Hashable, Sendable {
     var id = UUID()
     var playerID: String
     var name: String
@@ -91,307 +91,193 @@ struct BaseballPlayer: Identifiable {
     var lastName: String
 }
 
-func downloadBasketballRoster(completion: @escaping ([BasketballPlayer]) -> Void) {
-    var returnRoster = [BasketballPlayer]()
-    
-    OperationQueue().addOperation { AF.request("http://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/roster").responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, subJson):(String, JSON) in json["athletes"] {
-                
-                var playerName = ""
-                var playerID = ""
-                var playerNumber = ""
-                var playerHeight = ""
-                var playerWeight = ""
-                var playerPosition = ""
-                var playerGrade = ""
-                var numberInt = 1000
-                var playerHometown = ""
-                var playerPhoto = ""
-                var playerStatus = ""
-                var playerState = ""
-                var playerLastName = ""
-                
-                playerName = subJson["fullName"].stringValue
-                playerLastName = subJson["lastName"].stringValue
-                playerID = subJson["id"].stringValue
-                playerHeight = subJson["displayHeight"].stringValue
-                playerWeight = subJson["displayWeight"].stringValue
-                
-                playerNumber = subJson["jersey"].stringValue
-                numberInt = Int(playerNumber) ?? 1000
-                
-                let playerCity = subJson["birthPlace"]["city"].stringValue
-                if (subJson["birthPlace"]["state"].stringValue != "") {
-                    playerState = subJson["birthPlace"]["state"].stringValue
-                } else {
-                    playerState = subJson["birthPlace"]["country"].stringValue
-                }
-                
-                
-                
-                playerHometown = ("\(playerCity), \(playerState)")
-                
-                playerPosition = subJson["position"]["displayName"].stringValue
-                playerGrade = subJson["experience"]["displayValue"].stringValue
-                
-                playerPhoto = subJson["headshot"]["href"].stringValue
-                
-                playerStatus = subJson["status"]["name"].stringValue
-                
-                if (playerPhoto == "") {
-                    playerPhoto = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
-                }
-                
-                let tempPlayer = BasketballPlayer(playerID: playerID, name: playerName, number: playerNumber, numberInt: numberInt, height: playerHeight, weight: playerWeight, position: playerPosition, grade: playerGrade, hometown: playerHometown, photo: playerPhoto, status: playerStatus, lastName: playerLastName)
-                
-                returnRoster.append(tempPlayer)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            returnRoster = returnRoster.sorted(by: { $0.lastName < $1.lastName })
-            completion(returnRoster)
-        }
-        }
+/// Shown in place of a headshot the feed has no image for.
+private let missingHeadshot = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
+
+/// The jersey number sorted players without one to the end of the roster.
+private let noJerseyNumber = 1000
+
+private extension JSON {
+    /// An athlete's headshot, falling back to the generic silhouette.
+    var headshotURL: String {
+        let href = self["headshot"]["href"].stringValue
+        return href.isEmpty ? missingHeadshot : href
+    }
+
+    /// An athlete's jersey number as an integer, or `noJerseyNumber` when it
+    /// is absent or not numeric.
+    var jerseyNumber: Int {
+        Int(self["jersey"].stringValue) ?? noJerseyNumber
     }
 }
 
-func downloadFootballRoster(completion: @escaping ([FootBallPlayer]) -> Void) {
-    var returnRoster = [FootBallPlayer]()
-    
-    OperationQueue().addOperation { AF.request("http://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/roster").responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, subJson):(String, JSON) in json["athletes"] {
-                
-                var playerName = ""
-                var playerNumber = ""
-                var playerHeight = ""
-                var playerWeight = ""
-                var playerPosition = ""
-                var playerHometown = ""
-                var playerPhoto = ""
-                var playerDebutYear = ""
-                var playerCollege = ""
-                var numberInt = 1000
-                var playerAge = ""
-                var playerLastName = ""
-                let playerTeam = subJson["position"].stringValue
-                
-                for (_, itemsJson):(String, JSON) in subJson["items"] {
-                    
-                    playerName = itemsJson["fullName"].stringValue
-                    playerLastName = itemsJson["lastName"].stringValue
-                    playerHeight = itemsJson["displayHeight"].stringValue
-                    playerWeight = itemsJson["displayWeight"].stringValue
-                    playerNumber = itemsJson["jersey"].stringValue
-                    playerAge = itemsJson["age"].stringValue
-                    
-                    numberInt = Int(playerNumber) ?? 1000
-                    
-                    playerDebutYear = itemsJson["debutYear"].stringValue
-                    playerPosition = itemsJson["position"]["displayName"].stringValue
-                    playerPhoto = itemsJson["headshot"]["href"].stringValue
-                    playerCollege = itemsJson["college"]["name"].stringValue
-                    
-                    if (playerPhoto == "") {
-                        playerPhoto = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
-                    }
-                    
-                    let playerCity = itemsJson["birthPlace"]["city"].stringValue
-                    let playerState = itemsJson["birthPlace"]["state"].stringValue
-                    
-                    if (playerCity != "") {
-                        playerHometown = ("\(playerCity), \(playerState)")
-                    } else {
-                        playerHometown = "N/A"
-                    }
-                    
-                    let tempPlayer = FootBallPlayer(name: playerName, numberInt: numberInt, number: playerNumber, height: playerHeight, weight: playerWeight, position: playerPosition, hometown: playerHometown, photo: playerPhoto, debutYear: playerDebutYear, college: playerCollege, age: playerAge, lastName: playerLastName, team: playerTeam)
-                    
-                    returnRoster.append(tempPlayer)
-                }
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            returnRoster = returnRoster.sorted(by: { $0.lastName < $1.lastName })
-            completion(returnRoster)
-        }
-        }
+/// Loads the Kansas men's basketball roster, sorted by surname.
+func downloadBasketballRoster() async -> [BasketballPlayer] {
+    let json = await HTTPClient.json(
+        from: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/roster"
+    )
+
+    let roster = json["athletes"].map { _, athlete in
+        // College athletes list a state; international ones list a country
+        // instead.
+        let city = athlete["birthPlace"]["city"].stringValue
+        let region = athlete["birthPlace"]["state"].stringValue.isEmpty
+            ? athlete["birthPlace"]["country"].stringValue
+            : athlete["birthPlace"]["state"].stringValue
+
+        return BasketballPlayer(
+            playerID: athlete["id"].stringValue,
+            name: athlete["fullName"].stringValue,
+            number: athlete["jersey"].stringValue,
+            numberInt: athlete.jerseyNumber,
+            height: athlete["displayHeight"].stringValue,
+            weight: athlete["displayWeight"].stringValue,
+            position: athlete["position"]["displayName"].stringValue,
+            grade: athlete["experience"]["displayValue"].stringValue,
+            hometown: "\(city), \(region)",
+            photo: athlete.headshotURL,
+            status: athlete["status"]["name"].stringValue,
+            lastName: athlete["lastName"].stringValue
+        )
     }
+
+    return roster.sorted { $0.lastName < $1.lastName }
 }
 
-func downloadBaseballRoster(completion: @escaping ([BaseballPlayer]) -> Void) {
-    var returnRoster = [BaseballPlayer]()
-    
-    OperationQueue().addOperation { AF.request("http://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/roster").responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, subJson):(String, JSON) in json["athletes"] {
-                
-                var playerName = ""
-                var playerID = ""
-                var playerNumber = ""
-                var playerHeight = ""
-                var playerWeight = ""
-                var playerPosition = ""
-                var playerHometown = ""
-                var numberInt = 1000
-                var playerPhoto = ""
-                var playerDebutYear = ""
-                var playerCollege = ""
-                var playerBatHand = ""
-                var playerThrowHand = ""
-                var playerAge = ""
-                var playerLastName = ""
-                
-                for (_, itemsJson):(String, JSON) in subJson["items"] {
-                    playerID = itemsJson["id"].stringValue
-                    playerName = itemsJson["fullName"].stringValue
-                    playerLastName = itemsJson["lastName"].stringValue
-                    playerHeight = itemsJson["displayHeight"].stringValue
-                    playerWeight = itemsJson["displayWeight"].stringValue
-                    playerNumber = itemsJson["jersey"].stringValue
-                    numberInt = Int(playerNumber) ?? 1000
-                    playerDebutYear = itemsJson["debutYear"].stringValue
-                    playerPosition = itemsJson["position"]["displayName"].stringValue
-                    playerPhoto = itemsJson["headshot"]["href"].stringValue
-                    playerAge = itemsJson["age"].stringValue
-                    
-                    if (playerPhoto == "") {
-                        playerPhoto = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
-                    }
-                    
-                    playerCollege = itemsJson["college"]["name"].stringValue
-                    playerBatHand = itemsJson["bats"]["displayValue"].stringValue
-                    playerThrowHand = itemsJson["throws"]["displayValue"].stringValue
-                    
-                    let playerCity = itemsJson["birthPlace"]["city"].stringValue
-                    let playerState = itemsJson["birthPlace"]["state"].stringValue
-                    
-                    playerHometown = ("\(playerCity), \(playerState)")
+/// Loads the Chiefs roster, sorted by surname.
+///
+/// The NFL feed groups athletes by unit — offense, defense, special teams —
+/// so each group's `items` are flattened into a single roster.
+func downloadFootballRoster() async -> [FootBallPlayer] {
+    let json = await HTTPClient.json(
+        from: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/roster"
+    )
 
-                    let tempPlayer = BaseballPlayer(playerID: playerID, name: playerName, number: playerNumber, numberInt: numberInt, height: playerHeight, weight: playerWeight, position: playerPosition, hometown: playerHometown, photo: playerPhoto, debutYear: playerDebutYear, college: playerCollege, batHand: playerBatHand, throwHand: playerThrowHand, age: playerAge, lastName: playerLastName)
-                    
-                    returnRoster.append(tempPlayer)
-                }
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            returnRoster = returnRoster.sorted(by: { $0.lastName < $1.lastName })
-            completion(returnRoster)
-        }
+    var roster: [FootBallPlayer] = []
+
+    for (_, group): (String, JSON) in json["athletes"] {
+        let unit = group["position"].stringValue
+
+        for (_, athlete): (String, JSON) in group["items"] {
+            let city = athlete["birthPlace"]["city"].stringValue
+            let state = athlete["birthPlace"]["state"].stringValue
+
+            roster.append(
+                FootBallPlayer(
+                    name: athlete["fullName"].stringValue,
+                    numberInt: athlete.jerseyNumber,
+                    number: athlete["jersey"].stringValue,
+                    height: athlete["displayHeight"].stringValue,
+                    weight: athlete["displayWeight"].stringValue,
+                    position: athlete["position"]["displayName"].stringValue,
+                    hometown: city.isEmpty ? "N/A" : "\(city), \(state)",
+                    photo: athlete.headshotURL,
+                    debutYear: athlete["debutYear"].stringValue,
+                    college: athlete["college"]["name"].stringValue,
+                    age: athlete["age"].stringValue,
+                    lastName: athlete["lastName"].stringValue,
+                    team: unit
+                )
+            )
         }
     }
+
+    return roster.sorted { $0.lastName < $1.lastName }
 }
 
-func downloadSoccerRoster(completion: @escaping ([SoccerPlayer]) -> Void) {
-    var returnRoster = [SoccerPlayer]()
-    
-    OperationQueue().addOperation { AF.request("http://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/186/roster").responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, subJson):(String, JSON) in json["athletes"] {
-                
-                var playerName = ""
-                var playerLastName = ""
-                var playerNumber = ""
-                var numberInt = 1000
-                var playerHeight = ""
-                var playerWeight = ""
-                var playerPosition = ""
-                var playerPhoto = ""
-                var playerAge = ""
-                var playerBirthPlace = "N/A"
-                var playerCountry = "N/A"
-                var playerID = ""
-                var fouls = 0
-                var foulsSuffered = 0
-                var redCards = 0
-                var yellowCards = 0
-                var ownGoals = 0
-                var appearances = 0
-                var subAppearances = 0
-                var goalAssists = 0
-                var offsides = 0
-                var shotsOnTarget = 0
-                var totalShots = 0
-                var totalGoals = 0
-                var saves = 0
-                var shotsFaced = 0
-                var goalsConceded = 0
-                
-                playerName = subJson["fullName"].stringValue
-                playerLastName = subJson["lastName"].stringValue
-                playerID = subJson["id"].stringValue
-                playerHeight = subJson["displayHeight"].stringValue
-                playerWeight = subJson["displayWeight"].stringValue
-                playerPosition = subJson["position"]["displayName"].stringValue
-                playerNumber = subJson["jersey"].stringValue
-                numberInt = Int(playerNumber) ?? 1000
-                playerAge = subJson["age"].stringValue
-                
-                if (subJson["birthPlace"]["country"].stringValue != "")  {
-                    playerBirthPlace = subJson["birthPlace"]["country"].stringValue
-                }
-                
-                if (subJson["citizenship"].stringValue != "")  {
-                    playerCountry = subJson["citizenship"].stringValue
-                }
-            
-                playerPhoto = subJson["headshot"]["href"].stringValue
-                
-                if (playerPhoto == "") {
-                    playerPhoto = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
-                }
-                
-                fouls = subJson["statistics","splits","categories",0,"stats",0,"value"].intValue
-                foulsSuffered = subJson["statistics","splits","categories",0,"stats",1,"value"].intValue
-                redCards = subJson["statistics","splits","categories",0,"stats",2,"value"].intValue
-                yellowCards = subJson["statistics","splits","categories",0,"stats",3,"value"].intValue
-                ownGoals = subJson["statistics","splits","categories",0,"stats",4,"value"].intValue
-                appearances = subJson["statistics","splits","categories",0,"stats",5,"value"].intValue
-                subAppearances = subJson["statistics","splits","categories",0,"stats",6,"value"].intValue
-                goalAssists = subJson["statistics","splits","categories",1,"stats",0,"value"].intValue
-                offsides = subJson["statistics","splits","categories",1,"stats",1,"value"].intValue
-                shotsOnTarget = subJson["statistics","splits","categories",1,"stats",2,"value"].intValue
-                totalShots = subJson["statistics","splits","categories",1,"stats",3,"value"].intValue
-                totalGoals = subJson["statistics","splits","categories",1,"stats",4,"value"].intValue
-                saves = subJson["statistics","splits","categories",2,"stats",0,"value"].intValue
-                goalsConceded = subJson["statistics","splits","categories",2,"stats",2,"value"].intValue
-                shotsFaced = saves + goalsConceded
-                
-                
-                let tempPlayer = SoccerPlayer(name: playerName, number: playerNumber, numberInt: numberInt, height: playerHeight, weight: playerWeight, position: playerPosition, photo: playerPhoto, age: playerAge, playerID: playerID, birthPlace: playerBirthPlace, citizenshipCountry: playerCountry, fouls: fouls, foulsSuffered: foulsSuffered, redCards: redCards, yellowCards: yellowCards, ownGoals: ownGoals, appearances: appearances, subAppearances: subAppearances, goalAssists: goalAssists, offsides: offsides, shotsOnTarget: shotsOnTarget, totalShots: totalShots, totalGoals: totalGoals, saves: saves, shotsFaced: shotsFaced, goalsConceded: goalsConceded, lastName: playerLastName)
-                
-                returnRoster.append(tempPlayer)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            returnRoster = returnRoster.sorted(by: { $0.lastName < $1.lastName })
-            completion(returnRoster)
-        }
+/// Loads the Royals roster, sorted by surname.
+///
+/// Like the NFL feed, athletes arrive grouped by unit and are flattened.
+func downloadBaseballRoster() async -> [BaseballPlayer] {
+    let json = await HTTPClient.json(
+        from: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/roster"
+    )
+
+    var roster: [BaseballPlayer] = []
+
+    for (_, group): (String, JSON) in json["athletes"] {
+        for (_, athlete): (String, JSON) in group["items"] {
+            let city = athlete["birthPlace"]["city"].stringValue
+            let state = athlete["birthPlace"]["state"].stringValue
+
+            roster.append(
+                BaseballPlayer(
+                    playerID: athlete["id"].stringValue,
+                    name: athlete["fullName"].stringValue,
+                    number: athlete["jersey"].stringValue,
+                    numberInt: athlete.jerseyNumber,
+                    height: athlete["displayHeight"].stringValue,
+                    weight: athlete["displayWeight"].stringValue,
+                    position: athlete["position"]["displayName"].stringValue,
+                    hometown: "\(city), \(state)",
+                    photo: athlete.headshotURL,
+                    debutYear: athlete["debutYear"].stringValue,
+                    college: athlete["college"]["name"].stringValue,
+                    batHand: athlete["bats"]["displayValue"].stringValue,
+                    throwHand: athlete["throws"]["displayValue"].stringValue,
+                    age: athlete["age"].stringValue,
+                    lastName: athlete["lastName"].stringValue
+                )
+            )
         }
     }
+
+    return roster.sorted { $0.lastName < $1.lastName }
+}
+
+/// Loads the Sporting Kansas City roster, sorted by surname.
+///
+/// Season totals come embedded in the roster feed, in two categories for
+/// outfield players (discipline, then attacking) and a third for keepers.
+/// They are addressed by position, as the feed gives them no stable keys.
+func downloadSoccerRoster() async -> [SoccerPlayer] {
+    let json = await HTTPClient.json(
+        from: "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/186/roster"
+    )
+
+    let roster = json["athletes"].map { _, athlete in
+        let categories = athlete["statistics"]["splits"]["categories"]
+
+        func stat(_ category: Int, _ index: Int) -> Int {
+            categories[category]["stats"][index]["value"].intValue
+        }
+
+        let saves = stat(2, 0)
+        let goalsConceded = stat(2, 2)
+
+        let country = athlete["birthPlace"]["country"].stringValue
+        let citizenship = athlete["citizenship"].stringValue
+
+        return SoccerPlayer(
+            name: athlete["fullName"].stringValue,
+            number: athlete["jersey"].stringValue,
+            numberInt: athlete.jerseyNumber,
+            height: athlete["displayHeight"].stringValue,
+            weight: athlete["displayWeight"].stringValue,
+            position: athlete["position"]["displayName"].stringValue,
+            photo: athlete.headshotURL,
+            age: athlete["age"].stringValue,
+            playerID: athlete["id"].stringValue,
+            birthPlace: country.isEmpty ? "N/A" : country,
+            citizenshipCountry: citizenship.isEmpty ? "N/A" : citizenship,
+            fouls: stat(0, 0),
+            foulsSuffered: stat(0, 1),
+            redCards: stat(0, 2),
+            yellowCards: stat(0, 3),
+            ownGoals: stat(0, 4),
+            appearances: stat(0, 5),
+            subAppearances: stat(0, 6),
+            goalAssists: stat(1, 0),
+            offsides: stat(1, 1),
+            shotsOnTarget: stat(1, 2),
+            totalShots: stat(1, 3),
+            totalGoals: stat(1, 4),
+            saves: saves,
+            shotsFaced: saves + goalsConceded,
+            goalsConceded: goalsConceded,
+            lastName: athlete["lastName"].stringValue
+        )
+    }
+
+    return roster.sorted { $0.lastName < $1.lastName }
 }

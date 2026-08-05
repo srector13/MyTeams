@@ -7,14 +7,63 @@
 //
 
 import Foundation
-import SwiftyJSON
-import Alamofire
-import AlamofireImage
-import UIKit
 
-//NEED TO CREATE STRUCTS AND FUNCTIONS FOR BASEBALL AND SOCCER//
+/// The four teams the app follows, and everything that differs between them
+/// when reading a game summary.
+///
+/// Each case's raw value is the logo asset name, which is also the identifier
+/// the views pass around to say which team they are showing.
+enum Sport: String, Sendable, CaseIterable {
+    case jayhawk
+    case chiefs
+    case royals
+    case sporting
 
-struct GameInfo: Identifiable, Decodable {
+    /// The ESPN league path this team's summaries live under.
+    var summaryPath: String {
+        switch self {
+        case .jayhawk: "basketball/mens-college-basketball"
+        case .chiefs: "football/nfl"
+        case .royals: "baseball/mlb"
+        case .sporting: "soccer/usa.1"
+        }
+    }
+
+    /// How the followed team is named in a summary's `boxscore.teams` entries.
+    var boxscoreName: String {
+        switch self {
+        case .jayhawk: "Kansas"
+        case .chiefs: "Chiefs"
+        case .royals: "Royals"
+        case .sporting: "Kansas City"
+        }
+    }
+
+    /// The city the team plays home games in.
+    var homeCity: String {
+        switch self {
+        case .jayhawk: "Lawrence"
+        case .chiefs, .royals, .sporting: "Kansas City"
+        }
+    }
+
+    /// The team's own colour, used to tint a home game. Away games take the
+    /// host team's colour from the feed instead.
+    var homeColor: String {
+        switch self {
+        case .jayhawk: "0051BA"
+        case .chiefs: "E31837"
+        case .royals: "004687"
+        case .sporting: "002A5C"
+        }
+    }
+
+    func summaryURL(gameID: String) -> String {
+        "https://site.api.espn.com/apis/site/v2/sports/\(summaryPath)/summary?event=\(gameID)"
+    }
+}
+
+struct GameInfo: Identifiable, Hashable, Sendable {
     var id = UUID()
     var venueImage: String
     var city: String
@@ -22,9 +71,14 @@ struct GameInfo: Identifiable, Decodable {
     var capacity: String
     var attendance: String
     var gameColor: String
+
+    /// The value shown before a summary has loaded.
+    static let empty = GameInfo(
+        venueImage: "", city: "", state: "", capacity: "", attendance: "", gameColor: ""
+    )
 }
 
-struct BasketballGameTeamStats: Identifiable, Decodable {
+struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var fieldGoals: String
@@ -47,8 +101,7 @@ struct BasketballGameTeamStats: Identifiable, Decodable {
     var gameClock: String
 }
 
-// NEED TO FINISH //
-struct FootballGameTeamStats: Identifiable, Decodable {
+struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var yards: Int
@@ -64,7 +117,7 @@ struct FootballGameTeamStats: Identifiable, Decodable {
     var gameClock: String
 }
 
-struct BaseballGameTeamStats: Identifiable, Decodable {
+struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var yards: Float
@@ -76,7 +129,7 @@ struct BaseballGameTeamStats: Identifiable, Decodable {
     var gameClock: String
 }
 
-struct SoccerGameTeamStats: Identifiable, Decodable {
+struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var yards: Float
@@ -88,346 +141,153 @@ struct SoccerGameTeamStats: Identifiable, Decodable {
     var gameClock: String
 }
 
-func downloadGameInfo(gameID: String, type: String, completion: @escaping (GameInfo) -> Void) {
-    var returnGames = GameInfo(venueImage: "", city: "", state: "", capacity: "", attendance: "", gameColor: "")
-    var queryURL = ""
-    
-    switch type {
-    case "jayhawk":
-        queryURL = ("http://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=" + gameID)
-    case "chiefs":
-        queryURL = ("http://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + gameID)
-    case "royals":
-        queryURL = ("https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary?event=" + gameID)
-        print(queryURL)
-    case "sporting":
-        queryURL = ("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=" + gameID)
-        print(queryURL)
-    default:
-        print("error - No valid type found")
+/// Loads the venue details shown behind a game's detail sheet.
+///
+/// The accent colour follows the host: at home the team's own colour is used,
+/// and away the colour comes from whichever competitor is not the followed
+/// team.
+func downloadGameInfo(gameID: String, sport: Sport) async -> GameInfo {
+    let json = await HTTPClient.json(from: sport.summaryURL(gameID: gameID))
+
+    let venue = json["gameInfo"]["venue"]
+    let city = venue["address"]["city"].stringValue
+
+    let color: String
+    if city == sport.homeCity {
+        color = sport.homeColor
+    } else if json["boxscore", "teams", 0, "team", "shortDisplayName"].stringValue == sport.boxscoreName {
+        color = json["boxscore", "teams", 1, "team", "color"].stringValue
+    } else {
+        color = json["boxscore", "teams", 0, "team", "color"].stringValue
     }
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            let venueImage = json["gameInfo","venue","images",0,"href"].stringValue
-            let city = json["gameInfo","venue","address","city"].stringValue
-            let state = json["gameInfo","venue","address","state"].stringValue
-            let capacity = json["gameInfo","venue","capacity"].stringValue
-            let attendance = json["gameInfo","attendance"].stringValue
-            var color = ""
-            
-            switch type {
-            case "jayhawk":
-                if (city == "Lawrence") {
-                    color = "0051BA"
-                } else {
-                    if(json["boxscore","teams",0,"team","shortDisplayName"].stringValue == "Kansas") {
-                        color = json["boxscore","teams",1,"team","color"].stringValue
-                    } else {
-                        color = json["boxscore","teams",0,"team","color"].stringValue
-                    }
-                }
-            case "chiefs":
-                if (city == "Kansas City") {
-                    color = "E31837"
-                } else {
-                    if(json["boxscore","teams",0,"team","shortDisplayName"].stringValue == "Chiefs") {
-                        color = json["boxscore","teams",1,"team","color"].stringValue
-                    } else {
-                        color = json["boxscore","teams",0,"team","color"].stringValue
-                    }
-                }
-            case "royals":
-                if (city == "Kansas City") {
-                    color = "004687"
-                } else {
-                    if(json["boxscore","teams",0,"team","shortDisplayName"].stringValue == "Royals") {
-                        color = json["boxscore","teams",1,"team","color"].stringValue
-                    } else {
-                        color = json["boxscore","teams",0,"team","color"].stringValue
-                    }
-                }
-            default:
-                print("error - No valid type found")
-            }
-            
-            let tempGameInfo = GameInfo(venueImage: venueImage, city: city, state: state, capacity: capacity, attendance: attendance, gameColor: color)
-            returnGames = tempGameInfo
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
+
+    return GameInfo(
+        venueImage: venue["images", 0, "href"].stringValue,
+        city: city,
+        state: venue["address"]["state"].stringValue,
+        capacity: venue["capacity"].stringValue,
+        attendance: json["gameInfo"]["attendance"].stringValue,
+        gameColor: color
+    )
+}
+
+/// Loads a game's venue details by team identifier.
+///
+/// Views carry the team as the logo asset name; an unrecognised name yields an
+/// empty summary rather than a failed request.
+func downloadGameInfo(gameID: String, type: String) async -> GameInfo {
+    guard let sport = Sport(rawValue: type) else { return .empty }
+    return await downloadGameInfo(gameID: gameID, sport: sport)
+}
+
+/// Loads both teams' box score lines for a basketball game.
+///
+/// Statistics are addressed by position because the feed lists them in a fixed
+/// order without stable identifiers.
+func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGameTeamStats] {
+    let json = await HTTPClient.json(from: Sport.jayhawk.summaryURL(gameID: gameID))
+
+    let competitors = json["header", "competitions", 0, "competitors"]
+    let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
+
+    /// College basketball scores arrive per half, so a team's total is the sum
+    /// of its line scores.
+    func halfTotal(_ index: Int) -> Int {
+        competitors[index]["linescores", 0, "displayValue"].intValue
+            + competitors[index]["linescores", 1, "displayValue"].intValue
+    }
+
+    let jayhawksAreFirst = competitors[0]["team"]["name"].stringValue == "Jayhawks"
+    let teamScore = halfTotal(jayhawksAreFirst ? 0 : 1)
+    let opponentScore = halfTotal(jayhawksAreFirst ? 1 : 0)
+
+    return json["boxscore"]["teams"].enumerated().map { index, element in
+        let team = element.1
+        let statistics = team["statistics"]
+
+        return BasketballGameTeamStats(
+            name: team["team"]["name"].stringValue,
+            fieldGoals: statistics[0]["displayValue"].stringValue,
+            fieldGoalPct: statistics[1]["displayValue"].floatValue,
+            threePoints: statistics[2]["displayValue"].stringValue,
+            threePointPct: statistics[3]["displayValue"].floatValue,
+            freeThrows: statistics[4]["displayValue"].stringValue,
+            freeThrowPct: statistics[5]["displayValue"].floatValue,
+            offensiveRebounds: statistics[7]["displayValue"].intValue,
+            defensiveRebounds: statistics[8]["displayValue"].intValue,
+            assists: statistics[10]["displayValue"].intValue,
+            steals: statistics[11]["displayValue"].intValue,
+            blocks: statistics[12]["displayValue"].intValue,
+            turnOvers: statistics[13]["displayValue"].intValue,
+            fouls: statistics[19]["displayValue"].intValue,
+            largestLead: statistics[20]["displayValue"].intValue,
+            // The box score lists the away team first, matching the
+            // predictor's away/home pair.
+            projection: index == 0
+                ? json["predictor"]["awayTeam"]["gameProjection"].floatValue
+                : json["predictor"]["homeTeam"]["gameProjection"].floatValue,
+            score: teamScore,
+            opponentScore: opponentScore,
+            gameClock: gameClock
+        )
     }
 }
 
-func downloadSoccerGameInfo(gameID: String, type: String, completion: @escaping (GameInfo) -> Void) {
-    var returnGames = GameInfo(venueImage: "", city: "", state: "", capacity: "", attendance: "", gameColor: "")
-    let queryURL = ("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=" + gameID)
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            let venueImage = json["gameInfo","venue","images",0,"href"].stringValue
-            let city = json["gameInfo","venue","address","city"].stringValue
-            let state = json["gameInfo","venue","address","state"].stringValue
-            let capacity = json["gameInfo","venue","capacity"].stringValue
-            let attendance = json["gameInfo","attendance"].stringValue
-            var color = ""
-            
-            if (city == "Kansas City") {
-                color = "002A5C"
-            } else {
-                if(json["boxscore","teams",0,"team","shortDisplayName"].stringValue == "Kansas City") {
-                    //Do nothing
-                    color = json["boxscore","teams",1,"team","color"].stringValue
-                } else {
-                    color = json["boxscore","teams",0,"team","color"].stringValue
-                }
-            }
-            
-            let tempGameInfo = GameInfo(venueImage: venueImage, city: city, state: state, capacity: capacity, attendance: attendance, gameColor: color)
-            print(tempGameInfo)
-            returnGames = tempGameInfo
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
+/// Loads both teams' box score lines for a football game.
+func downloadFootballGameTeamStatsData(gameID: String) async -> [FootballGameTeamStats] {
+    let json = await HTTPClient.json(from: Sport.chiefs.summaryURL(gameID: gameID))
+
+    let competitors = json["header", "competitions", 0, "competitors"]
+    let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
+
+    let chiefsAreFirst = competitors[0]["team"]["name"].stringValue == "Chiefs"
+    let teamScore = competitors[chiefsAreFirst ? 0 : 1]["score"].intValue
+    let opponentScore = competitors[chiefsAreFirst ? 1 : 0]["score"].intValue
+
+    return json["boxscore"]["teams"].map { _, team in
+        let statistics = team["statistics"]
+
+        return FootballGameTeamStats(
+            name: team["team"]["name"].stringValue,
+            yards: statistics[7]["displayValue"].intValue,
+            passingYards: statistics[10]["displayValue"].intValue,
+            rushingYards: statistics[15]["displayValue"].intValue,
+            firstDowns: statistics[0]["displayValue"].intValue,
+            drives: statistics[9]["displayValue"].intValue,
+            score: teamScore,
+            interceptions: statistics[13]["displayValue"].intValue,
+            possesionTime: statistics[24]["displayValue"].stringValue,
+            completionAttempts: statistics[11]["displayValue"].intValue,
+            opponentScore: opponentScore,
+            gameClock: gameClock
+        )
     }
 }
 
-func downloadBasketballGameTeamStatsData(gameID: String, completion: @escaping ([BasketballGameTeamStats]) -> Void) {
-    var returnGames = [BasketballGameTeamStats]()
-    let queryURL = ("http://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=" + gameID)
-    print(queryURL)
-    var counter = 0
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            var homeScore = 0
-            var awayScore = 0
-            let tempGameClock = json["header","competitions",0,"status","type","detail"].stringValue
-            
-            //Get Scores
-            if json["header","competitions",0,"competitors",0,"team","name"].stringValue == "Jayhawks" {
-                homeScore = json["header","competitions",0,"competitors",0,"linescores",0,"displayValue"].intValue + json["header","competitions",0,"competitors",0,"linescores",1,"displayValue"].intValue
-                awayScore = json["header","competitions",0,"competitors",1,"linescores",0,"displayValue"].intValue + json["header","competitions",0,"competitors",1,"linescores",1,"displayValue"].intValue
-            } else {
-                homeScore = json["header","competitions",0,"competitors",1,"linescores",0,"displayValue"].intValue + json["header","competitions",0,"competitors",1,"linescores",1,"displayValue"].intValue
-                awayScore = json["header","competitions",0,"competitors",0,"linescores",0,"displayValue"].intValue + json["header","competitions",0,"competitors",0,"linescores",1,"displayValue"].intValue
-            }
-            
-            for (_, subJson):(String, JSON) in json["boxscore"]["teams"] {
-                let tempName = subJson["team"]["name"].stringValue
-                let tempFieldGoals = subJson["statistics",0,"displayValue"].stringValue
-                let tempFieldGoalPct = subJson["statistics",1,"displayValue"].floatValue
-                let tempThreePoints = subJson["statistics",2,"displayValue"].stringValue
-                let tempThreePointPct = subJson["statistics",3,"displayValue"].floatValue
-                let tempFreeThrows = subJson["statistics",4,"displayValue"].stringValue
-                let tempFreeThrowPct = subJson["statistics",5,"displayValue"].floatValue
-                let tempOffensiveRebounds = subJson["statistics",7,"displayValue"].intValue
-                let tempDefensiveRebounds = subJson["statistics",8,"displayValue"].intValue
-                let tempAssists = subJson["statistics",10,"displayValue"].intValue
-                let tempSteals = subJson["statistics",11,"displayValue"].intValue
-                let tempBlocks = subJson["statistics",12,"displayValue"].intValue
-                let tempTurnOvers = subJson["statistics",13,"displayValue"].intValue
-                let tempFouls = subJson["statistics",19,"displayValue"].intValue
-                let tempLargestLead = subJson["statistics",20,"displayValue"].intValue
-                var tempProjection = subJson["statistics",1,"displayValue"].floatValue
-                
-                
-                //FIND LOGIC
-                if(counter == 1) {
-                    tempProjection = json["predictor"]["homeTeam"]["gameProjection"].floatValue
-                    
-                } else {
-                    tempProjection = json["predictor"]["awayTeam"]["gameProjection"].floatValue
-                }
-                
-                counter+=1
-                
-                let tempGameStats = BasketballGameTeamStats(name: tempName, fieldGoals: tempFieldGoals, fieldGoalPct: tempFieldGoalPct, threePoints: tempThreePoints, threePointPct: tempThreePointPct, freeThrows: tempFreeThrows, freeThrowPct: tempFreeThrowPct, offensiveRebounds: tempOffensiveRebounds, defensiveRebounds: tempDefensiveRebounds, assists: tempAssists, steals: tempSteals, blocks: tempBlocks, turnOvers: tempTurnOvers, fouls: tempFouls, largestLead: tempLargestLead, projection: tempProjection, score: homeScore, opponentScore: awayScore, gameClock: tempGameClock)
-                returnGames.append(tempGameStats)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
+// The baseball and soccer detail views were never finished: they show a fixed
+// layout rather than live figures. These loaders return one placeholder entry
+// per team so those views lay out as they always have.
+
+/// Returns a placeholder line per team in a baseball game's box score.
+func downloadBaseballGameTeamStatsData(gameID: String) async -> [BaseballGameTeamStats] {
+    let json = await HTTPClient.json(from: Sport.royals.summaryURL(gameID: gameID))
+
+    return json["boxscore"]["teams"].map { _, _ in
+        BaseballGameTeamStats(
+            name: "", yards: 0, passingYards: 0, rushingYards: 0,
+            projection: 0, score: 0, opponentScore: 0, gameClock: "test"
+        )
     }
 }
 
-// NEED TO FINISH //
-func downloadFootballGameTeamStatsData(gameID: String, completion: @escaping ([FootballGameTeamStats]) -> Void) {
-    var returnGames = [FootballGameTeamStats]()
-    
-    let queryURL = ("http://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + gameID)
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            var counter = 0
-            
-            var homeScore = 0
-            var awayScore = 0
-            let tempGameClock = json["header","competitions",0,"status","type","detail"].stringValue
-            
-            //Get Scores
-            if json["header","competitions",0,"competitors",0,"team","name"].stringValue == "Chiefs" {
-                homeScore = json["header","competitions",0,"competitors",0,"score"].intValue
-                awayScore = json["header","competitions",0,"competitors",1,"score"].intValue
-            } else {
-                homeScore = json["header","competitions",0,"competitors",1,"score"].intValue
-                awayScore = json["header","competitions",0,"competitors",0,"score"].intValue
-            }
-            
-            for (_, subJson):(String, JSON) in json["boxscore"]["teams"] {
-                let tempName = subJson["team"]["name"].stringValue
-                let tempYards = subJson["statistics",7,"displayValue"].intValue
-                let tempPassingYards = subJson["statistics",10,"displayValue"].intValue
-                let tempRushingYards = subJson["statistics",15,"displayValue"].intValue
-                let tempFirstDowns = subJson["statistics",0,"displayValue"].intValue
-                let tempDrives = subJson["statistics",9,"displayValue"].intValue
-                let tempInterceptions = subJson["statistics",13,"displayValue"].intValue
-                let tempPossessionTime = subJson["statistics",24,"displayValue"].stringValue
-                let tempCompletionAttempts = subJson["statistics",11,"displayValue"].intValue
-                let tempFumbles = subJson["statistics",21,"displayValue"].intValue
-                
-                
-                counter+=1
-                
-                let tempGameStats = FootballGameTeamStats(name: tempName, yards: tempYards, passingYards: tempPassingYards, rushingYards: tempRushingYards, firstDowns: tempFirstDowns, drives: tempDrives, score: homeScore, interceptions: tempInterceptions, possesionTime: tempPossessionTime, completionAttempts: tempCompletionAttempts, opponentScore: awayScore, gameClock: tempGameClock)
-                returnGames.append(tempGameStats)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
-    }
-}
+/// Returns a placeholder line per team in a soccer game's box score.
+func downloadSoccerGameTeamStatsData(gameID: String) async -> [SoccerGameTeamStats] {
+    let json = await HTTPClient.json(from: Sport.sporting.summaryURL(gameID: gameID))
 
-func downloadBaseballGameTeamStatsData(gameID: String, completion: @escaping ([BaseballGameTeamStats]) -> Void) {
-    var returnGames = [BaseballGameTeamStats]()
-    
-    let queryURL = ("http://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=" + gameID)
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, _):(String, JSON) in json["boxscore"]["teams"] {
-                /*
-                let tempName = subJson["team"]["name"].stringValue
-                let tempFieldGoals = subJson["statistics",0,"displayValue"].stringValue
-                let tempFieldGoalPct = subJson["statistics",1,"displayValue"].floatValue
-                let tempThreePoints = subJson["statistics",2,"displayValue"].stringValue
-                let tempThreePointPct = subJson["statistics",3,"displayValue"].floatValue
-                let tempFreeThrows = subJson["statistics",4,"displayValue"].stringValue
-                let tempFreeThrowPct = subJson["statistics",5,"displayValue"].floatValue
-                let tempOffensiveRebounds = subJson["statistics",7,"displayValue"].intValue
-                let tempDefensiveRebounds = subJson["statistics",8,"displayValue"].intValue
-                let tempAssists = subJson["statistics",10,"displayValue"].intValue
-                let tempSteals = subJson["statistics",11,"displayValue"].intValue
-                let tempBlocks = subJson["statistics",12,"displayValue"].intValue
-                let tempTurnOvers = subJson["statistics",13,"displayValue"].intValue
-                let tempFouls = subJson["statistics",19,"displayValue"].intValue
-                let tempLargestLead = subJson["statistics",20,"displayValue"].intValue
-                var tempProjection = subJson["statistics",1,"displayValue"].floatValue
-                
-                //FIND LOGIC
-                if(counter == 1) {
-                    tempProjection = json["predictor"]["homeTeam"]["gameProjection"].floatValue
-                } else {
-                    tempProjection = json["predictor"]["awayTeam"]["gameProjection"].floatValue
-                }
-                
-                counter+=1
-                */
-                let tempGameStats = BaseballGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test")
-                returnGames.append(tempGameStats)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
-    }
-}
-
-func downloadSoccerGameTeamStatsData(gameID: String, completion: @escaping ([SoccerGameTeamStats]) -> Void) {
-    var returnGames = [SoccerGameTeamStats]()
-    
-    let queryURL = ("https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/summary?event=" + gameID)
-    print(queryURL)
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, _):(String, JSON) in json["boxscore"]["teams"] {
-                /*
-                let tempName = subJson["team"]["name"].stringValue
-                let tempFieldGoals = subJson["statistics",0,"displayValue"].stringValue
-                let tempFieldGoalPct = subJson["statistics",1,"displayValue"].floatValue
-                let tempThreePoints = subJson["statistics",2,"displayValue"].stringValue
-                let tempThreePointPct = subJson["statistics",3,"displayValue"].floatValue
-                let tempFreeThrows = subJson["statistics",4,"displayValue"].stringValue
-                let tempFreeThrowPct = subJson["statistics",5,"displayValue"].floatValue
-                let tempOffensiveRebounds = subJson["statistics",7,"displayValue"].intValue
-                let tempDefensiveRebounds = subJson["statistics",8,"displayValue"].intValue
-                let tempAssists = subJson["statistics",10,"displayValue"].intValue
-                let tempSteals = subJson["statistics",11,"displayValue"].intValue
-                let tempBlocks = subJson["statistics",12,"displayValue"].intValue
-                let tempTurnOvers = subJson["statistics",13,"displayValue"].intValue
-                let tempFouls = subJson["statistics",19,"displayValue"].intValue
-                let tempLargestLead = subJson["statistics",20,"displayValue"].intValue
-                var tempProjection = subJson["statistics",1,"displayValue"].floatValue
-                
-                //FIND LOGIC
-                if(counter == 1) {
-                    tempProjection = json["predictor"]["homeTeam"]["gameProjection"].floatValue
-                } else {
-                    tempProjection = json["predictor"]["awayTeam"]["gameProjection"].floatValue
-                }
-                
-                counter+=1
-                */
-                let tempGameStats = SoccerGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test")
-                returnGames.append(tempGameStats)
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-        }
+    return json["boxscore"]["teams"].map { _, _ in
+        SoccerGameTeamStats(
+            name: "", yards: 0, passingYards: 0, rushingYards: 0,
+            projection: 0, score: 0, opponentScore: 0, gameClock: "test"
+        )
     }
 }

@@ -6,73 +6,55 @@
 //  Copyright © 2020 Stephen Rector. All rights reserved.
 //
 
-import SwiftUI
 import Foundation
-import Alamofire
-import SwiftyJSON
 
-struct News: Identifiable, Equatable {
+struct News: Identifiable, Equatable, Hashable, Sendable {
     var id = UUID()
-    //public let source: NewsSource
-    public let author: String?
-    public let title: String
-    public let articleDescription: String?
-    public let url: URL
-    public let urlToImage: URL?
-    public let publishedAt: Date
-    public let content: String?
-    public let source: String
+    let author: String?
+    let title: String
+    let articleDescription: String?
+    let url: URL
+    let urlToImage: URL?
+    let publishedAt: Date
+    let content: String?
+    let source: String
 }
 
-func downloadNewsData(queryURL: String, completion: @escaping ([News]) -> Void) {
-    var returnNews = [News]()
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
+/// Parses the `publishedAt` timestamps NewsAPI returns, e.g.
+/// `2021-01-18T23:00:00Z`.
+private let publishedAtFormat = Date.ISO8601FormatStyle()
 
-            for (_, subJson):(String, JSON) in json["articles"] {
-                
-                _ = ""
-                var newsSource = ""
-                var newsAuthor = ""
-                var newsTitle = ""
-                var newsDescription = ""
-                var newsURL = URL(string: "https://www.google.com")
-                var newsURLToImage = URL(string: "https://www.google.com")
-                var newsPublishedAt = Date()
-                var newsContent = ""
-                
-                newsAuthor = subJson["author"].stringValue
-                newsSource = subJson["source"]["name"].stringValue
-                newsTitle = subJson["title"].stringValue
-                newsDescription = subJson["description"].stringValue
-                newsURL = URL(string: subJson["url"].stringValue)
-                newsURLToImage = URL(string: subJson["urlToImage"].stringValue)
-                newsContent = subJson["content"].stringValue
-                
-                    
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
-                
-                let isoFormatter = ISO8601DateFormatter()
-                    
-                newsPublishedAt = isoFormatter.date(from: subJson["publishedAt"].stringValue)!
-                
-                let tempArticle = News(author: newsAuthor, title: newsTitle, articleDescription: newsDescription, url: newsURL!, urlToImage: newsURLToImage, publishedAt: newsPublishedAt, content: newsContent, source: newsSource)
-                
-                if(!returnNews.contains(where: {$0.title == tempArticle.title})) {
-                    returnNews.append(tempArticle)
-                }
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnNews)
+/// Loads a NewsAPI feed and returns its articles in the order the service
+/// ranked them.
+///
+/// An article whose title has already been seen is dropped: the same story is
+/// frequently syndicated across the outlets these feeds draw from.
+func downloadNewsData(queryURL: String) async -> [News] {
+    let json = await HTTPClient.json(from: queryURL)
+    var articles: [News] = []
+
+    for (_, subJson): (String, JSON) in json["articles"] {
+        // An article with no readable link cannot be opened, and one with no
+        // timestamp cannot be placed in the feed, so skip either.
+        guard let url = URL(string: subJson["url"].stringValue),
+              let publishedAt = try? publishedAtFormat.parse(subJson["publishedAt"].stringValue)
+        else { continue }
+
+        let article = News(
+            author: subJson["author"].stringValue,
+            title: subJson["title"].stringValue,
+            articleDescription: subJson["description"].stringValue,
+            url: url,
+            urlToImage: URL(string: subJson["urlToImage"].stringValue),
+            publishedAt: publishedAt,
+            content: subJson["content"].stringValue,
+            source: subJson["source"]["name"].stringValue
+        )
+
+        if !articles.contains(where: { $0.title == article.title }) {
+            articles.append(article)
         }
     }
-    }
+
+    return articles
 }

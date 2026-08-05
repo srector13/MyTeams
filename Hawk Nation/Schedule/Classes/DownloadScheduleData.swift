@@ -7,10 +7,8 @@
 //
 
 import Foundation
-import SwiftyJSON
-import Alamofire
 
-struct Game: Identifiable, Decodable, Hashable {
+struct Game: Identifiable, Hashable, Sendable {
     var id = UUID()
     var team: String
     var opponent: String
@@ -35,258 +33,176 @@ struct Game: Identifiable, Decodable, Hashable {
     var gameHalftime: Bool
 }
 
-func downloadScheduleData(queryURL: String, teamName: String, completion: @escaping ([Game]) -> Void) {
-    var returnGames = [Game]()
-    var count = 0
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            
-            for (_, subJson):(String, JSON) in json["events"] {
-                
-                var gameOpponent = ""
-                var gameScore = ""
-                var gameOpponentScore = ""
-                var gameTime = ""
-                var gameDate = ""
-                var gameOpponentLogo = ""
-                var gameChannel = ""
-                var gameLocation = ""
-                var gameHome = Bool()
-                var id = ""
-                var gameDateAsDate = Date()
-                var Win = Bool()
-                var gameCompleted = Bool()
-                let gameCompetitionName = subJson["name"].stringValue
-                var gameCancelled = Bool()
-                var gamePostponed = Bool()
-                var tempGameClock = ""
-                var tempGamePeriod = ""
-                var tempGameHalftime = false
-                
-                for (_, competitionsJson):(String, JSON) in subJson["competitions"] {
-                    gameLocation = competitionsJson["venue"]["fullName"].stringValue
-                    id = competitionsJson["id"].stringValue
-                    var date = subJson["date"].stringValue
-                    date = date.replacingOccurrences(of: "T", with: " ")
-                    date = date.replacingOccurrences(of: "Z", with: "")
-                    
-                    let dateFormatterGet = DateFormatter()
-                    dateFormatterGet.dateFormat = "yyyy-MM-dd HH:mm"
-                    
-                    let dateFormatterPrint = DateFormatter()
-                    let timeFormatterPrint = DateFormatter()
-                    dateFormatterPrint.dateFormat = "MMM dd, yyyy"
-                    timeFormatterPrint.dateFormat = "h:mm a"
-                    
-                    if var tempDate = dateFormatterGet.date(from: date) {
-                        tempDate.addTimeInterval(TimeInterval(-6.0 * 3600.0))
-                        gameDateAsDate = tempDate
-                        gameDate = dateFormatterPrint.string(from: tempDate)
-                        gameTime = timeFormatterPrint.string(from: tempDate)
-                    } else {
-                        print("There was an error decoding the string")
-                    }
-                    
-                    gameCompleted = competitionsJson["status"]["type"]["completed"].boolValue
-                    
-                    if competitionsJson["status"]["type"]["description"].stringValue == "Halftime" {
-                        tempGameHalftime = true
-                    }
-                    
-                    gameChannel = competitionsJson["broadcasts",0,"media","shortName"].stringValue
-                    
-                    if(competitionsJson["status"]["type"]["detail"].stringValue == "Postponed") {
-                        gamePostponed = true
-                    } else {
-                        gamePostponed = false
-                    }
-                    
-                    if(competitionsJson["status"]["type"]["detail"].stringValue == "Canceled") {
-                        gameCancelled = true
-                    } else {
-                        gameCancelled = false
-                    }
-                    
-                    if (gameChannel == "") {
-                        gameChannel = "TBD"
-                    }
-                    tempGameClock = competitionsJson["status","displayClock"].stringValue
-                    tempGamePeriod = competitionsJson["status","period"].stringValue
-                    
-                    for (_, competitorsJson):(String, JSON) in competitionsJson["competitors"] {
-                        if((competitorsJson["team"]["nickname"]).stringValue == teamName) {
-                            if(competitorsJson["homeAway"].stringValue == "home") {
-                                gameHome = true
-                            } else {
-                                gameHome = false
-                            }
-                            
-                            Win = competitorsJson["winner"].boolValue
-                        }
-                        
-                        if ((competitorsJson["team"]["nickname"]).stringValue == teamName) { //us
-                            gameScore = competitorsJson["score"]["displayValue"].stringValue
-                        } else { //Opponent
-                            gameOpponent = competitorsJson["team"]["nickname"].stringValue
-                            gameOpponentScore = competitorsJson["score"]["displayValue"].stringValue
-                            
-                            for (_, logosJson):(String, JSON) in competitorsJson["team"]["logos"] {
-                                let link = logosJson["href"].stringValue
-                                
-                                if (!link.contains("dark")) {
-                                    gameOpponentLogo = logosJson["href"].stringValue
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let tempGame = Game(team: teamName, opponent: gameOpponent, score: gameScore, opponentScore: gameOpponentScore, time: gameTime, date: gameDate, dateAsDate: gameDateAsDate, opponentLogo: gameOpponentLogo, channel: gameChannel, location: gameLocation, gameHome: gameHome, gameID: id, pointer: count, gameWin: Win, completed: gameCompleted, competitionName: gameCompetitionName, cancelled: gameCancelled, postponed: gamePostponed, gameClock: tempGameClock, gamePeriod: tempGamePeriod, gameHalftime: tempGameHalftime)
-                returnGames.append(tempGame)
-                count += 1
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-    }
-    }
+/// Which field of an ESPN `team` object names the team a schedule belongs to.
+///
+/// The feeds disagree: basketball, football and baseball carry a `nickname`
+/// ("Jayhawks", "Chiefs"), while the soccer feed only carries a
+/// `shortDisplayName`.
+enum TeamNameField: String, Sendable {
+    case nickname
+    case shortDisplayName
 }
 
-func downloadScheduleData2(queryURL: String, teamName: String, completion: @escaping ([Game]) -> Void) {
-    var returnGames = [Game]()
-    var count = 0
-    
-    OperationQueue().addOperation { AF.request(queryURL).responseJSON { response in
-        switch response.result {
-        case .success(let value):
-            let json = JSON(value)
-            
-            for (_, subJson):(String, JSON) in json["events"] {
-                
-                var gameOpponent = ""
-                var gameScore = ""
-                var gameOpponentScore = ""
-                var gameTime = ""
-                var gameDate = ""
-                var gameOpponentLogo = ""
-                var gameChannel = ""
-                var gameLocation = ""
-                var gameHome = Bool()
-                var gameDateAsDate = Date()
-                var id = ""
-                var Win = Bool()
-                var gameCompleted = Bool()
-                let gameCompetitionName = subJson["name"].stringValue
-                var gameCancelled = Bool()
-                var gamePostponed = Bool()
-                var tempGameClock = ""
-                var tempGamePeriod = ""
-                var tempGameHalftime = false
-                
-                for (_, competitionsJson):(String, JSON) in subJson["competitions"] {
-                    gameLocation = competitionsJson["venue"]["fullName"].stringValue
-                    id = competitionsJson["id"].stringValue
-                    var date = subJson["date"].stringValue
-                    date = date.replacingOccurrences(of: "T", with: " ")
-                    date = date.replacingOccurrences(of: "Z", with: "")
-                    
-                    let dateFormatterGet = DateFormatter()
-                    dateFormatterGet.dateFormat = "yyyy-MM-dd HH:mm"
-                    
-                    let dateFormatterPrint = DateFormatter()
-                    let timeFormatterPrint = DateFormatter()
-                    dateFormatterPrint.dateFormat = "MMM dd, yyyy"
-                    timeFormatterPrint.dateFormat = "h:mm a"
-                    
-                    if var tempDate = dateFormatterGet.date(from: date) {
-                        tempDate.addTimeInterval(TimeInterval(-6.0 * 3600.0))
-                        gameDateAsDate = tempDate
-                        gameDate = dateFormatterPrint.string(from: tempDate)
-                        gameTime = timeFormatterPrint.string(from: tempDate)
-                    } else {
-                        print("There was an error decoding the string")
-                    }
-                    
-                    gameCompleted = competitionsJson["status"]["type"]["completed"].boolValue
-                    
-                    if competitionsJson["status"]["type"]["description"].stringValue == "Halftime" {
-                        tempGameHalftime = true
-                    }
-                    
-                    gameChannel = competitionsJson["broadcasts",0,"media","shortName"].stringValue
-                    
-                    if (gameChannel == "") {
-                        gameChannel = "TBD"
-                    }
-                    
-                    tempGameClock = competitionsJson["status","displayClock"].stringValue
-                    tempGamePeriod = competitionsJson["status","period"].stringValue
-                    
-                    if(competitionsJson["status"]["type"]["detail"].stringValue == "Canceled") {
-                        gameCancelled = true
-                    } else {
-                        gameCancelled = false
-                    }
-                    
-                    if(competitionsJson["status"]["type"]["detail"].stringValue == "Postponed") {
-                        gamePostponed = true
-                    } else {
-                        gamePostponed = false
-                    }
-                    
-                    for (_, competitorsJson):(String, JSON) in competitionsJson["competitors"] {
-                                               
-                        if((competitorsJson["team"]["shortDisplayName"]).stringValue == teamName) {
-                            if(competitorsJson["homeAway"].stringValue == "home") {
-                                gameHome = true
-                            } else {
-                                gameHome = false
-                            }
-                            
-                            Win = competitorsJson["winner"].boolValue
-                        }
-                        
-                        if ((competitorsJson["team"]["shortDisplayName"]).stringValue == teamName) { //us
-                            gameScore = competitorsJson["score"]["displayValue"].stringValue
-                        } else { //Opponent
-                            gameOpponent = competitorsJson["team"]["shortDisplayName"].stringValue
-                            gameOpponentScore = competitorsJson["score"]["displayValue"].stringValue
-                            
-                            for (_, logosJson):(String, JSON) in competitorsJson["team"]["logos"] {
-                                let link = logosJson["href"].stringValue
-                                
-                                if (!link.contains("dark")) {
-                                    gameOpponentLogo = logosJson["href"].stringValue
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                let tempGame = Game(team: teamName, opponent: gameOpponent, score: gameScore, opponentScore: gameOpponentScore, time: gameTime, date: gameDate, dateAsDate: gameDateAsDate, opponentLogo: gameOpponentLogo, channel: gameChannel, location: gameLocation, gameHome: gameHome, gameID: id, pointer: count, gameWin: Win, completed: gameCompleted, competitionName: gameCompetitionName, cancelled: gameCancelled, postponed: gamePostponed, gameClock: tempGameClock, gamePeriod: tempGamePeriod, gameHalftime: tempGameHalftime)
-                
-                returnGames.append(tempGame)
-                count += 1
-            }
-        case .failure(let error):
-            print(error)
-            
-        }
-        OperationQueue.main.addOperation {
-            completion(returnGames)
-        }
-    }
-    }
+// These formatters keep the device's locale, so month names and the choice of
+// a 12- or 24-hour clock follow the reader's region settings.
+//
+// They are shared rather than rebuilt for each of the several hundred games
+// parsed per refresh; `DateFormatter` is `Sendable`, and none of these are
+// mutated after creation.
+
+/// Formats a game's calendar date for display, e.g. "Jan 18, 2021".
+private let gameDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MMM dd, yyyy"
+    return formatter
+}()
+
+/// Formats a game's start time for display, e.g. "7:00 PM".
+private let gameTimeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "h:mm a"
+    return formatter
+}()
+
+/// Reads the UTC timestamps ESPN puts on events.
+private let eventDateParser: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm"
+    return formatter
+}()
+
+/// Reads an ESPN event timestamp, which is UTC in the form
+/// `2021-01-18T23:00Z`, and shifts it into US Central time — the home zone of
+/// all four teams, and the zone the schedule is presented in.
+func parseGameDate(_ raw: String) -> Date? {
+    let cleaned = raw
+        .replacingOccurrences(of: "T", with: " ")
+        .replacingOccurrences(of: "Z", with: "")
+
+    guard var date = eventDateParser.date(from: cleaned) else { return nil }
+
+    date.addTimeInterval(TimeInterval(-6 * 3600))
+    return date
 }
 
+/// Builds one `Game` from an ESPN event object.
+///
+/// `teamNameField` selects the name the feed uses to identify the followed
+/// team; the competitor that does not match it is the opponent.
+private func parseGame(
+    from event: JSON,
+    teamName: String,
+    teamNameField: TeamNameField,
+    pointer: Int
+) -> Game {
+    var opponent = ""
+    var score = ""
+    var opponentScore = ""
+    var time = ""
+    var date = ""
+    var dateAsDate = Date()
+    var opponentLogo = ""
+    var channel = ""
+    var location = ""
+    var gameHome = false
+    var gameID = ""
+    var gameWin = false
+    var completed = false
+    var cancelled = false
+    var postponed = false
+    var gameClock = ""
+    var gamePeriod = ""
+    var halftime = false
 
+    for (_, competition): (String, JSON) in event["competitions"] {
+        location = competition["venue"]["fullName"].stringValue
+        gameID = competition["id"].stringValue
 
+        if let parsed = parseGameDate(event["date"].stringValue) {
+            dateAsDate = parsed
+            date = gameDateFormatter.string(from: parsed)
+            time = gameTimeFormatter.string(from: parsed)
+        }
 
+        let status = competition["status"]
+        completed = status["type"]["completed"].boolValue
+        halftime = status["type"]["description"].stringValue == "Halftime"
+        gameClock = status["displayClock"].stringValue
+        gamePeriod = status["period"].stringValue
+
+        let detail = status["type"]["detail"].stringValue
+        postponed = detail == "Postponed"
+        cancelled = detail == "Canceled"
+
+        channel = competition["broadcasts", 0, "media", "shortName"].stringValue
+        if channel.isEmpty {
+            channel = "TBD"
+        }
+
+        for (_, competitor): (String, JSON) in competition["competitors"] {
+            if competitor["team"][teamNameField.rawValue].stringValue == teamName {
+                gameHome = competitor["homeAway"].stringValue == "home"
+                gameWin = competitor["winner"].boolValue
+                score = competitor["score"]["displayValue"].stringValue
+            } else {
+                opponent = competitor["team"][teamNameField.rawValue].stringValue
+                opponentScore = competitor["score"]["displayValue"].stringValue
+
+                // Feeds ship a light and a dark variant of every logo. Take
+                // the light one, which reads on the team-coloured cards.
+                for (_, logo): (String, JSON) in competitor["team"]["logos"] {
+                    let link = logo["href"].stringValue
+                    if !link.contains("dark") {
+                        opponentLogo = link
+                    }
+                }
+            }
+        }
+    }
+
+    return Game(
+        team: teamName,
+        opponent: opponent,
+        score: score,
+        opponentScore: opponentScore,
+        time: time,
+        date: date,
+        dateAsDate: dateAsDate,
+        opponentLogo: opponentLogo,
+        channel: channel,
+        location: location,
+        gameHome: gameHome,
+        gameID: gameID,
+        pointer: pointer,
+        gameWin: gameWin,
+        completed: completed,
+        competitionName: event["name"].stringValue,
+        cancelled: cancelled,
+        postponed: postponed,
+        gameClock: gameClock,
+        gamePeriod: gamePeriod,
+        gameHalftime: halftime
+    )
+}
+
+/// Loads a team's season schedule.
+///
+/// Games keep the order the feed lists them in, and each carries its position
+/// as `pointer` — the schedule carousels scroll to the next unplayed game by
+/// that index.
+func downloadScheduleData(
+    queryURL: String,
+    teamName: String,
+    teamNameField: TeamNameField = .nickname
+) async -> [Game] {
+    let json = await HTTPClient.json(from: queryURL)
+
+    return json["events"].enumerated().map { pointer, element in
+        parseGame(
+            from: element.1,
+            teamName: teamName,
+            teamNameField: teamNameField,
+            pointer: pointer
+        )
+    }
+}
