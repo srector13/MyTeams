@@ -44,6 +44,7 @@ struct BasketballPlayerBioView: View {
                 HStack() {
                     VStack() {
                         Image("\(player.photo)")
+                            .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 80, height: 80)
                             .clipShape(.circle)

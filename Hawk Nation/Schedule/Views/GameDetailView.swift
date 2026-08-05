@@ -32,7 +32,6 @@ struct BasketballGameDetailView: View {
                         }
                         
                         RemoteImage(url: URL(string: gameInfo.venueImage))
-                            .resizable()
                             .id(gameInfo.venueImage)
                             .frame(width: containerSize.width, height: 200)
                             .clipShape(.rect(cornerRadius: 10))
@@ -136,6 +135,7 @@ struct BasketballGameDetailView: View {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
                                                         Image("jayhawk")
+                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
@@ -240,6 +240,7 @@ struct BasketballGameDetailView: View {
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
                                                         Image("jayhawk")
+                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
@@ -436,7 +437,6 @@ struct FootballGameDetailView: View {
                         }
                         
                         RemoteImage(url: URL(string: gameInfo.venueImage))
-                            .resizable()
                             //.id(gameInfo.venueImage)
                             .frame(width: containerSize.width, height: 200)
                             .clipShape(.rect(cornerRadius: 10))
@@ -540,6 +540,7 @@ struct FootballGameDetailView: View {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
                                                         Image("chiefs")
+                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
@@ -641,6 +642,7 @@ struct FootballGameDetailView: View {
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
                                                         Image("chiefs")
+                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
@@ -814,7 +816,6 @@ struct BaseballGameDetailView: View {
                     }
                     
                     RemoteImage(url: URL(string: gameInfo.venueImage), options: .refreshCached)
-                        .resizable()
                         .id(gameInfo.venueImage)
                         .frame(width: containerSize.width, height: 200)
                         .clipShape(.rect(cornerRadius: 10))
@@ -908,6 +909,7 @@ struct BaseballGameDetailView: View {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
                                                     Image("royals")
+                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
@@ -1009,6 +1011,7 @@ struct BaseballGameDetailView: View {
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
                                                     Image("royals")
+                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
@@ -1108,6 +1111,7 @@ struct SoccerGameDetailView: View {
                     }
                     
                     Image("soccerField")
+                        .resizable()
                         .aspectRatio(contentMode: .fill)
                         .frame(width: containerSize.width, height: 200)
                         .clipShape(.rect(cornerRadius: 10))
@@ -1201,6 +1205,7 @@ struct SoccerGameDetailView: View {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
                                                     Image("sporting")
+                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
@@ -1302,6 +1307,7 @@ struct SoccerGameDetailView: View {
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
                                                     Image("sporting")
+                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     

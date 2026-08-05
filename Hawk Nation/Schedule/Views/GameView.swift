@@ -49,6 +49,7 @@ struct GameView : View {
                             
                             if(game.opponentLogo == "") {
                                 Image("blankTeam")
+                                    .resizable()
                                     .frame(width: 60, height: 60)
                             } else {
                                 RemoteImage(url: URL(string: game.opponentLogo))
@@ -243,6 +244,7 @@ struct GameView : View {
                                     
                                     if(game.opponentLogo == "") {
                                         Image("blankTeam")
+                                            .resizable()
                                             .frame(width: 60, height: 60)
                                     } else {
                                         RemoteImage(url: URL(string: game.opponentLogo))
@@ -333,6 +335,7 @@ struct FootballGameView : View {
                             
                             if(game.opponentLogo == "") {
                                 Image("blankTeam")
+                                    .resizable()
                                     .frame(width: 60, height: 60)
                             } else {
                                 RemoteImage(url: URL(string: game.opponentLogo))
@@ -576,6 +579,7 @@ struct FootballGameView : View {
                                     
                                     if(game.opponentLogo == "") {
                                         Image("blankTeam")
+                                            .resizable()
                                             .frame(width: 60, height: 60)
                                     } else {
                                         RemoteImage(url: URL(string: game.opponentLogo))
