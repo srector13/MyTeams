@@ -99,6 +99,15 @@ struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
     var score: Int
     var opponentScore: Int
     var gameClock: String
+
+    /// The pair of blank lines a detail view shows before its box score loads.
+    static let placeholderPair = [Self](repeating: BasketballGameTeamStats(
+        name: "", fieldGoals: "0", fieldGoalPct: 0, threePoints: "0",
+        threePointPct: 0, freeThrows: "0", freeThrowPct: 0, offensiveRebounds: 0,
+        defensiveRebounds: 0, assists: 0, steals: 0, blocks: 0, turnOvers: 0,
+        fouls: 0, largestLead: 0, projection: 0, score: 0, opponentScore: 0,
+        gameClock: ""
+    ), count: 2)
 }
 
 struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
@@ -115,6 +124,13 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     var completionAttempts: Int
     var opponentScore: Int
     var gameClock: String
+
+    /// The pair of blank lines a detail view shows before its box score loads.
+    static let placeholderPair = [Self](repeating: FootballGameTeamStats(
+        name: "", yards: 0, passingYards: 0, rushingYards: 0, firstDowns: 0,
+        drives: 0, score: 0, interceptions: 0, possesionTime: "",
+        completionAttempts: 0, opponentScore: 0, gameClock: ""
+    ), count: 2)
 }
 
 struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
@@ -127,6 +143,12 @@ struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
     var score: Int
     var opponentScore: Int
     var gameClock: String
+
+    /// The pair of blank lines a detail view shows before its box score loads.
+    static let placeholderPair = [Self](repeating: BaseballGameTeamStats(
+        name: "", yards: 0, passingYards: 0, rushingYards: 0, projection: 0,
+        score: 0, opponentScore: 0, gameClock: "test"
+    ), count: 2)
 }
 
 struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
@@ -139,6 +161,12 @@ struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
     var score: Int
     var opponentScore: Int
     var gameClock: String
+
+    /// The pair of blank lines a detail view shows before its box score loads.
+    static let placeholderPair = [Self](repeating: SoccerGameTeamStats(
+        name: "", yards: 0, passingYards: 0, rushingYards: 0, projection: 0,
+        score: 0, opponentScore: 0, gameClock: "test"
+    ), count: 2)
 }
 
 /// Loads the venue details shown behind a game's detail sheet.

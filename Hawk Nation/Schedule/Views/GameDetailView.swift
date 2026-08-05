@@ -7,21 +7,19 @@
 //
 
 import SwiftUI
-import SDWebImageSwiftUI
-import KingfisherSwiftUI
 
 struct BasketballGameDetailView: View {
-    @Environment(\.presentationMode) var presentationMode
-    @State var game: Game
+    @Environment(\.containerSize) private var containerSize
+
+    @Environment(\.dismiss) private var dismiss
+    let game: Game
     var teamColor: Color
-    @State var gameTeamStats = [BasketballGameTeamStats(name: "", fieldGoals: "0", fieldGoalPct: 0.00, threePoints: "0", threePointPct: 0.00, freeThrows: "0", freeThrowPct: 0.00, offensiveRebounds: 0, defensiveRebounds: 0, assists: 0, steals: 5, blocks: 0, turnOvers: 0, fouls: 0, largestLead: 0, projection: 0.00, score: 0, opponentScore: 0, gameClock: ""), BasketballGameTeamStats(name: "", fieldGoals: "0", fieldGoalPct: 0.00, threePoints: "0", threePointPct: 0.00, freeThrows: "0", freeThrowPct: 0.00, offensiveRebounds: 0, defensiveRebounds: 0, assists: 0, steals: 5, blocks: 0, turnOvers: 0, fouls: 0, largestLead: 0, projection: 0.00, score: 0, opponentScore: 0, gameClock: "")]
-    @State var gameInfo: GameInfo
+    @State private var gameTeamStats = BasketballGameTeamStats.placeholderPair
+    @State private var gameInfo = GameInfo.empty
     var teamLogo: String
-    @State var loading = true
+    @State private var loading = true
     
     
-    //Timer to reload ever 10 seconds
-    let timer = Timer.publish(every: 10, on: .current, in: .common).autoconnect()
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -33,33 +31,28 @@ struct BasketballGameDetailView: View {
                             Spacer()
                         }
                         
-                        WebImage(url: URL(string: gameInfo.venueImage))
-                            .onSuccess { image, cacheType in
-                                // Success
-                            }
+                        RemoteImage(url: URL(string: gameInfo.venueImage))
                             .resizable()
-                            //.placeholder(Image("news"))
-                            .indicator(.activity)
                             .id(gameInfo.venueImage)
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
-                            .cornerRadius(10)
+                            .frame(width: containerSize.width, height: 200)
+                            .clipShape(.rect(cornerRadius: 10))
                         
                         Rectangle()
-                            .foregroundColor(Color(UIColor(hexString: gameInfo.gameColor)))
-                            .background(Color(UIColor.black))
+                            .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                            .background(Color(uiColor: .black))
                             .opacity(0.6)
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
-                            .cornerRadius(10)
+                            .frame(width: containerSize.width, height: 200)
+                            .clipShape(.rect(cornerRadius: 10))
                         
                         //GAME DETAILS
                         VStack(spacing: 0) {
                             //DISMISS BUTTON
                             Button(action: {
-                                self.presentationMode.wrappedValue.dismiss()
+                                dismiss()
                             }) {
                                 RoundedRectangle(cornerRadius: 20)
                                     .frame(width: 100, height: 5)
-                                    .foregroundColor(Color(UIColor.white))
+                                    .foregroundStyle(Color(uiColor: .white))
                                     .opacity(0.7)
                             }.padding([.top, .trailing, .leading, .bottom], 10)
                             
@@ -70,7 +63,7 @@ struct BasketballGameDetailView: View {
                                 .font(.system(size: 25))
                                 .minimumScaleFactor(0.2)
                                 .lineLimit(1)
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.top, 5)
                             
                             Spacer()
@@ -79,21 +72,21 @@ struct BasketballGameDetailView: View {
                             Text(game.time)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
                             Text(game.date)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
                             Text(game.channel)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
@@ -102,7 +95,7 @@ struct BasketballGameDetailView: View {
                             Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                         }.padding(.horizontal, 15)
@@ -111,8 +104,8 @@ struct BasketballGameDetailView: View {
                     VStack(spacing: 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 600)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .center, spacing: 15) {
                                 if(game.cancelled) {
@@ -120,7 +113,7 @@ struct BasketballGameDetailView: View {
                                     
                                     Text("This game has been canceled.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -130,7 +123,7 @@ struct BasketballGameDetailView: View {
                                     
                                     Text("This game has been postponed.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -143,13 +136,12 @@ struct BasketballGameDetailView: View {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
                                                         Image("jayhawk")
-                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text("Kansas")
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                     
@@ -157,7 +149,7 @@ struct BasketballGameDetailView: View {
                                                     VStack(alignment: .center) {
                                                         Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
                                                             .font(.system(size: 30))
-                                                            //.foregroundColor(Color(UIColor.systemGray))
+                                                            //.foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                         
                                                         if(game.completed) {
@@ -165,7 +157,7 @@ struct BasketballGameDetailView: View {
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         } else if(game.gameHalftime) {
                                                             Text("Halftime")
                                                                 .font(.system(size: 15))
@@ -187,19 +179,16 @@ struct BasketballGameDetailView: View {
                                                     
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //AWAY TEAM PHOTO
-                                                        WebImage(url: URL(string: game.opponentLogo))
-                                                            .onSuccess { image, cacheType in
-                                                                // Success
-                                                            }
-                                                            .resizable()
-                                                            .placeholder(Image("blankTeam"))
-                                                            .indicator(.activity)
+                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                                Image("blankTeam")
+                                                                    .resizable()
+                                                        }
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text(game.opponent)
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                                 }
@@ -207,26 +196,23 @@ struct BasketballGameDetailView: View {
                                                 HStack() {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
-                                                        WebImage(url: URL(string: game.opponentLogo))
-                                                            .onSuccess { image, cacheType in
-                                                                // Success
-                                                            }
-                                                            .resizable()
-                                                            .placeholder(Image("blankTeam"))
-                                                            .indicator(.activity)
+                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                                Image("blankTeam")
+                                                                    .resizable()
+                                                        }
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text(game.opponent)
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                     
                                                     VStack(alignment: .center) {
                                                         Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
                                                             .font(.system(size: 30))
-                                                            //.foregroundColor(Color(UIColor.systemGray))
+                                                            //.foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                         
                                                         if(game.completed) {
@@ -234,19 +220,19 @@ struct BasketballGameDetailView: View {
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         } else {
                                                             Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                             
                                                             Text(game.gameClock)
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         }
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                     
@@ -254,13 +240,12 @@ struct BasketballGameDetailView: View {
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
                                                         Image("jayhawk")
-                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text("Kansas")
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                                 }
@@ -302,7 +287,7 @@ struct BasketballGameDetailView: View {
                                         
                                         Text("No game statistics at this time. Please check back later.")
                                             .font(.system(size: 15))
-                                            .foregroundColor(Color(UIColor.systemGray))
+                                            .foregroundStyle(Color(uiColor: .systemGray))
                                             .fontWeight(.bold)
                                             .minimumScaleFactor(0.5)
                                             .multilineTextAlignment(.center)
@@ -316,7 +301,7 @@ struct BasketballGameDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                         Spacer()
                     }
                 }
@@ -330,22 +315,22 @@ struct BasketballGameDetailView: View {
                         }
                         
                         LoadingView()
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
+                            .frame(width: containerSize.width, height: 200)
                         
                         //GAME DETAILS
                         VStack(spacing: 5) {
                             //DISMISS BUTTON
                             Button(action: {
-                                self.presentationMode.wrappedValue.dismiss()
+                                dismiss()
                             }) {
                                 RoundedRectangle(cornerRadius: 20)
                                     .frame(width: 100, height: 5)
-                                    .foregroundColor(Color(UIColor.white))
+                                    .foregroundStyle(Color(uiColor: .white))
                                     .opacity(0.7)
                             }.padding([.top, .trailing, .leading, .bottom], 10)
                             
                             LoadingView()
-                                .frame(width: UIScreen.main.bounds.width-20, height: 25)
+                                .frame(width: containerSize.width-20, height: 25)
                             
                             Spacer()
                             
@@ -369,8 +354,8 @@ struct BasketballGameDetailView: View {
                     VStack(spacing: 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 600)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .center, spacing: 15) {
                                 HStack() {
@@ -406,7 +391,7 @@ struct BasketballGameDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                         Spacer()
                     }
                 }
@@ -414,40 +399,31 @@ struct BasketballGameDetailView: View {
             
             
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadBasketballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: self.teamLogo, completion: { info in
-                self.gameInfo = info
-                self.loading = false
-            })
-        }
-        .onReceive(timer) {time in
-            downloadBasketballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: self.teamLogo, completion: { info in
-                self.gameInfo = info
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task(repeatingEvery: .seconds(10)) {
+            async let stats = downloadBasketballGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, type: teamLogo)
+
+            gameTeamStats = await stats
+            gameInfo = await info
+            loading = false
         }
     }
 }
 
 struct FootballGameDetailView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.containerSize) private var containerSize
+
+    @Environment(\.dismiss) private var dismiss
     var game: Game
     var teamColor: Color
-    @State var gameTeamStats = [FootballGameTeamStats(name: "", yards: 0, passingYards: 0, rushingYards: 0, firstDowns: 0, drives: 0, score: 0, interceptions: 0, possesionTime: "", completionAttempts: 0, opponentScore: 0, gameClock: ""), FootballGameTeamStats(name: "", yards: 0, passingYards: 0, rushingYards: 0, firstDowns: 0, drives: 0, score: 0, interceptions: 0, possesionTime: "", completionAttempts: 0, opponentScore: 0, gameClock: "")]
-    @State var gameInfo: GameInfo
+    @State private var gameTeamStats = FootballGameTeamStats.placeholderPair
+    @State private var gameInfo = GameInfo.empty
     var teamLogo: String
-    @State var loading = true
+    @State private var loading = true
     
     
-    //Timer to reload ever 10 seconds
-    let timer = Timer.publish(every: 10, on: .current, in: .common).autoconnect()
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -459,34 +435,28 @@ struct FootballGameDetailView: View {
                             Spacer()
                         }
                         
-                        WebImage(url: URL(string: gameInfo.venueImage))
-                            .onSuccess { image, cacheType in
-                                // Success
-                                
-                            }
+                        RemoteImage(url: URL(string: gameInfo.venueImage))
                             .resizable()
-                            //.placeholder(Image("news"))
-                            .indicator(.activity)
                             //.id(gameInfo.venueImage)
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
-                            .cornerRadius(10)
+                            .frame(width: containerSize.width, height: 200)
+                            .clipShape(.rect(cornerRadius: 10))
                         
                         Rectangle()
-                            .foregroundColor(Color(UIColor(hexString: gameInfo.gameColor)))
-                            .background(Color(UIColor.black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
+                            .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                            .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
                             .opacity(0.6)
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
-                            .cornerRadius(10)
+                            .frame(width: containerSize.width, height: 200)
+                            .clipShape(.rect(cornerRadius: 10))
                         
                         //GAME DETAILS
                         VStack(spacing: 0) {
                             //DISMISS BUTTON
                             Button(action: {
-                                self.presentationMode.wrappedValue.dismiss()
+                                dismiss()
                             }) {
                                 RoundedRectangle(cornerRadius: 20)
                                     .frame(width: 100, height: 5)
-                                    .foregroundColor(Color(UIColor.white))
+                                    .foregroundStyle(Color(uiColor: .white))
                                     .opacity(0.7)
                             }.padding([.top, .trailing, .leading, .bottom], 10)
                             
@@ -497,7 +467,7 @@ struct FootballGameDetailView: View {
                                 .font(.system(size: 25))
                                 .minimumScaleFactor(0.2)
                                 .lineLimit(1)
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.top, 5)
                             
                             Spacer()
@@ -506,21 +476,21 @@ struct FootballGameDetailView: View {
                             Text(game.time)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
                             Text(game.date)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
                             Text(game.channel)
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                             
@@ -529,7 +499,7 @@ struct FootballGameDetailView: View {
                             Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
                                 .fontWeight(.bold)
                                 .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .foregroundStyle(.white)
                                 .padding(.bottom, 10)
                                 .minimumScaleFactor(0.2)
                         }.padding(.horizontal, 15)
@@ -538,8 +508,8 @@ struct FootballGameDetailView: View {
                     VStack(spacing: 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 600)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .center, spacing: 15) {
                                 if(game.cancelled) {
@@ -547,7 +517,7 @@ struct FootballGameDetailView: View {
                                     
                                     Text("This game has been canceled.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -557,7 +527,7 @@ struct FootballGameDetailView: View {
                                     
                                     Text("This game has been postponed.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -570,13 +540,12 @@ struct FootballGameDetailView: View {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
                                                         Image("chiefs")
-                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text("Chiefs")
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                     
@@ -584,7 +553,7 @@ struct FootballGameDetailView: View {
                                                     VStack(alignment: .center) {
                                                         Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
                                                             .font(.system(size: 30))
-                                                            //.foregroundColor(Color(UIColor.systemGray))
+                                                            //.foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                         
                                                         if(game.completed) {
@@ -592,38 +561,35 @@ struct FootballGameDetailView: View {
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         } else {
                                                             Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                             
                                                             Text(game.gameClock)
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         }
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                     
                                                     
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //AWAY TEAM PHOTO
-                                                        WebImage(url: URL(string: game.opponentLogo))
-                                                            .onSuccess { image, cacheType in
-                                                                // Success
-                                                            }
-                                                            .resizable()
-                                                            .placeholder(Image("blankTeam"))
-                                                            .indicator(.activity)
+                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                                Image("blankTeam")
+                                                                    .resizable()
+                                                        }
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text(game.opponent)
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                                 }
@@ -631,26 +597,23 @@ struct FootballGameDetailView: View {
                                                 HStack() {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
-                                                        WebImage(url: URL(string: game.opponentLogo))
-                                                            .onSuccess { image, cacheType in
-                                                                // Success
-                                                            }
-                                                            .resizable()
-                                                            .placeholder(Image("blankTeam"))
-                                                            .indicator(.activity)
+                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                                Image("blankTeam")
+                                                                    .resizable()
+                                                        }
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text(game.opponent)
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                     
                                                     VStack(alignment: .center) {
                                                         Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
                                                             .font(.system(size: 30))
-                                                            //.foregroundColor(Color(UIColor.systemGray))
+                                                            //.foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                         
                                                         if(game.completed) {
@@ -658,19 +621,19 @@ struct FootballGameDetailView: View {
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         } else {
                                                             Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                             
                                                             Text(game.gameClock)
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
-                                                            //.foregroundColor(Color.white)
+                                                            //.foregroundStyle(Color.white)
                                                         }
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                     
@@ -678,13 +641,12 @@ struct FootballGameDetailView: View {
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
                                                         Image("chiefs")
-                                                            .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
                                                         
                                                         Text("Chiefs")
                                                             .font(.system(size: 15))
-                                                            .foregroundColor(Color(UIColor.systemGray))
+                                                            .foregroundStyle(Color(uiColor: .systemGray))
                                                             .fontWeight(.bold)
                                                     }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                                 }
@@ -712,7 +674,7 @@ struct FootballGameDetailView: View {
                                         
                                         Text("No game statistics at this time. Please check back later.")
                                             .font(.system(size: 15))
-                                            .foregroundColor(Color(UIColor.systemGray))
+                                            .foregroundStyle(Color(uiColor: .systemGray))
                                             .fontWeight(.bold)
                                             .minimumScaleFactor(0.5)
                                             .multilineTextAlignment(.center)
@@ -723,7 +685,7 @@ struct FootballGameDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                         Spacer()
                     }
                 }
@@ -737,22 +699,22 @@ struct FootballGameDetailView: View {
                         }
                         
                         LoadingView()
-                            .frame(width: UIScreen.main.bounds.width, height: 200)
+                            .frame(width: containerSize.width, height: 200)
                         
                         //GAME DETAILS
                         VStack(spacing: 5) {
                             //DISMISS BUTTON
                             Button(action: {
-                                self.presentationMode.wrappedValue.dismiss()
+                                dismiss()
                             }) {
                                 RoundedRectangle(cornerRadius: 20)
                                     .frame(width: 100, height: 5)
-                                    .foregroundColor(Color(UIColor.white))
+                                    .foregroundStyle(Color(uiColor: .white))
                                     .opacity(0.7)
                             }.padding([.top, .trailing, .leading, .bottom], 10)
                             
                             LoadingView()
-                                .frame(width: UIScreen.main.bounds.width-20, height: 25)
+                                .frame(width: containerSize.width-20, height: 25)
                             
                             Spacer()
                             
@@ -776,8 +738,8 @@ struct FootballGameDetailView: View {
                     VStack(spacing: 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 600)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .center, spacing: 15) {
                                 HStack() {
@@ -813,44 +775,35 @@ struct FootballGameDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                         Spacer()
                     }
                 }
             }
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadFootballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: "chiefs", completion: { info in
-                self.gameInfo = info
-                self.loading = false
-            })
-        }
-        .onReceive(timer) {time in
-            downloadFootballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: "chiefs", completion: { info in
-                self.gameInfo = info
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task(repeatingEvery: .seconds(10)) {
+            async let stats = downloadFootballGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, sport: .chiefs)
+
+            gameTeamStats = await stats
+            gameInfo = await info
+            loading = false
         }
     }
 }
 
 struct BaseballGameDetailView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.containerSize) private var containerSize
+
+    @Environment(\.dismiss) private var dismiss
     var game: Game
     var teamColor: Color
-    @State var gameTeamStats = [BaseballGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test"), BaseballGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test")]
-    @State var gameInfo: GameInfo
+    @State private var gameTeamStats = BaseballGameTeamStats.placeholderPair
+    @State private var gameInfo = GameInfo.empty
     var teamLogo: String
     
-    //Timer to reload ever 10 seconds
-    let timer = Timer.publish(every: 10, on: .current, in: .common).autoconnect()
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -860,34 +813,28 @@ struct BaseballGameDetailView: View {
                         Spacer()
                     }
                     
-                    WebImage(url: URL(string: gameInfo.venueImage), options: .refreshCached)
-                        .onSuccess { image, cacheType in
-                            // Success
-                            
-                        }
+                    RemoteImage(url: URL(string: gameInfo.venueImage), options: .refreshCached)
                         .resizable()
-                        //.placeholder(Image("news"))
-                        .indicator(.activity)
                         .id(gameInfo.venueImage)
-                        .frame(width: UIScreen.main.bounds.width, height: 200)
-                        .cornerRadius(10)
+                        .frame(width: containerSize.width, height: 200)
+                        .clipShape(.rect(cornerRadius: 10))
                     
                     Rectangle()
-                        .foregroundColor(Color(UIColor(hexString: gameInfo.gameColor)))
-                        .background(Color(UIColor.black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                        .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
                         .opacity(0.6)
-                        .frame(width: UIScreen.main.bounds.width, height: 200)
-                        .cornerRadius(10)
+                        .frame(width: containerSize.width, height: 200)
+                        .clipShape(.rect(cornerRadius: 10))
                     
                     //GAME DETAILS
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                                 .frame(width: 100, height: 5)
-                                .foregroundColor(Color(UIColor.white))
+                                .foregroundStyle(Color(uiColor: .white))
                                 .opacity(0.7)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -898,7 +845,7 @@ struct BaseballGameDetailView: View {
                             .font(.system(size: 25))
                             .minimumScaleFactor(0.2)
                             .lineLimit(1)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.top, 5)
                         
                         Spacer()
@@ -907,21 +854,21 @@ struct BaseballGameDetailView: View {
                         Text(game.time)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
                         Text(game.date)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
                         Text(game.channel)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
@@ -930,7 +877,7 @@ struct BaseballGameDetailView: View {
                         Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                     }.padding(.horizontal, 15)
@@ -939,8 +886,8 @@ struct BaseballGameDetailView: View {
                 VStack(spacing: 0) {
                     ZStack(alignment: .top) {
                         RoundedRectangle(cornerRadius: 20)
-                            .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .frame(width: (containerSize.width - 25), height: 600)
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                         
                         VStack(alignment: .center, spacing: 15) {
                             if(game.cancelled) {
@@ -948,7 +895,7 @@ struct BaseballGameDetailView: View {
                                 
                                 Text("This game has been canceled.")
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color(UIColor.systemGray))
+                                    .foregroundStyle(Color(uiColor: .systemGray))
                                     .fontWeight(.bold)
                                     .minimumScaleFactor(0.5)
                                     .multilineTextAlignment(.center)
@@ -961,13 +908,12 @@ struct BaseballGameDetailView: View {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
                                                     Image("royals")
-                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text("Royals")
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
@@ -975,7 +921,7 @@ struct BaseballGameDetailView: View {
                                                 VStack(alignment: .center) {
                                                     Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
                                                         .font(.system(size: 30))
-                                                        //.foregroundColor(Color(UIColor.systemGray))
+                                                        //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                     
                                                     if(game.completed) {
@@ -983,38 +929,35 @@ struct BaseballGameDetailView: View {
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     } else {
                                                         Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                         
                                                         Text(game.gameClock)
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     }
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                 
                                                 
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //AWAY TEAM PHOTO
-                                                    WebImage(url: URL(string: game.opponentLogo))
-                                                        .onSuccess { image, cacheType in
-                                                            // Success
-                                                        }
-                                                        .resizable()
-                                                        .placeholder(Image("blankTeam"))
-                                                        .indicator(.activity)
+                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                            Image("blankTeam")
+                                                                .resizable()
+                                                    }
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text(game.opponent)
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                             }
@@ -1022,26 +965,23 @@ struct BaseballGameDetailView: View {
                                             HStack() {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
-                                                    WebImage(url: URL(string: game.opponentLogo))
-                                                        .onSuccess { image, cacheType in
-                                                            // Success
-                                                        }
-                                                        .resizable()
-                                                        .placeholder(Image("blankTeam"))
-                                                        .indicator(.activity)
+                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                            Image("blankTeam")
+                                                                .resizable()
+                                                    }
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text(game.opponent)
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
                                                 VStack(alignment: .center) {
                                                     Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
                                                         .font(.system(size: 30))
-                                                        //.foregroundColor(Color(UIColor.systemGray))
+                                                        //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                     
                                                     if(game.completed) {
@@ -1049,19 +989,19 @@ struct BaseballGameDetailView: View {
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     } else {
                                                         Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                         
                                                         Text(game.gameClock)
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     }
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                 
@@ -1069,13 +1009,12 @@ struct BaseballGameDetailView: View {
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
                                                     Image("royals")
-                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text("Royals")
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                             }
@@ -1118,7 +1057,7 @@ struct BaseballGameDetailView: View {
                                     
                                     Text("No game statistics at this time. Please check back later.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -1132,42 +1071,33 @@ struct BaseballGameDetailView: View {
                             Spacer()
                         }.padding([.all], 20)
                     }
-                    .edgesIgnoringSafeArea(.top)
+                    .ignoresSafeArea(.top)
                     Spacer()
                 }
             }
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadBaseballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: "royals", completion: { info in
-                self.gameInfo = info
-            })
-        }
-        .onReceive(timer) {time in
-            downloadBaseballGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadGameInfo(gameID: game.gameID, type: "royals", completion: { info in
-                self.gameInfo = info
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task(repeatingEvery: .seconds(10)) {
+            async let stats = downloadBaseballGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, sport: .royals)
+
+            gameTeamStats = await stats
+            gameInfo = await info
         }
     }
 }
 
 struct SoccerGameDetailView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.containerSize) private var containerSize
+
+    @Environment(\.dismiss) private var dismiss
     var game: Game
     var teamColor: Color
-    @State var gameTeamStats = [SoccerGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test"), SoccerGameTeamStats(name: "", yards: 0.0, passingYards: 0.0, rushingYards: 0.0, projection: 0.0, score: 0, opponentScore: 0, gameClock: "test")]
-    @State var gameInfo: GameInfo
+    @State private var gameTeamStats = SoccerGameTeamStats.placeholderPair
+    @State private var gameInfo = GameInfo.empty
     var teamLogo: String
     
-    //Timer to reload ever 10 seconds
-    let timer = Timer.publish(every: 10, on: .current, in: .common).autoconnect()
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -1178,27 +1108,26 @@ struct SoccerGameDetailView: View {
                     }
                     
                     Image("soccerField")
-                        .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: UIScreen.main.bounds.width, height: 200)
-                        .cornerRadius(10)
+                        .frame(width: containerSize.width, height: 200)
+                        .clipShape(.rect(cornerRadius: 10))
                     
                     Rectangle()
-                        .foregroundColor(Color(UIColor(hexString: gameInfo.gameColor)))
-                        .background(Color(UIColor.black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
+                        .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                        .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
                         .opacity(0.6)
-                        .frame(width: UIScreen.main.bounds.width, height: 200)
-                        .cornerRadius(10)
+                        .frame(width: containerSize.width, height: 200)
+                        .clipShape(.rect(cornerRadius: 10))
                     
                     //GAME DETAILS
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                                 .frame(width: 100, height: 5)
-                                .foregroundColor(Color(UIColor.white))
+                                .foregroundStyle(Color(uiColor: .white))
                                 .opacity(0.7)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -1209,7 +1138,7 @@ struct SoccerGameDetailView: View {
                             .font(.system(size: 25))
                             .minimumScaleFactor(0.2)
                             .lineLimit(1)
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.top, 5)
                         
                         Spacer()
@@ -1218,21 +1147,21 @@ struct SoccerGameDetailView: View {
                         Text(game.time)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
                         Text(game.date)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
                         Text(game.channel)
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                         
@@ -1241,7 +1170,7 @@ struct SoccerGameDetailView: View {
                         Text("\(game.location)")
                             .fontWeight(.bold)
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundStyle(.white)
                             .padding(.bottom, 10)
                             .minimumScaleFactor(0.2)
                     }.padding(.horizontal, 15)
@@ -1250,8 +1179,8 @@ struct SoccerGameDetailView: View {
                 VStack(spacing: 0) {
                     ZStack(alignment: .top) {
                         RoundedRectangle(cornerRadius: 20)
-                            .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .frame(width: (containerSize.width - 25), height: 600)
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                         
                         VStack(alignment: .center, spacing: 15) {
                             if(game.cancelled) {
@@ -1259,7 +1188,7 @@ struct SoccerGameDetailView: View {
                                 
                                 Text("This game has been canceled.")
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color(UIColor.systemGray))
+                                    .foregroundStyle(Color(uiColor: .systemGray))
                                     .fontWeight(.bold)
                                     .minimumScaleFactor(0.5)
                                     .multilineTextAlignment(.center)
@@ -1272,13 +1201,12 @@ struct SoccerGameDetailView: View {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
                                                     Image("sporting")
-                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text("Kansas City")
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
@@ -1286,7 +1214,7 @@ struct SoccerGameDetailView: View {
                                                 VStack(alignment: .center) {
                                                     Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
                                                         .font(.system(size: 30))
-                                                        //.foregroundColor(Color(UIColor.systemGray))
+                                                        //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                     
                                                     if(game.completed) {
@@ -1294,38 +1222,35 @@ struct SoccerGameDetailView: View {
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     } else {
                                                         Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                         
                                                         Text(game.gameClock)
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     }
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                 
                                                 
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //AWAY TEAM PHOTO
-                                                    WebImage(url: URL(string: game.opponentLogo))
-                                                        .onSuccess { image, cacheType in
-                                                            // Success
-                                                        }
-                                                        .resizable()
-                                                        .placeholder(Image("blankTeam"))
-                                                        .indicator(.activity)
+                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                            Image("blankTeam")
+                                                                .resizable()
+                                                    }
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text(game.opponent)
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                             }
@@ -1333,26 +1258,23 @@ struct SoccerGameDetailView: View {
                                             HStack() {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
-                                                    WebImage(url: URL(string: game.opponentLogo))
-                                                        .onSuccess { image, cacheType in
-                                                            // Success
-                                                        }
-                                                        .resizable()
-                                                        .placeholder(Image("blankTeam"))
-                                                        .indicator(.activity)
+                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
+                                                            Image("blankTeam")
+                                                                .resizable()
+                                                    }
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text(game.opponent)
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
                                                 VStack(alignment: .center) {
                                                     Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
                                                         .font(.system(size: 30))
-                                                        //.foregroundColor(Color(UIColor.systemGray))
+                                                        //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                     
                                                     if(game.completed) {
@@ -1360,19 +1282,19 @@ struct SoccerGameDetailView: View {
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     } else {
                                                         Text(getPeriod(period: game.gamePeriod, team: game.team))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                         
                                                         Text(game.gameClock)
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
-                                                            .foregroundColor(Color.white)
+                                                            .foregroundStyle(Color.white)
                                                     }
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
                                                 
@@ -1380,13 +1302,12 @@ struct SoccerGameDetailView: View {
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
                                                     Image("sporting")
-                                                        .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
                                                     
                                                     Text("Kansas City")
                                                         .font(.system(size: 15))
-                                                        .foregroundColor(Color(UIColor.systemGray))
+                                                        .foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
                                             }
@@ -1429,7 +1350,7 @@ struct SoccerGameDetailView: View {
                                     
                                     Text("No game statistics at this time. Please check back later.")
                                         .font(.system(size: 15))
-                                        .foregroundColor(Color(UIColor.systemGray))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
                                         .fontWeight(.bold)
                                         .minimumScaleFactor(0.5)
                                         .multilineTextAlignment(.center)
@@ -1443,28 +1364,19 @@ struct SoccerGameDetailView: View {
                             Spacer()
                         }.padding([.all], 20)
                     }
-                    .edgesIgnoringSafeArea(.top)
+                    .ignoresSafeArea(.top)
                     Spacer()
                 }
             }
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadSoccerGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadSoccerGameInfo(gameID: game.gameID, type: "sporting", completion: { info in
-                self.gameInfo = info
-            })
-        }
-        .onReceive(timer) {time in
-            downloadSoccerGameTeamStatsData(gameID: self.game.gameID, completion: { stats in
-                self.gameTeamStats = stats
-            })
-            downloadSoccerGameInfo(gameID: game.gameID, type: "sporting", completion: { info in
-                self.gameInfo = info
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task(repeatingEvery: .seconds(10)) {
+            async let stats = downloadSoccerGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, sport: .sporting)
+
+            gameTeamStats = await stats
+            gameInfo = await info
         }
     }
 }

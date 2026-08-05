@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import SDWebImageSwiftUI
 
 struct BasketballPlayerDetailView2: View {
     var player: BasketballPlayer
@@ -22,22 +21,22 @@ struct BasketballPlayerDetailView2: View {
 }
 
 struct BasketballPlayerBioView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     var player: BasketballPlayer
     var body: some View {
         VStack {
             ZStack(alignment: .top) {
                 RoundedRectangle(cornerRadius: 20)
-                    .foregroundColor(Color(UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00)))
+                    .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
                 
                 VStack(spacing: 0) {
                     //DISMISS BUTTON
                     Button(action: {
-                        self.presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }) {
                         RoundedRectangle(cornerRadius: 20)
                         .frame(width: 100, height: 5)
-                        .foregroundColor(Color(UIColor.systemBackground))
+                        .foregroundStyle(Color(uiColor: .systemBackground))
                             .opacity(0.5)
                     }.padding([.top, .trailing, .leading, .bottom], 10)
                 }
@@ -45,14 +44,13 @@ struct BasketballPlayerBioView: View {
                 HStack() {
                     VStack() {
                         Image("\(player.photo)")
-                            .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 80, height: 80)
-                            .clipShape(Circle())
+                            .clipShape(.circle)
                         Text("\(player.name)")
                             .fontWeight(.bold)
                             .font(.system(size: 20))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                     }
                     Spacer()
                     VStack() {
@@ -62,36 +60,36 @@ struct BasketballPlayerBioView: View {
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .frame(minWidth: 0, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/)
                                 Text ("Number")
                                     .fontWeight(.bold)
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                             VStack {
                                 Text("\(player.position)")
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/)
                                 Text ("Position")
                                     .fontWeight(.bold)
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                             VStack {
                                 Text("\(player.grade)")
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .frame(minWidth: 0, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/)
                                 Text ("Class")
                                     .fontWeight(.bold)
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                         }.frame(height: 50)
                         
@@ -103,31 +101,31 @@ struct BasketballPlayerBioView: View {
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .frame(minWidth: 0, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/)
                                 Text ("Height")
                                     .fontWeight(.bold)
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                             VStack {
                                 Text("\(player.weight)")
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .frame(minWidth: 0, maxWidth: .infinity, minHeight: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/)
                                 Text ("Weight")
                                     .fontWeight(.bold)
                                     .font(.system(size: 15))
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                             VStack {
                                 Text("\(player.hometown)")
                                     .fontWeight(.bold)
                                     .font(.system(size: 20))
                                     .opacity(0.5)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                                     .minimumScaleFactor(0.5)
                                     .lineLimit(/*@START_MENU_TOKEN@*/2/*@END_MENU_TOKEN@*/)
                                     .multilineTextAlignment(.center)
@@ -138,7 +136,7 @@ struct BasketballPlayerBioView: View {
                                     .minimumScaleFactor(0.5)
                                     .lineLimit(/*@START_MENU_TOKEN@*/2/*@END_MENU_TOKEN@*/)
                                     .multilineTextAlignment(.center)
-                                    .foregroundColor(Color.white)
+                                    .foregroundStyle(Color.white)
                             }
                         }.frame(height: 50)
                     }.frame(height: 120)
@@ -206,16 +204,20 @@ struct BasketballPlayerStatView: View {
                 }
                 Spacer()
             }.padding([.all], 20)
-        }.onAppear {
-            downloadBasketballPlayerStats(playerID: self.player.playerID, completion: { stats in
-                self.playerStats = stats
-            })
+        }
+        .task {
+            playerStats = await downloadBasketballPlayerStats(playerID: player.playerID)
         }
     }
 }
 
-struct BasketballDetailPreview: PreviewProvider {
-    static var previews: some View {
-        BasketballPlayerBioView(player: BasketballPlayer(playerID: "test", name: "Ochai Agbaji", number: "30", numberInt: 1000, height: "6' 5\"", weight: "210 lbs", position: "Guard", grade: "Junior", hometown: "Kansas City, MO", photo: "blank", status: "Active", lastName: "Agbaji"))
-    }
+#Preview {
+    BasketballPlayerBioView(
+        player: BasketballPlayer(
+            playerID: "test", name: "Ochai Agbaji", number: "30", numberInt: 30,
+            height: "6' 5\"", weight: "210 lbs", position: "Guard",
+            grade: "Junior", hometown: "Kansas City, MO", photo: "blank",
+            status: "Active", lastName: "Agbaji"
+        )
+    )
 }

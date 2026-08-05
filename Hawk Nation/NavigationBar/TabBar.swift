@@ -1,5 +1,5 @@
 //
-//  ContentView2.swift
+//  TabBar.swift
 //  myTeams
 //
 //  Created by Stephen Rector on 10/22/20.
@@ -8,420 +8,243 @@
 
 import SwiftUI
 
-// TabItems..
-var tabItems = ["jayhawk","chiefs","royals","sporting"]
+/// The four teams the app follows, in the order their tabs appear.
+enum Team: String, CaseIterable, Identifiable {
+    case jayhawks
+    case chiefs
+    case royals
+    case sporting
 
-struct Home : View {
-    @State var jayhawkArticles = [News]()
-    @State var chiefsArticles = [News]()
-    @State var sportingArticles = [News]()
-    @State var royalsArticles = [News]()
-    
-    @State var chiefsGames = [Game]()
-    @State var jayhawkGames = [Game]()
-    @State var sportingGames = [Game]()
-    @State var royalsGames = [Game]()
-    
-    @State var chiefsPlayers = [FootBallPlayer]()
-    @State var jayhawkPlayers = [BasketballPlayer]()
-    @State var sportingPlayers = [SoccerPlayer]()
-    @State var royalsPlayers = [BaseballPlayer]()
-    
-    @State var jayhawksGamePointer = 0
-    @State var chiefsGamePointer = 0
-    @State var sportingGamePointer = 0
-    @State var royalsGamePointer = 0
-    
-    @State var index = 0
-    @State var centerX : CGFloat = 0
-    
-    // for sticky header view...
-    @State var timeKU = Timer.publish(every: 0.1, on: .current, in: .tracking).autoconnect()
-    @State var showKU = false
-    @State var timeChiefs = Timer.publish(every: 0.1, on: .current, in: .tracking).autoconnect()
-    @State var showChiefs = false
-    @State var timeRoyals = Timer.publish(every: 0.1, on: .current, in: .tracking).autoconnect()
-    @State var showRoyals = false
-    @State var timeSporting = Timer.publish(every: 0.1, on: .current, in: .tracking).autoconnect()
-    @State var showSporting = false
-    
-    @Environment(\.verticalSizeClass) var size
-    
-    init() {
-          UIScrollView.appearance().bounces = false
-       }
-    
-    var body: some View {
-        
-        VStack(spacing: 0){
-            ZStack{
-                //Jayhawks
-                ZStack(alignment: .top, content: {
-                    Rectangle()
-                        .foregroundColor(Color(UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00)))
-                        .frame(height: 500)
-                    
-                    ScrollView(.vertical, showsIndicators: false, content: {
-                        VStack{
-                            GeometryReader{g in
-                                Image("jayhawk")
-                                    .resizable()
-                                    .opacity(0.5)
-                                    .frame(width: UIScreen.main.bounds.width - 50, height: UIScreen.main.bounds.width - 50)
-                                    .offset(x: 50)
-                                    .onReceive(self.timeKU) { (_) in
-                                        // its not a timer...
-                                        // for tracking the image is scrolled out or not...
-                                        let y = g.frame(in: .global).minY
-                                        
-                                        if -y > (UIScreen.main.bounds.height / 4) - 50{
-                                            withAnimation{
-                                                self.showKU = true
-                                            }
-                                        }
-                                        else{
-                                            withAnimation{
-                                                self.showKU = false
-                                            }
-                                        }
-                                    }
-                            }
-                            // fixing default height...
-                            .frame(height: UIScreen.main.bounds.height / 14 )
-                            
-                            VStack{
-                                HStack(alignment: .bottom){
-                                    Text("Kansas Jayhawks")
-                                        .fontWeight(.bold)
-                                        .font(.system(size: 35))
-                                        .foregroundColor(.white)
-                                        .padding(.leading, 15)
-                                    Spacer()
-                                }.ignoresSafeArea()
-                                
-                            JayhawksHome(articles: jayhawkArticles, players: jayhawkPlayers, playersUnfiltered: jayhawkPlayers, games: jayhawkGames, nextGame: jayhawksGamePointer)
+    var id: Self { self }
 
-                            }
-                            .padding([.top, .horizontal])
-                        }
-                    })
-                    
-                    if self.showKU{
-                        TopView(logoName: "jayhawk", teamName: "Kansas Jayhawks")
-                    }
-                })
-                .edgesIgnoringSafeArea(.top)
-                .opacity(self.index == 0 ? 1 : 0)
-                
-                
-                //chiefs
-                ZStack(alignment: .top, content: {
-                    Rectangle()
-                        .foregroundColor(Color(UIColor(red: 227/255, green: 24/255, blue: 55/255, alpha: 1.00)))
-                        .frame(height: 500)
-                    
-                    ScrollView(.vertical, showsIndicators: false, content: {
-                        VStack{
-                            GeometryReader{g in
-                                Image("chiefs")
-                                    .resizable()
-                                    .opacity(0.5)
-                                    .frame(width: UIScreen.main.bounds.width - 50, height: UIScreen.main.bounds.width - 50)
-                                    .offset(x: 50)
-                                    .onReceive(self.timeChiefs) { (_) in
-                                        // its not a timer...
-                                        // for tracking the image is scrolled out or not...
-                                        let y = g.frame(in: .global).minY
-                                        
-                                        if -y > (UIScreen.main.bounds.height / 4) - 50{
-                                            withAnimation{
-                                                self.showChiefs = true
-                                            }
-                                        }
-                                        else{
-                                            withAnimation{
-                                                self.showChiefs = false
-                                            }
-                                        }
-                                    }
-                            }
-                            // fixing default height...
-                            .frame(height: UIScreen.main.bounds.height / 14 )
-                            
-                            VStack{
-                                HStack(alignment: .bottom){
-                                    Text("Kansas City Chiefs")
-                                        .fontWeight(.bold)
-                                        .font(.system(size: 35))
-                                        .foregroundColor(.white)
-                                        .padding(.leading, 15)
-                                    Spacer()
-                                }.ignoresSafeArea()
-                                
-
-                                ChiefsHome(articles: chiefsArticles, players: chiefsPlayers, playersUnfiltered: chiefsPlayers, games: chiefsGames, nextGame: chiefsGamePointer)
-
-                            }
-                            .padding([.top, .horizontal])
-                        }
-                    })
-                    
-                    if self.showChiefs{
-                        TopView(logoName: "chiefs", teamName: "Kansas City Chiefs")
-                    }
-                })
-                .edgesIgnoringSafeArea(.top)
-                .opacity(self.index == 1 ? 1 : 0)
-                
-                
-                //royals
-                ZStack(alignment: .top, content: {
-                    Rectangle()
-                        .foregroundColor(Color(UIColor(red: 0/255, green: 70/255, blue: 135/255, alpha: 1.00)))
-                        .frame(height: 500)
-                    
-                    ScrollView(.vertical, showsIndicators: false, content: {
-                        VStack{
-                            GeometryReader{g in
-                                Image("royals")
-                                    .resizable()
-                                    .opacity(0.5)
-                                    .frame(width: UIScreen.main.bounds.width - 50, height: UIScreen.main.bounds.width - 50)
-                                    .offset(x: 50)
-                                    .onReceive(self.timeRoyals) { (_) in
-                                        // its not a timer...
-                                        // for tracking the image is scrolled out or not...
-                                        let y = g.frame(in: .global).minY
-                                        
-                                        if -y > (UIScreen.main.bounds.height / 4) - 50{
-                                            withAnimation{
-                                                self.showRoyals = true
-                                            }
-                                        }
-                                        else{
-                                            withAnimation{
-                                                self.showRoyals = false
-                                            }
-                                        }
-                                    }
-                            }
-                            // fixing default height...
-                            .frame(height: UIScreen.main.bounds.height / 14 )
-                            
-                            VStack{
-                                HStack(alignment: .bottom){
-                                    Text("Kansas City Royals")
-                                        .fontWeight(.bold)
-                                        .font(.system(size: 35))
-                                        .foregroundColor(.white)
-                                        .padding(.leading, 15)
-                                    Spacer()
-                                }.ignoresSafeArea()
-                                
-
-                                RoyalsHome(articles: royalsArticles, players: royalsPlayers, playersUnfiltered: royalsPlayers, games: royalsGames, nextGame: royalsGamePointer)
-
-                            }
-                            .padding([.top, .horizontal])
-                        }
-                    })
-                    
-                    if self.showRoyals{
-                        TopView(logoName: "royals", teamName: "Kansas City Royals")
-                    }
-                })
-                .edgesIgnoringSafeArea(.top)
-                .opacity(self.index == 2 ? 1 : 0)
-                
-                //sporting
-                ZStack(alignment: .top, content: {
-                    Rectangle()
-                        .foregroundColor(Color(UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00)))
-                        .frame(height: 500)
-                    
-                    ScrollView(.vertical, showsIndicators: false, content: {
-                        VStack{
-                            GeometryReader{g in
-                                Image("sporting")
-                                    .resizable()
-                                    .opacity(0.5)
-                                    .frame(width: UIScreen.main.bounds.width - 50, height: UIScreen.main.bounds.width - 50)
-                                    .offset(x: 50)
-                                    .onReceive(self.timeSporting) { (_) in
-                                        // its not a timer...
-                                        // for tracking the image is scrolled out or not...
-                                        let y = g.frame(in: .global).minY
-                                        
-                                        if -y > (UIScreen.main.bounds.height / 4) - 50{
-                                            withAnimation{
-                                                self.showSporting = true
-                                            }
-                                        }
-                                        else{
-                                            withAnimation{
-                                                self.showSporting = false
-                                            }
-                                        }
-                                    }
-                            }
-                            // fixing default height...
-                            .frame(height: UIScreen.main.bounds.height / 14 )
-                            
-                            VStack{
-                                HStack(alignment: .bottom){
-                                    Text("Sporting Kansas City")
-                                        .fontWeight(.bold)
-                                        .font(.system(size: 35))
-                                        .foregroundColor(.white)
-                                        .padding(.leading, 15)
-                                    Spacer()
-                                }.ignoresSafeArea()
-                                
-
-                                SportingHome(articles: sportingArticles, players: sportingPlayers, playersUnfiltered: sportingPlayers, games: sportingGames, nextGame: sportingGamePointer)
-
-                            }
-                            .padding([.top, .horizontal])
-                        }
-                    })
-                    
-                    if self.showSporting{
-                        TopView(logoName: "sporting", teamName: "Sporting Kansas City")
-                    }
-                })
-                .edgesIgnoringSafeArea(.top)
-                .opacity(self.index == 3 ? 1 : 0)
-            }
-            
-            HStack{
-                Button(action: {
-                    self.index = 0
-                }) {
-                    HStack(spacing: 6){
-                        Image("jayhawk")
-                            .resizable()
-                            .frame(width: 25, height: 25)
-    
-                        if self.index == 0{
-                            Text("Jayhawks")
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.vertical,10)
-                    .padding(.horizontal)
-                    .background(self.index == 0 ? Color(UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00)) : Color.clear)
-                    .clipShape(Capsule())
-                }
-                
-                Spacer(minLength: 0)
-                
-                Button(action: {
-                    self.index = 1
-                }) {
-                    HStack(spacing: 6){
-                        Image("chiefs")
-                            .resizable()
-                            .frame(width: 25, height: 25)
-                        
-                        if self.index == 1{
-                            Text("Chiefs")
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.vertical,10)
-                    .padding(.horizontal)
-                    .background(self.index == 1 ? Color(UIColor(red: 227/255, green: 24/255, blue: 55/255, alpha: 1.00)) : Color.clear)
-                    .clipShape(Capsule())
-                }
-                
-                Spacer(minLength: 0)
-                
-                Button(action: {
-                    self.index = 2
-                }) {
-                    HStack(spacing: 6){
-                        Image("royals")
-                            // dark mode adoption...\
-                            .resizable()
-                            .frame(width: 25, height: 25)
-                        
-                        if self.index == 2{
-                            Text("Royals")
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.vertical,10)
-                    .padding(.horizontal)
-                    .background(self.index == 2 ? Color(UIColor(red: 0/255, green: 70/255, blue: 135/255, alpha: 1.00)) : Color.clear)
-                    .clipShape(Capsule())
-                }
-                
-                Spacer(minLength: 0)
-                
-                Button(action: {
-                    self.index = 3
-                }) {
-                    HStack(spacing: 6){
-                        Image("sporting")
-                            .resizable()
-                            .frame(width: 25, height: 25)
-
-                        if self.index == 3{
-                            Text("Sporting")
-                                .foregroundColor(.white)
-                        }
-                    }
-                    .padding(.vertical,10)
-                    .padding(.horizontal)
-                    .background(self.index == 3 ? Color(UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00)) : Color.clear)
-                    .clipShape(Capsule())
-                }
-            }
-            .padding(.horizontal,25)
-            .padding(.top)
-            // based on device bottom padding will be changed...\
-            .padding(.bottom,UIApplication.shared.windows.first?.safeAreaInsets.bottom == 0 ? 10 : UIApplication.shared.windows.first?.safeAreaInsets.bottom)
-            .background(BlurBG())
+    /// The full name shown in the header and the sticky title bar.
+    var displayName: String {
+        switch self {
+        case .jayhawks: "Kansas Jayhawks"
+        case .chiefs: "Kansas City Chiefs"
+        case .royals: "Kansas City Royals"
+        case .sporting: "Sporting Kansas City"
         }
-        .edgesIgnoringSafeArea(.bottom)
+    }
+
+    /// The short name shown beside the crest on the selected tab.
+    var shortName: String {
+        switch self {
+        case .jayhawks: "Jayhawks"
+        case .chiefs: "Chiefs"
+        case .royals: "Royals"
+        case .sporting: "Sporting"
+        }
+    }
+
+    /// The asset name of the team crest.
+    var logo: String {
+        switch self {
+        case .jayhawks: "jayhawk"
+        case .chiefs: "chiefs"
+        case .royals: "royals"
+        case .sporting: "sporting"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .jayhawks: Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255)
+        case .chiefs: Color(red: 227 / 255, green: 24 / 255, blue: 55 / 255)
+        case .royals: Color(red: 0 / 255, green: 70 / 255, blue: 135 / 255)
+        case .sporting: Color(red: 0 / 255, green: 42 / 255, blue: 92 / 255)
+        }
     }
 }
 
-// TopView...
-struct TopView : View {
+/// The app's root screen: one scrolling team page at a time, with a crest
+/// picker pinned to the bottom.
+struct Home: View {
+    @State private var selection: Team = .jayhawks
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                // All four pages stay mounted and are shown by opacity, so
+                // each keeps its scroll position and its loaded data when the
+                // reader moves between teams.
+                TeamPage(team: .jayhawks) { JayhawksHome() }
+                    .opacity(selection == .jayhawks ? 1 : 0)
+                TeamPage(team: .chiefs) { ChiefsHome() }
+                    .opacity(selection == .chiefs ? 1 : 0)
+                TeamPage(team: .royals) { RoyalsHome() }
+                    .opacity(selection == .royals ? 1 : 0)
+                TeamPage(team: .sporting) { SportingHome() }
+                    .opacity(selection == .sporting ? 1 : 0)
+            }
+            // Attaching the picker as a safe area inset lets SwiftUI sit it
+            // above the home indicator and extend its material behind it,
+            // which the original did by hand from the window's insets.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                TeamPicker(selection: $selection)
+            }
+            .environment(\.containerSize, proxy.size)
+        }
+    }
+}
+
+/// One team's scrolling page: the crest scrolls away under a title bar that
+/// takes its place at the top.
+private struct TeamPage<Content: View>: View {
+    let team: Team
+    @ViewBuilder var content: Content
+
+    /// Whether the crest has scrolled far enough to hand off to the sticky bar.
+    @State private var showsStickyHeader = false
+
+    @Environment(\.containerSize) private var containerSize
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle()
+                .foregroundStyle(team.color)
+                .frame(height: 500)
+                .ignoresSafeArea(edges: .top)
+
+            ScrollView(.vertical) {
+                VStack {
+                    Image(team.logo)
+                        .resizable()
+                        .opacity(0.5)
+                        .frame(
+                            width: containerSize.width - 50,
+                            height: containerSize.width - 50
+                        )
+                        .offset(x: 50)
+                        // The crest deliberately overflows its slot: only the
+                        // top sliver shows until the page is scrolled.
+                        .frame(height: containerSize.height / 14)
+
+                    VStack {
+                        HStack(alignment: .bottom) {
+                            Text(team.displayName)
+                                .fontWeight(.bold)
+                                .font(.system(size: 35))
+                                .foregroundStyle(.white)
+                                .padding(.leading, 15)
+                            Spacer()
+                        }
+                        .ignoresSafeArea()
+
+                        content
+                    }
+                    .padding([.top, .horizontal])
+                }
+                .background {
+                    // Reports how far the page has scrolled, in place of the
+                    // 0.1-second timer the original polled the offset with.
+                    GeometryReader { proxy in
+                        Color.clear.preference(
+                            key: ScrollOffsetKey.self,
+                            value: proxy.frame(in: .scrollView).minY
+                        )
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+            .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(ScrollOffsetKey.self) { offset in
+                let scrolledPast = -offset > (containerSize.height / 4) - 50
+                guard scrolledPast != showsStickyHeader else { return }
+                withAnimation {
+                    showsStickyHeader = scrolledPast
+                }
+            }
+
+            if showsStickyHeader {
+                TopView(logoName: team.logo, teamName: team.displayName)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+/// How far the team page has scrolled, in points from its resting position.
+private struct ScrollOffsetKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+/// The crest row pinned to the bottom of the screen. The selected team's crest
+/// grows a label and a coloured capsule.
+private struct TeamPicker: View {
+    @Binding var selection: Team
+
+    var body: some View {
+        HStack {
+            ForEach(Array(Team.allCases.enumerated()), id: \.element) { index, team in
+                Button {
+                    selection = team
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(team.logo)
+                            .resizable()
+                            .frame(width: 25, height: 25)
+
+                        if selection == team {
+                            Text(team.shortName)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal)
+                    .background(selection == team ? team.color : .clear)
+                    .clipShape(.capsule)
+                }
+                .accessibilityLabel(team.displayName)
+
+                if index < Team.allCases.count - 1 {
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .animation(.default, value: selection)
+        .padding(.horizontal, 25)
+        .padding(.top)
+        .padding(.bottom, 10)
+        .background(.bar)
+    }
+}
+
+/// The title bar that slides in once a team's crest has scrolled away.
+struct TopView: View {
     var logoName: String
     var teamName: String
-    
-    var body: some View{
-        HStack(alignment: .center){
+
+    var body: some View {
+        HStack(alignment: .center) {
             Image(logoName)
-                //.renderingMode(.template)
                 .resizable()
                 .frame(width: 40, height: 40)
                 .padding(.leading)
-            
+
             Text(teamName)
                 .font(.title)
                 .fontWeight(.bold)
             Spacer(minLength: 0)
         }
-        // for non safe area phones padding will be 15...
-        .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top == 0 ? 15 : (UIApplication.shared.windows.first?.safeAreaInsets.top)! + 5)
+        .padding(.top, 5)
         .padding(.horizontal)
         .padding(.bottom)
-        .background(BlurBG())
+        .background {
+            // The bar sits below the status bar but its material runs up
+            // behind it, so the crest scrolls away under frosted glass.
+            Rectangle()
+                .fill(.bar)
+                .ignoresSafeArea(edges: .top)
+        }
     }
 }
 
-// Blur background...
-struct BlurBG : UIViewRepresentable {
-    func makeUIView(context: Context) -> UIVisualEffectView{
-        // for dark mode adoption...
-        let view = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
-        return view
-    }
-    
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        
-    }
+#Preview {
+    Home()
 }

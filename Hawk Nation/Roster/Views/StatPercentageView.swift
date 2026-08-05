@@ -9,6 +9,8 @@
 import SwiftUI
 
 struct StatPercentageView: View {
+    @Environment(\.containerSize) private var containerSize
+
     var progress: CGFloat
     var color: UIColor
     var title: String
@@ -22,7 +24,7 @@ struct StatPercentageView: View {
                 if(progress.isFinite) {
                     CircularProgress(percentage: progress,
                                       fontSize: 10,
-                                      backgroundColor: Color(UIColor.systemBackground),
+                                      backgroundColor: Color(uiColor: .systemBackground),
                                       fontColor : Color.primary,
                                       borderColor1: Color(color.darker()!),
                                       borderColor2: LinearGradient(gradient: Gradient(colors: [Color(color), Color(color.lighter()!)]),startPoint: .top, endPoint: .bottom)
@@ -45,10 +47,10 @@ struct StatPercentageView: View {
                     .minimumScaleFactor(0.5)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
-                    .foregroundColor(Color(UIColor.systemGray))
+                    .foregroundStyle(Color(uiColor: .systemGray))
                     .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
                 
-            }.frame(width: (UIScreen.main.bounds.width/4), height: (UIScreen.main.bounds.width/3))
+            }.frame(width: (containerSize.width/4), height: (containerSize.width/3))
         }
 }
 
@@ -78,8 +80,10 @@ extension UIColor {
     }
 }
 
-struct StatPercentageView_Previews: PreviewProvider {
-    static var previews: some View {
-        StatPercentageView(progress: 0.6, color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "Test")
-    }
+#Preview {
+    StatPercentageView(
+        progress: 0.6,
+        color: UIColor(red: 0 / 255, green: 81 / 255, blue: 186 / 255, alpha: 1),
+        title: "Test"
+    )
 }

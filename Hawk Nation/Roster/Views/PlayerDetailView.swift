@@ -7,12 +7,13 @@
 //
 
 import SwiftUI
-import SDWebImageSwiftUI
 import Foundation
 
 struct BasketballPlayerDetailView: View {
+    @Environment(\.containerSize) private var containerSize
+
     var player: BasketballPlayer
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = BasketballPlayerStats(gamesPlayed: 0, avgMinutes: 0, fieldGoalPct: 0, threePointFieldGoalPct: 0, freeThrowPct: 0, avgOffensiveRebounds: 0, avgDefensiveRebounds: 0, avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0, avgTurnovers: 0, avgPoints: 0)
     
@@ -21,11 +22,11 @@ struct BasketballPlayerDetailView: View {
             VStack {
                 ZStack(alignment: .top) {
                     Rectangle()
-                        .foregroundColor(Color(UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00)))
+                        .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
                         .frame(height: 40)
                     
                     RoundedRectangle(cornerRadius: 20)
-                        .foregroundColor(Color(UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00)))
+                        .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
                     
                     //JAYHAWK LOGO
                     Image("jayhawk")
@@ -40,11 +41,11 @@ struct BasketballPlayerDetailView: View {
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                             .frame(width: 100, height: 5)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                                 .opacity(0.5)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -58,23 +59,20 @@ struct BasketballPlayerDetailView: View {
                             Text(player.name)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             
                             Text(player.number)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             .opacity(0.5)
                         }
                         
                         //PLAYER PHOTO
-                        WebImage(url: URL(string: player.photo))
-                            .onSuccess { image, cacheType in
-                                // Success
+                        RemoteImage(url: URL(string: player.photo)) {
+                            Image(systemName: "blank")
+                                .resizable()
                         }
-                        .resizable()
-                        .placeholder(Image(systemName: "blank"))
-                        .indicator(.activity)
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
                         
@@ -94,7 +92,7 @@ struct BasketballPlayerDetailView: View {
                                     if(pickerSelectedItem == 0) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("About")
@@ -102,7 +100,7 @@ struct BasketballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                                 .opacity(0.8)
@@ -110,7 +108,7 @@ struct BasketballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                                 
                                 Button(action: {
                                     pickerSelectedItem = 1
@@ -120,7 +118,7 @@ struct BasketballPlayerDetailView: View {
                                     if(pickerSelectedItem == 1) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("Statistics")
@@ -128,7 +126,7 @@ struct BasketballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .opacity(0.8)
                                                 .clipped()
@@ -136,11 +134,11 @@ struct BasketballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                             }
                             
                         }
-                        .cornerRadius(20)
+                        .clipShape(.rect(cornerRadius: 20))
                         .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
@@ -151,8 +149,8 @@ struct BasketballPlayerDetailView: View {
                     if(pickerSelectedItem == 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 240)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 240)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 //ROW 1
@@ -176,12 +174,12 @@ struct BasketballPlayerDetailView: View {
                                 Spacer()
                             }.padding(.all, 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     } else if(pickerSelectedItem == 1) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 600)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 //ROW 1
@@ -234,19 +232,17 @@ struct BasketballPlayerDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     }
                     Spacer()
                 }
             }
             
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadBasketballPlayerStats(playerID: self.player.playerID, completion: { stats in
-                self.playerStats = stats
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task {
+            playerStats = await downloadBasketballPlayerStats(playerID: player.playerID)
         }
     }
 }
@@ -260,9 +256,11 @@ extension Float {
 }
 
 struct FootballPlayerDetailView: View {
+    @Environment(\.containerSize) private var containerSize
+
     var player: FootBallPlayer
     var teamColor: Color
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = BasketballPlayerStats(gamesPlayed: 0, avgMinutes: 0, fieldGoalPct: 0, threePointFieldGoalPct: 0, freeThrowPct: 0, avgOffensiveRebounds: 0, avgDefensiveRebounds: 0, avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0, avgTurnovers: 0, avgPoints: 0)
     
@@ -271,11 +269,11 @@ struct FootballPlayerDetailView: View {
             VStack {
                 ZStack(alignment: .top) {
                     Rectangle()
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                         .frame(height: 40)
                     
                     RoundedRectangle(cornerRadius: 20)
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                     
                     //CHIEFS LOGO
                     Image("chiefs")
@@ -290,11 +288,11 @@ struct FootballPlayerDetailView: View {
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                             .frame(width: 100, height: 5)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                                 .opacity(0.5)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -308,23 +306,20 @@ struct FootballPlayerDetailView: View {
                             Text(player.name)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             
                             Text(player.number)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             .opacity(0.5)
                         }
                         
                         //PLAYER PHOTO
-                        WebImage(url: URL(string: player.photo))
-                            .onSuccess { image, cacheType in
-                                // Success
+                        RemoteImage(url: URL(string: player.photo)) {
+                            Image(systemName: "blank")
+                                .resizable()
                         }
-                        .resizable()
-                        .placeholder(Image(systemName: "blank"))
-                        .indicator(.activity)
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
                         
@@ -344,7 +339,7 @@ struct FootballPlayerDetailView: View {
                                     if(pickerSelectedItem == 0) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("About")
@@ -352,7 +347,7 @@ struct FootballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                                 .opacity(0.8)
@@ -360,7 +355,7 @@ struct FootballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                                 
                                 Button(action: {
                                     pickerSelectedItem = 1
@@ -370,7 +365,7 @@ struct FootballPlayerDetailView: View {
                                     if(pickerSelectedItem == 1) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("Statistics")
@@ -378,7 +373,7 @@ struct FootballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .opacity(0.8)
                                                 .clipped()
@@ -386,11 +381,11 @@ struct FootballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                             }
                             
                         }
-                        .cornerRadius(20)
+                        .clipShape(.rect(cornerRadius: 20))
                         .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
@@ -401,8 +396,8 @@ struct FootballPlayerDetailView: View {
                     if(pickerSelectedItem == 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 360)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 360)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 //ROW 1
@@ -435,12 +430,12 @@ struct FootballPlayerDetailView: View {
                                 Spacer()
                             }.padding(.all, 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     } else if(pickerSelectedItem == 1) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 680)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 680)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 /*
@@ -495,27 +490,25 @@ struct FootballPlayerDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     }
                     Spacer()
                 }
             }
             
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            //downloadBasketballPlayerStats(playerID: self.player.playerID, completion: { stats in
-            //    self.playerStats = stats
-            //})
-        }
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+
     }
 }
 
 struct BaseballPlayerDetailView: View {
+    @Environment(\.containerSize) private var containerSize
+
     var player: BaseballPlayer
     var teamColor: Color
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = BaseballPlayerStats(EarnedRunAverage: 0, wins: 0, losses: 0, saves: 0, saveOpportunities: 0, gamesPlayed: 0, gamesStarted: 0, completeGames: 0, innings: 0.0, hits: 0, runs: 0, earnedRuns: 0, homeRuns: 0, walks: 0, strikeouts: 0, opponentAvg: 0.0, AtBats: 0, Runs: 0, Hits: 0, Doubles: 0, Triples: 0, HomeRuns: 0, RBIs: 0.0, Walks: 0, HitByPitch: 0, Strikeouts: 0, StolenBases: 0, CaughtStealing: 0, Avg: 0.0, OnBasePct: 0.0, SlugAvg: 0.0, OPS: 0.0)
     
@@ -524,11 +517,11 @@ struct BaseballPlayerDetailView: View {
             VStack {
                 ZStack(alignment: .top) {
                     Rectangle()
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                         .frame(height: 40)
                     
                     RoundedRectangle(cornerRadius: 20)
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                     
                     //ROYALS LOGO
                     Image("royals")
@@ -543,11 +536,11 @@ struct BaseballPlayerDetailView: View {
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                             .frame(width: 100, height: 5)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                                 .opacity(0.5)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -561,23 +554,20 @@ struct BaseballPlayerDetailView: View {
                             Text(player.name)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             
                             Text(player.number)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             .opacity(0.5)
                         }
                         
                         //PLAYER PHOTO
-                        WebImage(url: URL(string: player.photo))
-                            .onSuccess { image, cacheType in
-                                // Success
+                        RemoteImage(url: URL(string: player.photo)) {
+                            Image(systemName: "blank")
+                                .resizable()
                         }
-                        .resizable()
-                        .placeholder(Image(systemName: "blank"))
-                        .indicator(.activity)
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
                         
@@ -597,7 +587,7 @@ struct BaseballPlayerDetailView: View {
                                     if(pickerSelectedItem == 0) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("About")
@@ -605,7 +595,7 @@ struct BaseballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                                 .opacity(0.8)
@@ -613,7 +603,7 @@ struct BaseballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                                 
                                 Button(action: {
                                     pickerSelectedItem = 1
@@ -623,7 +613,7 @@ struct BaseballPlayerDetailView: View {
                                     if(pickerSelectedItem == 1) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("Statistics")
@@ -631,7 +621,7 @@ struct BaseballPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .opacity(0.8)
                                                 .clipped()
@@ -639,11 +629,11 @@ struct BaseballPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                             }
                             
                         }
-                        .cornerRadius(20)
+                        .clipShape(.rect(cornerRadius: 20))
                         .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
@@ -654,8 +644,8 @@ struct BaseballPlayerDetailView: View {
                     if(pickerSelectedItem == 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 360)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 360)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 //ROW 1
@@ -691,13 +681,13 @@ struct BaseballPlayerDetailView: View {
                                 Spacer()
                             }.padding(.all, 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     } else if(pickerSelectedItem == 1) {
                         if(player.position.contains("Pitcher")) {
                             ZStack(alignment: .top) {
                                 RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (UIScreen.main.bounds.width - 25), height: 720)
-                                    .foregroundColor(Color(UIColor.systemBackground))
+                                    .frame(width: (containerSize.width - 25), height: 720)
+                                    .foregroundStyle(Color(uiColor: .systemBackground))
                                 
                                 VStack(alignment: .leading, spacing: 15) {
                                     //ROW 1
@@ -757,12 +747,12 @@ struct BaseballPlayerDetailView: View {
                                     Spacer()
                                 }.padding([.all], 20)
                             }
-                            .edgesIgnoringSafeArea(.top)
+                            .ignoresSafeArea(.top)
                         } else {
                             ZStack(alignment: .top) {
                                 RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                    .foregroundColor(Color(UIColor.systemBackground))
+                                    .frame(width: (containerSize.width - 25), height: 600)
+                                    .foregroundStyle(Color(uiColor: .systemBackground))
                                 
                                 VStack(alignment: .leading, spacing: 15) {
                                     //ROW 1
@@ -812,7 +802,7 @@ struct BaseballPlayerDetailView: View {
                                     Spacer()
                                 }.padding([.all], 20)
                             }
-                            .edgesIgnoringSafeArea(.top)
+                            .ignoresSafeArea(.top)
                         }
                     }
                     Spacer()
@@ -820,20 +810,23 @@ struct BaseballPlayerDetailView: View {
             }
             
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
-        .onAppear {
-            downloadBaseballPlayerStats(playerID: self.player.playerID, playerPosition: self.player.position, completion: { stats in
-                self.playerStats = stats
-            })
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .task {
+            playerStats = await downloadBaseballPlayerStats(
+                playerID: player.playerID,
+                playerPosition: player.position
+            )
         }
     }
 }
 
 struct SoccerPlayerDetailView: View {
+    @Environment(\.containerSize) private var containerSize
+
     var player: SoccerPlayer
     var teamColor: Color
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     @State var pickerSelectedItem = 0
     
@@ -842,11 +835,11 @@ struct SoccerPlayerDetailView: View {
             VStack {
                 ZStack(alignment: .top) {
                     Rectangle()
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                         .frame(height: 40)
                     
                     RoundedRectangle(cornerRadius: 20)
-                        .foregroundColor(teamColor)
+                        .foregroundStyle(teamColor)
                     
                     //SPORTING LOGO
                     Image("sporting")
@@ -861,11 +854,11 @@ struct SoccerPlayerDetailView: View {
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
-                            self.presentationMode.wrappedValue.dismiss()
+                            dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
                             .frame(width: 100, height: 5)
-                            .foregroundColor(Color(UIColor.systemBackground))
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                                 .opacity(0.5)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
                         
@@ -879,23 +872,20 @@ struct SoccerPlayerDetailView: View {
                             Text(player.name)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             
                             Text(player.number)
                             .fontWeight(.bold)
                             .font(.system(size: 35))
-                            .foregroundColor(Color.white)
+                            .foregroundStyle(Color.white)
                             .opacity(0.5)
                         }
                         
                         //PLAYER PHOTO
-                        WebImage(url: URL(string: player.photo))
-                            .onSuccess { image, cacheType in
-                                // Success
+                        RemoteImage(url: URL(string: player.photo)) {
+                            Image(systemName: "blank")
+                                .resizable()
                         }
-                        .resizable()
-                        .placeholder(Image(systemName: "blank"))
-                        .indicator(.activity)
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
                         
@@ -915,7 +905,7 @@ struct SoccerPlayerDetailView: View {
                                     if(pickerSelectedItem == 0) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("About")
@@ -923,7 +913,7 @@ struct SoccerPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                                 .opacity(0.8)
@@ -931,7 +921,7 @@ struct SoccerPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                                 
                                 Button(action: {
                                     pickerSelectedItem = 1
@@ -941,7 +931,7 @@ struct SoccerPlayerDetailView: View {
                                     if(pickerSelectedItem == 1) {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .clipped()
                                             Text("Statistics")
@@ -949,7 +939,7 @@ struct SoccerPlayerDetailView: View {
                                     } else {
                                         ZStack(alignment: .center) {
                                             Rectangle()
-                                                .foregroundColor(Color(UIColor.systemBackground))
+                                                .foregroundStyle(Color(uiColor: .systemBackground))
                                                 .frame(height: 30)
                                                 .opacity(0.8)
                                                 .clipped()
@@ -957,11 +947,11 @@ struct SoccerPlayerDetailView: View {
                                         }
                                     }
                                     
-                                }.buttonStyle(PlainButtonStyle())
+                                }.buttonStyle(.plain)
                             }
                             
                         }
-                        .cornerRadius(20)
+                        .clipShape(.rect(cornerRadius: 20))
                         .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
@@ -972,8 +962,8 @@ struct SoccerPlayerDetailView: View {
                     if(pickerSelectedItem == 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (UIScreen.main.bounds.width - 25), height: 240)
-                                .foregroundColor(Color(UIColor.systemBackground))
+                                .frame(width: (containerSize.width - 25), height: 240)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                             
                             VStack(alignment: .leading, spacing: 15) {
                                 //ROW 1
@@ -997,13 +987,13 @@ struct SoccerPlayerDetailView: View {
                                 Spacer()
                             }.padding(.all, 20)
                         }
-                        .edgesIgnoringSafeArea(.top)
+                        .ignoresSafeArea(.top)
                     } else if(pickerSelectedItem == 1) {
                         if(player.position.contains("Goalkeeper")) {
                             ZStack(alignment: .top) {
                                 RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (UIScreen.main.bounds.width - 25), height: 360)
-                                    .foregroundColor(Color(UIColor.systemBackground))
+                                    .frame(width: (containerSize.width - 25), height: 360)
+                                    .foregroundStyle(Color(uiColor: .systemBackground))
                                 
                                 VStack(alignment: .leading, spacing: 15) {
                                     //ROW 1
@@ -1035,12 +1025,12 @@ struct SoccerPlayerDetailView: View {
                                     Spacer()
                                 }.padding([.all], 20)
                             }
-                            .edgesIgnoringSafeArea(.top)
+                            .ignoresSafeArea(.top)
                         } else {
                             ZStack(alignment: .top) {
                                 RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (UIScreen.main.bounds.width - 25), height: 600)
-                                    .foregroundColor(Color(UIColor.systemBackground))
+                                    .frame(width: (containerSize.width - 25), height: 600)
+                                    .foregroundStyle(Color(uiColor: .systemBackground))
                                 
                                 VStack(alignment: .leading, spacing: 15) {
                                     //ROW 1
@@ -1093,7 +1083,7 @@ struct SoccerPlayerDetailView: View {
                                     Spacer()
                                 }.padding([.all], 20)
                             }
-                            .edgesIgnoringSafeArea(.top)
+                            .ignoresSafeArea(.top)
                         }
                     }
                     Spacer()
@@ -1101,7 +1091,7 @@ struct SoccerPlayerDetailView: View {
             }
             
             Spacer()
-        }.background(Color(UIColor.systemBackground).edgesIgnoringSafeArea(.all))
-        .edgesIgnoringSafeArea(.all)
+        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
     }
 }

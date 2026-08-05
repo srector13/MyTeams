@@ -25,7 +25,7 @@ struct StatRowView: View {
         
             Text(title)
                 .font(.system(size: 15))
-                .foregroundColor(Color(UIColor.systemGray))
+                .foregroundStyle(Color(uiColor: .systemGray))
                 .fontWeight(.bold)
                 .lineLimit(1)
                 .minimumScaleFactor(0.1)
@@ -41,8 +41,6 @@ struct StatRowView: View {
     }
 }
 
-struct StatRowView_Previews: PreviewProvider {
-    static var previews: some View {
-        StatRowView(title: "Field Goals",homeStat: "10",awayStat: "20")
-    }
+#Preview {
+    StatRowView(title: "Field Goals", homeStat: "10", awayStat: "20")
 }

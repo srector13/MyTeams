@@ -19,14 +19,14 @@ public struct CircularProgress: View {
 
     public var body: some View {
         return (Circle()
-                    .foregroundColor(backgroundColor)
+                    .foregroundStyle(backgroundColor)
                     .modifier(PercentageIndicator(percentage: self.percentage, fontSize: fontSize, fontColor: fontColor, borderColor1: borderColor1, borderColor2: borderColor2)))
         
     }
 }
 
 
-public struct PercentageIndicator: AnimatableModifier {
+public struct PercentageIndicator: ViewModifier, Animatable {
     var percentage: CGFloat
     let fontSize : CGFloat
     let fontColor : Color
@@ -58,7 +58,7 @@ public struct PercentageIndicator: AnimatableModifier {
                     .stroke(style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
                     .opacity(0.3)
                     .rotationEffect(Angle(degrees: -180))
-                    .foregroundColor(borderColor1)
+                    .foregroundStyle(borderColor1)
                     .padding(.all, 8)
                 
                 borderColor2
@@ -72,7 +72,7 @@ public struct PercentageIndicator: AnimatableModifier {
                     )
                     
                 Text("\(Int(percentage * 100))%")
-                    .foregroundColor(fontColor)
+                    .foregroundStyle(fontColor)
                     .font(.system(size: fontSize))
                     .fontWeight(.black)
                    .scaleEffect((percentage/2)+1)
@@ -97,14 +97,14 @@ public struct LinearProgress: View {
 
     public var body: some View {
         return (RoundedRectangle(cornerRadius: 20)
-                    .foregroundColor(backgroundColor)
+                    .foregroundStyle(backgroundColor)
                     .modifier(LinearPercentageIndicator(percentage: self.percentage, borderColor1: borderColor1, borderColor2: borderColor2)))
         
     }
 }
 
 
-public struct LinearPercentageIndicator: AnimatableModifier {
+public struct LinearPercentageIndicator: ViewModifier, Animatable {
     var percentage: CGFloat
     let borderColor1 : Color
     let borderColor2 : LinearGradient
@@ -128,7 +128,7 @@ public struct LinearPercentageIndicator: AnimatableModifier {
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 20)
                     .opacity(0.3)
-                    .foregroundColor(borderColor1)
+                    .foregroundStyle(borderColor1)
                     .padding(.all, 8)
                 
                 borderColor2
@@ -143,13 +143,18 @@ public struct LinearPercentageIndicator: AnimatableModifier {
 }
 
 
-struct Progress_Previews: PreviewProvider {
-    static var previews: some View {
-        LinearProgress(percentage: 0.5,
-                          backgroundColor: Color(UIColor.systemBackground),
-                          borderColor1: Color(UIColor.blue),
-                          borderColor2: LinearGradient(gradient: /*@START_MENU_TOKEN@*/Gradient(colors: [Color.red, Color.blue])/*@END_MENU_TOKEN@*/, startPoint: /*@START_MENU_TOKEN@*/.leading/*@END_MENU_TOKEN@*/, endPoint: /*@START_MENU_TOKEN@*/.trailing/*@END_MENU_TOKEN@*/)).frame(height: 70, alignment: .center)
-    }
+#Preview {
+    LinearProgress(
+        percentage: 0.5,
+        backgroundColor: Color(uiColor: .systemBackground),
+        borderColor1: .blue,
+        borderColor2: LinearGradient(
+            colors: [.red, .blue],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    )
+    .frame(height: 70)
 }
 
 

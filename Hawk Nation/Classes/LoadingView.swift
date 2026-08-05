@@ -24,7 +24,7 @@ public struct LoadingView: View {
     
     public var body: some View {
         RoundedRectangle(cornerRadius: Constants.cornerRadius)
-            .fill(Color(UIColor.systemGray))
+            .fill(Color(uiColor: .systemGray))
             .opacity(opacity)
             .transition(.opacity)
             .onAppear {
@@ -52,7 +52,7 @@ public struct LoadingViewCircle: View {
     
     public var body: some View {
         Circle()
-            .fill(Color(UIColor.systemGray))
+            .fill(Color(uiColor: .systemGray))
             .opacity(opacity)
             .transition(.opacity)
             .onAppear {
