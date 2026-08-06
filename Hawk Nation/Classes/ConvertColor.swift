@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 extension Color {
     /// Builds a colour from the six-digit hex strings the ESPN feeds use for

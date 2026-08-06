@@ -41,8 +41,9 @@ struct RoyalsHome: View {
             }
             .padding(.top, 5)
 
-            // A 162-game season has enough abandoned fixtures that the baseball
-            // tab has always counted them in the losses column.
+            // The other three tabs exclude cancelled and postponed fixtures
+            // from the losses column; this one never has. Kept as-is rather
+            // than quietly changing a displayed record.
             ScheduleSection(model: model, countsAbandonedGamesAsLosses: true) { game in
                 GameView(game: game, teamColor: teamColor, teamLogo: Team.royals.logo)
             } detail: { game in

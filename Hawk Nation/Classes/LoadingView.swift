@@ -8,7 +8,6 @@
 
 import SwiftUI
 
-@available(iOS 13.0, *)
 public struct LoadingView: View {
     
     private struct Constants {

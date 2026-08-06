@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 /// The next fixture, as the widget renders it.
 struct WidgetGame: Sendable {
