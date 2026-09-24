@@ -145,6 +145,54 @@ struct ScheduleParsingTests {
         )
     }
 
+    @Test("An empty schedule resolves to the placeholder index without trapping")
+    func emptySchedule() {
+        #expect(getNextGame(schedule: []) == 0)
+        #expect(getNextGame(schedule: [], pastDatesCountAsPlayed: true) == 0)
+    }
+
+    @Test("A season whose flags never arrived points at its last game, not its opener")
+    func pastSeasonWithoutFlagsClampsToEnd() {
+        // What the soccer feed used to look like: every fixture unflagged and
+        // weeks past. The date fallback walks the whole schedule and the
+        // pointer clamps to the final game instead of silently returning 0.
+        let lastWeek = Date().addingTimeInterval(-7 * 86_400)
+        let schedule = (0..<3).map {
+            game(pointer: $0, completed: false, date: lastWeek)
+        }
+        #expect(getNextGame(schedule: schedule, pastDatesCountAsPlayed: true) == 2)
+        // Even with the fallback off (a completed-only feed), the clamp still
+        // lands on the last game rather than the season opener.
+        let flagged = (0..<3).map {
+            game(pointer: $0, completed: true, date: lastWeek)
+        }
+        #expect(getNextGame(schedule: flagged) == 2)
+    }
+
+    @Test("The date fallback skips played fixtures and holds at a live one")
+    func dateFallbackWalksPastKickoffs() {
+        let now = Date()
+        let schedule = [
+            game(pointer: 0, completed: false, date: now.addingTimeInterval(-10 * 86_400)),
+            game(pointer: 1, completed: false, date: now.addingTimeInterval(-5 * 3600)),
+            game(pointer: 2, completed: false, date: now.addingTimeInterval(3 * 86_400)),
+        ]
+        // Games 0 and 1 are past their grace window; game 2 is next.
+        #expect(getNextGame(schedule: schedule, pastDatesCountAsPlayed: true, now: now) == 2)
+        // The same schedule without the fallback stops at the unflagged game 0.
+        #expect(getNextGame(schedule: schedule, now: now) == 0)
+
+        // A live fixture inside the four-hour window holds the pointer.
+        let withLive = [
+            game(pointer: 0, completed: false, date: now.addingTimeInterval(-10 * 86_400)),
+            game(pointer: 1, completed: false, date: now.addingTimeInterval(-2 * 3600)),
+            game(pointer: 2, completed: false, date: now.addingTimeInterval(3 * 86_400)),
+        ]
+        #expect(
+            getNextGame(schedule: withLive, pastDatesCountAsPlayed: true, now: now) == 1
+        )
+    }
+
     private func game(
         pointer: Int,
         completed: Bool,

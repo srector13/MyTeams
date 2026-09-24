@@ -14,8 +14,8 @@ struct SportingHome: View {
         teamName: "Kansas City",
         teamNameField: .shortDisplayName,
         newsURL: NewsFeed.sporting,
-        // MLS fixtures carry no completion flag, so the next game is found by
-        // kick-off time instead.
+        // MLS completion flags lag or never arrive, so the next game also
+        // walks past kick-off times.
         usesDateForNextGame: true,
         loadRoster: downloadSoccerRoster
     )

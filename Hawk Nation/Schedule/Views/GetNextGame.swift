@@ -8,58 +8,38 @@
 
 import Foundation
 
-func getNextGame(schedule: [Game]) -> Int {
-    //var currentDate = Date()
-    //currentDate.addTimeInterval(TimeInterval(90.0 * 60.0))
+/// The index of the next game still to be played, for the schedule carousel.
+///
+/// Feeds list a season in chronological order, so normally that is the first
+/// fixture not already marked done. Two feeds need a fallback: an in-progress
+/// game keeps `completed: false` (the score is still moving), and the soccer
+/// feed's flags lag or never arrive. There, a fixture whose start time is
+/// more than four hours past is treated as played so the pointer walks over
+/// it, while a live game keeps its slot.
+///
+/// Once nothing is left to play the result clamps to the final game — the
+/// season's last result, not the opener. An empty schedule returns 0 as a
+/// placeholder index; callers must only invoke this with a non-empty schedule
+/// (see `TeamModel.apply(schedule:)`).
+func getNextGame(
+    schedule: [Game],
+    pastDatesCountAsPlayed: Bool = false,
+    now: Date = Date()
+) -> Int {
+    guard !schedule.isEmpty else { return 0 }
 
     var nextGamePointer = 0
-    
+
     for game in schedule {
-        if(game.completed || game.cancelled || game.postponed) {
+        if game.completed || game.cancelled || game.postponed {
+            nextGamePointer += 1
+        } else if pastDatesCountAsPlayed
+                    && game.dateAsDate.addingTimeInterval(4 * 3600) < now {
             nextGamePointer += 1
         } else {
             break
         }
-        
-        /*let gameDate = game.dateAsDate
-        if(gameDate <= currentDate) {
-            nextGamePointer += 1
-        } else {
-            break
-        }*/
     }
-    
-    if nextGamePointer > schedule.count-1 {
-        return schedule.count - 1
-    }
-    
-    return nextGamePointer
-}
 
-func getNextSportingGame(schedule: [Game]) -> Int {
-    var currentDate = Date()
-    currentDate.addTimeInterval(TimeInterval(90.0 * 60.0))
-
-    var nextGamePointer = 0
-
-    
-    for pointer in (0...schedule.count-1).reversed() {
-        let gameDate = schedule[pointer].dateAsDate
-        if(gameDate >= currentDate) {
-            nextGamePointer = pointer
-        }
-    }
-    
-    return nextGamePointer
-}
-
-func hasPassed(game: Game) -> Bool {
-    var currentDate = Date()
-    currentDate.addTimeInterval(TimeInterval(90.0 * 60.0))
-
-    if(game.dateAsDate <= currentDate) {
-        return false
-    }
-    
-    return true
+    return min(nextGamePointer, schedule.count - 1)
 }

@@ -65,8 +65,10 @@ final class TeamModel<Player: RosterPlayer> {
     private let newsURL: String
     private let loadRoster: @Sendable () async -> [Player]
 
-    /// How the next game is located in the schedule. Soccer fixtures are
-    /// listed with no completion flag, so that tab searches by date instead.
+    /// Whether a past kick-off also counts as played when locating the next
+    /// game. The soccer feed's completion flags are unreliable, so that tab
+    /// gets the date fallback in `getNextGame`; the record shares the flag via
+    /// `seasonRecord(pastDatesCountAsPlayed:)`.
     private let usesDateForNextGame: Bool
 
     init(
@@ -146,9 +148,10 @@ final class TeamModel<Player: RosterPlayer> {
         guard !schedule.isEmpty else { return }
 
         games = schedule
-        nextGame = usesDateForNextGame
-            ? getNextSportingGame(schedule: schedule)
-            : getNextGame(schedule: schedule)
+        nextGame = getNextGame(
+            schedule: schedule,
+            pastDatesCountAsPlayed: usesDateForNextGame
+        )
     }
 
     // MARK: - Filtering and sorting
@@ -186,9 +189,11 @@ final class TeamModel<Player: RosterPlayer> {
 ///   - countingAbandonedAsLosses: the baseball tab's rule — cancelled and
 ///     postponed fixtures count in the losses column. Every other tab treats
 ///     an abandoned fixture as neither win nor loss. See `RoyalsHome`.
-///   - pastDatesCountAsPlayed: the soccer feed ships no completion flag, so
-///     there a past start time stands in for "played". Games are given a
-///     four-hour grace window past kickoff so a live match is not yet a loss.
+///   - pastDatesCountAsPlayed: the soccer feed's completion flags are
+///     unreliable, so there a past start time stands in for "played". Games
+///     are given a four-hour grace window past kickoff so a live match is not
+///     yet a loss. `getNextGame` applies the same fallback to the carousel
+///     pointer.
 func seasonRecord(
     games: [Game],
     countingAbandonedAsLosses: Bool = false,

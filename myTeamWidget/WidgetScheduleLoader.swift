@@ -119,6 +119,12 @@ enum WidgetScheduleLoader {
             teamNameField: team.teamNameField
         )
 
+        // The widget wants the earliest fixture that has not kicked off yet.
+        // The app locates the next game by walking completion flags
+        // (`getNextGame`); with dates parsed as true instants the two agree on
+        // every well-flagged schedule, and the widget keeps its date form
+        // because it renders `nil` — not a clamped last game — after a season
+        // ends, which the flag walk cannot express.
         guard let game = schedule
             .filter({ $0.dateAsDate >= Date() && !$0.cancelled })
             .min(by: { $0.dateAsDate < $1.dateAsDate })
