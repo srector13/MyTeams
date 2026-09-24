@@ -128,7 +128,7 @@ struct BasketballGameDetailView: View {
                                         .multilineTextAlignment(.center)
                                         .padding(.horizontal, 30)
                                 } else {
-                                    if(game.dateAsDate <= Date()) {
+                                    if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
                                         HStack(alignment: .top) {
                                             if(game.gameHome) {
                                                 HStack() {
@@ -533,7 +533,7 @@ struct FootballGameDetailView: View {
                                         .multilineTextAlignment(.center)
                                         .padding(.horizontal, 30)
                                 } else {
-                                    if(game.dateAsDate <= Date()) {
+                                    if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
                                         HStack(alignment: .top) {
                                             if(game.gameHome) {
                                                 HStack() {
@@ -902,7 +902,7 @@ struct BaseballGameDetailView: View {
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 30)
                             } else {
-                                if(game.dateAsDate <= Date()) {
+                                if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
                                     HStack(alignment: .top) {
                                         if(game.gameHome) {
                                             HStack() {
@@ -1198,7 +1198,7 @@ struct SoccerGameDetailView: View {
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 30)
                             } else {
-                                if(game.dateAsDate <= Date()) {
+                                if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
                                     HStack(alignment: .top) {
                                         if(game.gameHome) {
                                             HStack() {
