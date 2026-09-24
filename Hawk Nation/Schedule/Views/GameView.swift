@@ -225,12 +225,14 @@ struct GameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         }
-                                        
-                                        Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
-                                            .font(.system(size: 24))
-                                            .fontWeight(.heavy)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
+
+                                        if gameTeamStats.count >= 2 {
+                                            Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
+                                                .font(.system(size: 24))
+                                                .fontWeight(.heavy)
+                                                .minimumScaleFactor(0.5)
+                                                .foregroundStyle(Color.white)
+                                        }
                                     }
                                 }
                             }
@@ -490,7 +492,7 @@ struct FootballGameView : View {
                                         .foregroundStyle(teamColor)
                                         .opacity(0.5)
                                     
-                                    if (gameTeamStats[0].score > gameTeamStats[0].opponentScore) {
+                                    if gameTeamStats.count >= 2, (gameTeamStats[0].score > gameTeamStats[0].opponentScore) {
                                         VStack {
                                             HStack() {
                                                 Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
@@ -517,7 +519,7 @@ struct FootballGameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         }
-                                    } else if (gameTeamStats[0].score == gameTeamStats[0].opponentScore) {
+                                    } else if gameTeamStats.count >= 2, (gameTeamStats[0].score == gameTeamStats[0].opponentScore) {
                                         VStack {
                                             Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
                                                 .font(.system(size: 24))
@@ -537,7 +539,7 @@ struct FootballGameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         }
-                                    } else {
+                                    } else if gameTeamStats.count >= 2 {
                                         VStack {
                                             HStack() {
                                                 Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
