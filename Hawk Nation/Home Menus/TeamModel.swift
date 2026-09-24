@@ -87,14 +87,14 @@ final class TeamModel<Player: RosterPlayer> {
 
     /// The team's record so far this season, as wins and losses.
     ///
-    /// Losses count only games already played that were neither cancelled nor
-    /// postponed, so an abandoned fixture does not show up as a defeat.
-    var record: (wins: Int, losses: Int) {
-        let wins = games.count { $0.gameWin }
-        let losses = games.count {
-            !$0.gameWin && $0.pointer < nextGame && !$0.cancelled && !$0.postponed
-        }
-        return (wins, losses)
+    /// `countingAbandonedAsLosses` selects the baseball tab's rule; see
+    /// `RoyalsHome` and `seasonRecord`.
+    func displayRecord(countingAbandonedAsLosses: Bool = false) -> (wins: Int, losses: Int) {
+        seasonRecord(
+            games: games,
+            countingAbandonedAsLosses: countingAbandonedAsLosses,
+            pastDatesCountAsPlayed: usesDateForNextGame
+        )
     }
 
     // MARK: - Loading
@@ -174,4 +174,38 @@ final class TeamModel<Player: RosterPlayer> {
         case .position: filtered.sorted { $0.position < $1.position }
         }
     }
+}
+
+/// Wins and losses from a schedule, counted from each game's own state.
+///
+/// Deliberately independent of `nextGame`: that carousel pointer clamps to the
+/// last slot once the season ends, which silently dropped a finale that is not
+/// a win (a loss, or a fixture whose feed never set a winner) from the record.
+///
+/// - Parameters:
+///   - countingAbandonedAsLosses: the baseball tab's rule — cancelled and
+///     postponed fixtures count in the losses column. Every other tab treats
+///     an abandoned fixture as neither win nor loss. See `RoyalsHome`.
+///   - pastDatesCountAsPlayed: the soccer feed ships no completion flag, so
+///     there a past start time stands in for "played". Games are given a
+///     four-hour grace window past kickoff so a live match is not yet a loss.
+func seasonRecord(
+    games: [Game],
+    countingAbandonedAsLosses: Bool = false,
+    pastDatesCountAsPlayed: Bool = false,
+    now: Date = Date()
+) -> (wins: Int, losses: Int) {
+    let wins = games.count { $0.gameWin }
+    let losses = games.count { game in
+        if game.gameWin { return false }
+        if game.cancelled || game.postponed {
+            // The baseball tab's rule: an abandoned fixture goes in the
+            // losses column. Everywhere else it is neither win nor loss.
+            return countingAbandonedAsLosses
+        }
+        if game.completed { return true }
+        return pastDatesCountAsPlayed
+            && game.dateAsDate.addingTimeInterval(4 * 3600) < now
+    }
+    return (wins, losses)
 }

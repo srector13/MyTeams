@@ -77,17 +77,87 @@ struct ScheduleParsingTests {
         #expect(getNextGame(schedule: schedule) == 1)
     }
 
+    @Test("A season-ending loss counts, even though the pointer clamps before it")
+    func countsSeasonEndingLoss() {
+        let schedule = [
+            game(pointer: 0, completed: true, win: true),
+            game(pointer: 1, completed: true, win: true),
+            game(pointer: 2, completed: true, win: false),
+        ]
+        // The carousel pointer clamps to the last game, which under the old
+        // `pointer < nextGame` rule made that finale invisible to the record.
+        #expect(getNextGame(schedule: schedule) == 2)
+        #expect(seasonRecord(games: schedule) == (wins: 2, losses: 1))
+    }
+
+    @Test("A completed game with no winner set counts as a loss")
+    func forfeitCountsAsLoss() {
+        let schedule = [
+            game(pointer: 0, completed: true, win: false),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1))
+    }
+
+    @Test("Unplayed games are neither win nor loss")
+    func futureExcluded() {
+        let later = Date().addingTimeInterval(86_400)
+        let schedule = [
+            game(pointer: 0, completed: true, win: true),
+            game(pointer: 1, completed: false, date: later),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 0))
+    }
+
+    @Test("Cancelled fixtures are losses only on the baseball rule")
+    func abandonedFixtures() {
+        let schedule = [
+            game(pointer: 0, completed: false, cancelled: true),
+            game(pointer: 1, completed: false, postponed: true),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(
+            seasonRecord(games: schedule, countingAbandonedAsLosses: true)
+                == (wins: 0, losses: 2)
+        )
+    }
+
+    @Test("A past start time stands in for played only on the date-only feed")
+    func dateOnlySchedule() {
+        let sixHoursAgo = Date().addingTimeInterval(-6 * 3600)
+        let schedule = [
+            game(pointer: 0, completed: false, date: sixHoursAgo),
+        ]
+        // Past the grace window: a fixture whose kickoff is hours gone counts
+        // as played only where the feed ships no completion flag.
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(
+            seasonRecord(games: schedule, pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 1)
+        )
+
+        let inProgress = game(
+            pointer: 0, completed: false,
+            date: Date().addingTimeInterval(-2 * 3600)
+        )
+        #expect(
+            seasonRecord(games: [inProgress], pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 0)
+        )
+    }
+
     private func game(
         pointer: Int,
         completed: Bool,
+        win: Bool = false,
         cancelled: Bool = false,
-        postponed: Bool = false
+        postponed: Bool = false,
+        date: Date = .now
     ) -> Game {
         Game(
             team: "Jayhawks", opponent: "Bears", score: "", opponentScore: "",
-            time: "", date: "", dateAsDate: .now, opponentLogo: "", channel: "TBD",
+            time: "", date: "", dateAsDate: date, opponentLogo: "", channel: "TBD",
             location: "", gameHome: true, gameID: "\(pointer)", pointer: pointer,
-            gameWin: false, completed: completed, competitionName: "",
+            gameWin: win, completed: completed, competitionName: "",
             cancelled: cancelled, postponed: postponed, gameClock: "",
             gamePeriod: "", gameHalftime: false
         )

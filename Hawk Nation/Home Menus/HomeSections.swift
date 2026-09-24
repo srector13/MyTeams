@@ -122,10 +122,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     @State private var selectedGame: Game?
 
     private var record: String {
-        let losses = countsAbandonedGamesAsLosses
-            ? model.games.count { !$0.gameWin && $0.pointer < model.nextGame }
-            : model.record.losses
-        return "\(model.record.wins)-\(losses)"
+        let (wins, losses) = model.displayRecord(
+            countingAbandonedAsLosses: countsAbandonedGamesAsLosses
+        )
+        return "\(wins)-\(losses)"
     }
 
     var body: some View {
