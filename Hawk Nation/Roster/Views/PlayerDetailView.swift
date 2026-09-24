@@ -70,7 +70,7 @@ struct BasketballPlayerDetailView: View {
                         
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
-                            Image(systemName: "blank")
+                            Image("blank")
                                 .resizable()
                         }
                         .aspectRatio(contentMode: .fill)
@@ -317,7 +317,7 @@ struct FootballPlayerDetailView: View {
                         
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
-                            Image(systemName: "blank")
+                            Image("blank")
                                 .resizable()
                         }
                         .aspectRatio(contentMode: .fill)
@@ -565,7 +565,7 @@ struct BaseballPlayerDetailView: View {
                         
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
-                            Image(systemName: "blank")
+                            Image("blank")
                                 .resizable()
                         }
                         .aspectRatio(contentMode: .fill)
@@ -883,7 +883,7 @@ struct SoccerPlayerDetailView: View {
                         
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
-                            Image(systemName: "blank")
+                            Image("blank")
                                 .resizable()
                         }
                         .aspectRatio(contentMode: .fill)
