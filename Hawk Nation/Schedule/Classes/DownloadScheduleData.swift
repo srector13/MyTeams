@@ -128,6 +128,12 @@ private func parseGame(
     var halftime = false
 
     for (_, competition): (String, JSON) in event["competitions"] {
+        // Shape pin (M6): every assignment below overwrites the previous
+        // iteration's value, so with more than one competition in an event —
+        // a doubleheader feed, say — the last one silently wins. ESPN's
+        // summary and schedule endpoints carry exactly one competition per
+        // event today; revisit this loop (or assert a count of one) if a
+        // fixture ever shows the wrong venue, time, or score.
         location = competition["venue"]["fullName"].stringValue
         gameID = competition["id"].stringValue
 

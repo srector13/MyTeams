@@ -156,6 +156,12 @@ func downloadFootballRoster() async -> [FootBallPlayer] {
     var roster: [FootBallPlayer] = []
 
     for (_, group): (String, JSON) in json["athletes"] {
+        // Shape pin (M6): ESPN sends this `position` as a bare string naming
+        // the unit ("offense", "defense", "specialTeam"). Unlike the athlete
+        // `position` below, it is not an object. If the feed ever changes it
+        // to one, `stringValue` yields "" and every player is filed under ""
+        // — ChiefsHome's unit filters would then match nobody and all three
+        // roster sections render empty. See JSONTests for the coercion rule.
         let unit = group["position"].stringValue
 
         for (_, athlete): (String, JSON) in group["items"] {
@@ -246,6 +252,11 @@ func downloadSoccerRoster() async -> [SoccerPlayer] {
         let goalsConceded = stat(2, 2)
 
         let country = athlete["birthPlace"]["country"].stringValue
+        // Shape pin (M6): the soccer feed has shipped `citizenship` both as a
+        // string and as an array of country objects. `stringValue` returns ""
+        // for an array, so one shape change makes every player read "N/A"
+        // here — if that column goes blank across the roster, iterate the
+        // array and take each element's `name` instead.
         let citizenship = athlete["citizenship"].stringValue
 
         return SoccerPlayer(

@@ -165,4 +165,69 @@ struct JSONTests {
         #expect(JSON(data: Data("not json".utf8))["a"]["b"].stringValue == "")
         #expect(JSON(data: Data()).isNull)
     }
+
+    // MARK: - Feed shape pins (M6)
+
+    /// Pins the coercion behaviour the fragile ESPN parses lean on, so a
+    /// future feed shape change fails in these tests rather than silently
+    /// blanking a screen. See the matching comments in DownloadRosterData.
+    @Test("stringValue of a container is empty, of a bare value is its text")
+    func containerIsNotAString() {
+        let json = JSON(data: Data(#"""
+        {
+          "asText": "offense",
+          "asObject": {"abbreviation": "DEF"},
+          "asArray": [{"name": "Germany"}, {"name": "Brazil"}],
+          "asNumber": 7
+        }
+        """#.utf8))
+
+        // What the parsers see today: the unit group's `position` and the
+        // soccer `citizenship` are bare strings, so they read through.
+        #expect(json["asText"].stringValue == "offense")
+
+        // The failure mode if ESPN nests them instead: "" — which routes
+        // every football player to unit "" (ChiefsHome's filters match
+        // nobody) and every soccer player to "N/A" citizenship.
+        #expect(json["asObject"].stringValue == "")
+        #expect(json["asArray"].stringValue == "")
+
+        // Numbers keep rendering as their text.
+        #expect(json["asNumber"].stringValue == "7")
+    }
+
+    @Test("Iterating a two-competition event keeps only the last fixture's fields")
+    func lastCompetitionWins() {
+        // Documents the last-value-wins loop in parseGame: today every ESPN
+        // event carries exactly one competition; if that changes, the parse
+        // silently reports the last one. This test fails loudly if the
+        // precedence ever flips.
+        let event = JSON(data: Data(#"""
+        {
+          "name": "Doubleheader",
+          "date": "2021-01-18T23:00Z",
+          "competitions": [
+            {"id": "1", "venue": {"fullName": "First Arena"},
+             "status": {"type": {"completed": true, "detail": "Final"}},
+             "competitors": []},
+            {"id": "2", "venue": {"fullName": "Second Arena"},
+             "status": {"type": {"completed": true, "detail": "Final"}},
+             "competitors": []}
+          ]
+        }
+        """#.utf8))
+
+        var ids: [String] = []
+        var venues: [String] = []
+        for (_, competition): (String, JSON) in event["competitions"] {
+            ids.append(competition["id"].stringValue)
+            venues.append(competition["venue"]["fullName"].stringValue)
+        }
+        #expect(ids == ["1", "2"])
+
+        // The scalar `var`s in parseGame take the same walk, so the game
+        // they build reports only the final competition.
+        let last = venues.last ?? ""
+        #expect(last == "Second Arena")
+    }
 }

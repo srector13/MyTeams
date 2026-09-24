@@ -48,6 +48,24 @@ myTeamsTests/     Unit tests for JSON decoding and schedule parsing
 The widget extension compiles `JSON`, `HTTPClient`, `Sport` and the schedule
 parser from the app target rather than keeping its own copy of them.
 
+## Team identity
+
+A team's identity flows through views and models as a raw string — the
+`Sport` case's raw value, which is also the logo asset name in
+`Assets.xcassets`. The four teams are enumerated in three places today:
+
+- `Sport` (`Networking/Sport.swift`) — the app's four teams and everything
+  the ESPN feeds need per team; its raw values are the asset names.
+- `Team` (`NavigationBar/TabBar.swift`) — the tab picker, one case per team.
+- `WidgetTeam` (`myTeamWidget/WidgetScheduleLoader.swift`) — the three teams
+  with a widget; maps to `Sport` rather than mirroring its raw values.
+
+Adding a fifth team means touching all three plus the assets. They are not
+collapsed into one enum because `WidgetTeam` deliberately excludes Sporting
+KC while `Sport` includes it, and the widget target would otherwise pull the
+app's view-layer `Team` into its build. Kept as a known trade-off, not an
+oversight — revisit if the rosters grow or a widget is added for Sporting KC.
+
 ## Dependencies
 
 None. The app previously depended on Alamofire, SwiftyJSON,

@@ -27,14 +27,12 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<!-- Colour-only launch screen: the `logosmall` image this used to name
+	     never existed in Assets.xcassets, so nothing drew. -->
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchscreenColor</string>
-		<key>UIImageName</key>
-		<string>logosmall</string>
-		<key>UIImageRespectsSafeAreaInsets</key>
-		<true/>
 	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>

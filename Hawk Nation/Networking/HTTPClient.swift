@@ -51,7 +51,10 @@ enum HTTPClient {
     /// yields `JSON.null`, the same as a failed request.
     static func json(from urlString: String) async -> JSON {
         guard let url = URL(string: urlString) else {
-            logger.error("Malformed URL: \(urlString)")
+            // The string can still carry a query with the NewsAPI key, so
+            // log the host only — matching the other failure paths above.
+            let host = URLComponents(string: urlString)?.host ?? "unknown host"
+            logger.error("Malformed URL for host \(host)")
             return .null
         }
         return await json(from: url)
