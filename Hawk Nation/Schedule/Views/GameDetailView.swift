@@ -815,7 +815,7 @@ struct BaseballGameDetailView: View {
                         Spacer()
                     }
                     
-                    RemoteImage(url: URL(string: gameInfo.venueImage), options: .refreshCached)
+                    RemoteImage(url: URL(string: gameInfo.venueImage), reloading: true)
                         .id(gameInfo.venueImage)
                         .frame(width: containerSize.width, height: 200)
                         .clipShape(.rect(cornerRadius: 10))
