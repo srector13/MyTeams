@@ -78,6 +78,51 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     ), count: 2)
 }
 
+/// The current score of a game, read from its summary document.
+///
+/// Schedule cards need nothing livelier than the two team totals; the full
+/// box-score loaders behind the detail sheets fetch far more than a card
+/// renders.
+struct LiveGameScore: Sendable, Hashable {
+    var score: Int
+    var opponentScore: Int
+}
+
+/// Reads the current score from a game's summary document.
+///
+/// `isHome` is the schedule feed's `gameHome` flag for the followed team. The
+/// pro summaries carry no `shortDisplayName` on their header competitors, so
+/// the home/away side is the reliable key; the box-score name only
+/// disambiguates when a header omits `homeAway` (or the fixture moved sides).
+///
+/// Returns `nil` when the fetch failed or the document cannot be attributed,
+/// so a caller can keep its last known figures instead of painting a
+/// rate-limited or partial response as a 0–0 game.
+func downloadLiveGameScore(gameID: String, sport: Sport, isHome: Bool) async -> LiveGameScore? {
+    let json = await HTTPClient.json(from: sport.summaryURL(gameID: gameID))
+
+    var score: Int?
+    var opponentScore: Int?
+    for (_, competitor): (String, JSON) in json["header", "competitions", 0, "competitors"] {
+        let followedTeam: Bool
+        let side = competitor["homeAway"].stringValue
+        if side == "home" || side == "away" {
+            followedTeam = side == (isHome ? "home" : "away")
+        } else {
+            followedTeam = competitor["team"]["shortDisplayName"].stringValue == sport.boxscoreName
+        }
+
+        if followedTeam {
+            score = competitor["score"]["displayValue"].intValue
+        } else {
+            opponentScore = competitor["score"]["displayValue"].intValue
+        }
+    }
+
+    guard let score, let opponentScore else { return nil }
+    return LiveGameScore(score: score, opponentScore: opponentScore)
+}
+
 /// Loads the venue details shown behind a game's detail sheet.
 ///
 /// The accent colour follows the host: at home the team's own colour is used,

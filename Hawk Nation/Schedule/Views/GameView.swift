@@ -20,8 +20,11 @@ struct GameView : View {
     var game: Game
     var teamColor: Color
     var teamLogo: String
-    @State private var gameTeamStats = BasketballGameTeamStats.placeholderPair
-    
+
+    /// The in-progress score the team model polls for this game, if any.
+    /// Past and future fixtures carry no live score; they render from the
+    /// schedule feed's own fields.
+    var liveScore: LiveGameScore?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -226,8 +229,8 @@ struct GameView : View {
                                                 .foregroundStyle(Color.white)
                                         }
 
-                                        if gameTeamStats.count >= 2 {
-                                            Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
+                                        if let liveScore {
+                                            Text("\(liveScore.score) - \(liveScore.opponentScore)")
                                                 .font(.system(size: 24))
                                                 .fontWeight(.heavy)
                                                 .minimumScaleFactor(0.5)
@@ -297,9 +300,6 @@ struct GameView : View {
         }.background(Color(uiColor: .systemBackground))
             .frame(width: 120, height: 160)
             .clipShape(.rect(cornerRadius: 10))
-        .task(repeatingEvery: .seconds(60)) {
-            gameTeamStats = await downloadBasketballGameTeamStatsData(gameID: game.gameID)
-        }
     }
 }
 
@@ -308,8 +308,9 @@ struct FootballGameView : View {
     var game: Game
     var teamColor: Color
     var teamLogo: String
-    @State private var gameTeamStats = FootballGameTeamStats.placeholderPair
-    
+
+    /// The in-progress score the team model polls for this game, if any.
+    var liveScore: LiveGameScore?
     
     var body: some View {
         VStack(spacing: 0) {
@@ -492,10 +493,10 @@ struct FootballGameView : View {
                                         .foregroundStyle(teamColor)
                                         .opacity(0.5)
                                     
-                                    if gameTeamStats.count >= 2, (gameTeamStats[0].score > gameTeamStats[0].opponentScore) {
+                                    if let liveScore, liveScore.score > liveScore.opponentScore {
                                         VStack {
                                             HStack() {
-                                                Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
+                                                Text("\(liveScore.score) - \(liveScore.opponentScore)")
                                                     .font(.system(size: 24))
                                                     .fontWeight(.heavy)
                                                     .minimumScaleFactor(0.5)
@@ -519,9 +520,9 @@ struct FootballGameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         }
-                                    } else if gameTeamStats.count >= 2, (gameTeamStats[0].score == gameTeamStats[0].opponentScore) {
+                                    } else if let liveScore, liveScore.score == liveScore.opponentScore {
                                         VStack {
-                                            Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
+                                            Text("\(liveScore.score) - \(liveScore.opponentScore)")
                                                 .font(.system(size: 24))
                                                 .fontWeight(.heavy)
                                                 .minimumScaleFactor(0.5)
@@ -539,10 +540,10 @@ struct FootballGameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         }
-                                    } else if gameTeamStats.count >= 2 {
+                                    } else if let liveScore {
                                         VStack {
                                             HStack() {
-                                                Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
+                                                Text("\(liveScore.score) - \(liveScore.opponentScore)")
                                                     .font(.system(size: 24))
                                                     .fontWeight(.heavy)
                                                     .minimumScaleFactor(0.5)
@@ -632,9 +633,6 @@ struct FootballGameView : View {
         }.background(Color(uiColor: .systemBackground))
             .frame(width: 120, height: 160)
             .clipShape(.rect(cornerRadius: 10))
-        .task(repeatingEvery: .seconds(60)) {
-            gameTeamStats = await downloadFootballGameTeamStatsData(gameID: game.gameID)
-        }
     }
 }
 

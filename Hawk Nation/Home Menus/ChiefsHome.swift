@@ -13,6 +13,7 @@ struct ChiefsHome: View {
         scheduleURL: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/schedule",
         teamName: "KC",
         newsURL: NewsFeed.chiefs,
+        sport: .chiefs,
         loadRoster: downloadFootballRoster
     )
 
@@ -60,7 +61,12 @@ struct ChiefsHome: View {
             .padding(.top, 5)
 
             ScheduleSection(model: model) { game in
-                FootballGameView(game: game, teamColor: teamColor, teamLogo: Team.chiefs.logo)
+                FootballGameView(
+                    game: game,
+                    teamColor: teamColor,
+                    teamLogo: Team.chiefs.logo,
+                    liveScore: model.liveScores[game.gameID]
+                )
             } detail: { game in
                 FootballGameDetailView(
                     game: game,

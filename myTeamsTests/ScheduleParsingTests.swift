@@ -193,6 +193,47 @@ struct ScheduleParsingTests {
         )
     }
 
+    @Test("Only games in the live window are polled for scores")
+    func livePollingWindow() {
+        let now = Date()
+        // In progress: started two hours ago, feed has not flagged completion.
+        #expect(shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, date: now.addingTimeInterval(-2 * 3600)),
+            now: now
+        ))
+        // Starting in ten minutes: inside the fifteen-minute lead-in.
+        #expect(shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, date: now.addingTimeInterval(10 * 60)),
+            now: now
+        ))
+        // Tomorrow's fixture and last week's unflagged one are both out.
+        #expect(!shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, date: now.addingTimeInterval(86_400)),
+            now: now
+        ))
+        #expect(!shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, date: now.addingTimeInterval(-9 * 3600)),
+            now: now
+        ))
+    }
+
+    @Test("Finished, abandoned and unaddressable games are never polled")
+    func livePollingExclusions() {
+        let now = Date()
+        let inWindow = now.addingTimeInterval(-3600)
+        #expect(!shouldPollLiveScore(
+            game: game(pointer: 0, completed: true, date: inWindow), now: now))
+        #expect(!shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, cancelled: true, date: inWindow), now: now))
+        #expect(!shouldPollLiveScore(
+            game: game(pointer: 0, completed: false, postponed: true, date: inWindow), now: now))
+
+        // No game id means the summary endpoint cannot be addressed.
+        var anonymous = game(pointer: 0, completed: false, date: inWindow)
+        anonymous.gameID = ""
+        #expect(!shouldPollLiveScore(game: anonymous, now: now))
+    }
+
     private func game(
         pointer: Int,
         completed: Bool,

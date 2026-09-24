@@ -14,6 +14,7 @@ struct SportingHome: View {
         teamName: "Kansas City",
         teamNameField: .shortDisplayName,
         newsURL: NewsFeed.sporting,
+        sport: .sporting,
         // MLS completion flags lag or never arrive, so the next game also
         // walks past kick-off times.
         usesDateForNextGame: true,
@@ -48,7 +49,12 @@ struct SportingHome: View {
             .padding(.top, 5)
 
             ScheduleSection(model: model) { game in
-                GameView(game: game, teamColor: teamColor, teamLogo: Team.sporting.logo)
+                GameView(
+                    game: game,
+                    teamColor: teamColor,
+                    teamLogo: Team.sporting.logo,
+                    liveScore: model.liveScores[game.gameID]
+                )
             } detail: { game in
                 SoccerGameDetailView(
                     game: game,

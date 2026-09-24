@@ -13,6 +13,7 @@ struct JayhawksHome: View {
         scheduleURL: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/schedule",
         teamName: "Kansas",
         newsURL: NewsFeed.jayhawks,
+        sport: .jayhawk,
         loadRoster: downloadBasketballRoster
     )
 
@@ -32,7 +33,12 @@ struct JayhawksHome: View {
             .padding(.top, 5)
 
             ScheduleSection(model: model) { game in
-                GameView(game: game, teamColor: teamColor, teamLogo: Team.jayhawks.logo)
+                GameView(
+                    game: game,
+                    teamColor: teamColor,
+                    teamLogo: Team.jayhawks.logo,
+                    liveScore: model.liveScores[game.gameID]
+                )
             } detail: { game in
                 BasketballGameDetailView(
                     game: game,

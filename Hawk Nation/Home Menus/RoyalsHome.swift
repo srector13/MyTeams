@@ -14,6 +14,7 @@ struct RoyalsHome: View {
         teamName: "Royals",
         teamNameField: .shortDisplayName,
         newsURL: NewsFeed.royals,
+        sport: .royals,
         loadRoster: downloadBaseballRoster
     )
 
@@ -45,7 +46,12 @@ struct RoyalsHome: View {
             // from the losses column; this one never has. Kept as-is rather
             // than quietly changing a displayed record.
             ScheduleSection(model: model, countsAbandonedGamesAsLosses: true) { game in
-                GameView(game: game, teamColor: teamColor, teamLogo: Team.royals.logo)
+                GameView(
+                    game: game,
+                    teamColor: teamColor,
+                    teamLogo: Team.royals.logo,
+                    liveScore: model.liveScores[game.gameID]
+                )
             } detail: { game in
                 BaseballGameDetailView(
                     game: game,

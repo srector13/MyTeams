@@ -76,7 +76,9 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             .padding([.leading, .top, .trailing])
 
             ScrollView(.horizontal) {
-                HStack {
+                // Lazy so off-screen cards are never realized — and so an
+                // unrealized card can never start work of its own.
+                LazyHStack {
                     if model.players.isEmpty {
                         // Five placeholder cards, so the carousel occupies its
                         // final height while the roster loads.
@@ -139,7 +141,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
             ScrollView(.horizontal) {
                 ScrollViewReader { scrollView in
-                    HStack {
+                    // Realised on demand: every schedule card mounted eagerly
+                    // was the reason a quiet Home screen still made hundreds
+                    // of requests a minute.
+                    LazyHStack {
                         if model.games.isEmpty {
                             ForEach(0..<5, id: \.self) { _ in
                                 LoadingGameView()

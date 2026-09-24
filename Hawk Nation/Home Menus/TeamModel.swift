@@ -49,6 +49,11 @@ final class TeamModel<Player: RosterPlayer> {
     private(set) var games: [Game] = []
     private(set) var articles: [News] = []
 
+    /// Live scores for the games the model is currently polling summaries for,
+    /// keyed by `Game.gameID`. Schedule cards render from this instead of each
+    /// card fetching its own summary document.
+    private(set) var liveScores: [String: LiveGameScore] = [:]
+
     /// The index in `games` of the next game still to be played. The schedule
     /// carousel opens scrolled to it.
     private(set) var nextGame = 0
@@ -63,6 +68,7 @@ final class TeamModel<Player: RosterPlayer> {
     private let teamName: String
     private let teamNameField: TeamNameField
     private let newsURL: String
+    private let sport: Sport
     private let loadRoster: @Sendable () async -> [Player]
 
     /// Whether a past kick-off also counts as played when locating the next
@@ -76,6 +82,7 @@ final class TeamModel<Player: RosterPlayer> {
         teamName: String,
         teamNameField: TeamNameField = .nickname,
         newsURL: String,
+        sport: Sport,
         usesDateForNextGame: Bool = false,
         loadRoster: @escaping @Sendable () async -> [Player]
     ) {
@@ -83,6 +90,7 @@ final class TeamModel<Player: RosterPlayer> {
         self.teamName = teamName
         self.teamNameField = teamNameField
         self.newsURL = newsURL
+        self.sport = sport
         self.usesDateForNextGame = usesDateForNextGame
         self.loadRoster = loadRoster
     }
@@ -118,11 +126,15 @@ final class TeamModel<Player: RosterPlayer> {
         apply(schedule: loadedSchedule)
         articles = loadedNews
 
+        await refreshLiveScores()
         await refreshSchedulePeriodically()
     }
 
     /// Refetches the schedule once a minute until the surrounding task is
     /// cancelled, which SwiftUI does when the view goes away.
+    ///
+    /// Live scores ride along in the same loop: only games inside the live
+    /// window get a summary request, so a quiet Home screen makes zero.
     private func refreshSchedulePeriodically() async {
         while !Task.isCancelled {
             do {
@@ -131,6 +143,42 @@ final class TeamModel<Player: RosterPlayer> {
                 return
             }
             apply(schedule: await fetchSchedule())
+            await refreshLiveScores()
+        }
+    }
+
+    /// Fetches summaries for the games that qualify under
+    /// `shouldPollLiveScore` and publishes them through `liveScores`.
+    ///
+    /// Fetch failures keep the last known score rather than dropping the
+    /// entry, so an ESPN rate-limit window cannot paint a live game 0–0.
+    private func refreshLiveScores(now: Date = Date()) async {
+        let pollable = games.filter { shouldPollLiveScore(game: $0, now: now) }
+
+        // A game that left the window (finished, postponed, or too old) stops
+        // being live; its score now comes from the schedule feed itself.
+        let liveIDs = Set(pollable.map(\.gameID))
+        liveScores = liveScores.filter { liveIDs.contains($0.key) }
+        guard !pollable.isEmpty else { return }
+
+        let results = await withTaskGroup(of: (String, LiveGameScore?).self) { group in
+            let sport = self.sport
+            for game in pollable {
+                group.addTask {
+                    (game.gameID, await downloadLiveGameScore(gameID: game.gameID, sport: sport, isHome: game.gameHome))
+                }
+            }
+            var collected: [(String, LiveGameScore?)] = []
+            for await result in group {
+                collected.append(result)
+            }
+            return collected
+        }
+
+        for (gameID, score) in results {
+            if let score {
+                liveScores[gameID] = score
+            }
         }
     }
 
@@ -213,4 +261,29 @@ func seasonRecord(
             && game.dateAsDate.addingTimeInterval(4 * 3600) < now
     }
     return (wins, losses)
+}
+
+/// Whether a game's summary should be polled for a live score right now.
+///
+/// The old per-card poll asked for every fixture on the carousel, every
+/// minute, forever. A season is overwhelmingly games that already finished or
+/// start days from now — none of which change while you watch. This confines
+/// the requests to the one or two fixtures actually in progress: unplayed or
+/// live games whose start is near the current moment.
+///
+/// The window is deliberately asymmetric. A game starts up to eight hours
+/// after its listed date (doubleheaders, delays, a feed that never sets
+/// `completed`) and is still worth polling there; fifteen minutes before
+/// tip-off covers an early publication of the live scoreboard and nothing
+/// earlier, so a tomorrow fixture is never fetched today.
+///
+/// - Parameters:
+///   - game: the fixture to judge. One whose feed gave no game id cannot be
+///     addressed at the summary endpoint, so it never qualifies.
+///   - now: the current instant.
+func shouldPollLiveScore(game: Game, now: Date = Date()) -> Bool {
+    guard !game.gameID.isEmpty else { return false }
+    if game.completed || game.cancelled || game.postponed { return false }
+    return game.dateAsDate.addingTimeInterval(-15 * 60) <= now
+        && now <= game.dateAsDate.addingTimeInterval(8 * 3600)
 }
