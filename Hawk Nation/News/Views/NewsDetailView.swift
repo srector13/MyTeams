@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import WebKit
 import SafariServices
 
 struct NewsDetailView: View {
@@ -18,7 +17,6 @@ struct NewsDetailView: View {
     var body: some View {
         ZStack(alignment: .top) {
             SafariView(url: article.url)
-            //WebKit(request: URLRequest(url: article.url))
             .ignoresSafeArea(.top)
             
             Rectangle()
@@ -66,17 +64,5 @@ struct SafariView: UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: UIViewControllerRepresentableContext<SafariView>) {
-    }
-}
-
-struct WebKit: UIViewRepresentable {
-    let request: URLRequest
-    
-    func makeUIView(context: UIViewRepresentableContext<WebKit>) -> WKWebView {
-        return WKWebView()
-    }
-    
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        uiView.load(request)
     }
 }

@@ -247,14 +247,6 @@ struct BasketballPlayerDetailView: View {
     }
 }
 
-extension Float {
-    /// Rounds the double to decimal places value
-    func rounded(toPlaces places:Int) -> Float {
-        let divisor = pow(10.0, Float(places))
-        return (self * divisor).rounded() / divisor
-    }
-}
-
 struct FootballPlayerDetailView: View {
     @Environment(\.containerSize) private var containerSize
 
@@ -262,7 +254,6 @@ struct FootballPlayerDetailView: View {
     var teamColor: Color
     @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
-    @State var playerStats = BasketballPlayerStats(gamesPlayed: 0, avgMinutes: 0, fieldGoalPct: 0, threePointFieldGoalPct: 0, freeThrowPct: 0, avgOffensiveRebounds: 0, avgDefensiveRebounds: 0, avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0, avgTurnovers: 0, avgPoints: 0)
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -437,56 +428,14 @@ struct FootballPlayerDetailView: View {
                                 .frame(width: (containerSize.width - 25), height: 680)
                                 .foregroundStyle(Color(uiColor: .systemBackground))
                             
-                            VStack(alignment: .leading, spacing: 15) {
-                                /*
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    StatView(title: "Games Played", info: "\(playerStats.gamesPlayed)")
-                                    Spacer()
-                                    StatView(title: "Average Minutes", info: "\(playerStats.avgMinutes)")
-                                    Spacer()
-                                    StatView(title: "Average Points", info: "\(playerStats.avgPoints)")
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.fieldGoalPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "Field Goal Percentage")
-                                        .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                    Spacer()
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.threePointFieldGoalPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "3-Point Percentage")
-                                        .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                    Spacer()
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.freeThrowPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "Free Throw Percentage")
-                                    .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                }
-
-                                //ROW 3
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Rebounds", info: "\(playerStats.avgRebounds)")
-                                    Spacer()
-                                    StatView(title: "Avg. Defensive Rebounds", info: "\(playerStats.avgDefensiveRebounds)")
-                                    Spacer()
-                                    StatView(title: "Avg. Offensive Rebounds", info: "\(playerStats.avgOffensiveRebounds)")
-                                }
-                                
-                                //ROW 4
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Assists", info: "\(playerStats.avgAssists)")
-                                    Spacer()
-                                    StatView(title: "Average Blocks", info: "\(playerStats.avgBlocks)")
-                                    Spacer()
-                                    StatView(title: "Average Steals", info: "\(playerStats.avgSteals)")
-                                }
-                                
-                                //ROW 5
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Fouls", info: "\(playerStats.avgFouls)")
-                                    Spacer()
-                                    StatView(title: "Average Turnovers", info: "\(playerStats.avgTurnovers)")
-                                    Spacer()
-                                    StatView(title: "", info: " ")
-                                }
-                                */
+                            VStack(alignment: .center, spacing: 15) {
+                                Spacer()
+                                Text("Statistics are not available for this team yet.")
+                                    .font(.system(size: 15))
+                                    .foregroundStyle(Color(uiColor: .systemGray))
+                                    .fontWeight(.bold)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 30)
                                 Spacer()
                             }.padding([.all], 20)
                         }

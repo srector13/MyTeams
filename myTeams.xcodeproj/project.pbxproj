@@ -29,7 +29,6 @@
 		B5C6B213DE2B2F6C629CC6FA /* MyTeamsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E6F7749EA7D0396162F3F /* MyTeamsApp.swift */; };
 		1E79AFFA5A7731584B3F0F5D /* DownloadAthleteData.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E57CADCEC98ADC7F08259B /* DownloadAthleteData.swift */; };
 		1908D339C90720E026CC133F /* DownloadRosterData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5155054E50DB8742CCF3A02D /* DownloadRosterData.swift */; };
-		A4C5CCC274E7ED459D5D876B /* BasketballPlayerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F6C77D4A3E426BA668E7AE3 /* BasketballPlayerDetailView.swift */; };
 		C29C82642C379588DDB90840 /* BioViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 229980CC6EADD28B1327288E /* BioViews.swift */; };
 		938441ED20DAAFEFEF866860 /* PlayerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88D1C9C84AB3AE52DB615DEC /* PlayerDetailView.swift */; };
 		A6CF80F5A6D7C40726E89941 /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B3AA19AD17C939F21D94002 /* PlayerView.swift */; };
@@ -120,7 +119,6 @@
 		3A4E6F7749EA7D0396162F3F /* MyTeamsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MyTeamsApp.swift"; sourceTree = "<group>"; };
 		C9E57CADCEC98ADC7F08259B /* DownloadAthleteData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadAthleteData.swift"; sourceTree = "<group>"; };
 		5155054E50DB8742CCF3A02D /* DownloadRosterData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadRosterData.swift"; sourceTree = "<group>"; };
-		4F6C77D4A3E426BA668E7AE3 /* BasketballPlayerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BasketballPlayerDetailView.swift"; sourceTree = "<group>"; };
 		229980CC6EADD28B1327288E /* BioViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BioViews.swift"; sourceTree = "<group>"; };
 		88D1C9C84AB3AE52DB615DEC /* PlayerDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerDetailView.swift"; sourceTree = "<group>"; };
 		9B3AA19AD17C939F21D94002 /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerView.swift"; sourceTree = "<group>"; };
@@ -299,18 +297,9 @@
 			path = "Classes";
 			sourceTree = "<group>";
 		};
-		A9A595B60DB290C8B4C84EA0 /* BasketballPlayerDetailView */ = {
-			isa = PBXGroup;
-			children = (
-				4F6C77D4A3E426BA668E7AE3 /* BasketballPlayerDetailView.swift */,
-			);
-			path = "BasketballPlayerDetailView";
-			sourceTree = "<group>";
-		};
 		2D781E733A75BC803AFBA0B4 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				A9A595B60DB290C8B4C84EA0 /* BasketballPlayerDetailView */,
 				229980CC6EADD28B1327288E /* BioViews.swift */,
 				88D1C9C84AB3AE52DB615DEC /* PlayerDetailView.swift */,
 				9B3AA19AD17C939F21D94002 /* PlayerView.swift */,
@@ -586,7 +575,6 @@
 				B5C6B213DE2B2F6C629CC6FA /* MyTeamsApp.swift in Sources */,
 				1E79AFFA5A7731584B3F0F5D /* DownloadAthleteData.swift in Sources */,
 				1908D339C90720E026CC133F /* DownloadRosterData.swift in Sources */,
-				A4C5CCC274E7ED459D5D876B /* BasketballPlayerDetailView.swift in Sources */,
 				C29C82642C379588DDB90840 /* BioViews.swift in Sources */,
 				938441ED20DAAFEFEF866860 /* PlayerDetailView.swift in Sources */,
 				A6CF80F5A6D7C40726E89941 /* PlayerView.swift in Sources */,

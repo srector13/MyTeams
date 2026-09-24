@@ -78,42 +78,6 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     ), count: 2)
 }
 
-struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
-    var name: String
-    var yards: Float
-    var passingYards: Float
-    var rushingYards: Float
-    var projection: Float
-    var score: Int
-    var opponentScore: Int
-    var gameClock: String
-
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: BaseballGameTeamStats(
-        name: "", yards: 0, passingYards: 0, rushingYards: 0, projection: 0,
-        score: 0, opponentScore: 0, gameClock: "test"
-    ), count: 2)
-}
-
-struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
-    var name: String
-    var yards: Float
-    var passingYards: Float
-    var rushingYards: Float
-    var projection: Float
-    var score: Int
-    var opponentScore: Int
-    var gameClock: String
-
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: SoccerGameTeamStats(
-        name: "", yards: 0, passingYards: 0, rushingYards: 0, projection: 0,
-        score: 0, opponentScore: 0, gameClock: "test"
-    ), count: 2)
-}
-
 /// Loads the venue details shown behind a game's detail sheet.
 ///
 /// The accent colour follows the host: at home the team's own colour is used,
@@ -233,34 +197,6 @@ func downloadFootballGameTeamStatsData(gameID: String) async -> [FootballGameTea
             completionAttempts: statistics[11]["displayValue"].intValue,
             opponentScore: opponentScore,
             gameClock: gameClock
-        )
-    }
-}
-
-// The baseball and soccer detail views were never finished: they show a fixed
-// layout rather than live figures. These loaders return one placeholder entry
-// per team so those views lay out as they always have.
-
-/// Returns a placeholder line per team in a baseball game's box score.
-func downloadBaseballGameTeamStatsData(gameID: String) async -> [BaseballGameTeamStats] {
-    let json = await HTTPClient.json(from: Sport.royals.summaryURL(gameID: gameID))
-
-    return json["boxscore"]["teams"].map { _, _ in
-        BaseballGameTeamStats(
-            name: "", yards: 0, passingYards: 0, rushingYards: 0,
-            projection: 0, score: 0, opponentScore: 0, gameClock: "test"
-        )
-    }
-}
-
-/// Returns a placeholder line per team in a soccer game's box score.
-func downloadSoccerGameTeamStatsData(gameID: String) async -> [SoccerGameTeamStats] {
-    let json = await HTTPClient.json(from: Sport.sporting.summaryURL(gameID: gameID))
-
-    return json["boxscore"]["teams"].map { _, _ in
-        SoccerGameTeamStats(
-            name: "", yards: 0, passingYards: 0, rushingYards: 0,
-            projection: 0, score: 0, opponentScore: 0, gameClock: "test"
         )
     }
 }

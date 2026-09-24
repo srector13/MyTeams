@@ -638,22 +638,6 @@ struct FootballGameView : View {
     }
 }
 
-extension UIColor {
-    var customAccent: UIColor {
-        if #available(iOS 13, *) {
-            return UIColor { (traitCollection: UITraitCollection) -> UIColor in
-                if traitCollection.userInterfaceStyle == .dark {
-                    return UIColor.systemYellow
-                } else {
-                    return UIColor.systemBackground
-                }
-            }
-        } else {
-            return UIColor.white
-        }
-    }
-}
-
 func getPeriod(period: String, team: String) -> String {
     var returnPeriod = ""
     
