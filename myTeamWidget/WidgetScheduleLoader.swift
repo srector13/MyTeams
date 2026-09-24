@@ -98,6 +98,10 @@ enum WidgetTeam: Sendable {
 private let widgetDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "E MMM d, y"
+    // Same presentation zone as the app's schedule formatters (see
+    // `scheduleDisplayZone` in DownloadScheduleData.swift): game dates read
+    // in US Central regardless of where the phone is.
+    formatter.timeZone = TimeZone(identifier: "America/Chicago")
     return formatter
 }()
 

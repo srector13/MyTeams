@@ -50,10 +50,18 @@ enum TeamNameField: String, Sendable {
 // parsed per refresh; `DateFormatter` is `Sendable`, and none of these are
 // mutated after creation.
 
+/// The zone every game time is presented in: US Central, the home zone of all
+/// four teams. Display is pinned to this zone while the underlying `Date`
+/// stays the true instant, so schedule text reads identically on any device
+/// and clock comparisons (`dateAsDate < Date()`) remain correct. The zone is
+/// DST-aware, unlike the fixed six-hour shift this replaced.
+private let scheduleDisplayZone = TimeZone(identifier: "America/Chicago")
+
 /// Formats a game's calendar date for display, e.g. "Jan 18, 2021".
 private let gameDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "MMM dd, yyyy"
+    formatter.timeZone = scheduleDisplayZone
     return formatter
 }()
 
@@ -61,6 +69,7 @@ private let gameDateFormatter: DateFormatter = {
 private let gameTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "h:mm a"
+    formatter.timeZone = scheduleDisplayZone
     return formatter
 }()
 
@@ -68,21 +77,25 @@ private let gameTimeFormatter: DateFormatter = {
 private let eventDateParser: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
+    // ESPN's `Z` suffix means UTC; parse in UTC explicitly so the result is
+    // the same instant on every device instead of the wall-clock reading of
+    // whatever timezone the device happens to be set to.
+    formatter.timeZone = .utc
     return formatter
 }()
 
 /// Reads an ESPN event timestamp, which is UTC in the form
-/// `2021-01-18T23:00Z`, and shifts it into US Central time — the home zone of
-/// all four teams, and the zone the schedule is presented in.
+/// `2021-01-18T23:00Z`, as the exact instant it names.
+///
+/// The returned `Date` is timezone-neutral — correct for comparisons against
+/// `Date()` anywhere. Presentation in US Central time happens in the display
+/// formatters above, not by shifting the instant itself.
 func parseGameDate(_ raw: String) -> Date? {
     let cleaned = raw
         .replacingOccurrences(of: "T", with: " ")
         .replacingOccurrences(of: "Z", with: "")
 
-    guard var date = eventDateParser.date(from: cleaned) else { return nil }
-
-    date.addTimeInterval(TimeInterval(-6 * 3600))
-    return date
+    return eventDateParser.date(from: cleaned)
 }
 
 /// Builds one `Game` from an ESPN event object.
