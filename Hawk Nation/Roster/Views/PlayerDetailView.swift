@@ -426,17 +426,42 @@ struct FootballPlayerDetailView: View {
                     } else if(pickerSelectedItem == 1) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 680)
+                                .frame(width: (containerSize.width - 25), height: CGFloat(max(240, 130 * playerStats.groups.reduce(1) { $0 + $1.rows.count })))
                                 .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .center, spacing: 15) {
-                                Spacer()
-                                Text("Statistics are not available for this team yet.")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Color(uiColor: .systemGray))
-                                    .fontWeight(.bold)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 30)
+
+                            VStack(alignment: .leading, spacing: 15) {
+                                ForEach(playerStats.groups) { group in
+                                    Text(group.title)
+                                        .font(.system(size: 17))
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(teamColor)
+                                        .padding(.top, 5)
+
+                                    ForEach(Array(group.rows.enumerated()), id: \.offset) { _, row in
+                                        HStack(alignment: .center) {
+                                            ForEach(row) { stat in
+                                                StatView(title: stat.label, info: stat.display)
+                                            }
+                                            // Keep three columns so rows line
+                                            // up under the header.
+                                            ForEach(0 ..< max(0, 3 - row.count), id: \.self) { _ in
+                                                Color.clear
+                                                    .frame(width: (containerSize.width/4), height: containerSize.width/3)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if playerStats.loaded && playerStats.groups.isEmpty {
+                                    Text("No season statistics are available for this player yet.")
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(Color(uiColor: .systemGray))
+                                        .fontWeight(.bold)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 30)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                }
+
                                 Spacer()
                             }.padding([.all], 20)
                         }
@@ -449,7 +474,9 @@ struct FootballPlayerDetailView: View {
             Spacer()
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
-
+        .task {
+            playerStats = await downloadFootballPlayerStats(playerID: player.playerID)
+        }
     }
 }
 

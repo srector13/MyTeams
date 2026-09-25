@@ -26,6 +26,7 @@ struct BasketballPlayer: Identifiable, Hashable, Sendable {
 
 struct FootBallPlayer: Identifiable, Hashable, Sendable {
     var id = UUID()
+    var playerID: String
     var name: String
     var numberInt: Int
     var number: String
@@ -170,6 +171,7 @@ func downloadFootballRoster() async -> [FootBallPlayer] {
 
             roster.append(
                 FootBallPlayer(
+                    playerID: athlete["id"].stringValue,
                     name: athlete["fullName"].stringValue,
                     numberInt: athlete.jerseyNumber,
                     number: athlete["jersey"].stringValue,
