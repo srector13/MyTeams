@@ -16,7 +16,7 @@ struct BasketballGameDetailView: View {
     var teamColor: Color
     @State private var gameTeamStats = BasketballGameTeamStats.placeholderPair
     @State private var gameInfo = GameInfo.empty
-    var teamLogo: String
+    var team: Team
     @State private var loading = true
     
     
@@ -134,7 +134,7 @@ struct BasketballGameDetailView: View {
                                                 HStack() {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
-                                                        Image("jayhawk")
+                                                        team.logoImage
                                                             .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
@@ -239,7 +239,7 @@ struct BasketballGameDetailView: View {
                                                     //AWAY TEAM PHOTO
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
-                                                        Image("jayhawk")
+                                                        team.logoImage
                                                             .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
@@ -404,7 +404,7 @@ struct BasketballGameDetailView: View {
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
             async let stats = downloadBasketballGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, type: teamLogo)
+            async let info = downloadGameInfo(gameID: game.gameID, team: team)
 
             gameTeamStats = await stats
             gameInfo = await info
@@ -421,7 +421,7 @@ struct FootballGameDetailView: View {
     var teamColor: Color
     @State private var gameTeamStats = FootballGameTeamStats.placeholderPair
     @State private var gameInfo = GameInfo.empty
-    var teamLogo: String
+    var team: Team
     @State private var loading = true
     
     
@@ -539,7 +539,7 @@ struct FootballGameDetailView: View {
                                                 HStack() {
                                                     VStack(alignment: .leading, spacing: 5) {
                                                         //HOME TEAM PHOTO
-                                                        Image("chiefs")
+                                                        team.logoImage
                                                             .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
@@ -641,7 +641,7 @@ struct FootballGameDetailView: View {
                                                     //AWAY TEAM PHOTO
                                                     VStack(alignment: .trailing, spacing: 5) {
                                                         //PLAYER PHOTO
-                                                        Image("chiefs")
+                                                        team.logoImage
                                                             .resizable()
                                                             .aspectRatio(contentMode: .fill)
                                                             .frame(width: 50, height: 50)
@@ -787,7 +787,7 @@ struct FootballGameDetailView: View {
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
             async let stats = downloadFootballGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, sport: .chiefs)
+            async let info = downloadGameInfo(gameID: game.gameID, team: team)
 
             gameTeamStats = await stats
             gameInfo = await info
@@ -803,7 +803,7 @@ struct BaseballGameDetailView: View {
     var game: Game
     var teamColor: Color
     @State private var gameInfo = GameInfo.empty
-    var teamLogo: String
+    var team: Team
     
     
     var body: some View {
@@ -901,13 +901,15 @@ struct BaseballGameDetailView: View {
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 30)
                             } else {
-                                if game.dateAsDate <= Date() {
+                                if game.dateAsDate <= Date(),
+                                   let homeLine = gameTeamStats.first(where: { $0.homeAway == "home" }),
+                                   let awayLine = gameTeamStats.first(where: { $0.homeAway == "away" }) {
                                     HStack(alignment: .top) {
                                         if(game.gameHome) {
                                             HStack() {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
-                                                    Image("royals")
+                                                    team.logoImage
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
@@ -920,7 +922,7 @@ struct BaseballGameDetailView: View {
                                                 
                                                 
                                                 VStack(alignment: .center) {
-                                                    Text("\(game.score) - \(game.opponentScore)")
+                                                    Text("\(homeLine.runs) - \(awayLine.runs)")
                                                         .font(.system(size: 30))
                                                         //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
@@ -980,7 +982,7 @@ struct BaseballGameDetailView: View {
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
                                                 VStack(alignment: .center) {
-                                                    Text("\(game.opponentScore) - \(game.score)")
+                                                    Text("\(homeLine.runs) - \(awayLine.runs)")
                                                         .font(.system(size: 30))
                                                         //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
@@ -1009,7 +1011,7 @@ struct BaseballGameDetailView: View {
                                                 //AWAY TEAM PHOTO
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
-                                                    Image("royals")
+                                                    team.logoImage
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
@@ -1022,6 +1024,14 @@ struct BaseballGameDetailView: View {
                                             }
                                         }
                                     }.ignoresSafeArea()
+
+                                    Group {
+                                        StatRowView(title: "Runs", homeStat: "\(homeLine.runs)", awayStat: "\(awayLine.runs)")
+
+                                        StatRowView(title: "Hits", homeStat: "\(homeLine.hits)", awayStat: "\(awayLine.hits)")
+
+                                        StatRowView(title: "Errors", homeStat: "\(homeLine.errors)", awayStat: "\(awayLine.errors)")
+                                    }
                                 } else {
                                     
                                     Spacer()
@@ -1050,7 +1060,7 @@ struct BaseballGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
-            gameInfo = await downloadGameInfo(gameID: game.gameID, sport: .royals)
+            gameInfo = await downloadGameInfo(gameID: game.gameID, team: team)
         }
     }
 }
@@ -1062,7 +1072,7 @@ struct SoccerGameDetailView: View {
     var game: Game
     var teamColor: Color
     @State private var gameInfo = GameInfo.empty
-    var teamLogo: String
+    var team: Team
     
     
     var body: some View {
@@ -1167,7 +1177,7 @@ struct SoccerGameDetailView: View {
                                             HStack() {
                                                 VStack(alignment: .leading, spacing: 5) {
                                                     //HOME TEAM PHOTO
-                                                    Image("sporting")
+                                                    team.logoImage
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
@@ -1269,7 +1279,7 @@ struct SoccerGameDetailView: View {
                                                 //AWAY TEAM PHOTO
                                                 VStack(alignment: .trailing, spacing: 5) {
                                                     //PLAYER PHOTO
-                                                    Image("sporting")
+                                                    team.logoImage
                                                         .resizable()
                                                         .aspectRatio(contentMode: .fill)
                                                         .frame(width: 50, height: 50)
@@ -1310,7 +1320,7 @@ struct SoccerGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
-            gameInfo = await downloadGameInfo(gameID: game.gameID, sport: .sporting)
+            gameInfo = await downloadGameInfo(gameID: game.gameID, team: team)
         }
     }
 }

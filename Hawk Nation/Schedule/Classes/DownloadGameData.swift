@@ -98,8 +98,8 @@ struct LiveGameScore: Sendable, Hashable {
 /// Returns `nil` when the fetch failed or the document cannot be attributed,
 /// so a caller can keep its last known figures instead of painting a
 /// rate-limited or partial response as a 0–0 game.
-func downloadLiveGameScore(gameID: String, sport: Sport, isHome: Bool) async -> LiveGameScore? {
-    let json = await HTTPClient.json(from: sport.summaryURL(gameID: gameID))
+func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> LiveGameScore? {
+    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
 
     var score: Int?
     var opponentScore: Int?
@@ -109,7 +109,7 @@ func downloadLiveGameScore(gameID: String, sport: Sport, isHome: Bool) async -> 
         if side == "home" || side == "away" {
             followedTeam = side == (isHome ? "home" : "away")
         } else {
-            followedTeam = competitor["team"]["shortDisplayName"].stringValue == sport.boxscoreName
+            followedTeam = competitor["team"]["shortDisplayName"].stringValue == team.boxscoreName
         }
 
         if followedTeam {
@@ -128,16 +128,16 @@ func downloadLiveGameScore(gameID: String, sport: Sport, isHome: Bool) async -> 
 /// The accent colour follows the host: at home the team's own colour is used,
 /// and away the colour comes from whichever competitor is not the followed
 /// team.
-func downloadGameInfo(gameID: String, sport: Sport) async -> GameInfo {
-    let json = await HTTPClient.json(from: sport.summaryURL(gameID: gameID))
+func downloadGameInfo(gameID: String, team: Team) async -> GameInfo {
+    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
 
     let venue = json["gameInfo"]["venue"]
     let city = venue["address"]["city"].stringValue
 
     let color: String
-    if city == sport.homeCity {
-        color = sport.homeColor
-    } else if json["boxscore", "teams", 0, "team", "shortDisplayName"].stringValue == sport.boxscoreName {
+    if city == team.homeCity {
+        color = team.brandHex
+    } else if json["boxscore", "teams", 0, "team", "shortDisplayName"].stringValue == team.boxscoreName {
         color = json["boxscore", "teams", 1, "team", "color"].stringValue
     } else {
         color = json["boxscore", "teams", 0, "team", "color"].stringValue
@@ -153,21 +153,12 @@ func downloadGameInfo(gameID: String, sport: Sport) async -> GameInfo {
     )
 }
 
-/// Loads a game's venue details by team identifier.
-///
-/// Views carry the team as the logo asset name; an unrecognised name yields an
-/// empty summary rather than a failed request.
-func downloadGameInfo(gameID: String, type: String) async -> GameInfo {
-    guard let sport = Sport(rawValue: type) else { return .empty }
-    return await downloadGameInfo(gameID: gameID, sport: sport)
-}
-
 /// Loads both teams' box score lines for a basketball game.
 ///
 /// Statistics are addressed by position because the feed lists them in a fixed
 /// order without stable identifiers.
 func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGameTeamStats] {
-    let json = await HTTPClient.json(from: Sport.jayhawk.summaryURL(gameID: gameID))
+    let json = await HTTPClient.json(from: Team.jayhawks.summaryURL(gameID: gameID))
 
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
@@ -217,7 +208,7 @@ func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGam
 
 /// Loads both teams' box score lines for a football game.
 func downloadFootballGameTeamStatsData(gameID: String) async -> [FootballGameTeamStats] {
-    let json = await HTTPClient.json(from: Sport.chiefs.summaryURL(gameID: gameID))
+    let json = await HTTPClient.json(from: Team.chiefs.summaryURL(gameID: gameID))
 
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
