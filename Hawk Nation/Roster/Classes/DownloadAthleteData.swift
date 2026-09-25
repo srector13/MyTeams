@@ -204,7 +204,7 @@ private func humaniseStatName(_ name: String) -> String {
     }
     if !current.isEmpty { words.append(current) }
     return words
-        .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+        .map { $0.prefix(1).uppercased() + String($0.dropFirst()) }
         .joined(separator: " ")
 }
 
@@ -252,7 +252,7 @@ func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats 
         let stats = unknown.map {
             FootballStat(label: humaniseStatName($0), display: footballStatDisplay(name: $0, raw: feed[$0] ?? ""))
         }
-        if stats.contains(where: !$0.isZero) {
+        if stats.contains(where: { !$0.isZero }) {
             groups.append(FootballStatGroup(title: "Statistics", stats: stats))
         }
     }
