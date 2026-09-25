@@ -78,6 +78,34 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     ), count: 2)
 }
 
+/// One team's line in a baseball game's box score.
+///
+/// The box score lists teams in no stable order (MLB lists away first, MLS
+/// home), so each line carries the `homeAway` side it belongs to and callers
+/// pick the side they need rather than indexing by position.
+struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var name: String
+    /// `"home"` or `"away"`, as the box score labels this line.
+    var homeAway: String
+    var runs: Int
+    var hits: Int
+    var errors: Int
+}
+
+/// One team's line in a soccer game's box score. See
+/// `BaseballGameTeamStats` for why lines carry their side.
+struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
+    var id = UUID()
+    var name: String
+    /// `"home"` or `"away"`, as the box score labels this line.
+    var homeAway: String
+    var goals: Int
+    var shots: Int
+    var possessionPct: Float
+    var corners: Int
+}
+
 /// The current score of a game, read from its summary document.
 ///
 /// Schedule cards need nothing livelier than the two team totals; the full
@@ -235,4 +263,83 @@ func downloadFootballGameTeamStatsData(gameID: String) async -> [FootballGameTea
             gameClock: gameClock
         )
     }
+}
+/// Reads one statistic's node from a box-score team's statistics listing.
+///
+/// MLB nests its team statistics under named groups (`batting`, `pitching`,
+/// `fielding`) where the same stat name recurs across groups (`hits` is in all
+/// three, counting different things), so a group name can be required. MLS
+/// lists its statistics flat, with no groups.
+func boxscoreStatistic(_ statistics: JSON, named name: String, in group: String? = nil) -> JSON {
+    for (_, section) in statistics {
+        if let group {
+            guard section["name"].stringValue == group else { continue }
+        } else if section["name"].stringValue == name {
+            // Flat listing (MLS): the section itself is the stat.
+            return section
+        }
+        for (_, stat) in section["stats"] where stat["name"].stringValue == name {
+            return stat
+        }
+    }
+    return .null
+}
+
+/// Extracts both teams' box-score lines from a baseball game's summary
+/// document. Runs and hits come from the batting group, errors from fielding.
+func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
+    json["boxscore", "teams"].map { _, team in
+        let statistics = team["statistics"]
+
+        return BaseballGameTeamStats(
+            name: team["team", "shortDisplayName"].stringValue,
+            homeAway: team["homeAway"].stringValue,
+            runs: boxscoreStatistic(statistics, named: "runs", in: "batting").intValue,
+            hits: boxscoreStatistic(statistics, named: "hits", in: "batting").intValue,
+            errors: boxscoreStatistic(statistics, named: "errors", in: "fielding").intValue
+        )
+    }
+}
+
+/// Loads both teams' box score lines for a baseball game.
+func downloadBaseballGameTeamStatsData(gameID: String) async -> [BaseballGameTeamStats] {
+    let json = await HTTPClient.json(from: Team.royals.summaryURL(gameID: gameID))
+    return parseBaseballGameTeamStats(from: json)
+}
+
+/// Extracts both teams' box-score lines from a soccer game's summary
+/// document.
+///
+/// The MLS box score publishes match events but not goals: the scoreline
+/// lives on the header competitor for the same side, so goals are matched by
+/// `homeAway`.
+func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
+    let competitors = json["header", "competitions", 0, "competitors"]
+
+    func goals(side: String) -> Int {
+        for (_, competitor) in competitors where competitor["homeAway"].stringValue == side {
+            return competitor["score"].intValue
+        }
+        return 0
+    }
+
+    return json["boxscore", "teams"].map { _, team in
+        let statistics = team["statistics"]
+        let side = team["homeAway"].stringValue
+
+        return SoccerGameTeamStats(
+            name: team["team", "shortDisplayName"].stringValue,
+            homeAway: side,
+            goals: goals(side: side),
+            shots: boxscoreStatistic(statistics, named: "totalShots").intValue,
+            possessionPct: boxscoreStatistic(statistics, named: "possessionPct").floatValue,
+            corners: boxscoreStatistic(statistics, named: "wonCorners").intValue
+        )
+    }
+}
+
+/// Loads both teams' box score lines for a soccer game.
+func downloadSoccerGameTeamStatsData(gameID: String) async -> [SoccerGameTeamStats] {
+    let json = await HTTPClient.json(from: Team.sporting.summaryURL(gameID: gameID))
+    return parseSoccerGameTeamStats(from: json)
 }

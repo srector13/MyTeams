@@ -803,6 +803,7 @@ struct BaseballGameDetailView: View {
     var game: Game
     var teamColor: Color
     @State private var gameInfo = GameInfo.empty
+    @State private var gameTeamStats: [BaseballGameTeamStats] = []
     var team: Team
     
     
@@ -1060,7 +1061,11 @@ struct BaseballGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
-            gameInfo = await downloadGameInfo(gameID: game.gameID, team: team)
+            async let stats = downloadBaseballGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+
+            gameTeamStats = await stats
+            gameInfo = await info
         }
     }
 }
@@ -1071,6 +1076,7 @@ struct SoccerGameDetailView: View {
     @Environment(\.dismiss) private var dismiss
     var game: Game
     var teamColor: Color
+    @State private var gameTeamStats: [SoccerGameTeamStats] = []
     @State private var gameInfo = GameInfo.empty
     var team: Team
     
@@ -1171,7 +1177,9 @@ struct SoccerGameDetailView: View {
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 30)
                             } else {
-                                if game.dateAsDate <= Date() {
+                                if game.dateAsDate <= Date(),
+                                   let homeLine = gameTeamStats.first(where: { $0.homeAway == "home" }),
+                                   let awayLine = gameTeamStats.first(where: { $0.homeAway == "away" }) {
                                     HStack(alignment: .top) {
                                         if(game.gameHome) {
                                             HStack() {
@@ -1190,7 +1198,7 @@ struct SoccerGameDetailView: View {
                                                 
                                                 
                                                 VStack(alignment: .center) {
-                                                    Text("\(game.score) - \(game.opponentScore)")
+                                                    Text("\(homeLine.goals) - \(awayLine.goals)")
                                                         .font(.system(size: 30))
                                                         //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
@@ -1250,7 +1258,7 @@ struct SoccerGameDetailView: View {
                                                 }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
                                                 
                                                 VStack(alignment: .center) {
-                                                    Text("\(game.opponentScore) - \(game.score)")
+                                                    Text("\(homeLine.goals) - \(awayLine.goals)")
                                                         .font(.system(size: 30))
                                                         //.foregroundStyle(Color(uiColor: .systemGray))
                                                         .fontWeight(.bold)
@@ -1292,6 +1300,16 @@ struct SoccerGameDetailView: View {
                                             }
                                         }
                                     }.ignoresSafeArea()
+
+                                    Group {
+                                        StatRowView(title: "Goals", homeStat: "\(homeLine.goals)", awayStat: "\(awayLine.goals)")
+
+                                        StatRowView(title: "Shots", homeStat: "\(homeLine.shots)", awayStat: "\(awayLine.shots)")
+
+                                        StatRowView(title: "Possession", homeStat: "\(Int(homeLine.possessionPct.rounded()))%", awayStat: "\(Int(awayLine.possessionPct.rounded()))%")
+
+                                        StatRowView(title: "Corner Kicks", homeStat: "\(homeLine.corners)", awayStat: "\(awayLine.corners)")
+                                    }
                                 } else {
                                     
                                     Spacer()
@@ -1320,7 +1338,11 @@ struct SoccerGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task(repeatingEvery: .seconds(10)) {
-            gameInfo = await downloadGameInfo(gameID: game.gameID, team: team)
+            async let stats = downloadSoccerGameTeamStatsData(gameID: game.gameID)
+            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+
+            gameTeamStats = await stats
+            gameInfo = await info
         }
     }
 }
