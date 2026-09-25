@@ -46,8 +46,8 @@ struct WidgetGame: Sendable {
 
 // The teams the widgets cover are the canonical `Team` cases, defined in
 // Networking/Sport.swift (shared with the app target). WidgetTeam used to be
-// a fourth-hand copy of that list and had no Sporting case — which is why
-// Sporting KC has never had a widget.
+// a fourth-hand copy of that list and had no Sporting case — the reason
+// Sporting KC lacked a widget until the bundle grew its fourth entry.
 
 /// Shows the day of the week alongside the date, e.g. "Mon Jan 18, 2021".
 private let widgetDateFormatter: DateFormatter = {
@@ -79,9 +79,11 @@ enum WidgetScheduleLoader {
         // (`getNextGame`); with dates parsed as true instants the two agree on
         // every well-flagged schedule, and the widget keeps its date form
         // because it renders `nil` — not a clamped last game — after a season
-        // ends, which the flag walk cannot express.
+        // ends, which the flag walk cannot express. Status flags the app does
+        // honour are honoured here too: a fixture the app counts as played
+        // (cancelled or postponed) is never offered as the widget's next game.
         guard let game = schedule
-            .filter({ $0.dateAsDate >= Date() && !$0.cancelled })
+            .filter({ $0.dateAsDate >= Date() && !$0.cancelled && !$0.postponed })
             .min(by: { $0.dateAsDate < $1.dateAsDate })
         else { return nil }
 

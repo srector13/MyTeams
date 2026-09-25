@@ -147,12 +147,27 @@ struct RoyalsScheduleWidget: Widget {
     }
 }
 
+struct SportingScheduleWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(
+            kind: "myTeamsWidget4",
+            provider: GameTimelineProvider(team: .sporting)
+        ) { entry in
+            WidgetEntryView(entry: entry)
+        }
+        .configurationDisplayName("Sporting Schedule")
+        .description("This widget will show the next upcoming Sporting Kansas City soccer game.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
 @main
 struct ScheduleWidgets: WidgetBundle {
     var body: some Widget {
         JayhawksScheduleWidget()
         ChiefsScheduleWidget()
         RoyalsScheduleWidget()
+        SportingScheduleWidget()
     }
 }
 
