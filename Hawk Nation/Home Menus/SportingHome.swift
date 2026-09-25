@@ -10,11 +10,8 @@ import SwiftUI
 
 struct SportingHome: View {
     @State private var model = TeamModel<SoccerPlayer>(
-        scheduleURL: "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/186/schedule",
-        teamName: "Kansas City",
-        teamNameField: .shortDisplayName,
+        team: .sporting,
         newsURL: NewsFeed.sporting,
-        sport: .sporting,
         // MLS completion flags lag or never arrive, so the next game also
         // walks past kick-off times.
         usesDateForNextGame: true,
@@ -52,14 +49,14 @@ struct SportingHome: View {
                 GameView(
                     game: game,
                     teamColor: teamColor,
-                    teamLogo: Team.sporting.logo,
+                    team: .sporting,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 SoccerGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    teamLogo: Team.sporting.logo
+                    team: .sporting
                 )
             }
 

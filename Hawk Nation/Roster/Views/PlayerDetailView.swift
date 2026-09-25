@@ -29,7 +29,7 @@ struct BasketballPlayerDetailView: View {
                         .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
                     
                     //JAYHAWK LOGO
-                    Image("jayhawk")
+                    Team.jayhawks.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -254,6 +254,7 @@ struct FootballPlayerDetailView: View {
     var teamColor: Color
     @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
+    @State var playerStats = FootballPlayerStats.empty
     
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -267,7 +268,7 @@ struct FootballPlayerDetailView: View {
                         .foregroundStyle(teamColor)
                     
                     //CHIEFS LOGO
-                    Image("chiefs")
+                    Team.chiefs.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -473,7 +474,7 @@ struct BaseballPlayerDetailView: View {
                         .foregroundStyle(teamColor)
                     
                     //ROYALS LOGO
-                    Image("royals")
+                    Team.royals.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -791,7 +792,7 @@ struct SoccerPlayerDetailView: View {
                         .foregroundStyle(teamColor)
                     
                     //SPORTING LOGO
-                    Image("sporting")
+                    Team.sporting.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)

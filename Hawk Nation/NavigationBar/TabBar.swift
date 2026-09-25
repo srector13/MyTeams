@@ -8,54 +8,8 @@
 
 import SwiftUI
 
-/// The four teams the app follows, in the order their tabs appear.
-enum Team: String, CaseIterable, Identifiable {
-    case jayhawks
-    case chiefs
-    case royals
-    case sporting
-
-    var id: Self { self }
-
-    /// The full name shown in the header and the sticky title bar.
-    var displayName: String {
-        switch self {
-        case .jayhawks: "Kansas Jayhawks"
-        case .chiefs: "Kansas City Chiefs"
-        case .royals: "Kansas City Royals"
-        case .sporting: "Sporting Kansas City"
-        }
-    }
-
-    /// The short name shown beside the crest on the selected tab.
-    var shortName: String {
-        switch self {
-        case .jayhawks: "Jayhawks"
-        case .chiefs: "Chiefs"
-        case .royals: "Royals"
-        case .sporting: "Sporting"
-        }
-    }
-
-    /// The asset name of the team crest.
-    var logo: String {
-        switch self {
-        case .jayhawks: "jayhawk"
-        case .chiefs: "chiefs"
-        case .royals: "royals"
-        case .sporting: "sporting"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .jayhawks: Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255)
-        case .chiefs: Color(red: 227 / 255, green: 24 / 255, blue: 55 / 255)
-        case .royals: Color(red: 0 / 255, green: 70 / 255, blue: 135 / 255)
-        case .sporting: Color(red: 0 / 255, green: 42 / 255, blue: 92 / 255)
-        }
-    }
-}
+// The `Team` enum that drives this screen is defined once, in
+// Networking/Sport.swift.
 
 /// The app's root screen: one scrolling team page at a time, with a crest
 /// picker pinned to the bottom.
@@ -158,7 +112,7 @@ private struct TeamPage<Content: View>: View {
             }
 
             if showsStickyHeader {
-                TopView(logoName: team.logo, teamName: team.displayName)
+                TopView(team: team)
                     .transition(.opacity)
             }
         }
@@ -217,17 +171,16 @@ private struct TeamPicker: View {
 
 /// The title bar that slides in once a team's crest has scrolled away.
 struct TopView: View {
-    var logoName: String
-    var teamName: String
+    var team: Team
 
     var body: some View {
         HStack(alignment: .center) {
-            Image(logoName)
+            team.logoImage
                 .resizable()
                 .frame(width: 40, height: 40)
                 .padding(.leading)
 
-            Text(teamName)
+            Text(team.displayName)
                 .font(.title)
                 .fontWeight(.bold)
             Spacer(minLength: 0)

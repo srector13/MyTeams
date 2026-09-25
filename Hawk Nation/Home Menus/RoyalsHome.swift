@@ -10,11 +10,8 @@ import SwiftUI
 
 struct RoyalsHome: View {
     @State private var model = TeamModel<BaseballPlayer>(
-        scheduleURL: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/schedule",
-        teamName: "Royals",
-        teamNameField: .shortDisplayName,
+        team: .royals,
         newsURL: NewsFeed.royals,
-        sport: .royals,
         loadRoster: downloadBaseballRoster
     )
 
@@ -49,14 +46,14 @@ struct RoyalsHome: View {
                 GameView(
                     game: game,
                     teamColor: teamColor,
-                    teamLogo: Team.royals.logo,
+                    team: .royals,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 BaseballGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    teamLogo: Team.royals.logo
+                    team: .royals
                 )
             }
 

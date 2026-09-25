@@ -64,11 +64,8 @@ final class TeamModel<Player: RosterPlayer> {
     /// changes so the two do not clobber each other.
     private var activeFilter: (@Sendable (Player) -> Bool)?
 
-    private let scheduleURL: String
-    private let teamName: String
-    private let teamNameField: TeamNameField
+    private let team: Team
     private let newsURL: String
-    private let sport: Sport
     private let loadRoster: @Sendable () async -> [Player]
 
     /// Whether a past kick-off also counts as played when locating the next
@@ -78,19 +75,13 @@ final class TeamModel<Player: RosterPlayer> {
     private let usesDateForNextGame: Bool
 
     init(
-        scheduleURL: String,
-        teamName: String,
-        teamNameField: TeamNameField = .nickname,
+        team: Team,
         newsURL: String,
-        sport: Sport,
         usesDateForNextGame: Bool = false,
         loadRoster: @escaping @Sendable () async -> [Player]
     ) {
-        self.scheduleURL = scheduleURL
-        self.teamName = teamName
-        self.teamNameField = teamNameField
+        self.team = team
         self.newsURL = newsURL
-        self.sport = sport
         self.usesDateForNextGame = usesDateForNextGame
         self.loadRoster = loadRoster
     }
@@ -162,10 +153,10 @@ final class TeamModel<Player: RosterPlayer> {
         guard !pollable.isEmpty else { return }
 
         let results = await withTaskGroup(of: (String, LiveGameScore?).self) { group in
-            let sport = self.sport
+            let team = self.team
             for game in pollable {
                 group.addTask {
-                    (game.gameID, await downloadLiveGameScore(gameID: game.gameID, sport: sport, isHome: game.gameHome))
+                    (game.gameID, await downloadLiveGameScore(gameID: game.gameID, team: team, isHome: game.gameHome))
                 }
             }
             var collected: [(String, LiveGameScore?)] = []
@@ -184,9 +175,9 @@ final class TeamModel<Player: RosterPlayer> {
 
     private func fetchSchedule() async -> [Game] {
         await downloadScheduleData(
-            queryURL: scheduleURL,
-            teamName: teamName,
-            teamNameField: teamNameField
+            queryURL: team.scheduleURL,
+            teamName: team.scheduleTeamName,
+            teamNameField: team.scheduleNameField
         )
     }
 

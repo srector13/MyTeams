@@ -28,12 +28,12 @@ struct WidgetGame: Sendable {
 
     /// The entry shown in the widget gallery, and whenever a load fails.
     static func placeholder(
-        for team: WidgetTeam,
+        for team: Team,
         teamName: String = "Opponent",
         detail: String? = nil
     ) -> WidgetGame {
         WidgetGame(
-            backgroundLogo: team.sport.rawValue,
+            backgroundLogo: team.logo,
             teamName: teamName,
             gameDate: detail ?? "Date",
             gameTime: detail ?? "Time",
@@ -44,55 +44,10 @@ struct WidgetGame: Sendable {
     }
 }
 
-/// The teams that have a widget. Sporting Kansas City has never had one.
-enum WidgetTeam: Sendable {
-    case jayhawks
-    case chiefs
-    case royals
-
-    var sport: Sport {
-        switch self {
-        case .jayhawks: .jayhawk
-        case .chiefs: .chiefs
-        case .royals: .royals
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .jayhawks: Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255)
-        case .chiefs: Color(red: 227 / 255, green: 24 / 255, blue: 55 / 255)
-        case .royals: Color(red: 0 / 255, green: 70 / 255, blue: 135 / 255)
-        }
-    }
-
-    /// The name this team goes by in its own schedule feed.
-    var teamName: String {
-        switch self {
-        case .jayhawks: "Kansas"
-        case .chiefs: "KC"
-        case .royals: "Royals"
-        }
-    }
-
-    var teamNameField: TeamNameField {
-        switch self {
-        case .jayhawks, .chiefs: .nickname
-        case .royals: .shortDisplayName
-        }
-    }
-
-    var scheduleURL: String {
-        switch self {
-        case .jayhawks:
-            "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/schedule"
-        case .chiefs:
-            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/schedule"
-        case .royals:
-            "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/schedule"
-        }
-    }
-}
+// The teams the widgets cover are the canonical `Team` cases, defined in
+// Networking/Sport.swift (shared with the app target). WidgetTeam used to be
+// a fourth-hand copy of that list and had no Sporting case — which is why
+// Sporting KC has never had a widget.
 
 /// Shows the day of the week alongside the date, e.g. "Mon Jan 18, 2021".
 private let widgetDateFormatter: DateFormatter = {
@@ -112,11 +67,11 @@ enum WidgetScheduleLoader {
     /// Shares the app's schedule parsing rather than repeating it, which is
     /// what the per-team loaders here used to do with a thousand lines of
     /// hand-written models apiece.
-    static func nextGame(for team: WidgetTeam) async -> WidgetGame? {
+    static func nextGame(for team: Team) async -> WidgetGame? {
         let schedule = await downloadScheduleData(
             queryURL: team.scheduleURL,
-            teamName: team.teamName,
-            teamNameField: team.teamNameField
+            teamName: team.scheduleTeamName,
+            teamNameField: team.scheduleNameField
         )
 
         // The widget wants the earliest fixture that has not kicked off yet.
@@ -131,7 +86,7 @@ enum WidgetScheduleLoader {
         else { return nil }
 
         return WidgetGame(
-            backgroundLogo: team.sport.rawValue,
+            backgroundLogo: team.logo,
             teamName: game.opponent,
             gameDate: widgetDateFormatter.string(from: game.dateAsDate),
             gameTime: game.time,

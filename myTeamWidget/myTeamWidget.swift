@@ -20,7 +20,7 @@ struct WidgetEntry: TimelineEntry {
 /// The three teams shared an identical provider apiece; they now share this
 /// one, differing only in which team they are built for.
 struct GameTimelineProvider: TimelineProvider {
-    let team: WidgetTeam
+    let team: Team
 
     /// How long a rendered fixture stays good for.
     ///

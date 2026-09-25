@@ -35,9 +35,10 @@ struct Game: Identifiable, Hashable, Sendable {
 
 /// Which field of an ESPN `team` object names the team a schedule belongs to.
 ///
-/// The feeds disagree: basketball, football and baseball carry a `nickname`
-/// ("Jayhawks", "Chiefs"), while the soccer feed only carries a
-/// `shortDisplayName`.
+/// The feeds disagree: the basketball and football feeds carry the followed
+/// team's name in `nickname` ("Kansas", "KC"), while the baseball and soccer
+/// feeds name it in `shortDisplayName`. Each team's field is declared on the
+/// `Team` enum (`scheduleNameField` in Sport.swift).
 enum TeamNameField: String, Sendable {
     case nickname
     case shortDisplayName

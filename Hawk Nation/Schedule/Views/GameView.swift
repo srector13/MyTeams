@@ -19,7 +19,7 @@ struct GameView : View {
     
     var game: Game
     var teamColor: Color
-    var teamLogo: String
+    var team: Team
 
     /// The in-progress score the team model polls for this game, if any.
     /// Past and future fixtures carry no live score; they render from the
@@ -32,7 +32,7 @@ struct GameView : View {
                 Rectangle()
                     .foregroundStyle(self.teamColor)
                 
-                Image(teamLogo)
+                team.logoImage
                     .resizable()
                     .renderingMode(.original)
                     .aspectRatio(contentMode: .fill)
@@ -307,7 +307,7 @@ struct FootballGameView : View {
     
     var game: Game
     var teamColor: Color
-    var teamLogo: String
+    var team: Team
 
     /// The in-progress score the team model polls for this game, if any.
     var liveScore: LiveGameScore?
@@ -318,7 +318,7 @@ struct FootballGameView : View {
                 Rectangle()
                     .foregroundStyle(self.teamColor)
                 
-                Image(teamLogo)
+                team.logoImage
                     .resizable()
                     .renderingMode(.original)
                     .aspectRatio(contentMode: .fill)
