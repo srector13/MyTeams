@@ -1,0 +1,57 @@
+//
+//  StatView.swift
+//  myTeams
+//
+//  Created by Stephen Rector on 5/18/20.
+//  Copyright © 2020 Stephen Rector. All rights reserved.
+//
+
+import SwiftUI
+
+struct StatView: View {
+    @Environment(\.containerSize) private var containerSize
+
+    var title: String
+    var info: String
+    
+    var body: some View {
+            VStack(alignment: .center, spacing: 0){
+                if(info == "") {
+                    Text("N/A")
+                        .font(.system(size: 20))
+                        .fontWeight(.black)
+                        .minimumScaleFactor(0.5)
+                        //.lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                    
+                } else {
+                    Text(info)
+                        .font(.system(size: 20))
+                        .fontWeight(.black)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                }
+                
+                Text(title)
+                    .font(.system(size: 15))
+                    .fontWeight(.bold)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                
+                
+            }.frame(width: (containerSize.width/4), height: containerSize.width/3)
+        }
+}
+
+#Preview {
+    StatView(title: "test", info: "0.5")
+}
+
+
+

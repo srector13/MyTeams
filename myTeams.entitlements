@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- The App Group group.com.myTeams this file used to declare was removed:
+     no code references it (no UserDefaults(suiteName:) or containerURL) and
+     the widget fetches its data over the network, so nothing shares a
+     container. Add `com.apple.security.application-groups` back if a feature
+     ever needs app/widget shared storage. -->
+<dict/>
+</plist>
