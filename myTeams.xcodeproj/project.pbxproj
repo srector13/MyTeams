@@ -53,6 +53,7 @@
 		E7E921A83B474F55A0120398 /* BoxScoreParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */; };
 		4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */; };
 		7E3C9A51D2B84F06A1C5E8D4 /* HTTPClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */; };
+		F38CF3BA1E30891DD3715EEB /* GoldenParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7B081DF6D2F99291D6A497E /* GoldenParserTests.swift */; };
 		2A8A7749105511EB64C1E23F /* FixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */; };
 		9E669271FC3B738FEB53346A /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = 0016D8946325BE560D66E257 /* Fixtures */; };
 		CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */; };
@@ -145,6 +146,7 @@
 		B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BoxScoreParsingTests.swift"; sourceTree = "<group>"; };
 		6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AthleteStatsParsingTests.swift"; sourceTree = "<group>"; };
 		A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HTTPClientTests.swift"; sourceTree = "<group>"; };
+		C7B081DF6D2F99291D6A497E /* GoldenParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GoldenParserTests.swift"; sourceTree = "<group>"; };
 		80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FixtureLoader.swift"; sourceTree = "<group>"; };
 		0016D8946325BE560D66E257 /* Fixtures */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Fixtures"; sourceTree = "<group>"; };
 		BD5786509BA63FD87FE7AD03 /* FIXTURES.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "FIXTURES.md"; sourceTree = "<group>"; };
@@ -394,6 +396,7 @@
 				6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */,
 				A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */,
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
+				C7B081DF6D2F99291D6A497E /* GoldenParserTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
 				BD5786509BA63FD87FE7AD03 /* FIXTURES.md */,
@@ -629,6 +632,7 @@
 				4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */,
 				7E3C9A51D2B84F06A1C5E8D4 /* HTTPClientTests.swift in Sources */,
 				CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */,
+				F38CF3BA1E30891DD3715EEB /* GoldenParserTests.swift in Sources */,
 				2A8A7749105511EB64C1E23F /* FixtureLoader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
