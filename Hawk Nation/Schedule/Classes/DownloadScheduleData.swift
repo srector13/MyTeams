@@ -16,6 +16,8 @@ struct Game: Identifiable, Hashable, Sendable {
     /// or empty when the event does not list the team.
     var team: String
     var opponent: String
+    /// The opponent's ESPN team id, or empty when the feed names none.
+    var opponentID = ""
     var score: String
     var opponentScore: String
     var time: String
@@ -145,6 +147,7 @@ func parseGame(
     let nameField = team.league.descriptor.competitorNameField
     var teamName = ""
     var opponent = ""
+    var opponentID = ""
     var score = ""
     var opponentScore = ""
     var time = ""
@@ -202,16 +205,13 @@ func parseGame(
                 score = competitor["score"]["displayValue"].stringValue
             } else {
                 opponent = competitor["team"][nameField.rawValue].stringValue
+                opponentID = competitor["team"]["id"].stringValue
                 opponentScore = competitor["score"]["displayValue"].stringValue
 
-                // Feeds ship a light and a dark variant of every logo. Take
-                // the light one, which reads on the team-coloured cards.
-                for (_, logo): (String, JSON) in competitor["team"]["logos"] {
-                    let link = logo["href"].stringValue
-                    if !link.contains("dark") {
-                        opponentLogo = link
-                    }
-                }
+                // Feeds ship a light and a dark variant of every logo, among
+                // a dozen brand-service ones. Take the default crest, chosen
+                // by its `rel` tokens, which reads on the team-coloured cards.
+                opponentLogo = ESPNLogos.select(competitor["team"]["logos"]).default?.absoluteString ?? ""
             }
         }
     }
@@ -228,6 +228,7 @@ func parseGame(
         eventID: eventID,
         team: teamName,
         opponent: opponent,
+        opponentID: opponentID,
         score: score,
         opponentScore: opponentScore,
         time: time,

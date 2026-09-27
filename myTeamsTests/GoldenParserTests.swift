@@ -76,9 +76,11 @@ struct GoldenScheduleTests {
         #expect(game.gamePeriod == "2")  // status.period (2 halves)
         #expect(game.channel == "ESPN+")  // broadcasts[0].media.shortName
         #expect(game.location == "Allen Fieldhouse")  // venue.fullName
-        // The last non-"dark" entry of competitors[1].team.logos wins.
-        #expect(game.opponentLogo
-            == "https://a.espncdn.com/guid/80a8f2a5-71ee-595e-5428-0ad7c949dccd/logos/secondary_logo_white.png")
+        // The competitors[1].team.logos entry whose rel is ["full", "default"]
+        // (P2-a: chosen by rel; it was the last non-"dark" href, a 4096 px
+        // guid/…/secondary_logo_white.png).
+        #expect(game.opponentLogo == "https://a.espncdn.com/i/teamlogos/ncaa/500/2739.png")
+        #expect(game.opponentID == "2739")  // competitors[1].team.id
         #expect(!game.isDraw)
 
         // .date "2025-11-04T01:00Z" is the UTC instant 1762218000.
@@ -134,9 +136,10 @@ struct GoldenScheduleTests {
         let away = try scheduledGame("chiefs_schedule", event: "401872976", team: .chiefs)
         #expect(away.opponent == "Raiders")  // competitors[0].team.nickname
         #expect(!away.gameHome)  // competitors[1].homeAway (Chiefs)
-        // The last non-"dark" entry of competitors[0].team.logos.
-        #expect(away.opponentLogo
-            == "https://a.espncdn.com/guid/b18540eb-6f2b-534c-e7f9-9bd930518da9/logos/secondary_logo_white.png")
+        // The competitors[0].team.logos entry whose rel is ["full", "default"]
+        // (P2-a: was guid/…/secondary_logo_white.png).
+        #expect(away.opponentLogo == "https://a.espncdn.com/i/teamlogos/nfl/500/lv.png")
+        #expect(away.opponentID == "13")  // competitors[0].team.id
     }
 
     @Test("NFL overtime final (Final/OT) reads as completed with period 5")
