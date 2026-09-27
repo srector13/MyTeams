@@ -183,7 +183,7 @@ enum GamePhase: Sendable, Hashable {
     case live
     /// Over — played out, or called off.
     case final
-    /// The document carried no status, e.g. because the fetch failed.
+    /// The document carried no status, e.g. a partial response.
     case unknown
 }
 
@@ -221,15 +221,15 @@ struct GameDetail<Stats: Sendable>: Sendable {
         self.phase = parseGamePhase(from: json)
     }
 
+    /// How long a detail sheet waits after a fetch that produced no document.
+    /// Longer than the live rate, so a rate-limited sheet backs off.
+    static var retryInterval: Duration { .seconds(30) }
+
     /// How long a detail sheet waits before refetching, or `nil` to stop.
     ///
     /// A live game refreshes every ten seconds. One not yet started only needs
     /// to notice kickoff, so it checks once a minute; a finished game will not
     /// change again. A document with no status is retried at the live rate.
-    /// How long a detail sheet waits after a fetch that produced no document.
-    /// Longer than the live rate, so a rate-limited sheet backs off.
-    static var retryInterval: Duration { .seconds(30) }
-
     var refreshInterval: Duration? {
         switch phase {
         case .live, .unknown: return .seconds(10)

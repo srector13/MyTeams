@@ -118,12 +118,12 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                             // Either the feed listed nobody, or the filter
                             // matches nobody.
                             SectionStatusView(message: "No players to show")
-                                .frame(width: containerSize.width - 20)
+                                .frame(width: max(containerSize.width - 20, 200))
                         case .failed:
                             SectionStatusView(message: "Couldn't load the roster") {
                                 Task { await model.reloadRoster() }
                             }
-                            .frame(width: containerSize.width - 20)
+                            .frame(width: max(containerSize.width - 20, 200))
                         }
                     } else {
                         ForEach(model.players) { player in
@@ -195,12 +195,12 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                                 }
                             case .loaded:
                                 SectionStatusView(message: "Nothing scheduled")
-                                    .frame(width: containerSize.width - 30)
+                                    .frame(width: max(containerSize.width - 30, 200))
                             case .failed:
                                 SectionStatusView(message: "Couldn't load the schedule") {
                                     Task { await model.reloadSchedule() }
                                 }
-                                .frame(width: containerSize.width - 30)
+                                .frame(width: max(containerSize.width - 30, 200))
                             }
                         } else {
                             ForEach(model.games) { game in

@@ -122,6 +122,12 @@ final class TeamModel<Player: RosterPlayer> {
     /// Scores and clocks move during a game, so the schedule is refetched every
     /// minute; rosters and news do not, so they are fetched once.
     func load() async {
+        // A tab that failed last time it appeared shows its skeletons again
+        // while it retries.
+        if rosterState == .failed { rosterState = .loading }
+        if scheduleState == .failed { scheduleState = .loading }
+        if newsState == .failed { newsState = .loading }
+
         async let roster = loadRoster()
         async let schedule = fetchSchedule()
         async let news = downloadNewsData(queryURL: newsURL)
