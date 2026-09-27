@@ -64,6 +64,11 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
         "\(Self.siteAPI)/\(path)/teams/\(teamID)/roster"
     }
 
+    /// A team's news feed, newest first.
+    func newsURL(teamID: String) -> String {
+        "\(Self.siteAPI)/\(path)/news?team=\(teamID)&limit=25"
+    }
+
     /// One game's summary: header, box score, venue.
     func summaryURL(gameID: String) -> String {
         "\(Self.siteAPI)/\(path)/summary?event=\(gameID)"
@@ -130,10 +135,6 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     /// app and the widget each carry a copy of these imagesets.
     var logoAsset: String?
 
-    /// The NewsAPI query terms behind the team's news feed, hand-tuned for
-    /// the seeded teams. See `NewsFeed.url(for:)`.
-    var newsQuery: String?
-
     /// The stable key for persistence and widgets: `"<leaguePath>:<espnID>"`,
     /// e.g. `"football/nfl:12"`.
     var id: String { Self.id(league: league, espnID: espnID) }
@@ -161,6 +162,8 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     var scheduleURL: String { league.scheduleURL(teamID: espnID) }
 
     var rosterURL: String { league.rosterURL(teamID: espnID) }
+
+    var newsURL: String { league.newsURL(teamID: espnID) }
 
     func summaryURL(gameID: String) -> String {
         league.summaryURL(gameID: gameID)

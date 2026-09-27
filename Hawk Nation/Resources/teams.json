@@ -11,8 +11,7 @@
       "alternateColorHex": "E8000D",
       "logoURL": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png",
       "logoDarkURL": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/2305.png",
-      "logoAsset": "jayhawk",
-      "newsQuery": "q=+jayhawks+basketball&qInTitle=kansas&domains=espn.com,bleacherreport.com,foxsport.com"
+      "logoAsset": "jayhawk"
     },
     {
       "league": "football/nfl",
@@ -25,8 +24,7 @@
       "alternateColorHex": "FFB612",
       "logoURL": "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png",
       "logoDarkURL": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/kc.png",
-      "logoAsset": "chiefs",
-      "newsQuery": "qInTitle=+chiefs&domains=espn.com,bleacherreport.com,foxsport.com,nfl.com"
+      "logoAsset": "chiefs"
     },
     {
       "league": "baseball/mlb",
@@ -39,8 +37,7 @@
       "alternateColorHex": "7AB2DD",
       "logoURL": "https://a.espncdn.com/i/teamlogos/mlb/500/kc.png",
       "logoDarkURL": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/kc.png",
-      "logoAsset": "royals",
-      "newsQuery": "q=+royals+kansas+city&domains=espn.com,bleacherreport.com,foxsport.com"
+      "logoAsset": "royals"
     },
     {
       "league": "soccer/usa.1",
@@ -53,8 +50,7 @@
       "alternateColorHex": "A7C6ED",
       "logoURL": "https://a.espncdn.com/i/teamlogos/soccer/500/186.png",
       "logoDarkURL": "https://a.espncdn.com/i/teamlogos/soccer/500-dark/186.png",
-      "logoAsset": "sporting",
-      "newsQuery": "q=+sporting+kc+mls"
+      "logoAsset": "sporting"
     }
   ]
 }

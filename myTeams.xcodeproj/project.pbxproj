@@ -21,7 +21,6 @@
 		76207EC0BBD446E30AD3ABCE /* Sport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CBF316BA698A3A7672774F /* Sport.swift */; };
 		7B4DB145D40FB923834AE02E /* TeamRef.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95678F04274EC3A4BFC7B89B /* TeamRef.swift */; };
 		FC03614F349A24609A803EE0 /* DownloadNewsData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ED568E453469367FE117D58 /* DownloadNewsData.swift */; };
-		A180B40AC355B05F060B4E64 /* NewsFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20CF0EE3CD427394B0E3901 /* NewsFeed.swift */; };
 		4A8E1E1BFE20496EE2B73179 /* NewsDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE0A8D246611BB27CCB24297 /* NewsDetailView.swift */; };
 		A90873D889AD7C520275E2E7 /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E046E9BE3DE42EB5029A98 /* NewsView.swift */; };
 		B5C6B213DE2B2F6C629CC6FA /* MyTeamsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E6F7749EA7D0396162F3F /* MyTeamsApp.swift */; };
@@ -118,7 +117,6 @@
 		A1CBF316BA698A3A7672774F /* Sport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sport.swift"; sourceTree = "<group>"; };
 		95678F04274EC3A4BFC7B89B /* TeamRef.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamRef.swift"; sourceTree = "<group>"; };
 		6ED568E453469367FE117D58 /* DownloadNewsData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadNewsData.swift"; sourceTree = "<group>"; };
-		A20CF0EE3CD427394B0E3901 /* NewsFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NewsFeed.swift"; sourceTree = "<group>"; };
 		BE0A8D246611BB27CCB24297 /* NewsDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NewsDetailView.swift"; sourceTree = "<group>"; };
 		78E046E9BE3DE42EB5029A98 /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NewsView.swift"; sourceTree = "<group>"; };
 		F742C536A79EF1E75AC68E72 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
@@ -262,7 +260,6 @@
 			isa = PBXGroup;
 			children = (
 				6ED568E453469367FE117D58 /* DownloadNewsData.swift */,
-				A20CF0EE3CD427394B0E3901 /* NewsFeed.swift */,
 			);
 			path = "Classes";
 			sourceTree = "<group>";
@@ -593,7 +590,6 @@
 				76207EC0BBD446E30AD3ABCE /* Sport.swift in Sources */,
 				7B4DB145D40FB923834AE02E /* TeamRef.swift in Sources */,
 				FC03614F349A24609A803EE0 /* DownloadNewsData.swift in Sources */,
-				A180B40AC355B05F060B4E64 /* NewsFeed.swift in Sources */,
 				4A8E1E1BFE20496EE2B73179 /* NewsDetailView.swift in Sources */,
 				A90873D889AD7C520275E2E7 /* NewsView.swift in Sources */,
 				B5C6B213DE2B2F6C629CC6FA /* MyTeamsApp.swift in Sources */,
@@ -805,7 +801,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				NEWS_API_KEY = "$(NEWS_API_KEY)";
 				PRODUCT_BUNDLE_IDENTIFIER = "PolarReailty.Hawk-Nation";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -830,7 +825,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0.0;
-				NEWS_API_KEY = "$(NEWS_API_KEY)";
 				PRODUCT_BUNDLE_IDENTIFIER = "PolarReailty.Hawk-Nation";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

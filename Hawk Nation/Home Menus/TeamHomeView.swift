@@ -41,7 +41,7 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         self.team = team
         _model = State(initialValue: TeamModel(
             team: team,
-            newsURL: NewsFeed.url(for: team),
+            newsURL: team.newsURL,
             loadRoster: loadRoster
         ))
     }

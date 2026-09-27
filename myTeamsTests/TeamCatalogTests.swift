@@ -66,6 +66,21 @@ struct TeamCatalogTests {
         #expect(LeagueID.mls.athleteURL(athleteID: "249729") == "\(common)/soccer/usa.1/athletes/249729")
     }
 
+    @Test("News feeds come from the league path and ESPN id alone")
+    func newsURLs() {
+        let site = "https://site.api.espn.com/apis/site/v2/sports"
+        #expect(TeamRef.jayhawks.newsURL == "\(site)/basketball/mens-college-basketball/news?team=2305&limit=25")
+        #expect(TeamRef.chiefs.newsURL == "\(site)/football/nfl/news?team=12&limit=25")
+        #expect(TeamRef.royals.newsURL == "\(site)/baseball/mlb/news?team=7&limit=25")
+        #expect(TeamRef.sporting.newsURL == "\(site)/soccer/usa.1/news?team=186&limit=25")
+
+        // Every catalogued team, and a league the app has never seeded.
+        for team in TeamCatalog.all {
+            #expect(team.newsURL == "\(site)/\(team.league.path)/news?team=\(team.espnID)&limit=25")
+        }
+        #expect(LeagueID(sport: "hockey", league: "nhl").newsURL(teamID: "4") == "\(site)/hockey/nhl/news?team=4&limit=25")
+    }
+
     @Test("League paths round-trip through LeagueID")
     func leaguePaths() throws {
         #expect(LeagueID(path: "football/nfl") == .nfl)
@@ -141,15 +156,10 @@ struct TeamCatalogTests {
     }
 
     // The literals below are what the per-team home views and schedule cards
-    // hard-coded before TeamHomeView: NewsFeed's four constants, the Chiefs
-    // card's "Tie" and score-first live state, and each page's filter menu.
+    // hard-coded before TeamHomeView: the Chiefs card's "Tie" and score-first
+    // live state, and each page's filter menu.
     @Test("Team and league data carry what the per-team views hard-coded")
     func formerViewConfiguration() {
-        #expect(TeamRef.jayhawks.newsQuery == "q=+jayhawks+basketball&qInTitle=kansas&domains=espn.com,bleacherreport.com,foxsport.com")
-        #expect(TeamRef.chiefs.newsQuery == "qInTitle=+chiefs&domains=espn.com,bleacherreport.com,foxsport.com,nfl.com")
-        #expect(TeamRef.royals.newsQuery == "q=+royals+kansas+city&domains=espn.com,bleacherreport.com,foxsport.com")
-        #expect(TeamRef.sporting.newsQuery == "q=+sporting+kc+mls")
-
         let nfl = TeamRef.chiefs.league.descriptor
         #expect(nfl.drawLabel == "Tie")
         #expect(nfl.liveCardStyle == .scoreFirst)

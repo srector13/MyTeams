@@ -5,7 +5,8 @@ the Kansas City Chiefs, the Kansas City Royals and Sporting Kansas City —
 showing each team's roster, schedule and news, with home-screen widgets for
 the next fixture.
 
-Built with SwiftUI against the public ESPN and NewsAPI endpoints.
+Built with SwiftUI against ESPN's public site API — rosters, schedules, game
+summaries and team news alike. No API keys are needed.
 
 ## Requirements
 
@@ -18,19 +19,6 @@ Built with SwiftUI against the public ESPN and NewsAPI endpoints.
 Open `myTeams.xcodeproj` and build the `myTeams` scheme. There are no package
 or CocoaPods dependencies to resolve first.
 
-### The news API key
-
-The news feeds read their key from a `NEWS_API_KEY` build setting, which
-`Info.plist` passes through to the app. Supply it however suits your setup —
-an `.xcconfig` that is not checked in, or a CI secret:
-
-```
-NEWS_API_KEY = your-newsapi-key
-```
-
-Without a key the rosters and schedules still load; only the news sections
-fail, showing a load error with a retry button.
-
 ## Layout
 
 ```
@@ -40,7 +28,7 @@ Hawk Nation/
   NavigationBar/  The root screen and its team picker
   Roster/         Player cards, detail sheets and the roster loaders
   Schedule/       Game cards, detail sheets and the schedule loaders
-  News/           The news feed, its article sheet and the feed queries
+  News/           The news feed and its article sheet
 myTeamWidget/     The three next-fixture widgets
 myTeamsTests/     Unit tests for JSON decoding and schedule parsing
 ```

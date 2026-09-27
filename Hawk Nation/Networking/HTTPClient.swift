@@ -135,8 +135,7 @@ struct HTTPClient: Sendable {
     /// fails with `.invalidURL`.
     func fetch(_ urlString: String) async -> FetchResult {
         guard let url = URL(string: urlString) else {
-            // The string can still carry a query with the NewsAPI key, so
-            // log the host only — matching the other failure paths above.
+            // Log the host only, matching the other failure paths above.
             let host = URLComponents(string: urlString)?.host ?? "unknown host"
             logger.error("Malformed URL for host \(host)")
             return .failure(.invalidURL)
