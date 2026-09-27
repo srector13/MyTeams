@@ -28,12 +28,12 @@ struct WidgetGame: Sendable {
 
     /// The entry shown in the widget gallery, and whenever a load fails.
     static func placeholder(
-        for team: Team,
+        for team: TeamRef,
         teamName: String = "Opponent",
         detail: String? = nil
     ) -> WidgetGame {
         WidgetGame(
-            backgroundLogo: team.logo,
+            backgroundLogo: team.logoAsset ?? "",
             teamName: teamName,
             gameDate: detail ?? "Date",
             gameTime: detail ?? "Time",
@@ -44,9 +44,10 @@ struct WidgetGame: Sendable {
     }
 }
 
-// The teams the widgets cover are the canonical `Team` cases, defined in
-// Networking/Sport.swift (shared with the app target). WidgetTeam used to be
-// a fourth-hand copy of that list and had no Sporting case — the reason
+// The teams the widgets cover come from the bundled catalog
+// (`TeamCatalog`, Networking/TeamRef.swift, shared with the app target; the
+// widget bundles its own copy of teams.json). WidgetTeam used to be a
+// fourth-hand copy of the team list and had no Sporting case — the reason
 // Sporting KC lacked a widget until the bundle grew its fourth entry.
 
 /// Shows the day of the week alongside the date, e.g. "Mon Jan 18, 2021".
@@ -77,12 +78,8 @@ enum WidgetScheduleLoader {
     /// Shares the app's schedule parsing rather than repeating it, which is
     /// what the per-team loaders here used to do with a thousand lines of
     /// hand-written models apiece.
-    static func nextGame(for team: Team) async -> WidgetLoadResult {
-        let result = await downloadScheduleData(
-            queryURL: team.scheduleURL,
-            teamName: team.scheduleTeamName,
-            teamNameField: team.scheduleNameField
-        )
+    static func nextGame(for team: TeamRef) async -> WidgetLoadResult {
+        let result = await downloadScheduleData(team: team)
         guard case .success(let schedule) = result else { return .failed }
 
         // The widget wants the earliest fixture that has not kicked off yet.
@@ -99,7 +96,7 @@ enum WidgetScheduleLoader {
         else { return .seasonOver }
 
         let widgetGame = WidgetGame(
-            backgroundLogo: team.logo,
+            backgroundLogo: team.logoAsset ?? "",
             teamName: game.opponent,
             gameDate: widgetDateFormatter.string(from: game.dateAsDate),
             gameTime: game.time,
@@ -114,7 +111,7 @@ enum WidgetScheduleLoader {
     ///
     /// The widget gallery wants its snapshot back within moments; a slow
     /// network should fall back to sample data rather than hold it up.
-    static func nextGame(for team: Team, within deadline: Duration) async -> WidgetLoadResult {
+    static func nextGame(for team: TeamRef, within deadline: Duration) async -> WidgetLoadResult {
         await withTaskGroup(of: WidgetLoadResult.self) { group in
             group.addTask {
                 await WidgetScheduleLoader.nextGame(for: team)

@@ -13,6 +13,7 @@ struct BasketballPlayerDetailView: View {
     @Environment(\.containerSize) private var containerSize
 
     var player: BasketballPlayer
+    var team: TeamRef
     @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = BasketballPlayerStats(gamesPlayed: 0, avgMinutes: 0, fieldGoalPct: 0, threePointFieldGoalPct: 0, freeThrowPct: 0, avgOffensiveRebounds: 0, avgDefensiveRebounds: 0, avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0, avgTurnovers: 0, avgPoints: 0)
@@ -28,8 +29,8 @@ struct BasketballPlayerDetailView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
                     
-                    //JAYHAWK LOGO
-                    Team.jayhawks.logoImage
+                    //TEAM LOGO
+                    team.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -242,7 +243,7 @@ struct BasketballPlayerDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task {
-            playerStats = await downloadBasketballPlayerStats(playerID: player.playerID)
+            playerStats = await downloadBasketballPlayerStats(playerID: player.playerID, league: team.league)
         }
     }
 }
@@ -252,6 +253,7 @@ struct FootballPlayerDetailView: View {
 
     var player: FootBallPlayer
     var teamColor: Color
+    var team: TeamRef
     @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = FootballPlayerStats.empty
@@ -267,8 +269,8 @@ struct FootballPlayerDetailView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .foregroundStyle(teamColor)
                     
-                    //CHIEFS LOGO
-                    Team.chiefs.logoImage
+                    //TEAM LOGO
+                    team.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -475,7 +477,7 @@ struct FootballPlayerDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .task {
-            playerStats = await downloadFootballPlayerStats(playerID: player.playerID)
+            playerStats = await downloadFootballPlayerStats(playerID: player.playerID, league: team.league)
         }
     }
 }
@@ -485,6 +487,7 @@ struct BaseballPlayerDetailView: View {
 
     var player: BaseballPlayer
     var teamColor: Color
+    var team: TeamRef
     @Environment(\.dismiss) private var dismiss
     @State var pickerSelectedItem = 0
     @State var playerStats = BaseballPlayerStats(EarnedRunAverage: 0, wins: 0, losses: 0, saves: 0, saveOpportunities: 0, gamesPlayed: 0, gamesStarted: 0, completeGames: 0, innings: 0.0, hits: 0, runs: 0, earnedRuns: 0, homeRuns: 0, walks: 0, strikeouts: 0, opponentAvg: 0.0, AtBats: 0, Runs: 0, Hits: 0, Doubles: 0, Triples: 0, HomeRuns: 0, RBIs: 0.0, Walks: 0, HitByPitch: 0, Strikeouts: 0, StolenBases: 0, CaughtStealing: 0, Avg: 0.0, OnBasePct: 0.0, SlugAvg: 0.0, OPS: 0.0)
@@ -500,8 +503,8 @@ struct BaseballPlayerDetailView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .foregroundStyle(teamColor)
                     
-                    //ROYALS LOGO
-                    Team.royals.logoImage
+                    //TEAM LOGO
+                    team.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)
@@ -792,7 +795,8 @@ struct BaseballPlayerDetailView: View {
         .task {
             playerStats = await downloadBaseballPlayerStats(
                 playerID: player.playerID,
-                playerPosition: player.position
+                playerPosition: player.position,
+                league: team.league
             )
         }
     }
@@ -803,6 +807,7 @@ struct SoccerPlayerDetailView: View {
 
     var player: SoccerPlayer
     var teamColor: Color
+    var team: TeamRef
     @Environment(\.dismiss) private var dismiss
     
     @State var pickerSelectedItem = 0
@@ -818,8 +823,8 @@ struct SoccerPlayerDetailView: View {
                     RoundedRectangle(cornerRadius: 20)
                         .foregroundStyle(teamColor)
                     
-                    //SPORTING LOGO
-                    Team.sporting.logoImage
+                    //TEAM LOGO
+                    team.logoImage
                         .resizable()
                         .renderingMode(.original)
                         .aspectRatio(contentMode: .fill)

@@ -45,26 +45,26 @@ myTeamWidget/     The three next-fixture widgets
 myTeamsTests/     Unit tests for JSON decoding and schedule parsing
 ```
 
-The widget extension compiles `JSON`, `HTTPClient`, `Sport` and the schedule
-parser from the app target rather than keeping its own copy of them.
+The widget extension compiles `JSON`, `HTTPClient`, `Sport`, `TeamRef`,
+`ConvertColor` and the schedule parser from the app target rather than
+keeping its own copy of them, and bundles its own copy of `teams.json`.
 
 ## Team identity
 
-A team's identity flows through views and models as a raw string — the
-`Sport` case's raw value, which is also the logo asset name in
-`Assets.xcassets`. The four teams are enumerated in three places today:
+A team is a `TeamRef` value (`Networking/TeamRef.swift`): its ESPN league
+(`LeagueID`, e.g. `football/nfl`) and ESPN team id, plus display fields. Its
+`id` is `"<leaguePath>:<espnID>"`, e.g. `"football/nfl:12"`. Feeds are
+matched on the ESPN id every competitor node carries, never on names.
 
-- `Sport` (`Networking/Sport.swift`) — the app's four teams and everything
-  the ESPN feeds need per team; its raw values are the asset names.
-- `Team` (`NavigationBar/TabBar.swift`) — the tab picker, one case per team.
-- `WidgetTeam` (`myTeamWidget/WidgetScheduleLoader.swift`) — the three teams
-  with a widget; maps to `Sport` rather than mirroring its raw values.
+- `TeamCatalog` reads the teams from the bundled `Resources/teams.json`,
+  which seeds the four teams the app follows.
+- `LeagueDescriptor` (`Networking/Sport.swift`) holds what differs by
+  league: sport kind, roster shape, record rule, period names.
+- `FavoriteTeams` is the tab and widget list — for now, the whole catalog.
 
-Adding a fifth team means touching all three plus the assets. They are not
-collapsed into one enum because `WidgetTeam` deliberately excludes Sporting
-KC while `Sport` includes it, and the widget target would otherwise pull the
-app's view-layer `Team` into its build. Kept as a known trade-off, not an
-oversight — revisit if the rosters grow or a widget is added for Sporting KC.
+The retired `Team` enum's raw values (`"jayhawk"`, `"chiefs"`, `"royals"`,
+`"sporting"`) survive only as `TeamCatalog.legacyTeamIDs`, for migrating
+anything persisted under them.
 
 ## Dependencies
 

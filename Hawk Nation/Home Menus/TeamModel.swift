@@ -80,37 +80,33 @@ final class TeamModel<Player: RosterPlayer> {
     /// changes so the two do not clobber each other.
     private var activeFilter: (@Sendable (Player) -> Bool)?
 
-    private let team: Team
+    let team: TeamRef
     private let newsURL: String
-    private let loadRoster: @Sendable () async -> Result<[Player], NetworkError>
+    private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
 
-    /// Whether a past kick-off also counts as played when locating the next
-    /// game. The soccer feed's completion flags are unreliable, so that tab
-    /// gets the date fallback in `getNextGame`; the record shares the flag via
-    /// `seasonRecord(pastDatesCountAsPlayed:)`.
-    private let usesDateForNextGame: Bool
+    /// How the league turns the schedule into a record and a next game: MLS
+    /// completion flags are unreliable, so there a past kick-off also counts
+    /// as played (`getNextGame`, `seasonRecord(pastDatesCountAsPlayed:)`),
+    /// and MLB counts abandoned fixtures as losses.
+    private var recordRule: RecordRule { team.league.descriptor.recordRule }
 
     init(
-        team: Team,
+        team: TeamRef,
         newsURL: String,
-        usesDateForNextGame: Bool = false,
-        loadRoster: @escaping @Sendable () async -> Result<[Player], NetworkError>
+        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>
     ) {
         self.team = team
         self.newsURL = newsURL
-        self.usesDateForNextGame = usesDateForNextGame
         self.loadRoster = loadRoster
     }
 
-    /// The team's record so far this season, as wins, losses and draws.
-    ///
-    /// `countingAbandonedAsLosses` selects the baseball tab's rule; see
-    /// `RoyalsHome` and `seasonRecord`.
-    func displayRecord(countingAbandonedAsLosses: Bool = false) -> (wins: Int, losses: Int, draws: Int) {
+    /// The team's record so far this season, as wins, losses and draws,
+    /// counted under the league's `RecordRule`. See `seasonRecord`.
+    func displayRecord() -> (wins: Int, losses: Int, draws: Int) {
         seasonRecord(
             games: games,
-            countingAbandonedAsLosses: countingAbandonedAsLosses,
-            pastDatesCountAsPlayed: usesDateForNextGame
+            countingAbandonedAsLosses: recordRule.countsAbandonedGamesAsLosses,
+            pastDatesCountAsPlayed: recordRule.usesDateForNextGame
         )
     }
 
@@ -128,7 +124,7 @@ final class TeamModel<Player: RosterPlayer> {
         if scheduleState == .failed { scheduleState = .loading }
         if newsState == .failed { newsState = .loading }
 
-        async let roster = loadRoster()
+        async let roster = loadRoster(team)
         async let schedule = fetchSchedule()
         async let news = downloadNewsData(queryURL: newsURL)
 
@@ -199,7 +195,7 @@ final class TeamModel<Player: RosterPlayer> {
     /// Refetches the roster after a failed load.
     func reloadRoster() async {
         rosterState = .loading
-        apply(roster: await loadRoster())
+        apply(roster: await loadRoster(team))
     }
 
     /// Refetches the schedule after a failed load, without waiting for the
@@ -219,11 +215,7 @@ final class TeamModel<Player: RosterPlayer> {
     // MARK: - Applying results
 
     private func fetchSchedule() async -> Result<[Game], NetworkError> {
-        await downloadScheduleData(
-            queryURL: team.scheduleURL,
-            teamName: team.scheduleTeamName,
-            teamNameField: team.scheduleNameField
-        )
+        await downloadScheduleData(team: team)
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen
@@ -240,7 +232,7 @@ final class TeamModel<Player: RosterPlayer> {
             games = schedule
             nextGame = getNextGame(
                 schedule: schedule,
-                pastDatesCountAsPlayed: usesDateForNextGame
+                pastDatesCountAsPlayed: recordRule.usesDateForNextGame
             )
         case .failure(let error):
             fail(&scheduleState, with: error, hasContent: !games.isEmpty)
@@ -313,9 +305,10 @@ final class TeamModel<Player: RosterPlayer> {
 /// draw, an NFL tie — see `Game.isDraw`) counts in the draws column instead.
 ///
 /// - Parameters:
-///   - countingAbandonedAsLosses: the baseball tab's rule — cancelled and
-///     postponed fixtures count in the losses column. Every other tab treats
-///     an abandoned fixture as neither win nor loss. See `RoyalsHome`.
+///   - countingAbandonedAsLosses: MLB's rule — cancelled and postponed
+///     fixtures count in the losses column. Every other league treats an
+///     abandoned fixture as neither win nor loss. See
+///     `RecordRule.countsAbandonedGamesAsLosses`.
 ///   - pastDatesCountAsPlayed: the soccer feed's completion flags are
 ///     unreliable, so there a past start time stands in for "played". Games
 ///     are given a four-hour grace window past kickoff so a live match is not
@@ -342,8 +335,8 @@ func seasonRecord(
     let losses = games.count { game in
         if game.gameWin { return false }
         if game.cancelled || game.postponed {
-            // The baseball tab's rule: an abandoned fixture goes in the
-            // losses column. Everywhere else it is neither win nor loss.
+            // MLB's rule: an abandoned fixture goes in the losses column.
+            // Everywhere else it is neither win nor loss.
             return countingAbandonedAsLosses
         }
         return !game.isDraw && played(game)

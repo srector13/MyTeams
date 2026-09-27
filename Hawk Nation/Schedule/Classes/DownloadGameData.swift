@@ -126,15 +126,14 @@ struct LiveGameScore: Sendable, Hashable {
 
 /// Reads the current score from a game's summary document.
 ///
-/// `isHome` is the schedule feed's `gameHome` flag for the followed team. The
-/// pro summaries carry no `shortDisplayName` on their header competitors, so
-/// the home/away side is the reliable key; the box-score name only
-/// disambiguates when a header omits `homeAway` (or the fixture moved sides).
+/// `isHome` is the schedule feed's `gameHome` flag for the followed team, and
+/// the home/away side is the primary key; the competitor's `team.id` only
+/// decides when a header omits `homeAway`.
 ///
 /// Returns `nil` when the fetch failed or the document cannot be attributed,
 /// so a caller can keep its last known figures instead of painting a
 /// rate-limited or partial response as a 0–0 game.
-func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> LiveGameScore? {
+func downloadLiveGameScore(gameID: String, team: TeamRef, isHome: Bool) async -> LiveGameScore? {
     guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
         return nil
     }
@@ -152,7 +151,7 @@ func competitorScore(_ competitor: JSON) -> Int? {
 
 /// Extracts the current score from a game's summary document. See
 /// `downloadLiveGameScore`.
-func parseLiveGameScore(from json: JSON, team: Team, isHome: Bool) -> LiveGameScore? {
+func parseLiveGameScore(from json: JSON, team: TeamRef, isHome: Bool) -> LiveGameScore? {
     var score: Int?
     var opponentScore: Int?
     for (_, competitor): (String, JSON) in json["header", "competitions", 0, "competitors"] {
@@ -161,7 +160,7 @@ func parseLiveGameScore(from json: JSON, team: Team, isHome: Bool) -> LiveGameSc
         if side == "home" || side == "away" {
             followedTeam = side == (isHome ? "home" : "away")
         } else {
-            followedTeam = competitor["team"]["shortDisplayName"].stringValue == team.boxscoreName
+            followedTeam = competitor["team"]["id"].stringValue == team.espnID
         }
 
         if followedTeam {
@@ -215,7 +214,7 @@ struct GameDetail<Stats: Sendable>: Sendable {
     var info: GameInfo
     var phase: GamePhase
 
-    init(json: JSON, team: Team, stats: [Stats]) {
+    init(json: JSON, team: TeamRef, stats: [Stats]) {
         self.stats = stats
         self.info = parseGameInfo(from: json, team: team)
         self.phase = parseGamePhase(from: json)
@@ -241,20 +240,21 @@ struct GameDetail<Stats: Sendable>: Sendable {
 
 /// Reads the venue details shown behind a game's detail sheet.
 ///
-/// The accent colour follows the host: at home the team's own colour is used,
-/// and away the colour comes from whichever competitor is not the followed
-/// team.
-func parseGameInfo(from json: JSON, team: Team) -> GameInfo {
+/// The accent colour follows the host: when the box score lists the followed
+/// team (by `team.id`) as home, the team's own colour is used; otherwise the
+/// colour comes from whichever box-score team is not the followed one.
+func parseGameInfo(from json: JSON, team: TeamRef) -> GameInfo {
     let venue = json["gameInfo"]["venue"]
     let city = venue["address"]["city"].stringValue
 
+    let boxscoreTeams = json["boxscore", "teams"].map { $0.1 }
+    let followed = boxscoreTeams.first { $0["team", "id"].stringValue == team.espnID }
     let color: String
-    if city == team.homeCity {
-        color = team.brandHex
-    } else if json["boxscore", "teams", 0, "team", "shortDisplayName"].stringValue == team.boxscoreName {
-        color = json["boxscore", "teams", 1, "team", "color"].stringValue
+    if followed?["homeAway"].stringValue == "home" {
+        color = team.colorHex
     } else {
-        color = json["boxscore", "teams", 0, "team", "color"].stringValue
+        let host = boxscoreTeams.first { $0["team", "id"].stringValue != team.espnID }
+        color = host?["team", "color"].stringValue ?? ""
     }
 
     return GameInfo(
@@ -268,19 +268,19 @@ func parseGameInfo(from json: JSON, team: Team) -> GameInfo {
 }
 
 /// Loads a basketball game's detail sheet: box score, venue and phase.
-func downloadBasketballGameDetail(gameID: String, team: Team) async -> GameDetail<BasketballGameTeamStats>? {
+func downloadBasketballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<BasketballGameTeamStats>? {
     guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
         return nil
     }
-    return GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json))
+    return GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json, team: team))
 }
 
 /// Extracts both teams' box score lines from a basketball game's summary
-/// document.
+/// document. Every line carries `team`'s score first.
 ///
 /// Statistics are addressed by position because the feed lists them in a fixed
 /// order without stable identifiers.
-func parseBasketballGameTeamStats(from json: JSON) -> [BasketballGameTeamStats] {
+func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [BasketballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
 
@@ -293,9 +293,9 @@ func parseBasketballGameTeamStats(from json: JSON) -> [BasketballGameTeamStats] 
         }
     }
 
-    let jayhawksAreFirst = competitors[0]["team"]["name"].stringValue == "Jayhawks"
-    let teamScore = lineScoreTotal(jayhawksAreFirst ? 0 : 1)
-    let opponentScore = lineScoreTotal(jayhawksAreFirst ? 1 : 0)
+    let followedIsFirst = competitors[0]["team"]["id"].stringValue == followed.espnID
+    let teamScore = lineScoreTotal(followedIsFirst ? 0 : 1)
+    let opponentScore = lineScoreTotal(followedIsFirst ? 1 : 0)
 
     return json["boxscore"]["teams"].enumerated().map { index, element in
         let team = element.1
@@ -330,22 +330,22 @@ func parseBasketballGameTeamStats(from json: JSON) -> [BasketballGameTeamStats] 
 }
 
 /// Loads a football game's detail sheet: box score, venue and phase.
-func downloadFootballGameDetail(gameID: String, team: Team) async -> GameDetail<FootballGameTeamStats>? {
+func downloadFootballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<FootballGameTeamStats>? {
     guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
         return nil
     }
-    return GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json))
+    return GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json, team: team))
 }
 
 /// Extracts both teams' box score lines from a football game's summary
-/// document.
-func parseFootballGameTeamStats(from json: JSON) -> [FootballGameTeamStats] {
+/// document. Every line carries `team`'s score first.
+func parseFootballGameTeamStats(from json: JSON, team followed: TeamRef) -> [FootballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
 
-    let chiefsAreFirst = competitors[0]["team"]["name"].stringValue == "Chiefs"
-    let teamScore = competitors[chiefsAreFirst ? 0 : 1]["score"].intValue
-    let opponentScore = competitors[chiefsAreFirst ? 1 : 0]["score"].intValue
+    let followedIsFirst = competitors[0]["team"]["id"].stringValue == followed.espnID
+    let teamScore = competitors[followedIsFirst ? 0 : 1]["score"].intValue
+    let opponentScore = competitors[followedIsFirst ? 1 : 0]["score"].intValue
 
     return json["boxscore"]["teams"].map { _, team in
         let statistics = team["statistics"]
@@ -404,7 +404,7 @@ func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
 }
 
 /// Loads a baseball game's detail sheet: box score, venue and phase.
-func downloadBaseballGameDetail(gameID: String, team: Team) async -> GameDetail<BaseballGameTeamStats>? {
+func downloadBaseballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<BaseballGameTeamStats>? {
     guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
         return nil
     }
@@ -443,7 +443,7 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
 }
 
 /// Loads a soccer game's detail sheet: box score, venue and phase.
-func downloadSoccerGameDetail(gameID: String, team: Team) async -> GameDetail<SoccerGameTeamStats>? {
+func downloadSoccerGameDetail(gameID: String, team: TeamRef) async -> GameDetail<SoccerGameTeamStats>? {
     guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
         return nil
     }

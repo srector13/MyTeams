@@ -9,20 +9,27 @@
 import SwiftUI
 
 struct ChiefsHome: View {
-    @State private var model = TeamModel<FootBallPlayer>(
-        team: .chiefs,
-        newsURL: NewsFeed.chiefs,
-        loadRoster: downloadFootballRoster
-    )
+    let team: TeamRef
 
-    private let teamColor = Team.chiefs.color
+    @State private var model: TeamModel<FootBallPlayer>
+
+    init(team: TeamRef) {
+        self.team = team
+        _model = State(initialValue: TeamModel(
+            team: team,
+            newsURL: NewsFeed.chiefs,
+            loadRoster: downloadFootballRoster(team:)
+        ))
+    }
+
+    private var teamColor: Color { team.color }
 
     var body: some View {
         TeamHomeLayout {
             RosterSection(model: model) { player in
                 FootballPlayerView(player: player, state: model.sort)
             } detail: { player in
-                FootballPlayerDetailView(player: player, teamColor: teamColor)
+                FootballPlayerDetailView(player: player, teamColor: teamColor, team: team)
             } filterMenu: {
                 Button("All") { model.filter() }
 
@@ -62,14 +69,14 @@ struct ChiefsHome: View {
                 FootballGameView(
                     game: game,
                     teamColor: teamColor,
-                    team: .chiefs,
+                    team: team,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 FootballGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    team: .chiefs
+                    team: team
                 )
             }
 
@@ -99,5 +106,5 @@ struct ChiefsHome: View {
 }
 
 #Preview {
-    ChiefsHome()
+    ChiefsHome(team: TeamCatalog.seeded(league: .nfl, espnID: "12"))
 }

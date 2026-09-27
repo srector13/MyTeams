@@ -36,15 +36,10 @@ private func approx(_ value: Float, _ expected: Float, tolerance: Float = 0.001)
 }
 
 /// Parses one event from a schedule fixture the way the app does for `team`.
-private func scheduledGame(_ fixture: String, event id: String, team: Team) throws -> Game {
+private func scheduledGame(_ fixture: String, event id: String, team: TeamRef) throws -> Game {
     let schedule = try Fixture.json(fixture)
     let (event, pointer) = try Fixture.event(id, in: schedule)
-    return parseGame(
-        from: event,
-        teamName: team.scheduleTeamName,
-        teamNameField: team.scheduleNameField,
-        pointer: pointer
-    )
+    return parseGame(from: event, team: team, pointer: pointer)
 }
 
 /// The path to an event's status `detail` string, for derived variants.
@@ -67,7 +62,7 @@ struct GoldenScheduleTests {
         #expect(game.gameID == "401819882")  // .competitions[0].id
         #expect(game.id == "401819882")
         #expect(game.pointer == 0)
-        #expect(game.team == "Kansas")  // Team.jayhawks.scheduleTeamName
+        #expect(game.team == "Kansas")  // competitors[0].team.nickname (team.id 2305)
         #expect(game.competitionName == "Green Bay Phoenix at Kansas Jayhawks")  // .name
         #expect(game.opponent == "Green Bay")  // competitors[1].team.nickname
         #expect(game.score == "94")  // competitors[0].score.displayValue
@@ -118,37 +113,30 @@ struct GoldenScheduleTests {
         #expect(home.gamePeriod == "3")
     }
 
-    // KNOWN-BUG: the NFL schedule feed names the Chiefs `nickname: "Chiefs"`
-    // (abbreviation "KC"), but Team.chiefs.scheduleTeamName is "KC". No
-    // competitor matches, so both take the opponent branch (§7 #15). Correct:
-    // score "31", gameHome true, gameWin true for 401872931.
-    @Test("Chiefs schedule: the followed team is never matched", .tags(.knownBug))
-    func chiefsTeamNameMismatch() throws {
+    // The NFL schedule feed names the Chiefs `nickname: "Chiefs"` while the
+    // retired Team.chiefs.scheduleTeamName was "KC", so the name match never
+    // found them (§7 #15). Matching competitors[*].team.id against the
+    // TeamRef's ESPN id (12) fixes it.
+    @Test("Chiefs schedule: the followed team is matched by ESPN id")
+    func chiefsMatchedByID() throws {
         // chiefs_schedule.json events[0] (id 401872931): Chiefs (home) 31, Broncos 10.
         let game = try scheduledGame("chiefs_schedule", event: "401872931", team: .chiefs)
-        #expect(game.opponent == "Broncos")  // last competitor, competitors[1].team.nickname
-        #expect(game.score == "")  // KNOWN-BUG: should be "31"
+        #expect(game.opponent == "Broncos")  // competitors[1].team.nickname
+        #expect(game.score == "31")  // competitors[0].score.displayValue
         #expect(game.opponentScore == "10")  // competitors[1].score.displayValue
-        #expect(!game.gameHome)  // KNOWN-BUG: should be true
-        #expect(!game.gameWin)  // KNOWN-BUG: should be true
+        #expect(game.gameHome)  // competitors[0].homeAway
+        #expect(game.gameWin)  // competitors[0].winner
         #expect(game.completed)
-        #expect(game.team == "KC")
+        #expect(game.team == "Chiefs")  // competitors[0].team.nickname
 
-        // Away games list the Chiefs last, so the "opponent" is the Chiefs.
+        // Away games list the Chiefs last; the opponent is still the host.
         // chiefs_schedule.json id 401872976: Raiders (home) v Chiefs (away).
         let away = try scheduledGame("chiefs_schedule", event: "401872976", team: .chiefs)
-        #expect(away.opponent == "Chiefs")  // KNOWN-BUG: should be "Raiders"
+        #expect(away.opponent == "Raiders")  // competitors[0].team.nickname
+        #expect(!away.gameHome)  // competitors[1].homeAway (Chiefs)
+        // The last non-"dark" entry of competitors[0].team.logos.
         #expect(away.opponentLogo
-            == "https://a.espncdn.com/guid/f68f2343-8ceb-7a02-740d-af6338be21d2/logos/secondary_logo_white.png")
-
-        // The fixture itself is sound: matched by its real nickname, the
-        // same event reads correctly. This is the shape of the fix.
-        let schedule = try Fixture.json("chiefs_schedule")
-        let (event, pointer) = try Fixture.event("401872931", in: schedule)
-        let matched = parseGame(from: event, teamName: "Chiefs", teamNameField: .nickname, pointer: pointer)
-        #expect(matched.score == "31")  // competitors[0].score.displayValue
-        #expect(matched.gameHome)
-        #expect(matched.gameWin)
+            == "https://a.espncdn.com/guid/b18540eb-6f2b-534c-e7f9-9bd930518da9/logos/secondary_logo_white.png")
     }
 
     @Test("NFL overtime final (Final/OT) reads as completed with period 5")
@@ -191,10 +179,7 @@ struct GoldenScheduleTests {
         let halftime = event.setting(
             ["competitions", 0, "status", "type", "description"], to: .string("Halftime")
         )
-        let parsed = parseGame(
-            from: halftime, teamName: Team.chiefs.scheduleTeamName,
-            teamNameField: Team.chiefs.scheduleNameField, pointer: pointer
-        )
+        let parsed = parseGame(from: halftime, team: .chiefs, pointer: pointer)
         #expect(parsed.gameHalftime)
     }
 
@@ -224,10 +209,7 @@ struct GoldenScheduleTests {
         let schedule = try Fixture.json("royals_schedule")
         let (event, pointer) = try Fixture.event("401814790", in: schedule)
         let canceled = event.setting(detailPath, to: .string("Canceled"))
-        let game = parseGame(
-            from: canceled, teamName: Team.royals.scheduleTeamName,
-            teamNameField: Team.royals.scheduleNameField, pointer: pointer
-        )
+        let game = parseGame(from: canceled, team: .royals, pointer: pointer)
         #expect(game.cancelled)
         #expect(!game.postponed)
         #expect(!game.completed)
@@ -273,8 +255,7 @@ struct GoldenScheduleTests {
         let (event, pointer) = try Fixture.event("401814790", in: schedule)
         let game = parseGame(
             from: event.setting(detailPath, to: .string("Suspended")),
-            teamName: Team.royals.scheduleTeamName,
-            teamNameField: Team.royals.scheduleNameField, pointer: pointer
+            team: .royals, pointer: pointer
         )
         #expect(!game.postponed)  // KNOWN-BUG
         #expect(!game.cancelled)  // KNOWN-BUG
@@ -297,8 +278,7 @@ struct GoldenScheduleTests {
         let before = Date()
         let game = parseGame(
             from: event.setting(["date"], to: .string("TBD")),
-            teamName: Team.royals.scheduleTeamName,
-            teamNameField: Team.royals.scheduleNameField, pointer: pointer
+            team: .royals, pointer: pointer
         )
         let after = Date()
 
@@ -327,6 +307,7 @@ struct GoldenScheduleTests {
     // so an event carrying two competitions reports only the last and the
     // first game's result is lost. Correct: one Game per competition.
     // The only synthetic document in this suite — no captured feed has one.
+    // Team ids are ESPN's MLB ids (Royals 7, Tigers 6, Twins 9).
     @Test("A two-competition event keeps only the last competition", .tags(.knownBug))
     func doubleheaderLastCompetitionWins() {
         let event = JSON(data: Data(#"""
@@ -338,23 +319,23 @@ struct GoldenScheduleTests {
              "status": {"period": 9, "type": {"completed": true, "detail": "Final"}},
              "competitors": [
                {"homeAway": "home", "winner": true,
-                "team": {"shortDisplayName": "Royals"}, "score": {"displayValue": "5"}},
+                "team": {"id": "7", "shortDisplayName": "Royals"}, "score": {"displayValue": "5"}},
                {"homeAway": "away",
-                "team": {"shortDisplayName": "Tigers"}, "score": {"displayValue": "2"}}
+                "team": {"id": "6", "shortDisplayName": "Tigers"}, "score": {"displayValue": "2"}}
              ]},
             {"id": "2", "venue": {"fullName": "Second Arena"},
              "status": {"period": 1, "type": {"completed": false, "detail": "Postponed"}},
              "competitors": [
                {"homeAway": "away", "winner": false,
-                "team": {"shortDisplayName": "Royals"}, "score": {"displayValue": "0"}},
+                "team": {"id": "7", "shortDisplayName": "Royals"}, "score": {"displayValue": "0"}},
                {"homeAway": "home",
-                "team": {"shortDisplayName": "Twins"}, "score": {"displayValue": "0"}}
+                "team": {"id": "9", "shortDisplayName": "Twins"}, "score": {"displayValue": "0"}}
              ]}
           ]
         }
         """#.utf8))
 
-        let game = parseGame(from: event, teamName: "Royals", teamNameField: .shortDisplayName, pointer: 0)
+        let game = parseGame(from: event, team: .royals, pointer: 0)
         #expect(game.location == "Second Arena")
         #expect(game.gameID == "2")
         #expect(game.eventID == "2")  // no event id: the (last) competition id
@@ -370,18 +351,14 @@ struct GoldenScheduleTests {
     @Test("An offseason feed with no events parses to no games")
     func offseason() throws {
         // jayhawks_schedule_offseason.json: "events": [] (season.year 2027)
-        let games = parseSchedule(
-            from: try Fixture.json("jayhawks_schedule_offseason"),
-            teamName: Team.jayhawks.scheduleTeamName,
-            teamNameField: Team.jayhawks.scheduleNameField
-        )
+        let games = parseSchedule(from: try Fixture.json("jayhawks_schedule_offseason"), team: .jayhawks)
         #expect(games.isEmpty)
     }
 
     @Test("Whole feeds parse one game per event, in feed order, with unique ids")
     func wholeFeeds() throws {
         // Event counts: len(.events) of each fixture.
-        let feeds: [(String, Team, Int)] = [
+        let feeds: [(String, TeamRef, Int)] = [
             ("chiefs_schedule", .chiefs, 17),
             ("jayhawks_schedule_2026", .jayhawks, 33),
             ("royals_schedule", .royals, 9),  // trimmed from 163; see FIXTURES.md
@@ -389,7 +366,7 @@ struct GoldenScheduleTests {
         ]
         for (fixture, team, count) in feeds {
             let json = try Fixture.json(fixture)
-            let games = parseSchedule(from: json, teamName: team.scheduleTeamName, teamNameField: team.scheduleNameField)
+            let games = parseSchedule(from: json, team: team)
             #expect(games.count == count, "\(fixture)")
             #expect(games.map(\.pointer) == Array(0 ..< count), "\(fixture)")
             #expect(Set(games.map(\.id)).count == count, "\(fixture)")
@@ -399,8 +376,8 @@ struct GoldenScheduleTests {
 
     @Test("Season records from real feeds")
     func seasonRecords() throws {
-        func games(_ fixture: String, _ team: Team) throws -> [Game] {
-            parseSchedule(from: try Fixture.json(fixture), teamName: team.scheduleTeamName, teamNameField: team.scheduleNameField)
+        func games(_ fixture: String, _ team: TeamRef) throws -> [Game] {
+            parseSchedule(from: try Fixture.json(fixture), team: team)
         }
 
         // jayhawks_schedule_2026.json: 33 finals, `winner` true on KU in 23.
@@ -423,19 +400,14 @@ struct GoldenScheduleTests {
         #expect(sporting.wins == 6 && sporting.losses == 17 && sporting.draws == 3)
     }
 
-    // KNOWN-BUG: follows from chiefsTeamNameMismatch — no game has a Chiefs
-    // score or winner, so both played games (31–10, 33–30 OT, both won)
-    // count as losses. Correct: 2–0–0.
-    @Test("Chiefs season record reads 0–2", .tags(.knownBug))
+    // Follows from chiefsMatchedByID: both played games (31–10, 33–30 OT)
+    // carry `winner` on the Chiefs; the in-progress one is not yet played.
+    @Test("Chiefs season record reads 2–0")
     func chiefsSeasonRecord() throws {
-        let games = parseSchedule(
-            from: try Fixture.json("chiefs_schedule"),
-            teamName: Team.chiefs.scheduleTeamName,
-            teamNameField: Team.chiefs.scheduleNameField
-        )
+        let games = parseSchedule(from: try Fixture.json("chiefs_schedule"), team: .chiefs)
         let record = seasonRecord(games: games)
-        #expect(record.wins == 0)  // KNOWN-BUG: should be 2
-        #expect(record.losses == 2)  // KNOWN-BUG: should be 0
+        #expect(record.wins == 2)
+        #expect(record.losses == 0)
         #expect(record.draws == 0)
     }
 }
@@ -446,37 +418,38 @@ struct GoldenScheduleTests {
 struct GoldenPeriodTests {
     @Test("Regulation periods are named for basketball, football and soccer")
     func regulationPeriods() throws {
-        // Inputs are Game.team / Game.gamePeriod from real schedule events.
+        // Inputs are Game.gamePeriod from real schedule events, named by the
+        // followed team's league (TeamRef.periodName).
         let kansas = try scheduledGame("jayhawks_schedule_2026", event: "401819882", team: .jayhawks)
-        #expect(getPeriod(period: kansas.gamePeriod, team: kansas.team) == "2nd Half")  // ("2", "Kansas")
-        #expect(getPeriod(period: "1", team: kansas.team) == "1st Half")
+        #expect(TeamRef.jayhawks.periodName(kansas.gamePeriod) == "2nd Half")  // "2", NCAAM halves
+        #expect(TeamRef.jayhawks.periodName("1") == "1st Half")
 
         let chiefs = try scheduledGame("chiefs_schedule", event: "401872952", team: .chiefs)
-        #expect(getPeriod(period: chiefs.gamePeriod, team: chiefs.team) == "2nd Quarter")  // ("2", "KC")
+        #expect(TeamRef.chiefs.periodName(chiefs.gamePeriod) == "2nd Quarter")  // "2", NFL quarters
 
         let sporting = try scheduledGame("sporting_schedule", event: "761836", team: .sporting)
-        #expect(getPeriod(period: sporting.gamePeriod, team: sporting.team) == "2nd Half")  // ("2", "Kansas City")
+        #expect(TeamRef.sporting.periodName(sporting.gamePeriod) == "2nd Half")  // "2", MLS halves
     }
 
-    // KNOWN-BUG (§7 #12): getPeriod matches team-name strings and knows only
-    // regulation periods. Correct: "OT" for basketball period 3 and football
-    // period 5, and an inning label ("Bot 10th" etc.) for baseball.
+    // KNOWN-BUG (§7 #12): period labels know only regulation periods.
+    // Correct: "OT" for basketball period 3 and football period 5, and an
+    // inning label ("Bot 10th" etc.) for baseball.
     @Test("Overtime periods and every baseball inning read as blank", .tags(.knownBug))
     func unnamedPeriods() throws {
         // jayhawks_schedule_2026.json id 401817259: "Final/OT", period 3
         let kansasOT = try scheduledGame("jayhawks_schedule_2026", event: "401817259", team: .jayhawks)
-        #expect(getPeriod(period: kansasOT.gamePeriod, team: kansasOT.team) == "")  // KNOWN-BUG
+        #expect(TeamRef.jayhawks.periodName(kansasOT.gamePeriod) == "")  // KNOWN-BUG
 
         // chiefs_schedule.json id 401872945: "Final/OT", period 5
         let chiefsOT = try scheduledGame("chiefs_schedule", event: "401872945", team: .chiefs)
-        #expect(getPeriod(period: chiefsOT.gamePeriod, team: chiefsOT.team) == "")  // KNOWN-BUG
+        #expect(TeamRef.chiefs.periodName(chiefsOT.gamePeriod) == "")  // KNOWN-BUG
 
         // royals_schedule.json id 401815101 ("Final/10", period 10) and
         // 401817094 ("Final", period 9)
         let extras = try scheduledGame("royals_schedule", event: "401815101", team: .royals)
-        #expect(getPeriod(period: extras.gamePeriod, team: extras.team) == "")  // KNOWN-BUG
+        #expect(TeamRef.royals.periodName(extras.gamePeriod) == "")  // KNOWN-BUG
         let nine = try scheduledGame("royals_schedule", event: "401817094", team: .royals)
-        #expect(getPeriod(period: nine.gamePeriod, team: nine.team) == "")  // KNOWN-BUG
+        #expect(TeamRef.royals.periodName(nine.gamePeriod) == "")  // KNOWN-BUG
     }
 }
 
@@ -513,10 +486,10 @@ struct GoldenSummaryTests {
         #expect(try parseLiveGameScore(from: Fixture.json("royals_summary_pregame_401817109"), team: .royals, isHome: true) == nil)
     }
 
-    @Test("Without homeAway the live score falls back to the shortDisplayName")
-    func liveScoreNameFallback() throws {
+    @Test("Without homeAway the live score falls back to the team id")
+    func liveScoreIDFallback() throws {
         // sporting_summary_final_761450.json with both header competitors'
-        // homeAway removed; competitors[1].team.shortDisplayName is "Kansas City".
+        // homeAway removed; competitors[1].team.id is "186" (Kansas City).
         var sporting = try Fixture.json("sporting_summary_final_761450")
         for index in 0 ..< 2 {
             sporting = sporting.setting(["header", "competitions", 0, "competitors", .index(index), "homeAway"], to: .null)
@@ -524,26 +497,28 @@ struct GoldenSummaryTests {
         #expect(parseLiveGameScore(from: sporting, team: .sporting, isHome: true)
             == LiveGameScore(score: 0, opponentScore: 3))
 
-        // Shape pin: the NFL header competitors carry no shortDisplayName
-        // (only name/nickname), so the same fallback finds no followed team.
+        // The NFL header competitors carry no shortDisplayName, which left
+        // the retired name fallback with no followed team (nil). Every
+        // header competitor carries team.id: competitors[0] is the Chiefs
+        // (12) with "33", the Colts "30".
         var chiefs = try Fixture.json("chiefs_summary_final_401872945")
         for index in 0 ..< 2 {
             chiefs = chiefs.setting(["header", "competitions", 0, "competitors", .index(index), "homeAway"], to: .null)
         }
-        #expect(parseLiveGameScore(from: chiefs, team: .chiefs, isHome: true) == nil)
+        #expect(parseLiveGameScore(from: chiefs, team: .chiefs, isHome: true)
+            == LiveGameScore(score: 33, opponentScore: 30))
     }
 
-    // KNOWN-BUG: the schedule's gameHome feeds isHome. Because the Chiefs
-    // are never matched in their schedule (chiefsTeamNameMismatch), every
-    // Chiefs game has gameHome false, and a home game's live score comes
-    // out inverted. Correct: LiveGameScore(score: 33, opponentScore: 30).
-    @Test("Chiefs home game: live score inverted end to end", .tags(.knownBug))
-    func chiefsLiveScoreInverted() throws {
+    // The schedule's gameHome feeds isHome. With the Chiefs matched by id
+    // (chiefsMatchedByID) a home game is flagged home, so its live score
+    // reads the right way round.
+    @Test("Chiefs home game: live score reads home-first end to end")
+    func chiefsLiveScoreEndToEnd() throws {
         let game = try scheduledGame("chiefs_schedule", event: "401872945", team: .chiefs)
-        #expect(!game.gameHome)  // KNOWN-BUG
+        #expect(game.gameHome)
         let summary = try Fixture.json("chiefs_summary_final_401872945")
         #expect(parseLiveGameScore(from: summary, team: .chiefs, isHome: game.gameHome)
-            == LiveGameScore(score: 30, opponentScore: 33))  // KNOWN-BUG
+            == LiveGameScore(score: 33, opponentScore: 30))
     }
 
     // MARK: Phase and refresh
@@ -562,9 +537,9 @@ struct GoldenSummaryTests {
         #expect(try parseGamePhase(from: Fixture.json("sporting_summary_final_761450")) == .final)  // "FT"
         #expect(try parseGamePhase(from: Fixture.json("jayhawks_summary_final_401851305")) == .final)
 
-        #expect(GameDetail(json: pregame, team: .chiefs, stats: parseFootballGameTeamStats(from: pregame)).refreshInterval == .seconds(60))
-        #expect(GameDetail(json: live, team: .chiefs, stats: parseFootballGameTeamStats(from: live)).refreshInterval == .seconds(10))
-        #expect(GameDetail(json: final, team: .chiefs, stats: parseFootballGameTeamStats(from: final)).refreshInterval == nil)
+        #expect(GameDetail(json: pregame, team: .chiefs, stats: parseFootballGameTeamStats(from: pregame, team: .chiefs)).refreshInterval == .seconds(60))
+        #expect(GameDetail(json: live, team: .chiefs, stats: parseFootballGameTeamStats(from: live, team: .chiefs)).refreshInterval == .seconds(10))
+        #expect(GameDetail(json: final, team: .chiefs, stats: parseFootballGameTeamStats(from: final, team: .chiefs)).refreshInterval == nil)
     }
 
     // MARK: Venue
@@ -574,16 +549,17 @@ struct GoldenSummaryTests {
         // gameInfo.venue.{images[0].href,address.city,address.state,capacity}, gameInfo.attendance.
         // No captured venue has a "capacity" key, so capacity is "" throughout.
 
-        // Home (city == Team.homeCity): the team's own brandHex.
+        // Home (the followed team's boxscore.teams entry, by team.id, is
+        // "home"): the team's own TeamRef.colorHex.
         #expect(try parseGameInfo(from: Fixture.json("chiefs_summary_final_401872945"), team: .chiefs) == GameInfo(
             venueImage: "https://a.espncdn.com/i/venues/nfl/day/3622.jpg",
             city: "Kansas City", state: "MO", capacity: "", attendance: "73351",
-            gameColor: "E31837"  // Team.chiefs.brandHex (227, 24, 55)
+            gameColor: "E31837"  // TeamRef.chiefs.colorHex (227, 24, 55)
         ))
         #expect(try parseGameInfo(from: Fixture.json("royals_summary_final_401817094"), team: .royals) == GameInfo(
             venueImage: "https://a.espncdn.com/i/venues/mlb/day/7.jpg",
             city: "Kansas City", state: "Missouri", capacity: "", attendance: "24656",
-            gameColor: "004687"  // Team.royals.brandHex (0, 70, 135)
+            gameColor: "004687"  // TeamRef.royals.colorHex (0, 70, 135)
         ))
         #expect(try parseGameInfo(from: Fixture.json("royals_summary_pregame_401817109"), team: .royals) == GameInfo(
             venueImage: "https://a.espncdn.com/i/venues/mlb/day/7.jpg",
@@ -591,7 +567,8 @@ struct GoldenSummaryTests {
             gameColor: "004687"
         ))
 
-        // Away, followed team listed first in boxscore.teams: teams[1].team.color.
+        // Away: the other boxscore.teams entry's team.color. Here the
+        // followed team is listed first, so teams[1].
         #expect(try parseGameInfo(from: Fixture.json("chiefs_summary_live_401872952"), team: .chiefs) == GameInfo(
             venueImage: "https://a.espncdn.com/i/venues/nfl/day/3948.jpg",
             city: "Miami Gardens", state: "FL", capacity: "", attendance: "",
@@ -602,15 +579,15 @@ struct GoldenSummaryTests {
             city: "Las Vegas", state: "NV", capacity: "", attendance: "",
             gameColor: "000000"  // boxscore.teams[1] Raiders
         ))
-        // KU at a neutral Kansas City site is not "Lawrence", so away rules
-        // apply; boxscore.teams[0].team.shortDisplayName is "Kansas".
+        // KU at a neutral Kansas City site is listed "away", so away rules
+        // apply; boxscore.teams[0] is Kansas (team.id 2305).
         #expect(try parseGameInfo(from: Fixture.json("jayhawks_summary_final_401851305"), team: .jayhawks) == GameInfo(
             venueImage: "",  // gameInfo.venue has no images
             city: "Kansas City", state: "MO", capacity: "", attendance: "19450",
             gameColor: "c8102e"  // boxscore.teams[1] Houston
         ))
 
-        // Away, followed team not first: teams[0].team.color.
+        // Away, followed team listed second: teams[0].team.color.
         #expect(try parseGameInfo(from: Fixture.json("sporting_summary_final_761450"), team: .sporting) == GameInfo(
             venueImage: "",
             city: "San Jose, California", state: "", capacity: "", attendance: "16367",
@@ -628,7 +605,7 @@ struct GoldenSummaryTests {
     @Test("KU final box score (regulation, KU listed second)", .tags(.knownBug))
     func basketballBoxScore() throws {
         // jayhawks_summary_final_401851305.json — detail "Final"
-        let lines = parseBasketballGameTeamStats(from: try Fixture.json("jayhawks_summary_final_401851305"))
+        let lines = parseBasketballGameTeamStats(from: try Fixture.json("jayhawks_summary_final_401851305"), team: .jayhawks)
         try #require(lines.count == 2)  // boxscore.teams
 
         // boxscore.teams[0] (Jayhawks, away) .statistics[i].displayValue
@@ -649,7 +626,7 @@ struct GoldenSummaryTests {
         #expect(kansas.fouls == 9)  // KNOWN-BUG: [19] fastBreakPoints; fouls [21] is 11
         #expect(kansas.largestLead == 14)  // KNOWN-BUG: [20] pointsInPaint; largestLead [22] is 0
         #expect(kansas.projection == 0)  // no "predictor" in a final summary
-        // Score: competitors[0].team.name is "Cougars", so KU is index 1;
+        // Score: competitors[0].team.id is "248" (Houston), so KU is index 1;
         // linescores [25, 22] = 47 and Houston's [33, 36] = 69.
         #expect(kansas.score == 47)
         #expect(kansas.opponentScore == 69)
@@ -682,7 +659,7 @@ struct GoldenSummaryTests {
     @Test("NFL overtime final box score (Final/OT)")
     func footballOvertimeBoxScore() throws {
         // chiefs_summary_final_401872945.json
-        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_final_401872945"))
+        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_final_401872945"), team: .chiefs)
         try #require(lines.count == 2)
 
         // boxscore.teams[0] (Colts) .statistics[i].displayValue
@@ -722,7 +699,7 @@ struct GoldenSummaryTests {
     @Test("NFL in-game box score (state in, 2nd quarter)")
     func footballLiveBoxScore() throws {
         // chiefs_summary_live_401872952.json
-        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_live_401872952"))
+        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_live_401872952"), team: .chiefs)
         try #require(lines.count == 2)
 
         let chiefs = lines[0]  // boxscore.teams[0]
@@ -761,7 +738,7 @@ struct GoldenSummaryTests {
     @Test("NFL pre-game box score reads season averages positionally", .tags(.knownBug))
     func footballPregameBoxScore() throws {
         // chiefs_summary_pregame_401872976.json
-        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_pregame_401872976"))
+        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_pregame_401872976"), team: .chiefs)
         try #require(lines.count == 2)
 
         let chiefs = lines[0]

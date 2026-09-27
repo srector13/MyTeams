@@ -9,13 +9,20 @@
 import SwiftUI
 
 struct RoyalsHome: View {
-    @State private var model = TeamModel<BaseballPlayer>(
-        team: .royals,
-        newsURL: NewsFeed.royals,
-        loadRoster: downloadBaseballRoster
-    )
+    let team: TeamRef
 
-    private let teamColor = Team.royals.color
+    @State private var model: TeamModel<BaseballPlayer>
+
+    init(team: TeamRef) {
+        self.team = team
+        _model = State(initialValue: TeamModel(
+            team: team,
+            newsURL: NewsFeed.royals,
+            loadRoster: downloadBaseballRoster(team:)
+        ))
+    }
+
+    private var teamColor: Color { team.color }
 
     private let positions = [
         "Catcher", "Center Fielder", "First Baseman", "Relief Pitcher",
@@ -27,7 +34,7 @@ struct RoyalsHome: View {
             RosterSection(model: model) { player in
                 BaseballPlayerView(player: player, state: model.sort)
             } detail: { player in
-                BaseballPlayerDetailView(player: player, teamColor: teamColor)
+                BaseballPlayerDetailView(player: player, teamColor: teamColor, team: team)
             } filterMenu: {
                 Button("All") { model.filter() }
 
@@ -39,21 +46,21 @@ struct RoyalsHome: View {
             }
             .padding(.top, 5)
 
-            // The other three tabs exclude cancelled and postponed fixtures
-            // from the losses column; this one never has. Kept as-is rather
-            // than quietly changing a displayed record.
-            ScheduleSection(model: model, countsAbandonedGamesAsLosses: true) { game in
+            // MLB counts cancelled and postponed fixtures in the losses
+            // column (`RecordRule.countsAbandonedGamesAsLosses`); the other
+            // leagues exclude them.
+            ScheduleSection(model: model) { game in
                 GameView(
                     game: game,
                     teamColor: teamColor,
-                    team: .royals,
+                    team: team,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 BaseballGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    team: .royals
+                    team: team
                 )
             }
 
@@ -64,5 +71,5 @@ struct RoyalsHome: View {
 }
 
 #Preview {
-    RoyalsHome()
+    RoyalsHome(team: TeamCatalog.seeded(league: .mlb, espnID: "7"))
 }

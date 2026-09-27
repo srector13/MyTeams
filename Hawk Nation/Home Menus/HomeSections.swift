@@ -152,10 +152,6 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
 struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     let model: TeamModel<Player>
 
-    /// Whether cancelled and postponed fixtures are excluded from the losses
-    /// half of the record. Only the baseball tab counts them in.
-    var countsAbandonedGamesAsLosses = false
-
     @ViewBuilder let card: (Game) -> Card
     @ViewBuilder let detail: (Game) -> Detail
 
@@ -164,9 +160,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     @Environment(\.containerSize) private var containerSize
 
     private var record: String {
-        let (wins, losses, draws) = model.displayRecord(
-            countingAbandonedAsLosses: countsAbandonedGamesAsLosses
-        )
+        // The league's record rule decides how abandoned and unflagged
+        // fixtures count; see `RecordRule`.
+        let (wins, losses, draws) = model.displayRecord()
         // Sports without level results keep the familiar two-part record.
         return draws > 0 ? "\(wins)-\(losses)-\(draws)" : "\(wins)-\(losses)"
     }

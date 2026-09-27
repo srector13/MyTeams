@@ -8,36 +8,50 @@
 
 import SwiftUI
 
-// The `Team` enum that drives this screen is defined once, in
-// Networking/Sport.swift.
+// The teams on this screen are `FavoriteTeams.teams`, drawn from the bundled
+// catalog (Networking/TeamRef.swift).
 
 /// The app's root screen: one scrolling team page at a time, with a crest
 /// picker pinned to the bottom.
 struct Home: View {
-    @State private var selection: Team = .jayhawks
+    private let teams = FavoriteTeams.teams
+
+    @State private var selection: TeamRef.ID = FavoriteTeams.teams.first?.id ?? ""
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                // All four pages stay mounted and are shown by opacity, so
-                // each keeps its scroll position and its loaded data when the
+                // Every page stays mounted and is shown by opacity, so each
+                // keeps its scroll position and its loaded data when the
                 // reader moves between teams.
-                TeamPage(team: .jayhawks) { JayhawksHome() }
-                    .opacity(selection == .jayhawks ? 1 : 0)
-                TeamPage(team: .chiefs) { ChiefsHome() }
-                    .opacity(selection == .chiefs ? 1 : 0)
-                TeamPage(team: .royals) { RoyalsHome() }
-                    .opacity(selection == .royals ? 1 : 0)
-                TeamPage(team: .sporting) { SportingHome() }
-                    .opacity(selection == .sporting ? 1 : 0)
+                ForEach(teams) { team in
+                    TeamPage(team: team) { TeamHome(team: team) }
+                        .opacity(selection == team.id ? 1 : 0)
+                }
             }
             // Attaching the picker as a safe area inset lets SwiftUI sit it
             // above the home indicator and extend its material behind it,
             // which the original did by hand from the window's insets.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                TeamPicker(selection: $selection)
+                TeamPicker(teams: teams, selection: $selection)
             }
             .environment(\.containerSize, proxy.size)
+        }
+    }
+}
+
+/// A team's page content, chosen by its league's sport. The per-sport pages
+/// are still separate views; Phase 1-c folds them into one.
+private struct TeamHome: View {
+    let team: TeamRef
+
+    var body: some View {
+        switch team.league.descriptor.kind {
+        case .basketball: JayhawksHome(team: team)
+        case .football: ChiefsHome(team: team)
+        case .baseball: RoyalsHome(team: team)
+        case .soccer: SportingHome(team: team)
+        case .other: EmptyView()
         }
     }
 }
@@ -45,7 +59,7 @@ struct Home: View {
 /// One team's scrolling page: the crest scrolls away under a title bar that
 /// takes its place at the top.
 private struct TeamPage<Content: View>: View {
-    let team: Team
+    let team: TeamRef
     @ViewBuilder var content: Content
 
     /// Whether the crest has scrolled far enough to hand off to the sticky bar.
@@ -62,7 +76,7 @@ private struct TeamPage<Content: View>: View {
 
             ScrollView(.vertical) {
                 VStack {
-                    Image(team.logo)
+                    team.logoImage
                         .resizable()
                         .opacity(0.5)
                         .frame(
@@ -131,32 +145,33 @@ private struct ScrollOffsetKey: PreferenceKey {
 /// The crest row pinned to the bottom of the screen. The selected team's crest
 /// grows a label and a coloured capsule.
 private struct TeamPicker: View {
-    @Binding var selection: Team
+    let teams: [TeamRef]
+    @Binding var selection: TeamRef.ID
 
     var body: some View {
         HStack {
-            ForEach(Array(Team.allCases.enumerated()), id: \.element) { index, team in
+            ForEach(Array(teams.enumerated()), id: \.element.id) { index, team in
                 Button {
-                    selection = team
+                    selection = team.id
                 } label: {
                     HStack(spacing: 6) {
-                        Image(team.logo)
+                        team.logoImage
                             .resizable()
                             .frame(width: 25, height: 25)
 
-                        if selection == team {
+                        if selection == team.id {
                             Text(team.shortName)
                                 .foregroundStyle(.white)
                         }
                     }
                     .padding(.vertical, 10)
                     .padding(.horizontal)
-                    .background(selection == team ? team.color : .clear)
+                    .background(selection == team.id ? team.color : .clear)
                     .clipShape(.capsule)
                 }
                 .accessibilityLabel(team.displayName)
 
-                if index < Team.allCases.count - 1 {
+                if index < teams.count - 1 {
                     Spacer(minLength: 0)
                 }
             }
@@ -171,7 +186,7 @@ private struct TeamPicker: View {
 
 /// The title bar that slides in once a team's crest has scrolled away.
 struct TopView: View {
-    var team: Team
+    var team: TeamRef
 
     var body: some View {
         HStack(alignment: .center) {

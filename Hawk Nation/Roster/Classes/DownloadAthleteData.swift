@@ -210,7 +210,7 @@ private func humaniseStatName(_ name: String) -> String {
         .joined(separator: " ")
 }
 
-/// Loads a Chiefs player's season splits.
+/// Loads a football player's season splits in `league`.
 ///
 /// Unlike the basketball feed, which repeats a keyed stats object per split,
 /// the NFL splits document carries one "All Splits" row whose values align
@@ -218,11 +218,11 @@ private func humaniseStatName(_ name: String) -> String {
 /// group, and whether the group appears at all, come from
 /// `footballStatSpecs`; the feed only carries the lines a given position
 /// actually plays, and groups whose numbers are all zero are dropped.
-func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats {
+func downloadFootballPlayerStats(playerID: String, league: LeagueID) async -> FootballPlayerStats {
     // The player sheets have no error state of their own: a failed fetch
     // reads as an empty document, which each parser renders as no stats.
     let json = await HTTPClient.shared.fetch(
-        "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/\(playerID)/splits"
+        league.athleteSplitsURL(athleteID: playerID)
     ).document ?? .null
     return parseFootballPlayerStats(from: json)
 }
@@ -329,15 +329,15 @@ struct BaseballPlayerStats: Hashable, Sendable {
     )
 }
 
-/// Loads a Kansas player's season averages.
+/// Loads a basketball player's season averages in `league`.
 ///
 /// The splits feed reports home and away separately, so a rate stat is the
 /// mean of the two weighted by games played, and games played is their sum.
 /// Values are addressed by position because the feed lists them in a fixed
 /// order with no keys.
-func downloadBasketballPlayerStats(playerID: String) async -> BasketballPlayerStats {
+func downloadBasketballPlayerStats(playerID: String, league: LeagueID) async -> BasketballPlayerStats {
     let json = await HTTPClient.shared.fetch(
-        "https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes/\(playerID)/splits"
+        league.athleteSplitsURL(athleteID: playerID)
     ).document ?? .null
     return parseBasketballPlayerStats(from: json)
 }
@@ -378,17 +378,18 @@ func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
     )
 }
 
-/// Loads a Royals player's season totals.
+/// Loads a baseball player's season totals in `league`.
 ///
 /// Pitchers and position players get different stat lines from the feed, in
 /// the same positions, so the player's position decides which half of
 /// `BaseballPlayerStats` is filled in.
 func downloadBaseballPlayerStats(
     playerID: String,
-    playerPosition: String
+    playerPosition: String,
+    league: LeagueID
 ) async -> BaseballPlayerStats {
     let json = await HTTPClient.shared.fetch(
-        "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/\(playerID)/splits"
+        league.athleteSplitsURL(athleteID: playerID)
     ).document ?? .null
     return parseBaseballPlayerStats(from: json, playerPosition: playerPosition)
 }
@@ -438,16 +439,17 @@ func parseBaseballPlayerStats(from json: JSON, playerPosition: String) -> Baseba
     return result
 }
 
-/// Loads a Sporting Kansas City player's headline statistics.
+/// Loads a soccer player's headline statistics in `league`.
 ///
 /// Only the keeper line is filled in; outfield players show "N/A", as they
 /// always have.
 func downloadSoccerPlayerStats(
     playerID: String,
-    playerPosition: String
+    playerPosition: String,
+    league: LeagueID
 ) async -> SoccerPlayerStats {
     let json = await HTTPClient.shared.fetch(
-        "https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/\(playerID)"
+        league.athleteURL(athleteID: playerID)
     ).document ?? .null
     return parseSoccerPlayerStats(from: json, playerPosition: playerPosition)
 }

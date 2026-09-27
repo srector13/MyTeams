@@ -17,10 +17,10 @@ struct WidgetEntry: TimelineEntry {
 
 /// Supplies one team's next fixture to its widget.
 ///
-/// The three teams shared an identical provider apiece; they now share this
-/// one, differing only in which team they are built for.
+/// The teams shared an identical provider apiece; they now share this one,
+/// differing only in which catalog team they are built for.
 struct GameTimelineProvider: TimelineProvider {
-    let team: Team
+    let team: TeamRef
 
     /// How long a rendered fixture stays good for.
     ///
@@ -153,7 +153,7 @@ struct JayhawksScheduleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(
             kind: "myTeamsWidget",
-            provider: GameTimelineProvider(team: .jayhawks)
+            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305"))
         ) { entry in
             WidgetEntryView(entry: entry)
         }
@@ -167,7 +167,7 @@ struct ChiefsScheduleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(
             kind: "myTeamsWidget2",
-            provider: GameTimelineProvider(team: .chiefs)
+            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .nfl, espnID: "12"))
         ) { entry in
             WidgetEntryView(entry: entry)
         }
@@ -181,7 +181,7 @@ struct RoyalsScheduleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(
             kind: "myTeamsWidget3",
-            provider: GameTimelineProvider(team: .royals)
+            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .mlb, espnID: "7"))
         ) { entry in
             WidgetEntryView(entry: entry)
         }
@@ -195,7 +195,7 @@ struct SportingScheduleWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(
             kind: "myTeamsWidget4",
-            provider: GameTimelineProvider(team: .sporting)
+            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .mls, espnID: "186"))
         ) { entry in
             WidgetEntryView(entry: entry)
         }
@@ -218,5 +218,5 @@ struct ScheduleWidgets: WidgetBundle {
 #Preview(as: .systemSmall) {
     JayhawksScheduleWidget()
 } timeline: {
-    WidgetEntry(date: .now, tempGame: .placeholder(for: .jayhawks))
+    WidgetEntry(date: .now, tempGame: .placeholder(for: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")))
 }

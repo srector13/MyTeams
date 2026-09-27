@@ -128,11 +128,9 @@ private extension JSON {
     }
 }
 
-/// Loads the Kansas men's basketball roster, sorted by surname.
-func downloadBasketballRoster() async -> Result<[BasketballPlayer], NetworkError> {
-    await HTTPClient.shared.fetch(
-        "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/roster"
-    ).map(empty: [], parseBasketballRoster(from:))
+/// Loads a basketball team's roster, sorted by surname.
+func downloadBasketballRoster(team: TeamRef) async -> Result<[BasketballPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseBasketballRoster(from:))
 }
 
 /// Builds the roster from the feed's document. See `downloadBasketballRoster`.
@@ -165,14 +163,12 @@ func parseBasketballRoster(from json: JSON) -> [BasketballPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Chiefs roster, sorted by surname.
+/// Loads a football team's roster, sorted by surname.
 ///
 /// The NFL feed groups athletes by unit — offense, defense, special teams —
 /// so each group's `items` are flattened into a single roster.
-func downloadFootballRoster() async -> Result<[FootBallPlayer], NetworkError> {
-    await HTTPClient.shared.fetch(
-        "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/roster"
-    ).map(empty: [], parseFootballRoster(from:))
+func downloadFootballRoster(team: TeamRef) async -> Result<[FootBallPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseFootballRoster(from:))
 }
 
 /// Builds the roster from the feed's document. See `downloadFootballRoster`.
@@ -217,13 +213,11 @@ func parseFootballRoster(from json: JSON) -> [FootBallPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Royals roster, sorted by surname.
+/// Loads a baseball team's roster, sorted by surname.
 ///
 /// Like the NFL feed, athletes arrive grouped by unit and are flattened.
-func downloadBaseballRoster() async -> Result<[BaseballPlayer], NetworkError> {
-    await HTTPClient.shared.fetch(
-        "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/roster"
-    ).map(empty: [], parseBaseballRoster(from:))
+func downloadBaseballRoster(team: TeamRef) async -> Result<[BaseballPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseBaseballRoster(from:))
 }
 
 /// Builds the roster from the feed's document. See `downloadBaseballRoster`.
@@ -261,15 +255,13 @@ func parseBaseballRoster(from json: JSON) -> [BaseballPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Sporting Kansas City roster, sorted by surname.
+/// Loads a soccer team's roster, sorted by surname.
 ///
 /// Season totals come embedded in the roster feed, in two categories for
 /// outfield players (discipline, then attacking) and a third for keepers.
 /// They are addressed by position, as the feed gives them no stable keys.
-func downloadSoccerRoster() async -> Result<[SoccerPlayer], NetworkError> {
-    await HTTPClient.shared.fetch(
-        "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/186/roster"
-    ).map(empty: [], parseSoccerRoster(from:))
+func downloadSoccerRoster(team: TeamRef) async -> Result<[SoccerPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseSoccerRoster(from:))
 }
 
 /// Builds the roster from the feed's document. See `downloadSoccerRoster`.

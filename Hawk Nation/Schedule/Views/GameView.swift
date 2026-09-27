@@ -19,7 +19,7 @@ struct GameView : View {
     
     var game: Game
     var teamColor: Color
-    var team: Team
+    var team: TeamRef
 
     /// The in-progress score the team model polls for this game, if any.
     /// Past and future fixtures carry no live score; they render from the
@@ -229,7 +229,7 @@ struct GameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                         } else {
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                            Text(team.periodName(game.gamePeriod))
                                                 .font(.system(size: 15))
                                                 .fontWeight(.bold)
                                                 .minimumScaleFactor(0.5)
@@ -320,7 +320,7 @@ struct FootballGameView : View {
     
     var game: Game
     var teamColor: Color
-    var team: Team
+    var team: TeamRef
 
     /// The in-progress score the team model polls for this game, if any.
     var liveScore: LiveGameScore?
@@ -534,7 +534,7 @@ struct FootballGameView : View {
                                                 
                                             }
                                             
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                            Text(team.periodName(game.gamePeriod))
                                                 .font(.system(size: 15))
                                                 .fontWeight(.bold)
                                                 .minimumScaleFactor(0.5)
@@ -554,7 +554,7 @@ struct FootballGameView : View {
                                                 .minimumScaleFactor(0.5)
                                                 .foregroundStyle(Color.white)
                                             
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                            Text(team.periodName(game.gamePeriod))
                                                 .font(.system(size: 15))
                                                 .fontWeight(.bold)
                                                 .minimumScaleFactor(0.5)
@@ -582,7 +582,7 @@ struct FootballGameView : View {
                                             }
                                             
                                             
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                            Text(team.periodName(game.gamePeriod))
                                             .font(.system(size: 12))
                                             .fontWeight(.bold)
                                             .minimumScaleFactor(0.5)
@@ -661,30 +661,3 @@ struct FootballGameView : View {
             .clipShape(.rect(cornerRadius: 10))
     }
 }
-
-func getPeriod(period: String, team: String) -> String {
-    var returnPeriod = ""
-    
-    if(team == "Kansas" || team == "Kansas City") {
-        if(period == "2") {
-            returnPeriod = "2nd Half"
-        } else if (period == "1") {
-            returnPeriod = "1st Half"
-        }
-    } else if (team == "Royals") {
-        
-    } else if (team == "KC") {
-        if(period == "4") {
-            returnPeriod = "4th Quarter"
-        } else if (period == "3") {
-            returnPeriod = "3rd Quarter"
-        } else if(period == "2") {
-            returnPeriod = "2nd Quarter"
-        } else if (period == "1") {
-            returnPeriod = "1st Quarter"
-        }
-    }
-    
-    return returnPeriod
-}
-

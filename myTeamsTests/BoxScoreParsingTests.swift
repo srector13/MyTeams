@@ -204,11 +204,11 @@ struct BoxScoreParsingTests {
             "status": {"type": {"completed": true, "detail": "Final/OT"}},
             "competitors": [
               {"homeAway": "home", "score": "90",
-               "team": {"name": "Jayhawks"},
+               "team": {"id": "2305", "name": "Jayhawks"},
                "linescores": [{"displayValue": "38"}, {"displayValue": "40"},
                               {"displayValue": "12"}]},
               {"homeAway": "away", "score": "87",
-               "team": {"name": "Bears"},
+               "team": {"id": "239", "name": "Bears"},
                "linescores": [{"displayValue": "45"}, {"displayValue": "33"},
                               {"displayValue": "9"}]}
             ]
@@ -220,7 +220,7 @@ struct BoxScoreParsingTests {
         }
         """.utf8))
 
-        let lines = parseBasketballGameTeamStats(from: overtime)
+        let lines = parseBasketballGameTeamStats(from: overtime, team: .jayhawks)
         #expect(lines.count == 2)
         let line = try #require(lines.first)
         #expect(line.score == 90)
@@ -235,9 +235,9 @@ struct BoxScoreParsingTests {
         {
           "header": {"competitions": [{
             "competitors": [
-              {"team": {"name": "Wildcats"},
+              {"team": {"id": "2", "name": "Wildcats"},
                "linescores": [{"displayValue": "30"}, {"displayValue": "31"}]},
-              {"team": {"name": "Jayhawks"},
+              {"team": {"id": "2305", "name": "Jayhawks"},
                "linescores": [{"displayValue": "35"}, {"displayValue": "37"}]}
             ]
           }]},
@@ -248,7 +248,7 @@ struct BoxScoreParsingTests {
         }
         """.utf8))
 
-        let line = try #require(parseBasketballGameTeamStats(from: regulation).first)
+        let line = try #require(parseBasketballGameTeamStats(from: regulation, team: .jayhawks).first)
         #expect(line.score == 72)
         #expect(line.opponentScore == 61)
     }

@@ -9,16 +9,22 @@
 import SwiftUI
 
 struct SportingHome: View {
-    @State private var model = TeamModel<SoccerPlayer>(
-        team: .sporting,
-        newsURL: NewsFeed.sporting,
-        // MLS completion flags lag or never arrive, so the next game also
-        // walks past kick-off times.
-        usesDateForNextGame: true,
-        loadRoster: downloadSoccerRoster
-    )
+    let team: TeamRef
 
-    private let teamColor = Team.sporting.color
+    // MLS completion flags lag or never arrive, so the next game also walks
+    // past kick-off times (`RecordRule.usesDateForNextGame`).
+    @State private var model: TeamModel<SoccerPlayer>
+
+    init(team: TeamRef) {
+        self.team = team
+        _model = State(initialValue: TeamModel(
+            team: team,
+            newsURL: NewsFeed.sporting,
+            loadRoster: downloadSoccerRoster(team:)
+        ))
+    }
+
+    private var teamColor: Color { team.color }
 
     /// The menu labels the app uses for each playing position.
     private let positions: KeyValuePairs<String, String> = [
@@ -33,7 +39,7 @@ struct SportingHome: View {
             RosterSection(model: model) { player in
                 SoccerPlayerView(player: player, state: model.sort)
             } detail: { player in
-                SoccerPlayerDetailView(player: player, teamColor: teamColor)
+                SoccerPlayerDetailView(player: player, teamColor: teamColor, team: team)
             } filterMenu: {
                 Button("All") { model.filter() }
 
@@ -49,14 +55,14 @@ struct SportingHome: View {
                 GameView(
                     game: game,
                     teamColor: teamColor,
-                    team: .sporting,
+                    team: team,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 SoccerGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    team: .sporting
+                    team: team
                 )
             }
 
@@ -67,5 +73,5 @@ struct SportingHome: View {
 }
 
 #Preview {
-    SportingHome()
+    SportingHome(team: TeamCatalog.seeded(league: .mls, espnID: "186"))
 }

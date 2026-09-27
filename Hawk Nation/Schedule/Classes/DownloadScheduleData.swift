@@ -12,6 +12,8 @@ struct Game: Identifiable, Hashable, Sendable {
     /// ESPN's id for the event, or — for a feed entry that carries none — a
     /// key built from its raw date, opponent and feed position. See `id`.
     var eventID = ""
+    /// The followed team's name as the feed gives it (see `TeamNameField`),
+    /// or empty when the event does not list the team.
     var team: String
     var opponent: String
     var score: String
@@ -59,12 +61,14 @@ struct Game: Identifiable, Hashable, Sendable {
     }
 }
 
-/// Which field of an ESPN `team` object names the team a schedule belongs to.
+/// Which field of an ESPN `team` object a schedule card names a team by.
 ///
-/// The feeds disagree: the basketball and football feeds carry the followed
-/// team's name in `nickname` ("Kansas", "KC"), while the baseball and soccer
-/// feeds name it in `shortDisplayName`. Each team's field is declared on the
-/// `Team` enum (`scheduleNameField` in Sport.swift).
+/// The feeds disagree on which reads best: the basketball and football feeds
+/// carry the short name in `nickname` ("Kansas", "Broncos"), while the
+/// baseball and soccer feeds' `nickname` is absent or a mascot, and their
+/// `shortDisplayName` is the familiar name. Each league's field is declared
+/// on its `LeagueDescriptor` (`competitorNameField`). Names are display only;
+/// teams are matched by id.
 enum TeamNameField: String, Sendable {
     case nickname
     case shortDisplayName
@@ -78,7 +82,7 @@ enum TeamNameField: String, Sendable {
 // mutated after creation.
 
 /// The zone every game time is presented in: US Central, the home zone of all
-/// four teams. Display is pinned to this zone while the underlying `Date`
+/// four seeded teams. Display is pinned to this zone while the underlying `Date`
 /// stays the true instant, so schedule text reads identically on any device
 /// and clock comparisons (`dateAsDate < Date()`) remain correct. The zone is
 /// DST-aware, unlike the fixed six-hour shift this replaced.
@@ -127,17 +131,19 @@ func parseGameDate(_ raw: String) -> Date? {
 
 /// Builds one `Game` from an ESPN event object.
 ///
-/// `teamNameField` selects the name the feed uses to identify the followed
-/// team; the competitor that does not match it is the opponent.
+/// The followed team is the competitor whose `team.id` is `team.espnID`; any
+/// other competitor is the opponent. Both are named by the league's
+/// `competitorNameField`.
 ///
 /// Internal rather than private so the golden fixture tests can drive it
 /// with real ESPN events; `parseSchedule` remains the production entry point.
 func parseGame(
     from event: JSON,
-    teamName: String,
-    teamNameField: TeamNameField,
+    team: TeamRef,
     pointer: Int
 ) -> Game {
+    let nameField = team.league.descriptor.competitorNameField
+    var teamName = ""
     var opponent = ""
     var score = ""
     var opponentScore = ""
@@ -189,12 +195,13 @@ func parseGame(
         }
 
         for (_, competitor): (String, JSON) in competition["competitors"] {
-            if competitor["team"][teamNameField.rawValue].stringValue == teamName {
+            if competitor["team"]["id"].stringValue == team.espnID {
+                teamName = competitor["team"][nameField.rawValue].stringValue
                 gameHome = competitor["homeAway"].stringValue == "home"
                 gameWin = competitor["winner"].boolValue
                 score = competitor["score"]["displayValue"].stringValue
             } else {
-                opponent = competitor["team"][teamNameField.rawValue].stringValue
+                opponent = competitor["team"][nameField.rawValue].stringValue
                 opponentScore = competitor["score"]["displayValue"].stringValue
 
                 // Feeds ship a light and a dark variant of every logo. Take
@@ -251,29 +258,16 @@ func parseGame(
 ///
 /// A feed that answers with no events is a season with nothing scheduled
 /// (`.success([])`), which is distinct from a feed that could not be reached.
-func downloadScheduleData(
-    queryURL: String,
-    teamName: String,
-    teamNameField: TeamNameField = .nickname
-) async -> Result<[Game], NetworkError> {
-    await HTTPClient.shared.fetch(queryURL).map(empty: []) { json in
-        parseSchedule(from: json, teamName: teamName, teamNameField: teamNameField)
+func downloadScheduleData(team: TeamRef) async -> Result<[Game], NetworkError> {
+    await HTTPClient.shared.fetch(team.scheduleURL).map(empty: []) { json in
+        parseSchedule(from: json, team: team)
     }
 }
 
 /// Builds the season's games from a schedule document. See
 /// `downloadScheduleData`.
-func parseSchedule(
-    from json: JSON,
-    teamName: String,
-    teamNameField: TeamNameField = .nickname
-) -> [Game] {
+func parseSchedule(from json: JSON, team: TeamRef) -> [Game] {
     json["events"].enumerated().map { pointer, element in
-        parseGame(
-            from: element.1,
-            teamName: teamName,
-            teamNameField: teamNameField,
-            pointer: pointer
-        )
+        parseGame(from: element.1, team: team, pointer: pointer)
     }
 }

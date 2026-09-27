@@ -16,7 +16,7 @@ struct BasketballGameDetailView: View {
     var teamColor: Color
     @State private var gameTeamStats = BasketballGameTeamStats.placeholderPair
     @State private var gameInfo = GameInfo.empty
-    var team: Team
+    var team: TeamRef
     @State private var loading = true
     
     
@@ -164,7 +164,7 @@ struct BasketballGameDetailView: View {
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
                                                         } else {
-                                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                            Text(team.periodName(game.gamePeriod))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
@@ -222,7 +222,7 @@ struct BasketballGameDetailView: View {
                                                                 .minimumScaleFactor(0.5)
                                                             //.foregroundStyle(Color.white)
                                                         } else {
-                                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                            Text(team.periodName(game.gamePeriod))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
@@ -430,7 +430,7 @@ struct FootballGameDetailView: View {
     var teamColor: Color
     @State private var gameTeamStats = FootballGameTeamStats.placeholderPair
     @State private var gameInfo = GameInfo.empty
-    var team: Team
+    var team: TeamRef
     @State private var loading = true
     
     
@@ -573,7 +573,7 @@ struct FootballGameDetailView: View {
                                                                 .minimumScaleFactor(0.5)
                                                             //.foregroundStyle(Color.white)
                                                         } else {
-                                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                            Text(team.periodName(game.gamePeriod))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
@@ -633,7 +633,7 @@ struct FootballGameDetailView: View {
                                                                 .minimumScaleFactor(0.5)
                                                             //.foregroundStyle(Color.white)
                                                         } else {
-                                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                            Text(team.periodName(game.gamePeriod))
                                                                 .font(.system(size: 15))
                                                                 .fontWeight(.bold)
                                                                 .minimumScaleFactor(0.5)
@@ -822,7 +822,7 @@ struct BaseballGameDetailView: View {
     var teamColor: Color
     @State private var gameInfo = GameInfo.empty
     @State private var gameTeamStats: [BaseballGameTeamStats] = []
-    var team: Team
+    var team: TeamRef
     
     
     var body: some View {
@@ -953,7 +953,7 @@ struct BaseballGameDetailView: View {
                                                             .minimumScaleFactor(0.5)
                                                             .foregroundStyle(Color.white)
                                                     } else {
-                                                        Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                        Text(team.periodName(game.gamePeriod))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
@@ -1013,7 +1013,7 @@ struct BaseballGameDetailView: View {
                                                             .minimumScaleFactor(0.5)
                                                             .foregroundStyle(Color.white)
                                                     } else {
-                                                        Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                        Text(team.periodName(game.gamePeriod))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
@@ -1099,7 +1099,7 @@ struct SoccerGameDetailView: View {
     var teamColor: Color
     @State private var gameTeamStats: [SoccerGameTeamStats] = []
     @State private var gameInfo = GameInfo.empty
-    var team: Team
+    var team: TeamRef
     
     
     var body: some View {
@@ -1231,7 +1231,7 @@ struct SoccerGameDetailView: View {
                                                             .minimumScaleFactor(0.5)
                                                             .foregroundStyle(Color.white)
                                                     } else {
-                                                        Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                        Text(team.periodName(game.gamePeriod))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)
@@ -1291,7 +1291,7 @@ struct SoccerGameDetailView: View {
                                                             .minimumScaleFactor(0.5)
                                                             .foregroundStyle(Color.white)
                                                     } else {
-                                                        Text(getPeriod(period: game.gamePeriod, team: game.team))
+                                                        Text(team.periodName(game.gamePeriod))
                                                             .font(.system(size: 15))
                                                             .fontWeight(.bold)
                                                             .minimumScaleFactor(0.5)

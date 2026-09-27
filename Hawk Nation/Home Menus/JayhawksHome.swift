@@ -9,20 +9,27 @@
 import SwiftUI
 
 struct JayhawksHome: View {
-    @State private var model = TeamModel<BasketballPlayer>(
-        team: .jayhawks,
-        newsURL: NewsFeed.jayhawks,
-        loadRoster: downloadBasketballRoster
-    )
+    let team: TeamRef
 
-    private let teamColor = Team.jayhawks.color
+    @State private var model: TeamModel<BasketballPlayer>
+
+    init(team: TeamRef) {
+        self.team = team
+        _model = State(initialValue: TeamModel(
+            team: team,
+            newsURL: NewsFeed.jayhawks,
+            loadRoster: downloadBasketballRoster(team:)
+        ))
+    }
+
+    private var teamColor: Color { team.color }
 
     var body: some View {
         TeamHomeLayout {
             RosterSection(model: model) { player in
                 PlayerView(player: player, state: model.sort)
             } detail: { player in
-                BasketballPlayerDetailView(player: player)
+                BasketballPlayerDetailView(player: player, team: team)
             } filterMenu: {
                 Button("All") { model.filter() }
                 Button("Forwards") { model.filter { $0.position == "Forward" } }
@@ -34,14 +41,14 @@ struct JayhawksHome: View {
                 GameView(
                     game: game,
                     teamColor: teamColor,
-                    team: .jayhawks,
+                    team: team,
                     liveScore: model.liveScores[game.gameID]
                 )
             } detail: { game in
                 BasketballGameDetailView(
                     game: game,
                     teamColor: teamColor,
-                    team: .jayhawks
+                    team: team
                 )
             }
 
@@ -52,5 +59,5 @@ struct JayhawksHome: View {
 }
 
 #Preview {
-    JayhawksHome()
+    JayhawksHome(team: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305"))
 }

@@ -304,23 +304,23 @@ struct ScheduleParsingTests {
        "competitions": [{"id": "401700001",
          "status": {"type": {"completed": false}},
          "competitors": [
-           {"homeAway": "home", "team": {"nickname": "Kansas"}},
-           {"homeAway": "away", "team": {"nickname": "Howard"}}
+           {"homeAway": "home", "team": {"id": "2305", "nickname": "Kansas"}},
+           {"homeAway": "away", "team": {"id": "47", "nickname": "Howard"}}
          ]}]},
       {"date": "2026-11-08T01:00Z", "name": "Kansas at Duke",
        "competitions": [{
          "status": {"type": {"completed": false}},
          "competitors": [
-           {"homeAway": "away", "team": {"nickname": "Kansas"}},
-           {"homeAway": "home", "team": {"nickname": "Duke"}}
+           {"homeAway": "away", "team": {"id": "2305", "nickname": "Kansas"}},
+           {"homeAway": "home", "team": {"id": "150", "nickname": "Duke"}}
          ]}]}
     ]}
     """
 
     @Test("Game ids are identical across two parses of the same feed")
     func deterministicGameIDs() {
-        let first = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), teamName: "Kansas")
-        let second = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), teamName: "Kansas")
+        let first = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), team: .jayhawks)
+        let second = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), team: .jayhawks)
 
         #expect(first.count == 2)
         #expect(first.map(\.id) == second.map(\.id))
