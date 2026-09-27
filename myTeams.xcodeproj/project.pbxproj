@@ -61,6 +61,9 @@
 		CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */; };
 		CDA8493C950E9AE560961E76 /* myTeamsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */; };
 		5457AB9FB521F7F7EF0268A3 /* myTeamWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
+		BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
+		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -157,6 +160,8 @@
 		4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = myTeamWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E02A90D9643568EA39115CFB /* myTeamsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DC2D7827160987765974061 /* myTeamsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5883C4F774D9544E81195578 /* LogoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStore.swift"; sourceTree = "<group>"; };
+		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -252,6 +257,7 @@
 				CA2FB2E1805F644DD405F129 /* RemoteImage.swift */,
 				A1CBF316BA698A3A7672774F /* Sport.swift */,
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
+				5883C4F774D9544E81195578 /* LogoStore.swift */,
 			);
 			path = "Networking";
 			sourceTree = "<group>";
@@ -397,6 +403,7 @@
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
 				C7B081DF6D2F99291D6A497E /* GoldenParserTests.swift */,
 				85ADA55D78EE908E3737EFAC /* TeamCatalogTests.swift */,
+				B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
 				BD5786509BA63FD87FE7AD03 /* FIXTURES.md */,
@@ -606,6 +613,7 @@
 				712E5226E4DF0A7BE1609DE4 /* GameView.swift in Sources */,
 				1CD5FF6E028E55CEBF833F15 /* GetNextGame.swift in Sources */,
 				DD8B5E279E378CED42EDFE79 /* StatRowView.swift in Sources */,
+				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -621,6 +629,7 @@
 				43F1053E017CE0ACD2513F5F /* TeamRef.swift in Sources */,
 				2129690FEF4C818C0D034221 /* ConvertColor.swift in Sources */,
 				6560ECADCC6B530EAB4FC234 /* DownloadScheduleData.swift in Sources */,
+				BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -636,6 +645,7 @@
 				F38CF3BA1E30891DD3715EEB /* GoldenParserTests.swift in Sources */,
 				2A8A7749105511EB64C1E23F /* FixtureLoader.swift in Sources */,
 				07BFE42C24ACB22870DAD8F2 /* TeamCatalogTests.swift in Sources */,
+				015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
