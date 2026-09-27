@@ -92,6 +92,11 @@ struct GameTimelineProvider: TimelineProvider {
                     policy: .after(reload)
                 )
             )
+
+            // After the timeline is handed over, so the league's team list
+            // (up to a megabyte for college leagues) is never parsed while
+            // the schedule is in memory.
+            await WidgetScheduleLoader.refreshCatalog(for: team)
         }
     }
 }
@@ -135,15 +140,17 @@ struct WidgetEntryView: View {
             ZStack {
                 entry.tempGame.teamColor
 
-                Image(entry.tempGame.backgroundLogo)
-                    .resizable()
-                    .renderingMode(.original)
-                    .aspectRatio(contentMode: .fill)
-                    .opacity(0.1)
-                    .saturation(0.1)
-                    .contrast(0.5)
-                    .frame(width: 200, height: 200)
-                    .offset(x: 40, y: 50)
+                if let data = entry.tempGame.backgroundLogo, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .renderingMode(.original)
+                        .aspectRatio(contentMode: .fill)
+                        .opacity(0.1)
+                        .saturation(0.1)
+                        .contrast(0.5)
+                        .frame(width: 200, height: 200)
+                        .offset(x: 40, y: 50)
+                }
             }
         }
     }

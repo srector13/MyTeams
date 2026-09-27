@@ -11,13 +11,16 @@ import Foundation
 
 /// The next fixture, as the widget renders it.
 struct WidgetGame: Sendable {
-    var backgroundLogo: String
+    /// The followed team's crest, drawn faintly behind the fixture. Read from
+    /// `LogoStore`; the widget no longer bundles crests.
+    var backgroundLogo: Data?
     var teamName: String
     var gameDate: String
     var gameTime: String
     var gameChannel: String
 
-    /// The opponent's crest, fetched alongside the schedule.
+    /// The opponent's crest, read from `LogoStore` (or fetched into it)
+    /// alongside the schedule.
     ///
     /// Widgets get one short window to build a timeline and cannot load
     /// anything while rendering, so the image travels with the entry rather
@@ -33,7 +36,7 @@ struct WidgetGame: Sendable {
         detail: String? = nil
     ) -> WidgetGame {
         WidgetGame(
-            backgroundLogo: team.logoAsset ?? "",
+            backgroundLogo: WidgetScheduleLoader.storedCrest(for: team),
             teamName: teamName,
             gameDate: detail ?? "Date",
             gameTime: detail ?? "Time",
@@ -95,13 +98,15 @@ enum WidgetScheduleLoader {
             .min(by: { $0.dateAsDate < $1.dateAsDate })
         else { return .seasonOver }
 
+        async let background = crest(for: team, favorite: true)
+        async let opponentLogo = opponentCrest(for: game, following: team)
         let widgetGame = WidgetGame(
-            backgroundLogo: team.logoAsset ?? "",
+            backgroundLogo: await background,
             teamName: game.opponent,
             gameDate: widgetDateFormatter.string(from: game.dateAsDate),
             gameTime: game.time,
             gameChannel: game.channel,
-            teamLogo: await logoData(game.opponentLogo),
+            teamLogo: await opponentLogo,
             teamColor: team.color
         )
         return .game(widgetGame, kickoff: game.dateAsDate)
@@ -126,10 +131,54 @@ enum WidgetScheduleLoader {
         }
     }
 
-    /// Fetches the opponent's crest. Uses the app's session, whose timeouts
-    /// keep a stalled image from eating the widget's short refresh window.
-    private static func logoData(_ urlString: String) async -> Data? {
-        guard let url = URL(string: urlString) else { return nil }
-        return try? await HTTPClient.defaultSession.data(from: url).0
+    /// A crest already in `LogoStore`, read synchronously.
+    static func storedCrest(for team: TeamRef) -> Data? {
+        LogoStore.url(for: team, variant: .default).flatMap { try? Data(contentsOf: $0) }
+    }
+
+    /// A team's crest from `LogoStore`, downloading it into the store first
+    /// if it is not there. Stored crests are reused across timelines, so the
+    /// hourly reload no longer downloads them again.
+    private static func crest(for team: TeamRef, favorite: Bool) async -> Data? {
+        if let stored = storedCrest(for: team) {
+            return stored
+        }
+        await LogoStore.prefetched(team, variant: .default, favorite: favorite)
+        return storedCrest(for: team)
+    }
+
+    /// The opponent's crest, stored under its ESPN id.
+    ///
+    /// Schedule competitors carry `team.id` but not always a league, so the
+    /// opponent is filed under the followed team's league; pro opponents are
+    /// always same-league. An opponent without an id is downloaded but not
+    /// stored. Uses the app's session, whose timeouts keep a stalled image
+    /// from eating the widget's short refresh window.
+    private static func opponentCrest(for game: Game, following team: TeamRef) async -> Data? {
+        guard let url = URL(string: game.opponentLogo) else { return nil }
+        guard !game.opponentID.isEmpty else {
+            guard let data = try? await HTTPClient.defaultSession.data(from: url).0 else { return nil }
+            return LogoStore.downscaledPNG(data)
+        }
+        let opponent = TeamRef(
+            league: team.league,
+            espnID: game.opponentID,
+            displayName: game.opponent,
+            shortName: game.opponent,
+            abbreviation: "",
+            location: "",
+            colorHex: "",
+            alternateColorHex: "",
+            logoURL: url,
+            logoDarkURL: nil,
+            logoAsset: nil
+        )
+        return await crest(for: opponent, favorite: false)
+    }
+
+    /// Refreshes the followed team's league catalog, at most daily. The
+    /// catalog itself is cached for a week, so most calls do nothing.
+    static func refreshCatalog(for team: TeamRef) async {
+        await RemoteTeamCatalog.shared.refreshIfDue(team.league, minimumInterval: 24 * 60 * 60)
     }
 }
