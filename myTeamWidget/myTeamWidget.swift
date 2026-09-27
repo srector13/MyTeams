@@ -27,25 +27,72 @@ struct GameTimelineProvider: TimelineProvider {
     /// A fixture's date, time and channel rarely change, so the widget asks
     /// for a new timeline hourly rather than the five seconds the Jayhawks
     /// provider used to request — a budget WidgetKit would never have granted.
+    /// A fixture starting sooner than that reloads at its kickoff instead.
     private let refreshInterval: TimeInterval = 60 * 60
+
+    /// How soon a failed load is retried. Showing "N/A" for a whole hour
+    /// after one dropped request was the old behaviour.
+    private let retryInterval: TimeInterval = 5 * 60
+
+    /// How long the gallery preview waits for real data before settling for
+    /// the placeholder.
+    private let previewDeadline: Duration = .seconds(3)
 
     func placeholder(in context: Context) -> WidgetEntry {
         WidgetEntry(date: .now, tempGame: .placeholder(for: team))
     }
 
+    /// Renders the real next fixture — in the widget gallery too, where it
+    /// waits only briefly before falling back to the placeholder.
     func getSnapshot(in context: Context, completion: @escaping (WidgetEntry) -> Void) {
-        completion(placeholder(in: context))
+        let isPreview = context.isPreview
+        Task {
+            let result: WidgetLoadResult
+            if isPreview {
+                result = await WidgetScheduleLoader.nextGame(for: team, within: previewDeadline)
+            } else {
+                result = await WidgetScheduleLoader.nextGame(for: team)
+            }
+
+            let game: WidgetGame
+            switch result {
+            case .game(let next, _):
+                game = next
+            case .seasonOver:
+                game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+            case .failed:
+                game = .placeholder(for: team)
+            }
+            completion(WidgetEntry(date: .now, tempGame: game))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WidgetEntry>) -> Void) {
         Task {
-            let game = await WidgetScheduleLoader.nextGame(for: team)
-                ?? .placeholder(for: team, teamName: "N/A", detail: "N/A")
+            let now = Date.now
+            let game: WidgetGame
+            let reload: Date
+
+            let result = await WidgetScheduleLoader.nextGame(for: team)
+            switch result {
+            case .game(let next, let kickoff):
+                game = next
+                // Once the game starts it is no longer the next one; reload
+                // then (but never sooner than a minute) so the widget moves
+                // on to the following fixture.
+                reload = min(now + refreshInterval, max(kickoff, now + 60))
+            case .seasonOver:
+                game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+                reload = now + refreshInterval
+            case .failed:
+                game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+                reload = now + retryInterval
+            }
 
             completion(
                 Timeline(
-                    entries: [WidgetEntry(date: .now, tempGame: game)],
-                    policy: .after(.now + refreshInterval)
+                    entries: [WidgetEntry(date: now, tempGame: game)],
+                    policy: .after(reload)
                 )
             )
         }

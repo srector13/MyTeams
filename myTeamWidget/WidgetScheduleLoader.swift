@@ -60,20 +60,30 @@ private let widgetDateFormatter: DateFormatter = {
     return formatter
 }()
 
+/// What the widget found when it looked for the next fixture.
+enum WidgetLoadResult: Sendable {
+    /// The next fixture, and when it starts.
+    case game(WidgetGame, kickoff: Date)
+    /// The schedule loaded but has no games left to play.
+    case seasonOver
+    /// The schedule could not be loaded (or, for a gallery preview, not in
+    /// time).
+    case failed
+}
+
 enum WidgetScheduleLoader {
-    /// Loads a team's next fixture, or `nil` when the season has no games left
-    /// to play.
+    /// Loads a team's next fixture.
     ///
     /// Shares the app's schedule parsing rather than repeating it, which is
     /// what the per-team loaders here used to do with a thousand lines of
     /// hand-written models apiece.
-    static func nextGame(for team: Team) async -> WidgetGame? {
+    static func nextGame(for team: Team) async -> WidgetLoadResult {
         let result = await downloadScheduleData(
             queryURL: team.scheduleURL,
             teamName: team.scheduleTeamName,
             teamNameField: team.scheduleNameField
         )
-        guard case .success(let schedule) = result else { return nil }
+        guard case .success(let schedule) = result else { return .failed }
 
         // The widget wants the earliest fixture that has not kicked off yet.
         // The app locates the next game by walking completion flags
@@ -86,9 +96,9 @@ enum WidgetScheduleLoader {
         guard let game = schedule
             .filter({ $0.dateAsDate >= Date() && !$0.cancelled && !$0.postponed })
             .min(by: { $0.dateAsDate < $1.dateAsDate })
-        else { return nil }
+        else { return .seasonOver }
 
-        return WidgetGame(
+        let widgetGame = WidgetGame(
             backgroundLogo: team.logo,
             teamName: game.opponent,
             gameDate: widgetDateFormatter.string(from: game.dateAsDate),
@@ -97,10 +107,32 @@ enum WidgetScheduleLoader {
             teamLogo: await logoData(game.opponentLogo),
             teamColor: team.color
         )
+        return .game(widgetGame, kickoff: game.dateAsDate)
     }
 
+    /// Loads a team's next fixture, giving up as `.failed` after `deadline`.
+    ///
+    /// The widget gallery wants its snapshot back within moments; a slow
+    /// network should fall back to sample data rather than hold it up.
+    static func nextGame(for team: Team, within deadline: Duration) async -> WidgetLoadResult {
+        await withTaskGroup(of: WidgetLoadResult.self) { group in
+            group.addTask {
+                await WidgetScheduleLoader.nextGame(for: team)
+            }
+            group.addTask {
+                try? await Task.sleep(for: deadline)
+                return .failed
+            }
+            let first = await group.next() ?? .failed
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// Fetches the opponent's crest. Uses the app's session, whose timeouts
+    /// keep a stalled image from eating the widget's short refresh window.
     private static func logoData(_ urlString: String) async -> Data? {
         guard let url = URL(string: urlString) else { return nil }
-        return try? await URLSession.shared.data(from: url).0
+        return try? await HTTPClient.defaultSession.data(from: url).0
     }
 }
