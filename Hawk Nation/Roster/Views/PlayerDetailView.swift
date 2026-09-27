@@ -698,7 +698,7 @@ struct BaseballPlayerDetailView: View {
                                     HStack(alignment: .center) {
                                         StatView(title: "Runs", info: "\(playerStats.runs)")
                                         Spacer()
-                                        StatView(title: "Earned Run Avg.", info: "\(playerStats.EarnedRunAverage)")
+                                        StatView(title: "Earned Run Avg.", info: String(format: "%.2f", playerStats.EarnedRunAverage))
                                         Spacer()
                                         StatView(title: "Earned Runs", info: "\(playerStats.earnedRuns)")
                                     }

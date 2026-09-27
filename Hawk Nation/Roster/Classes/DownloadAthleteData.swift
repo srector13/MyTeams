@@ -276,7 +276,7 @@ struct BaseballPlayerStats: Identifiable, Hashable, Sendable {
     var id = UUID()
 
     // Pitching
-    var EarnedRunAverage: Int
+    var EarnedRunAverage: Float
     var wins: Int
     var losses: Int
     var saves: Int
@@ -370,12 +370,17 @@ func downloadBaseballPlayerStats(
     let json = await HTTPClient.json(
         from: "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/\(playerID)/splits"
     )
+    return parseBaseballPlayerStats(from: json, playerPosition: playerPosition)
+}
 
+/// Extracts a baseball player's season totals from a splits document. See
+/// `downloadBaseballPlayerStats`.
+func parseBaseballPlayerStats(from json: JSON, playerPosition: String) -> BaseballPlayerStats {
     let stats = json["splitCategories"][0]["splits"][0]["stats"]
     var result = BaseballPlayerStats.empty
 
     if playerPosition.contains("Pitcher") {
-        result.EarnedRunAverage = stats[0].intValue
+        result.EarnedRunAverage = stats[0].floatValue
         result.wins = stats[1].intValue
         result.losses = stats[2].intValue
         result.saves = stats[3].intValue
