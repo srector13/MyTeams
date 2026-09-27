@@ -49,10 +49,21 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     static let mlb = LeagueID(sport: "baseball", league: "mlb")
     static let mls = LeagueID(sport: "soccer", league: "usa.1")
 
+    /// Whether the league is a college one. Unknown leagues are judged by
+    /// their path (`college-football`, `womens-college-basketball`).
+    var isCollege: Bool { descriptor.isCollege || league.contains("college") }
+
     // MARK: URLs
 
     private static let siteAPI = "https://site.api.espn.com/apis/site/v2/sports"
     private static let commonAPI = "https://site.web.api.espn.com/apis/common/v3/sports"
+
+    /// Every team in the league. The default page is short, so ask for more
+    /// than any league has; college leagues also name the all-divisions group
+    /// (`groups=50`), which returns all 762 college-football teams in one call.
+    var teamsURL: String {
+        "\(Self.siteAPI)/\(path)/teams?limit=1000" + (isCollege ? "&groups=50" : "")
+    }
 
     /// A team's season schedule.
     func scheduleURL(teamID: String) -> String {

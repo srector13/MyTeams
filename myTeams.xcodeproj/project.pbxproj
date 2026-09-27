@@ -63,6 +63,9 @@
 		5457AB9FB521F7F7EF0268A3 /* myTeamWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
 		BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
+		056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
+		CA55107148FE3854E9BE41FF /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
+		F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */; };
 		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -161,6 +164,8 @@
 		E02A90D9643568EA39115CFB /* myTeamsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DC2D7827160987765974061 /* myTeamsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5883C4F774D9544E81195578 /* LogoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStore.swift"; sourceTree = "<group>"; };
+		A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalog.swift"; sourceTree = "<group>"; };
+		82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalogTests.swift"; sourceTree = "<group>"; };
 		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -258,6 +263,7 @@
 				A1CBF316BA698A3A7672774F /* Sport.swift */,
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
 				5883C4F774D9544E81195578 /* LogoStore.swift */,
+				A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */,
 			);
 			path = "Networking";
 			sourceTree = "<group>";
@@ -403,6 +409,7 @@
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
 				C7B081DF6D2F99291D6A497E /* GoldenParserTests.swift */,
 				85ADA55D78EE908E3737EFAC /* TeamCatalogTests.swift */,
+				82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */,
 				B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
@@ -614,6 +621,7 @@
 				1CD5FF6E028E55CEBF833F15 /* GetNextGame.swift in Sources */,
 				DD8B5E279E378CED42EDFE79 /* StatRowView.swift in Sources */,
 				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
+				056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -630,6 +638,7 @@
 				2129690FEF4C818C0D034221 /* ConvertColor.swift in Sources */,
 				6560ECADCC6B530EAB4FC234 /* DownloadScheduleData.swift in Sources */,
 				BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */,
+				CA55107148FE3854E9BE41FF /* RemoteTeamCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -645,6 +654,7 @@
 				F38CF3BA1E30891DD3715EEB /* GoldenParserTests.swift in Sources */,
 				2A8A7749105511EB64C1E23F /* FixtureLoader.swift in Sources */,
 				07BFE42C24ACB22870DAD8F2 /* TeamCatalogTests.swift in Sources */,
+				F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */,
 				015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

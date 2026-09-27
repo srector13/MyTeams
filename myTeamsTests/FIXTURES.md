@@ -85,6 +85,38 @@ The original file was compact JSON, and the trim re-serialised it the same way
 (`separators=(',', ':')`), so every kept event is byte-identical to the capture.
 Every other fixture is byte-for-byte what ESPN returned.
 
+## Team catalogs (P2-a)
+
+`RemoteTeamCatalogTests.swift` reads two `teams` documents, captured on
+**2026-09-27** from this host:
+
+```sh
+base=https://site.api.espn.com/apis/site/v2/sports
+curl -s "$base/football/nfl/teams?limit=500" -o nfl_teams.json
+curl -s "$base/football/college-football/teams?limit=1000&groups=50" -o college_football_teams.json
+```
+
+Both were **trimmed to 15 teams** (`sports[0].leagues[0].teams`), keeping
+feed order and every other key; each kept team object is unchanged. They were
+re-serialised compactly (`separators=(',', ':')`).
+
+| File | Teams | Bytes (capture → trimmed) | Kept |
+|---|---|---|---|
+| `nfl_teams.json` | 32 → 15 | 148,848 → 69,777 | the first 13 in feed order, plus Kansas City (12) and Las Vegas (13) |
+| `college_football_teams.json` | 762 → 15 | 1,856,910 → 39,381 | the first 11 in feed order, plus Andrew (134002: no logos, no colours), Apprentice School (3111: colour, no logos), Arizona Christian (108358: no logos) and Kansas (2305) |
+
+Notes on the live shape:
+
+- `limit=500` caps college football at 500 teams; `limit=1000` returns all
+  762 (with or without `groups=50`). The app asks for `limit=1000`.
+- 91 of the 762 college teams have no `logos`, and 72 have no `color`. Every
+  team with logos had both a `["full","default"]` and a `["full","dark"]`
+  entry, so the dark-absent case is made in the test by filtering one real
+  team's `logos` (`JSON.setting`), not by editing the fixture.
+- NFL teams list 17 logos: default, dark, scoreboard, scoreboard-dark,
+  grayscale and twelve 4096 px `guid/…` brand-service images. Default is first
+  in the feed, so the selection test reverses the Chiefs' array in memory.
+
 ## Refreshing
 
 1. Re-run the requests above, for example:
