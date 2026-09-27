@@ -326,18 +326,32 @@ struct BaseballPlayerStats: Identifiable, Hashable, Sendable {
 /// Loads a Kansas player's season averages.
 ///
 /// The splits feed reports home and away separately, so a rate stat is the
-/// mean of the two and games played is their sum. Values are addressed by
-/// position because the feed lists them in a fixed order with no keys.
+/// mean of the two weighted by games played, and games played is their sum.
+/// Values are addressed by position because the feed lists them in a fixed
+/// order with no keys.
 func downloadBasketballPlayerStats(playerID: String) async -> BasketballPlayerStats {
     let json = await HTTPClient.json(
         from: "https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes/\(playerID)/splits"
     )
+    return parseBasketballPlayerStats(from: json)
+}
 
+/// Extracts a basketball player's season averages from a splits document.
+/// See `downloadBasketballPlayerStats`.
+func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
     let splits = json["splitCategories"][0]["splits"]
+    let homeGames = splits[0]["stats"][0].floatValue
+    let awayGames = splits[1]["stats"][0].floatValue
 
-    /// The mean of the home and away values at `index`.
+    /// The home and away values at `index`, weighted by the games each split
+    /// covers. A player with no games in either split falls back to the
+    /// plain mean rather than dividing by zero.
     func average(_ index: Int) -> Float {
-        (splits[0]["stats"][index].floatValue + splits[1]["stats"][index].floatValue) / 2
+        let home = splits[0]["stats"][index].floatValue
+        let away = splits[1]["stats"][index].floatValue
+        let games = homeGames + awayGames
+        guard games > 0 else { return (home + away) / 2 }
+        return (home * homeGames + away * awayGames) / games
     }
 
     return BasketballPlayerStats(
