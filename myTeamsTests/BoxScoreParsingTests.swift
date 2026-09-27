@@ -191,6 +191,156 @@ struct BoxScoreParsingTests {
         #expect(lines.first { $0.name == "Philadelphia" }?.goals == 4)
     }
 
+    // MARK: - Basketball
+
+    @Test("Basketball totals include every overtime period")
+    func basketballOvertimeCounts() throws {
+        // An abridged NCAA summary: Kansas (home) 90, Baylor (away) 87 after
+        // one overtime. The header carries one line score per half plus one
+        // per overtime; the old reader summed only the two halves (78-78).
+        let overtime = JSON(data: Data("""
+        {
+          "header": {"competitions": [{
+            "status": {"type": {"completed": true, "detail": "Final/OT"}},
+            "competitors": [
+              {"homeAway": "home", "score": "90",
+               "team": {"name": "Jayhawks"},
+               "linescores": [{"displayValue": "38"}, {"displayValue": "40"},
+                              {"displayValue": "12"}]},
+              {"homeAway": "away", "score": "87",
+               "team": {"name": "Bears"},
+               "linescores": [{"displayValue": "45"}, {"displayValue": "33"},
+                              {"displayValue": "9"}]}
+            ]
+          }]},
+          "boxscore": {"teams": [
+            {"team": {"name": "Bears"}, "statistics": []},
+            {"team": {"name": "Jayhawks"}, "statistics": []}
+          ]}
+        }
+        """.utf8))
+
+        let lines = parseBasketballGameTeamStats(from: overtime)
+        #expect(lines.count == 2)
+        let line = try #require(lines.first)
+        #expect(line.score == 90)
+        #expect(line.opponentScore == 87)
+        #expect(line.gameClock == "Final/OT")
+    }
+
+    @Test("A regulation basketball game still sums its two halves")
+    func basketballRegulation() throws {
+        // Jayhawks listed second: the side lookup must still find them.
+        let regulation = JSON(data: Data("""
+        {
+          "header": {"competitions": [{
+            "competitors": [
+              {"team": {"name": "Wildcats"},
+               "linescores": [{"displayValue": "30"}, {"displayValue": "31"}]},
+              {"team": {"name": "Jayhawks"},
+               "linescores": [{"displayValue": "35"}, {"displayValue": "37"}]}
+            ]
+          }]},
+          "boxscore": {"teams": [
+            {"team": {"name": "Wildcats"}, "statistics": []},
+            {"team": {"name": "Jayhawks"}, "statistics": []}
+          ]}
+        }
+        """.utf8))
+
+        let line = try #require(parseBasketballGameTeamStats(from: regulation).first)
+        #expect(line.score == 72)
+        #expect(line.opponentScore == 61)
+    }
+
+    // MARK: - Live score
+
+    /// An abridged in-progress MLB summary header: Royals (home) 3, Tigers
+    /// (away) 5. The summary header publishes `score` as a bare string; the
+    /// `{"displayValue": ...}` wrapper only appears on the schedule feed.
+    static let liveMLB = JSON(data: Data("""
+    {
+      "header": {"competitions": [{
+        "status": {"type": {"name": "STATUS_IN_PROGRESS", "state": "in",
+                            "completed": false, "detail": "Bot 6th"}},
+        "competitors": [
+          {"homeAway": "home", "score": "3", "winner": false,
+           "team": {"displayName": "Kansas City Royals"}},
+          {"homeAway": "away", "score": "5", "winner": false,
+           "team": {"displayName": "Detroit Tigers"}}
+        ]
+      }]}
+    }
+    """.utf8))
+
+    @Test("A live score reads the header's bare-string scores by side")
+    func liveScoreFromBareStrings() throws {
+        let home = try #require(parseLiveGameScore(from: Self.liveMLB, team: .royals, isHome: true))
+        #expect(home.score == 3)
+        #expect(home.opponentScore == 5)
+
+        // The same document read for the away side swaps the pair.
+        let away = try #require(parseLiveGameScore(from: Self.liveMLB, team: .royals, isHome: false))
+        #expect(away.score == 5)
+        #expect(away.opponentScore == 3)
+    }
+
+    @Test("A final summary reads its scores the same way")
+    func liveScoreFromCompletedGame() throws {
+        let finished = JSON(data: Data("""
+        {
+          "header": {"competitions": [{
+            "status": {"type": {"name": "STATUS_FINAL", "state": "post",
+                                "completed": true, "detail": "Final"}},
+            "competitors": [
+              {"homeAway": "home", "score": "24", "winner": true,
+               "team": {"displayName": "Kansas City Chiefs"}},
+              {"homeAway": "away", "score": "17", "winner": false,
+               "team": {"displayName": "Denver Broncos"}}
+            ]
+          }]}
+        }
+        """.utf8))
+        let score = try #require(parseLiveGameScore(from: finished, team: .chiefs, isHome: true))
+        #expect(score.score == 24)
+        #expect(score.opponentScore == 17)
+    }
+
+    @Test("A score wrapped in a displayValue object still reads")
+    func liveScoreFromWrappedScore() throws {
+        let wrapped = JSON(data: Data("""
+        {
+          "header": {"competitions": [{
+            "competitors": [
+              {"homeAway": "home", "score": {"value": 2.0, "displayValue": "2"}},
+              {"homeAway": "away", "score": {"value": 1.0, "displayValue": "1"}}
+            ]
+          }]}
+        }
+        """.utf8))
+        let score = try #require(parseLiveGameScore(from: wrapped, team: .sporting, isHome: true))
+        #expect(score.score == 2)
+        #expect(score.opponentScore == 1)
+    }
+
+    @Test("A missing score reads as no live score, not 0–0")
+    func liveScoreMissing() {
+        // The polling loop keeps its last known figures when this is nil;
+        // a zero here would overwrite them.
+        let partial = JSON(data: Data("""
+        {
+          "header": {"competitions": [{
+            "competitors": [
+              {"homeAway": "home", "score": "3"},
+              {"homeAway": "away"}
+            ]
+          }]}
+        }
+        """.utf8))
+        #expect(parseLiveGameScore(from: partial, team: .royals, isHome: true) == nil)
+        #expect(parseLiveGameScore(from: JSON(data: Data()), team: .royals, isHome: true) == nil)
+    }
+
     // MARK: - Degenerate documents
 
     @Test("A failed fetch parses to no lines rather than trapping")

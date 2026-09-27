@@ -128,7 +128,21 @@ struct LiveGameScore: Sendable, Hashable {
 /// rate-limited or partial response as a 0–0 game.
 func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> LiveGameScore? {
     let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+    return parseLiveGameScore(from: json, team: team, isHome: isHome)
+}
 
+/// Reads a header competitor's score, or `nil` when it has none.
+///
+/// The summary header publishes `score` as a bare string (`"3"`); the schedule
+/// feed wraps it as `{"value": 3.0, "displayValue": "3"}`. Both are accepted.
+func competitorScore(_ competitor: JSON) -> Int? {
+    let score = competitor["score"]
+    return score.dictionary == nil ? score.int : score["displayValue"].int
+}
+
+/// Extracts the current score from a game's summary document. See
+/// `downloadLiveGameScore`.
+func parseLiveGameScore(from json: JSON, team: Team, isHome: Bool) -> LiveGameScore? {
     var score: Int?
     var opponentScore: Int?
     for (_, competitor): (String, JSON) in json["header", "competitions", 0, "competitors"] {
@@ -141,9 +155,9 @@ func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> Li
         }
 
         if followedTeam {
-            score = competitor["score"]["displayValue"].intValue
+            score = competitorScore(competitor)
         } else {
-            opponentScore = competitor["score"]["displayValue"].intValue
+            opponentScore = competitorScore(competitor)
         }
     }
 
@@ -187,20 +201,27 @@ func downloadGameInfo(gameID: String, team: Team) async -> GameInfo {
 /// order without stable identifiers.
 func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGameTeamStats] {
     let json = await HTTPClient.json(from: Team.jayhawks.summaryURL(gameID: gameID))
+    return parseBasketballGameTeamStats(from: json)
+}
 
+/// Extracts both teams' box score lines from a basketball game's summary
+/// document. See `downloadBasketballGameTeamStatsData`.
+func parseBasketballGameTeamStats(from json: JSON) -> [BasketballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
 
-    /// College basketball scores arrive per half, so a team's total is the sum
-    /// of its line scores.
-    func halfTotal(_ index: Int) -> Int {
-        competitors[index]["linescores", 0, "displayValue"].intValue
-            + competitors[index]["linescores", 1, "displayValue"].intValue
+    /// College basketball scores arrive per period — two halves, then one
+    /// entry per overtime — so a team's total is the sum of all its line
+    /// scores.
+    func lineScoreTotal(_ index: Int) -> Int {
+        competitors[index]["linescores"].reduce(0) { total, period in
+            total + period.1["displayValue"].intValue
+        }
     }
 
     let jayhawksAreFirst = competitors[0]["team"]["name"].stringValue == "Jayhawks"
-    let teamScore = halfTotal(jayhawksAreFirst ? 0 : 1)
-    let opponentScore = halfTotal(jayhawksAreFirst ? 1 : 0)
+    let teamScore = lineScoreTotal(jayhawksAreFirst ? 0 : 1)
+    let opponentScore = lineScoreTotal(jayhawksAreFirst ? 1 : 0)
 
     return json["boxscore"]["teams"].enumerated().map { index, element in
         let team = element.1
