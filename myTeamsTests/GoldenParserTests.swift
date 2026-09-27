@@ -764,13 +764,9 @@ struct GoldenSummaryTests {
 
     // MARK: Baseball and soccer box scores
 
-    // KNOWN-BUG: boxscoreStatistic returns the stat *object*
-    // ({"name","value","displayValue"}), and `.intValue`/`.floatValue` of an
-    // object is 0. Every MLB run/hit/error and MLS shot/possession/corner
-    // therefore reads 0. Correct: read the node's "value"/"displayValue".
-    // (BoxScoreParsingTests.baseballStats/soccerStats assert the correct
-    // values and fail against today's code for the same reason.)
-    @Test("MLB final box score: every count reads 0", .tags(.knownBug))
+    // Each count is the stat node's "displayValue" (MLB nodes also carry a
+    // numeric "value"; MLS nodes carry only "displayValue").
+    @Test("MLB final box score")
     func baseballBoxScore() throws {
         // royals_summary_final_401817094.json
         let lines = parseBaseballGameTeamStats(from: try Fixture.json("royals_summary_final_401817094"))
@@ -780,16 +776,16 @@ struct GoldenSummaryTests {
         #expect(lines[0].name == "Guardians")  // team.shortDisplayName
         #expect(lines[0].homeAway == "away")
         #expect(lines[0].id == "away")
-        #expect(lines[0].runs == 0)  // KNOWN-BUG: should be 11
-        #expect(lines[0].hits == 0)  // KNOWN-BUG: should be 14
-        #expect(lines[0].errors == 0)  // KNOWN-BUG: should be 1
+        #expect(lines[0].runs == 11)
+        #expect(lines[0].hits == 14)  // batting, not fielding's "hits" 0
+        #expect(lines[0].errors == 1)
 
         // boxscore.teams[1]: home Royals; batting.runs 5, batting.hits 10, fielding.errors 2
         #expect(lines[1].name == "Royals")
         #expect(lines[1].homeAway == "home")
-        #expect(lines[1].runs == 0)  // KNOWN-BUG: should be 5
-        #expect(lines[1].hits == 0)  // KNOWN-BUG: should be 10
-        #expect(lines[1].errors == 0)  // KNOWN-BUG: should be 2
+        #expect(lines[1].runs == 5)
+        #expect(lines[1].hits == 10)
+        #expect(lines[1].errors == 2)
 
         // The stat nodes themselves are found by group; their values are there.
         let royals = try Fixture.json("royals_summary_final_401817094")["boxscore", "teams", 1, "statistics"]
@@ -798,17 +794,20 @@ struct GoldenSummaryTests {
         #expect(boxscoreStatistic(royals, named: "errors", in: "fielding")["value"].intValue == 2)
     }
 
-    @Test("MLB pre-game summary still lists both teams", .tags(.knownBug))
+    @Test("MLB pre-game summary reads season totals")
     func baseballPregameBoxScore() throws {
         // royals_summary_pregame_401817109.json: boxscore.teams carry season
-        // totals (batting.runs 676 / 687); same KNOWN-BUG reads them as 0.
+        // totals. Guardians batting.runs 676, batting.hits 1282, fielding.errors 86;
+        // Royals 687, 1336, 76.
         let lines = parseBaseballGameTeamStats(from: try Fixture.json("royals_summary_pregame_401817109"))
         #expect(lines.map(\.name) == ["Guardians", "Royals"])
         #expect(lines.map(\.homeAway) == ["away", "home"])
-        #expect(lines.allSatisfy { $0.runs == 0 && $0.hits == 0 && $0.errors == 0 })  // KNOWN-BUG
+        #expect(lines.map(\.runs) == [676, 687])
+        #expect(lines.map(\.hits) == [1282, 1336])
+        #expect(lines.map(\.errors) == [86, 76])
     }
 
-    @Test("MLS final box score: goals from the header, the rest reads 0", .tags(.knownBug))
+    @Test("MLS final box score: goals from the header, the rest from the box score")
     func soccerBoxScore() throws {
         // sporting_summary_final_761450.json
         let lines = parseSoccerGameTeamStats(from: try Fixture.json("sporting_summary_final_761450"))
@@ -819,18 +818,18 @@ struct GoldenSummaryTests {
         #expect(lines[0].name == "San Jose")
         #expect(lines[0].homeAway == "home")
         #expect(lines[0].goals == 3)
-        #expect(lines[0].shots == 0)  // KNOWN-BUG: should be 17
-        #expect(lines[0].possessionPct == 0)  // KNOWN-BUG: should be 44.2
-        #expect(lines[0].corners == 0)  // KNOWN-BUG: should be 15
+        #expect(lines[0].shots == 17)
+        #expect(lines[0].possessionPct == 44.2)
+        #expect(lines[0].corners == 15)
 
         // boxscore.teams[1]: away Kansas City; header (away) score "0";
         // totalShots "7", possessionPct "55.8", wonCorners "3".
         #expect(lines[1].name == "Kansas City")
         #expect(lines[1].homeAway == "away")
         #expect(lines[1].goals == 0)
-        #expect(lines[1].shots == 0)  // KNOWN-BUG: should be 7
-        #expect(lines[1].possessionPct == 0)  // KNOWN-BUG: should be 55.8
-        #expect(lines[1].corners == 0)  // KNOWN-BUG: should be 3
+        #expect(lines[1].shots == 7)
+        #expect(lines[1].possessionPct == 55.8)
+        #expect(lines[1].corners == 3)
     }
 }
 

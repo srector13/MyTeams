@@ -396,9 +396,9 @@ func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
         return BaseballGameTeamStats(
             name: team["team", "shortDisplayName"].stringValue,
             homeAway: team["homeAway"].stringValue,
-            runs: boxscoreStatistic(statistics, named: "runs", in: "batting").intValue,
-            hits: boxscoreStatistic(statistics, named: "hits", in: "batting").intValue,
-            errors: boxscoreStatistic(statistics, named: "errors", in: "fielding").intValue
+            runs: boxscoreStatistic(statistics, named: "runs", in: "batting")["displayValue"].intValue,
+            hits: boxscoreStatistic(statistics, named: "hits", in: "batting")["displayValue"].intValue,
+            errors: boxscoreStatistic(statistics, named: "errors", in: "fielding")["displayValue"].intValue
         )
     }
 }
@@ -435,9 +435,9 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
             name: team["team", "shortDisplayName"].stringValue,
             homeAway: side,
             goals: goals(side: side),
-            shots: boxscoreStatistic(statistics, named: "totalShots").intValue,
-            possessionPct: boxscoreStatistic(statistics, named: "possessionPct").floatValue,
-            corners: boxscoreStatistic(statistics, named: "wonCorners").intValue
+            shots: boxscoreStatistic(statistics, named: "totalShots")["displayValue"].intValue,
+            possessionPct: boxscoreStatistic(statistics, named: "possessionPct")["displayValue"].floatValue,
+            corners: boxscoreStatistic(statistics, named: "wonCorners")["displayValue"].intValue
         )
     }
 }
