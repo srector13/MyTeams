@@ -17,10 +17,20 @@ protocol RosterPlayer: Identifiable, Hashable, Sendable {
     var numberInt: Int { get }
     var position: String { get }
     var photo: String { get }
+    /// The unit a grouped roster feed files the player under (the NFL's
+    /// `"offense"`, `"defense"`, `"specialTeam"`), or empty when the feed
+    /// has none. `RosterFilter.unit` matches on it.
+    var unit: String { get }
+}
+
+extension RosterPlayer {
+    var unit: String { "" }
 }
 
 extension BasketballPlayer: RosterPlayer {}
-extension FootBallPlayer: RosterPlayer {}
+extension FootBallPlayer: RosterPlayer {
+    var unit: String { team }
+}
 extension BaseballPlayer: RosterPlayer {}
 extension SoccerPlayer: RosterPlayer {}
 
@@ -46,8 +56,8 @@ enum SectionLoadState: Sendable, Equatable {
 
 /// Everything one team tab displays, and the loading that fills it.
 ///
-/// The four tabs differ only in which roster they fetch and which feeds they read,
-/// so they share this model rather than each repeating the same state,
+/// Team pages differ only in which roster they fetch and which feeds they
+/// read, so they share this model rather than each repeating the same state,
 /// filtering, sorting and refresh logic.
 @MainActor
 @Observable

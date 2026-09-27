@@ -139,4 +139,49 @@ struct TeamCatalogTests {
         #expect(LeagueID(sport: "basketball", league: "nba").descriptor.kind == .basketball)
         #expect(nhl.descriptor.periodName("1") == "")
     }
+
+    // The literals below are what the per-team home views and schedule cards
+    // hard-coded before TeamHomeView: NewsFeed's four constants, the Chiefs
+    // card's "Tie" and score-first live state, and each page's filter menu.
+    @Test("Team and league data carry what the per-team views hard-coded")
+    func formerViewConfiguration() {
+        #expect(TeamRef.jayhawks.newsQuery == "q=+jayhawks+basketball&qInTitle=kansas&domains=espn.com,bleacherreport.com,foxsport.com")
+        #expect(TeamRef.chiefs.newsQuery == "qInTitle=+chiefs&domains=espn.com,bleacherreport.com,foxsport.com,nfl.com")
+        #expect(TeamRef.royals.newsQuery == "q=+royals+kansas+city&domains=espn.com,bleacherreport.com,foxsport.com")
+        #expect(TeamRef.sporting.newsQuery == "q=+sporting+kc+mls")
+
+        let nfl = TeamRef.chiefs.league.descriptor
+        #expect(nfl.drawLabel == "Tie")
+        #expect(nfl.liveCardStyle == .scoreFirst)
+        for team in [TeamRef.jayhawks, .royals, .sporting] {
+            #expect(team.league.descriptor.drawLabel == "Draw")
+            #expect(team.league.descriptor.liveCardStyle == .periodFirst)
+        }
+
+        #expect(TeamRef.sporting.league.descriptor.venueBackdropAsset == "soccerField")
+        #expect(TeamRef.chiefs.league.descriptor.venueBackdropAsset == nil)
+
+        // ChiefsHome: a submenu per unit, each opening with the whole unit.
+        guard case .menu(let title, let offense) = nfl.rosterFilters[1] else {
+            Issue.record("NFL filters should open with unit submenus")
+            return
+        }
+        #expect(title == "Offense")
+        #expect(offense.first == RosterFilter(label: "All", unit: "offense"))
+        #expect(offense.contains(RosterFilter(label: "Tackle", unit: "offense", position: "Offensive Tackle")))
+        #expect(nfl.rosterFilters.count == 3)
+
+        // JayhawksHome, RoyalsHome, SportingHome: flat position lists.
+        #expect(TeamRef.jayhawks.league.descriptor.rosterFilters == [
+            .filter(RosterFilter(label: "Forwards", position: "Forward")),
+            .filter(RosterFilter(label: "Guards", position: "Guard")),
+        ])
+        #expect(TeamRef.royals.league.descriptor.rosterFilters.count == 8)
+        #expect(TeamRef.sporting.league.descriptor.rosterFilters == [
+            .filter(RosterFilter(label: "Goalkeeper", position: "Goalkeeper")),
+            .filter(RosterFilter(label: "Defense", position: "Defender")),
+            .filter(RosterFilter(label: "Midfield", position: "Midfielder")),
+            .filter(RosterFilter(label: "Attacker", position: "Forward")),
+        ])
+    }
 }

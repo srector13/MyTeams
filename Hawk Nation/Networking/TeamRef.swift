@@ -130,6 +130,10 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     /// app and the widget each carry a copy of these imagesets.
     var logoAsset: String?
 
+    /// The NewsAPI query terms behind the team's news feed, hand-tuned for
+    /// the seeded teams. See `NewsFeed.url(for:)`.
+    var newsQuery: String?
+
     /// The stable key for persistence and widgets: `"<leaguePath>:<espnID>"`,
     /// e.g. `"football/nfl:12"`.
     var id: String { Self.id(league: league, espnID: espnID) }
