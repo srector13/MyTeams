@@ -52,6 +52,7 @@
 		3BBFED87D728D7319D475FEB /* JSONTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C215F1D687B2267DDC42D736 /* JSONTests.swift */; };
 		E7E921A83B474F55A0120398 /* BoxScoreParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */; };
 		4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */; };
+		7E3C9A51D2B84F06A1C5E8D4 /* HTTPClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */; };
 		CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */; };
 		CDA8493C950E9AE560961E76 /* myTeamsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */; };
 		5457AB9FB521F7F7EF0268A3 /* myTeamWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -141,6 +142,7 @@
 		C215F1D687B2267DDC42D736 /* JSONTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JSONTests.swift"; sourceTree = "<group>"; };
 		B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BoxScoreParsingTests.swift"; sourceTree = "<group>"; };
 		6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AthleteStatsParsingTests.swift"; sourceTree = "<group>"; };
+		A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HTTPClientTests.swift"; sourceTree = "<group>"; };
 		CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduleParsingTests.swift"; sourceTree = "<group>"; };
 		E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "myTeamsUITests.swift"; sourceTree = "<group>"; };
 		B6CDB6E5D160E013280D3C68 /* myTeams.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = myTeams.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -385,6 +387,7 @@
 				C215F1D687B2267DDC42D736 /* JSONTests.swift */,
 				B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */,
 				6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */,
+				A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */,
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
 			);
 			path = "myTeamsTests";
@@ -615,6 +618,7 @@
 				3BBFED87D728D7319D475FEB /* JSONTests.swift in Sources */,
 				E7E921A83B474F55A0120398 /* BoxScoreParsingTests.swift in Sources */,
 				4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */,
+				7E3C9A51D2B84F06A1C5E8D4 /* HTTPClientTests.swift in Sources */,
 				CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

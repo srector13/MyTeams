@@ -32,8 +32,12 @@ private let publishedAtFormat = Date.ISO8601FormatStyle()
 ///
 /// An article whose title has already been seen is dropped: the same story is
 /// frequently syndicated across the outlets these feeds draw from.
-func downloadNewsData(queryURL: String) async -> [News] {
-    let json = await HTTPClient.json(from: queryURL)
+func downloadNewsData(queryURL: String) async -> Result<[News], NetworkError> {
+    await HTTPClient.shared.fetch(queryURL).map(empty: [], parseNews(from:))
+}
+
+/// Builds the article list from a NewsAPI document. See `downloadNewsData`.
+func parseNews(from json: JSON) -> [News] {
     var articles: [News] = []
 
     for (_, subJson): (String, JSON) in json["articles"] {

@@ -68,11 +68,12 @@ enum WidgetScheduleLoader {
     /// what the per-team loaders here used to do with a thousand lines of
     /// hand-written models apiece.
     static func nextGame(for team: Team) async -> WidgetGame? {
-        let schedule = await downloadScheduleData(
+        let result = await downloadScheduleData(
             queryURL: team.scheduleURL,
             teamName: team.scheduleTeamName,
             teamNameField: team.scheduleNameField
         )
+        guard case .success(let schedule) = result else { return nil }
 
         // The widget wants the earliest fixture that has not kicked off yet.
         // The app locates the next game by walking completion flags

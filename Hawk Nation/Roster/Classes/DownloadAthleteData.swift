@@ -219,9 +219,11 @@ private func humaniseStatName(_ name: String) -> String {
 /// `footballStatSpecs`; the feed only carries the lines a given position
 /// actually plays, and groups whose numbers are all zero are dropped.
 func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats {
-    let json = await HTTPClient.json(
-        from: "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/\(playerID)/splits"
-    )
+    // The player sheets have no error state of their own: a failed fetch
+    // reads as an empty document, which each parser renders as no stats.
+    let json = await HTTPClient.shared.fetch(
+        "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/\(playerID)/splits"
+    ).document ?? .null
 
     let names = json["names"].arrayValue.map { $0.stringValue }
     let values = json["splitCategories"][0]["splits"][0]["stats"].arrayValue.map { $0.stringValue }
@@ -329,9 +331,9 @@ struct BaseballPlayerStats: Hashable, Sendable {
 /// Values are addressed by position because the feed lists them in a fixed
 /// order with no keys.
 func downloadBasketballPlayerStats(playerID: String) async -> BasketballPlayerStats {
-    let json = await HTTPClient.json(
-        from: "https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes/\(playerID)/splits"
-    )
+    let json = await HTTPClient.shared.fetch(
+        "https://site.web.api.espn.com/apis/common/v3/sports/basketball/mens-college-basketball/athletes/\(playerID)/splits"
+    ).document ?? .null
     return parseBasketballPlayerStats(from: json)
 }
 
@@ -380,9 +382,9 @@ func downloadBaseballPlayerStats(
     playerID: String,
     playerPosition: String
 ) async -> BaseballPlayerStats {
-    let json = await HTTPClient.json(
-        from: "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/\(playerID)/splits"
-    )
+    let json = await HTTPClient.shared.fetch(
+        "https://site.web.api.espn.com/apis/common/v3/sports/baseball/mlb/athletes/\(playerID)/splits"
+    ).document ?? .null
     return parseBaseballPlayerStats(from: json, playerPosition: playerPosition)
 }
 
@@ -439,9 +441,9 @@ func downloadSoccerPlayerStats(
     playerID: String,
     playerPosition: String
 ) async -> SoccerPlayerStats {
-    let json = await HTTPClient.json(
-        from: "https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/\(playerID)"
-    )
+    let json = await HTTPClient.shared.fetch(
+        "https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/\(playerID)"
+    ).document ?? .null
 
     guard playerPosition.contains("Goalkeeper") else {
         return SoccerPlayerStats(

@@ -38,6 +38,29 @@ extension SectionHeader where Accessory == EmptyView {
     }
 }
 
+/// Stands in for a section's cards when it has none to show: either the feed
+/// answered with nothing, or it could not be reached and `retry` is offered.
+struct SectionStatusView: View {
+    let message: String
+    var retry: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(message)
+                .font(.system(size: 15))
+                .fontWeight(.bold)
+                .foregroundStyle(Color(uiColor: .systemGray))
+                .multilineTextAlignment(.center)
+
+            if let retry {
+                Button("Retry", action: retry)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding()
+    }
+}
+
 /// The roster carousel, with the filter and sort menus that drive it.
 ///
 /// `card` draws one player; `detail` is the sheet a tap opens. `filterMenu`
@@ -47,6 +70,8 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     @ViewBuilder let card: (Player) -> Card
     @ViewBuilder let detail: (Player) -> Detail
     @ViewBuilder let filterMenu: FilterMenu
+
+    @Environment(\.containerSize) private var containerSize
 
     @State private var selectedPlayer: Player?
 
@@ -80,12 +105,25 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                 // unrealized card can never start work of its own.
                 LazyHStack {
                     if model.players.isEmpty {
-                        // Five placeholder cards, so the carousel occupies its
-                        // final height while the roster loads.
-                        ForEach(0..<5, id: \.self) { _ in
-                            LoadingPlayerView()
-                                .padding(.leading, 10)
-                                .padding(.bottom, 15)
+                        switch model.rosterState {
+                        case .loading:
+                            // Five placeholder cards, so the carousel occupies
+                            // its final height while the roster loads.
+                            ForEach(0..<5, id: \.self) { _ in
+                                LoadingPlayerView()
+                                    .padding(.leading, 10)
+                                    .padding(.bottom, 15)
+                            }
+                        case .loaded:
+                            // Either the feed listed nobody, or the filter
+                            // matches nobody.
+                            SectionStatusView(message: "No players to show")
+                                .frame(width: containerSize.width - 20)
+                        case .failed:
+                            SectionStatusView(message: "Couldn't load the roster") {
+                                Task { await model.reloadRoster() }
+                            }
+                            .frame(width: containerSize.width - 20)
                         }
                     } else {
                         ForEach(model.players) { player in
@@ -123,6 +161,8 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     @State private var selectedGame: Game?
 
+    @Environment(\.containerSize) private var containerSize
+
     private var record: String {
         let (wins, losses, draws) = model.displayRecord(
             countingAbandonedAsLosses: countsAbandonedGamesAsLosses
@@ -147,9 +187,20 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                     // of requests a minute.
                     LazyHStack {
                         if model.games.isEmpty {
-                            ForEach(0..<5, id: \.self) { _ in
-                                LoadingGameView()
-                                    .padding(.leading, 10)
+                            switch model.scheduleState {
+                            case .loading:
+                                ForEach(0..<5, id: \.self) { _ in
+                                    LoadingGameView()
+                                        .padding(.leading, 10)
+                                }
+                            case .loaded:
+                                SectionStatusView(message: "Nothing scheduled")
+                                    .frame(width: containerSize.width - 30)
+                            case .failed:
+                                SectionStatusView(message: "Couldn't load the schedule") {
+                                    Task { await model.reloadSchedule() }
+                                }
+                                .frame(width: containerSize.width - 30)
                             }
                         } else {
                             ForEach(model.games) { game in
@@ -196,8 +247,17 @@ struct NewsSection<Player: RosterPlayer>: View {
 
             VStack(alignment: .center, spacing: 10) {
                 if model.articles.isEmpty {
-                    ForEach(0..<5, id: \.self) { _ in
-                        LoadingNewsView()
+                    switch model.newsState {
+                    case .loading:
+                        ForEach(0..<5, id: \.self) { _ in
+                            LoadingNewsView()
+                        }
+                    case .loaded:
+                        SectionStatusView(message: "No news right now")
+                    case .failed:
+                        SectionStatusView(message: "Couldn't load the news") {
+                            Task { await model.reloadNews() }
+                        }
                     }
                 } else {
                     ForEach(model.articles) { article in

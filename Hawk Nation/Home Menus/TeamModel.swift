@@ -32,6 +32,18 @@ enum PlayerSort: String, Sendable {
     case position
 }
 
+/// Where a section's feed stands, for a section with nothing to show yet.
+///
+/// A section with content always shows it; this decides what an empty one
+/// says instead — skeletons while loading, an empty-state message once the
+/// feed has answered with nothing, or an error with a retry when it could
+/// not be reached.
+enum SectionLoadState: Sendable, Equatable {
+    case loading
+    case loaded
+    case failed
+}
+
 /// Everything one team tab displays, and the loading that fills it.
 ///
 /// The four tabs differ only in which roster they fetch and which feeds they read,
@@ -48,6 +60,10 @@ final class TeamModel<Player: RosterPlayer> {
 
     private(set) var games: [Game] = []
     private(set) var articles: [News] = []
+
+    private(set) var rosterState: SectionLoadState = .loading
+    private(set) var scheduleState: SectionLoadState = .loading
+    private(set) var newsState: SectionLoadState = .loading
 
     /// Live scores for the games the model is currently polling summaries for,
     /// keyed by `Game.gameID`. Schedule cards render from this instead of each
@@ -66,7 +82,7 @@ final class TeamModel<Player: RosterPlayer> {
 
     private let team: Team
     private let newsURL: String
-    private let loadRoster: @Sendable () async -> [Player]
+    private let loadRoster: @Sendable () async -> Result<[Player], NetworkError>
 
     /// Whether a past kick-off also counts as played when locating the next
     /// game. The soccer feed's completion flags are unreliable, so that tab
@@ -78,7 +94,7 @@ final class TeamModel<Player: RosterPlayer> {
         team: Team,
         newsURL: String,
         usesDateForNextGame: Bool = false,
-        loadRoster: @escaping @Sendable () async -> [Player]
+        loadRoster: @escaping @Sendable () async -> Result<[Player], NetworkError>
     ) {
         self.team = team
         self.newsURL = newsURL
@@ -112,10 +128,9 @@ final class TeamModel<Player: RosterPlayer> {
 
         let (loadedRoster, loadedSchedule, loadedNews) = await (roster, schedule, news)
 
-        allPlayers = loadedRoster
-        applyFilterAndSort()
+        apply(roster: loadedRoster)
         apply(schedule: loadedSchedule)
-        articles = loadedNews
+        apply(news: loadedNews)
 
         await refreshLiveScores()
         await refreshSchedulePeriodically()
@@ -173,7 +188,31 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
-    private func fetchSchedule() async -> [Game] {
+    // MARK: - Retrying
+
+    /// Refetches the roster after a failed load.
+    func reloadRoster() async {
+        rosterState = .loading
+        apply(roster: await loadRoster())
+    }
+
+    /// Refetches the schedule after a failed load, without waiting for the
+    /// next scheduled refresh.
+    func reloadSchedule() async {
+        scheduleState = .loading
+        apply(schedule: await fetchSchedule())
+        await refreshLiveScores()
+    }
+
+    /// Refetches the news after a failed load.
+    func reloadNews() async {
+        newsState = .loading
+        apply(news: await downloadNewsData(queryURL: newsURL))
+    }
+
+    // MARK: - Applying results
+
+    private func fetchSchedule() async -> Result<[Game], NetworkError> {
         await downloadScheduleData(
             queryURL: team.scheduleURL,
             teamName: team.scheduleTeamName,
@@ -181,16 +220,56 @@ final class TeamModel<Player: RosterPlayer> {
         )
     }
 
-    private func apply(schedule: [Game]) {
-        // A failed refresh returns nothing; keep what is already on screen
-        // rather than blanking the carousel.
-        guard !schedule.isEmpty else { return }
+    /// Publishes a schedule fetch. A failure keeps what is already on screen
+    /// rather than blanking the carousel; it only shows as an error when
+    /// there is nothing else to show.
+    private func apply(schedule result: Result<[Game], NetworkError>) {
+        switch result {
+        case .success(let schedule):
+            scheduleState = .loaded
+            // A feed that suddenly lists nothing mid-season is far likelier a
+            // hiccup than a cleared schedule, so games on screen stay put.
+            guard !schedule.isEmpty else { return }
 
-        games = schedule
-        nextGame = getNextGame(
-            schedule: schedule,
-            pastDatesCountAsPlayed: usesDateForNextGame
-        )
+            games = schedule
+            nextGame = getNextGame(
+                schedule: schedule,
+                pastDatesCountAsPlayed: usesDateForNextGame
+            )
+        case .failure(let error):
+            fail(&scheduleState, with: error, hasContent: !games.isEmpty)
+        }
+    }
+
+    private func apply(roster result: Result<[Player], NetworkError>) {
+        switch result {
+        case .success(let roster):
+            rosterState = .loaded
+            allPlayers = roster
+            applyFilterAndSort()
+        case .failure(let error):
+            fail(&rosterState, with: error, hasContent: !allPlayers.isEmpty)
+        }
+    }
+
+    private func apply(news result: Result<[News], NetworkError>) {
+        switch result {
+        case .success(let loaded):
+            newsState = .loaded
+            articles = loaded
+        case .failure(let error):
+            fail(&newsState, with: error, hasContent: !articles.isEmpty)
+        }
+    }
+
+    /// Marks a section failed, unless it already has content to keep showing
+    /// or the fetch was merely cancelled (the view went away mid-load, and
+    /// the next appearance loads again).
+    private func fail(_ state: inout SectionLoadState, with error: NetworkError, hasContent: Bool) {
+        if case .cancelled = error { return }
+        if !hasContent {
+            state = .failed
+        }
     }
 
     // MARK: - Filtering and sorting

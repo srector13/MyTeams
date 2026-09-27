@@ -29,7 +29,7 @@ NEWS_API_KEY = your-newsapi-key
 ```
 
 Without a key the rosters and schedules still load; only the news sections
-stay empty.
+fail, showing a load error with a retry button.
 
 ## Layout
 

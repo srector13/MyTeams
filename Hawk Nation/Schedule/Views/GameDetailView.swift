@@ -403,7 +403,16 @@ struct BasketballGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .pollingTask {
-            let detail = await downloadBasketballGameDetail(gameID: game.gameID, team: team)
+            guard let detail = await downloadBasketballGameDetail(gameID: game.gameID, team: team) else {
+                // Keep the last good box score through a failed refresh.
+                // With nothing loaded yet, show the "no statistics" message
+                // rather than a blank sheet while retrying.
+                if loading {
+                    gameTeamStats = []
+                    loading = false
+                }
+                return GameDetail<BasketballGameTeamStats>.retryInterval
+            }
 
             gameTeamStats = detail.stats
             gameInfo = detail.info
@@ -786,7 +795,16 @@ struct FootballGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .pollingTask {
-            let detail = await downloadFootballGameDetail(gameID: game.gameID, team: team)
+            guard let detail = await downloadFootballGameDetail(gameID: game.gameID, team: team) else {
+                // Keep the last good box score through a failed refresh.
+                // With nothing loaded yet, show the "no statistics" message
+                // rather than a blank sheet while retrying.
+                if loading {
+                    gameTeamStats = []
+                    loading = false
+                }
+                return GameDetail<FootballGameTeamStats>.retryInterval
+            }
 
             gameTeamStats = detail.stats
             gameInfo = detail.info
@@ -1061,7 +1079,10 @@ struct BaseballGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .pollingTask {
-            let detail = await downloadBaseballGameDetail(gameID: game.gameID, team: team)
+            guard let detail = await downloadBaseballGameDetail(gameID: game.gameID, team: team) else {
+                // Keep the last good box score through a failed refresh.
+                return GameDetail<BaseballGameTeamStats>.retryInterval
+            }
 
             gameTeamStats = detail.stats
             gameInfo = detail.info
@@ -1338,7 +1359,10 @@ struct SoccerGameDetailView: View {
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .pollingTask {
-            let detail = await downloadSoccerGameDetail(gameID: game.gameID, team: team)
+            guard let detail = await downloadSoccerGameDetail(gameID: game.gameID, team: team) else {
+                // Keep the last good box score through a failed refresh.
+                return GameDetail<SoccerGameTeamStats>.retryInterval
+            }
 
             gameTeamStats = detail.stats
             gameInfo = detail.info

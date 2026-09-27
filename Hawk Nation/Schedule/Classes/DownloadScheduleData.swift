@@ -244,13 +244,17 @@ private func parseGame(
 /// Games keep the order the feed lists them in, and each carries its position
 /// as `pointer` — the schedule carousels scroll to the next unplayed game by
 /// that index.
+///
+/// A feed that answers with no events is a season with nothing scheduled
+/// (`.success([])`), which is distinct from a feed that could not be reached.
 func downloadScheduleData(
     queryURL: String,
     teamName: String,
     teamNameField: TeamNameField = .nickname
-) async -> [Game] {
-    let json = await HTTPClient.json(from: queryURL)
-    return parseSchedule(from: json, teamName: teamName, teamNameField: teamNameField)
+) async -> Result<[Game], NetworkError> {
+    await HTTPClient.shared.fetch(queryURL).map(empty: []) { json in
+        parseSchedule(from: json, teamName: teamName, teamNameField: teamNameField)
+    }
 }
 
 /// Builds the season's games from a schedule document. See

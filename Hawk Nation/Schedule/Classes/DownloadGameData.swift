@@ -135,7 +135,9 @@ struct LiveGameScore: Sendable, Hashable {
 /// so a caller can keep its last known figures instead of painting a
 /// rate-limited or partial response as a 0–0 game.
 func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> LiveGameScore? {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+        return nil
+    }
     return parseLiveGameScore(from: json, team: team, isHome: isHome)
 }
 
@@ -204,6 +206,10 @@ func parseGamePhase(from json: JSON) -> GamePhase {
 /// box score, once for the venue — and never stopped, even for a game long
 /// finished. One fetch now fills both, and the phase decides when to ask
 /// again (see `refreshInterval`).
+///
+/// The `download…GameDetail` loaders return `nil` when the fetch produced no
+/// document, so a sheet keeps its last good box score through a transient
+/// failure instead of flickering to "No game statistics".
 struct GameDetail<Stats: Sendable>: Sendable {
     var stats: [Stats]
     var info: GameInfo
@@ -220,6 +226,10 @@ struct GameDetail<Stats: Sendable>: Sendable {
     /// A live game refreshes every ten seconds. One not yet started only needs
     /// to notice kickoff, so it checks once a minute; a finished game will not
     /// change again. A document with no status is retried at the live rate.
+    /// How long a detail sheet waits after a fetch that produced no document.
+    /// Longer than the live rate, so a rate-limited sheet backs off.
+    static var retryInterval: Duration { .seconds(30) }
+
     var refreshInterval: Duration? {
         switch phase {
         case .live, .unknown: return .seconds(10)
@@ -258,8 +268,10 @@ func parseGameInfo(from json: JSON, team: Team) -> GameInfo {
 }
 
 /// Loads a basketball game's detail sheet: box score, venue and phase.
-func downloadBasketballGameDetail(gameID: String, team: Team) async -> GameDetail<BasketballGameTeamStats> {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+func downloadBasketballGameDetail(gameID: String, team: Team) async -> GameDetail<BasketballGameTeamStats>? {
+    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+        return nil
+    }
     return GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json))
 }
 
@@ -318,8 +330,10 @@ func parseBasketballGameTeamStats(from json: JSON) -> [BasketballGameTeamStats] 
 }
 
 /// Loads a football game's detail sheet: box score, venue and phase.
-func downloadFootballGameDetail(gameID: String, team: Team) async -> GameDetail<FootballGameTeamStats> {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+func downloadFootballGameDetail(gameID: String, team: Team) async -> GameDetail<FootballGameTeamStats>? {
+    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+        return nil
+    }
     return GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json))
 }
 
@@ -390,8 +404,10 @@ func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
 }
 
 /// Loads a baseball game's detail sheet: box score, venue and phase.
-func downloadBaseballGameDetail(gameID: String, team: Team) async -> GameDetail<BaseballGameTeamStats> {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+func downloadBaseballGameDetail(gameID: String, team: Team) async -> GameDetail<BaseballGameTeamStats>? {
+    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+        return nil
+    }
     return GameDetail(json: json, team: team, stats: parseBaseballGameTeamStats(from: json))
 }
 
@@ -427,7 +443,9 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
 }
 
 /// Loads a soccer game's detail sheet: box score, venue and phase.
-func downloadSoccerGameDetail(gameID: String, team: Team) async -> GameDetail<SoccerGameTeamStats> {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+func downloadSoccerGameDetail(gameID: String, team: Team) async -> GameDetail<SoccerGameTeamStats>? {
+    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+        return nil
+    }
     return GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
 }
