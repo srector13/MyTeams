@@ -224,7 +224,12 @@ func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats 
     let json = await HTTPClient.shared.fetch(
         "https://site.web.api.espn.com/apis/common/v3/sports/football/nfl/athletes/\(playerID)/splits"
     ).document ?? .null
+    return parseFootballPlayerStats(from: json)
+}
 
+/// Builds a football player's stat groups from a splits document. See
+/// `downloadFootballPlayerStats`.
+func parseFootballPlayerStats(from json: JSON) -> FootballPlayerStats {
     let names = json["names"].arrayValue.map { $0.stringValue }
     let values = json["splitCategories"][0]["splits"][0]["stats"].arrayValue.map { $0.stringValue }
     guard !names.isEmpty, names.count == values.count else {
@@ -444,7 +449,12 @@ func downloadSoccerPlayerStats(
     let json = await HTTPClient.shared.fetch(
         "https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/\(playerID)"
     ).document ?? .null
+    return parseSoccerPlayerStats(from: json, playerPosition: playerPosition)
+}
 
+/// Extracts a soccer player's headline statistics from an athlete document.
+/// See `downloadSoccerPlayerStats`.
+func parseSoccerPlayerStats(from json: JSON, playerPosition: String) -> SoccerPlayerStats {
     guard playerPosition.contains("Goalkeeper") else {
         return SoccerPlayerStats(
             starts: "N/A", saves: "N/A", cleanSheets: "N/A", goalsConceded: "N/A"

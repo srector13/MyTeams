@@ -129,7 +129,10 @@ func parseGameDate(_ raw: String) -> Date? {
 ///
 /// `teamNameField` selects the name the feed uses to identify the followed
 /// team; the competitor that does not match it is the opponent.
-private func parseGame(
+///
+/// Internal rather than private so the golden fixture tests can drive it
+/// with real ESPN events; `parseSchedule` remains the production entry point.
+func parseGame(
     from event: JSON,
     teamName: String,
     teamNameField: TeamNameField,
