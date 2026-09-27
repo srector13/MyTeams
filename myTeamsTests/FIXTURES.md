@@ -1,9 +1,10 @@
 # ESPN fixtures
 
 `myTeamsTests/Fixtures/` holds real ESPN responses, captured on **2026-09-27**
-between 17:05Z and 17:39Z. `GoldenParserTests.swift` runs every parser over
-them and asserts exactly what the code produces today. See the roadmap
-(`docs/ANALYSIS-any-team-roadmap.md` §6 Phase 1, "Tests first").
+between 17:05Z and 17:39Z (the news feed at 19:33Z). `GoldenParserTests.swift`
+runs every parser over them and asserts exactly what the code produces today.
+See the roadmap (`docs/ANALYSIS-any-team-roadmap.md` §6 Phase 1, "Tests
+first").
 
 ## How the tests find them
 
@@ -35,6 +36,7 @@ splits URLs in `Roster/Classes`) and checked against each document's
 | `jayhawks_roster_2026.json` | same, plus `?season=2026` (2025-26 postseason roster) | 17:05:40Z |
 | `{team}_splits_{athleteID}.json` | `https://site.web.api.espn.com/apis/common/v3/sports/{league}/athletes/{athleteID}/splits` | 2026-09-27 |
 | `sporting_athlete_249729.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/249729` | 2026-09-27 |
+| `chiefs_news.json` | `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=12&limit=25` (25 articles; newest `published` 2026-09-27T18:50:54Z) | 19:33Z (file time; the feed has no timestamp field) |
 | `_athletes.json` | Not a response. It lists the athlete ids chosen for splits: jayhawks 4872739 (Elmarko Jackson), chiefs 4912218 (Cyrus Allen), royals 5136077 (Spencer Bivens, RP), sporting 249729 (Stefan Cleveland, GK) | — |
 
 ### Game phase of each summary
@@ -95,6 +97,7 @@ Every other fixture is byte-for-byte what ESPN returned.
    curl -s "$base/football/nfl/summary?event=401872952" -o chiefs_summary_live_401872952.json
    curl -s "$base/football/nfl/teams/12/roster" -o chiefs_roster.json
    curl -s "$web/football/nfl/athletes/4912218/splits" -o chiefs_splits_4912218.json
+   curl -s "$base/football/nfl/news?team=12&limit=25" -o chiefs_news.json
    # …and the same per team/league from the tables above.
    ```
 

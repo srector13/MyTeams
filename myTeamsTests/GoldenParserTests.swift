@@ -1104,3 +1104,84 @@ struct GoldenAthleteTests {
         #expect(outfield == SoccerPlayerStats(starts: "N/A", saves: "N/A", cleanSheets: "N/A", goalsConceded: "N/A"))
     }
 }
+
+// MARK: - News
+
+/// An ESPN `published` timestamp, read with the ISO 8601 style the parser uses.
+private func espnDate(_ text: String) -> Date? {
+    try? Date(text, strategy: .iso8601)
+}
+
+@Suite("Golden: news parsing", .tags(.golden))
+struct GoldenNewsTests {
+    @Test("Chiefs news: every https article in feed order, credited to ESPN")
+    func chiefsNews() throws {
+        // chiefs_news.json articles[]: 25 items. articles[9] is a game
+        // Preview whose links.web.href is plain http, so it is skipped.
+        let articles = parseNews(from: try Fixture.json("chiefs_news"))
+        #expect(articles.count == 24)
+        #expect(Set(articles.map(\.id)).count == 24)
+        #expect(Set(articles.map(\.title)).count == 24)
+        for article in articles {
+            #expect(!article.title.isEmpty)
+            #expect(article.url.scheme == "https")
+            #expect(article.url.host() == "www.espn.com")
+            #expect(article.source == "ESPN")
+            #expect(article.content == nil)
+            #expect(article.urlToImage?.scheme == "https")
+        }
+        #expect(!articles.contains { $0.url.absoluteString.contains("/nfl/preview") })
+
+        // articles[0] (id 50034932, type Story)
+        let first = try #require(articles.first)
+        #expect(first.title == "Week 3 NFL highlights: Best plays, moments, touchdowns, more")
+        #expect(first.articleDescription == "Sunday of Week 3 will feature 14 games, including an international game in Rio de Janeiro between the Ravens and Cowboys.")
+        #expect(first.author == "NFL Nation")  // byline
+        #expect(first.url.absoluteString == "https://www.espn.com/nfl/story/_/id/50034932/best-plays-moments-touchdowns-more")
+        #expect(first.urlToImage?.absoluteString == "https://a.espncdn.com/photo/2026/0927/r1722527_608x342_16-9.jpg")  // images[0].url
+        #expect(first.publishedAt == espnDate("2026-09-27T18:50:54Z"))
+
+        // articles[4] (id 50028890, type Media): a video clip with a null byline.
+        let clip = articles[4]
+        #expect(clip.title == "Jeff Hafley credits Chiefs' striking offense to Kenneth Walker")
+        #expect(clip.url.absoluteString == "https://www.espn.com/video/clip/_/id/50028890/jeff-hafley-credits-chiefs-striking-offense-kenneth-walker")
+        #expect(clip.author == nil)
+        #expect(clip.publishedAt == espnDate("2026-09-25T20:01:29Z"))
+
+        // articles[24] (id 49996723, type HeadlineNews)
+        let last = try #require(articles.last)
+        #expect(last.title == "Chiefs laud Kenneth Walker III's impact through 2-0 start")
+        #expect(last.author == "Nate Taylor")
+        #expect(last.publishedAt == espnDate("2026-09-21T07:39:39Z"))
+    }
+
+    @Test("Articles without a headline, an https link or a date are skipped (derived)")
+    func unusableArticles() throws {
+        // chiefs_news.json articles[0], with one field altered per copy.
+        let feed = try Fixture.json("chiefs_news")
+        let story = feed["articles"][0]
+        let href: [JSON.Index] = ["links", "web", "href"]
+        let variants: [JSON] = [
+            story.setting(["headline"], to: .null),
+            story.setting(["headline"], to: .string("")),
+            story.setting(href, to: .null),
+            story.setting(href, to: .string("javascript:alert(1)")),
+            story.setting(href, to: .string("espn://story/50034932")),
+            story.setting(href, to: .string("http://www.espn.com/nfl/story/_/id/50034932")),
+            story.setting(["published"], to: .string("not a date")),
+        ]
+        for variant in variants {
+            #expect(parseNews(from: .object(["articles": .array([variant])])).isEmpty)
+        }
+
+        // A repeat of the same story is kept once.
+        let doubled = parseNews(from: .object(["articles": .array([story, story])]))
+        #expect(doubled.count == 1)
+
+        // Missing images and byline leave those fields nil.
+        let bare = story.setting(["images"], to: .array([])).setting(["byline"], to: .null)
+        let article = try #require(parseNews(from: .object(["articles": .array([bare])])).first)
+        #expect(article.urlToImage == nil)
+        #expect(article.author == nil)
+    }
+}
