@@ -25,7 +25,7 @@ struct Home: View {
                 // keeps its scroll position and its loaded data when the
                 // reader moves between teams.
                 ForEach(teams) { team in
-                    TeamPage(team: team) { TeamHome(team: team) }
+                    TeamPage(team: team) { TeamHomeView(team: team) }
                         .opacity(selection == team.id ? 1 : 0)
                 }
             }
@@ -36,22 +36,6 @@ struct Home: View {
                 TeamPicker(teams: teams, selection: $selection)
             }
             .environment(\.containerSize, proxy.size)
-        }
-    }
-}
-
-/// A team's page content, chosen by its league's sport. The per-sport pages
-/// are still separate views; Phase 1-c folds them into one.
-private struct TeamHome: View {
-    let team: TeamRef
-
-    var body: some View {
-        switch team.league.descriptor.kind {
-        case .basketball: JayhawksHome(team: team)
-        case .football: ChiefsHome(team: team)
-        case .baseball: RoyalsHome(team: team)
-        case .soccer: SportingHome(team: team)
-        case .other: EmptyView()
         }
     }
 }

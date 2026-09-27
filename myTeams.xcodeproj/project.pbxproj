@@ -11,11 +11,8 @@
 		27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7DFED7B341798C35C5671F /* ConvertColor.swift */; };
 		43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3336602F15AB9F42EE41A789 /* LoadingView.swift */; };
 		FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */; };
-		FDDE5D0FAE7EF0D2D1FA71D0 /* ChiefsHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = F961BD5229FE24486494FE1C /* ChiefsHome.swift */; };
 		F40E52311E166FC0C805078D /* HomeSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F3B13CE1F1A66438291C3 /* HomeSections.swift */; };
-		A716FE84235AF6D1F21EE621 /* JayhawksHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190B3CE0E20AAF26F3C26E74 /* JayhawksHome.swift */; };
-		745D752A621F6947D025DDC1 /* RoyalsHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5E3DE2E2D9FDA2A097DC41 /* RoyalsHome.swift */; };
-		620F01D4774C7AB990CFED32 /* SportingHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3276DF76292D3EC970932EDE /* SportingHome.swift */; };
+		3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */; };
 		0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF854E8FC1231BAD448D63BA /* TeamModel.swift */; };
 		2F614A3B78950C035DC9E0B7 /* TabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0281FE48582B84C0A01766 /* TabBar.swift */; };
 		443BDD6E8DE6AD6663C2B878 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF333D024A94AD1329FBDD78 /* HTTPClient.swift */; };
@@ -110,11 +107,8 @@
 		8F7DFED7B341798C35C5671F /* ConvertColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConvertColor.swift"; sourceTree = "<group>"; };
 		3336602F15AB9F42EE41A789 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoadingView.swift"; sourceTree = "<group>"; };
 		24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RepeatingTask.swift"; sourceTree = "<group>"; };
-		F961BD5229FE24486494FE1C /* ChiefsHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChiefsHome.swift"; sourceTree = "<group>"; };
 		295F3B13CE1F1A66438291C3 /* HomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeSections.swift"; sourceTree = "<group>"; };
-		190B3CE0E20AAF26F3C26E74 /* JayhawksHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JayhawksHome.swift"; sourceTree = "<group>"; };
-		EC5E3DE2E2D9FDA2A097DC41 /* RoyalsHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RoyalsHome.swift"; sourceTree = "<group>"; };
-		3276DF76292D3EC970932EDE /* SportingHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SportingHome.swift"; sourceTree = "<group>"; };
+		8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamHomeView.swift"; sourceTree = "<group>"; };
 		BF854E8FC1231BAD448D63BA /* TeamModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamModel.swift"; sourceTree = "<group>"; };
 		79C7A63F34A9A6D50AA82504 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
 		DB0281FE48582B84C0A01766 /* TabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabBar.swift"; sourceTree = "<group>"; };
@@ -237,11 +231,8 @@
 		B589460F49A851E6DFD8E653 /* Home Menus */ = {
 			isa = PBXGroup;
 			children = (
-				F961BD5229FE24486494FE1C /* ChiefsHome.swift */,
 				295F3B13CE1F1A66438291C3 /* HomeSections.swift */,
-				190B3CE0E20AAF26F3C26E74 /* JayhawksHome.swift */,
-				EC5E3DE2E2D9FDA2A097DC41 /* RoyalsHome.swift */,
-				3276DF76292D3EC970932EDE /* SportingHome.swift */,
+				8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */,
 				BF854E8FC1231BAD448D63BA /* TeamModel.swift */,
 			);
 			path = "Home Menus";
@@ -592,11 +583,8 @@
 				27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */,
 				43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */,
 				FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */,
-				FDDE5D0FAE7EF0D2D1FA71D0 /* ChiefsHome.swift in Sources */,
 				F40E52311E166FC0C805078D /* HomeSections.swift in Sources */,
-				A716FE84235AF6D1F21EE621 /* JayhawksHome.swift in Sources */,
-				745D752A621F6947D025DDC1 /* RoyalsHome.swift in Sources */,
-				620F01D4774C7AB990CFED32 /* SportingHome.swift in Sources */,
+				3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */,
 				0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */,
 				2F614A3B78950C035DC9E0B7 /* TabBar.swift in Sources */,
 				443BDD6E8DE6AD6663C2B878 /* HTTPClient.swift in Sources */,

@@ -9,820 +9,390 @@
 import SwiftUI
 import Foundation
 
-struct BasketballPlayerDetailView: View {
-    @Environment(\.containerSize) private var containerSize
+// MARK: - Sheet content
 
-    var player: BasketballPlayer
-    var team: TeamRef
-    @Environment(\.dismiss) private var dismiss
-    @State var pickerSelectedItem = 0
-    @State var playerStats = BasketballPlayerStats(gamesPlayed: 0, avgMinutes: 0, fieldGoalPct: 0, threePointFieldGoalPct: 0, freeThrowPct: 0, avgOffensiveRebounds: 0, avgDefensiveRebounds: 0, avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0, avgTurnovers: 0, avgPoints: 0)
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack {
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
-                        .frame(height: 40)
-                    
-                    RoundedRectangle(cornerRadius: 20)
-                        .foregroundStyle(Color(red: 0 / 255, green: 81 / 255, blue: 186 / 255))
-                    
-                    //TEAM LOGO
-                    team.logoImage
-                        .resizable()
-                        .renderingMode(.original)
-                        .aspectRatio(contentMode: .fill)
-                        .opacity(0.1)
-                        .saturation(0.1)
-                        .contrast(0.5)
-                        .frame(width: 300, height: 300)
-                    
-                    VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                            .frame(width: 100, height: 5)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                                .opacity(0.5)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        //PLAYER NAME
-                        HStack(alignment: .top) {
-                            Text(player.name)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            
-                            Text(player.number)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            .opacity(0.5)
-                        }
-                        
-                        //PLAYER PHOTO
-                        RemoteImage(url: URL(string: player.photo)) {
-                            Image("blank")
-                                .resizable()
-                        }
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 180, height: 180)
-                        
-                        //SELECTOR VIEW
-                        ZStack() {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(height: 30)
-                            
-                            
-                            HStack(spacing: 0) {
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 0
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 0) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("About")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                                .opacity(0.8)
-                                            Text("About")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 1
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 1) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .opacity(0.8)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                            }
-                            
-                        }
-                        .clipShape(.rect(cornerRadius: 20))
-                        .padding([.bottom, .leading, .trailing], 10)
-                    }
-                }
-                
-                
-                VStack(spacing: 0) {
-                    //PLAYER BIO
-                    if(pickerSelectedItem == 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 240)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .leading, spacing: 15) {
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    BioView(title: "Position", info: player.position)
-                                    Spacer()
-                                    BioView(title: "Class", info: player.grade)
-                                    Spacer()
-                                    BioView(title: "Status", info: player.status)
-                                    
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    BioView(title: "Height", info: player.height)
-                                    Spacer()
-                                    BioView(title: "Weight", info: player.weight)
-                                    Spacer()
-                                    BioView(title: "HomeTown", info: player.hometown)
-                                }
-                                Spacer()
-                            }.padding(.all, 20)
-                        }
-                        .ignoresSafeArea(.top)
-                    } else if(pickerSelectedItem == 1) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 600)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .leading, spacing: 15) {
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    StatView(title: "Games Played", info: "\(playerStats.gamesPlayed)")
-                                    Spacer()
-                                    StatView(title: "Average Minutes", info: String(format: "%.1f", playerStats.avgMinutes))
-                                    Spacer()
-                                    StatView(title: "Average Points", info: String(format: "%.1f", playerStats.avgPoints))
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.fieldGoalPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "Field Goal Percentage")
-                                        .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                    Spacer()
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.threePointFieldGoalPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "3-Point Percentage")
-                                        .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                    Spacer()
-                                    StatPercentageView(progress: CGFloat(Double(playerStats.freeThrowPct)/100), color: UIColor(red: 0/255, green: 81/255, blue: 186/255, alpha: 1.00), title: "Free Throw Percentage")
-                                    .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                }
+/// One cell in a player sheet's three-column grid.
+enum PlayerSheetCell: Sendable {
+    /// A biography fact, drawn by `BioView`.
+    case fact(title: String, info: String)
+    /// A season statistic, drawn by `StatView`.
+    case stat(title: String, info: String)
+    /// A rate drawn as a ring by `StatPercentageView`: `progress` runs 0–1,
+    /// and a non-finite one (a rate over zero attempts) reads "N/A".
+    case percentage(title: String, progress: Double)
 
-                                //ROW 3
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Rebounds", info: String(format: "%.1f", playerStats.avgRebounds))
-                                    Spacer()
-                                    StatView(title: "Avg. Defensive Rebounds", info: String(format: "%.1f", playerStats.avgDefensiveRebounds))
-                                    Spacer()
-                                    StatView(title: "Avg. Offensive Rebounds", info: String(format: "%.1f", playerStats.avgOffensiveRebounds))
-                                }
-                                
-                                //ROW 4
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Assists", info: String(format: "%.1f", playerStats.avgAssists))
-                                    Spacer()
-                                    StatView(title: "Average Blocks", info: String(format: "%.1f", playerStats.avgBlocks))
-                                    Spacer()
-                                    StatView(title: "Average Steals", info: String(format: "%.1f", playerStats.avgSteals))
-                                }
-                                
-                                //ROW 5
-                                HStack(alignment: .center) {
-                                    StatView(title: "Average Fouls", info: String(format: "%.1f", playerStats.avgFouls))
-                                    Spacer()
-                                    StatView(title: "Average Turnovers", info: String(format: "%.1f", playerStats.avgTurnovers))
-                                    Spacer()
-                                    StatView(title: "", info: " ")
-                                }
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                    }
-                    Spacer()
-                }
-            }
-            
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .task {
-            playerStats = await downloadBasketballPlayerStats(playerID: player.playerID, league: team.league)
+    /// An empty About column that keeps the grid aligned.
+    static let blankFact = PlayerSheetCell.fact(title: "", info: " ")
+    /// An empty Statistics column that keeps the grid aligned.
+    static let blankStat = PlayerSheetCell.stat(title: "", info: " ")
+}
+
+/// One tab of a player sheet: rows of three cells, optionally under section
+/// titles.
+struct PlayerSheetGrid: Sendable {
+    enum Layout: Sendable {
+        /// Three full cells per row, spread across the card.
+        case spread
+        /// Cells packed from the leading edge under a section title, short
+        /// rows padded out to three columns. The card grows with the rows.
+        case titledSections
+    }
+
+    struct Section: Sendable {
+        var title: String?
+        var rows: [[PlayerSheetCell]]
+    }
+
+    var layout: Layout
+    var sections: [Section]
+    /// Shown beneath the sections, e.g. once a fetch found nothing.
+    var message: String?
+
+    init(layout: Layout = .spread, sections: [Section], message: String? = nil) {
+        self.layout = layout
+        self.sections = sections
+        self.message = message
+    }
+
+    /// A single untitled section of spread rows.
+    init(rows: [[PlayerSheetCell]]) {
+        self.init(sections: [Section(rows: rows)])
+    }
+
+    /// The height of the card the grid sits on.
+    var cardHeight: CGFloat {
+        let rowCount = sections.reduce(0) { $0 + $1.rows.count }
+        switch layout {
+        case .spread:
+            return CGFloat(120 * rowCount)
+        case .titledSections:
+            return CGFloat(max(240, 130 * (1 + rowCount)))
         }
     }
 }
 
-struct FootballPlayerDetailView: View {
-    @Environment(\.containerSize) private var containerSize
+/// A roster player the generic `PlayerDetailView` can describe: the facts on
+/// its About tab and the season statistics on its Statistics tab.
+///
+/// Each sport's player type conforms below; what the sheet shows is data, the
+/// sheet itself is shared.
+protocol PlayerSheetDescribing: RosterPlayer {
+    /// The About tab.
+    var about: PlayerSheetGrid { get }
 
-    var player: FootBallPlayer
-    var teamColor: Color
-    var team: TeamRef
-    @Environment(\.dismiss) private var dismiss
-    @State var pickerSelectedItem = 0
-    @State var playerStats = FootballPlayerStats.empty
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack {
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .foregroundStyle(teamColor)
-                        .frame(height: 40)
-                    
-                    RoundedRectangle(cornerRadius: 20)
-                        .foregroundStyle(teamColor)
-                    
-                    //TEAM LOGO
-                    team.logoImage
-                        .resizable()
-                        .renderingMode(.original)
-                        .aspectRatio(contentMode: .fill)
-                        .opacity(0.1)
-                        .saturation(0.1)
-                        .contrast(0.5)
-                        .frame(width: 300, height: 300)
-                    
-                    VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                            .frame(width: 100, height: 5)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                                .opacity(0.5)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        //PLAYER NAME
-                        HStack(alignment: .top) {
-                            Text(player.name)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            
-                            Text(player.number)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            .opacity(0.5)
-                        }
-                        
-                        //PLAYER PHOTO
-                        RemoteImage(url: URL(string: player.photo)) {
-                            Image("blank")
-                                .resizable()
-                        }
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 180, height: 180)
-                        
-                        //SELECTOR VIEW
-                        ZStack() {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(height: 30)
-                            
-                            
-                            HStack(spacing: 0) {
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 0
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 0) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("About")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                                .opacity(0.8)
-                                            Text("About")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 1
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 1) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .opacity(0.8)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                            }
-                            
-                        }
-                        .clipShape(.rect(cornerRadius: 20))
-                        .padding([.bottom, .leading, .trailing], 10)
-                    }
-                }
-                
-                
-                VStack(spacing: 0) {
-                    //PLAYER BIO
-                    if(pickerSelectedItem == 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 360)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .leading, spacing: 15) {
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    BioView(title: "Position", info: player.position)
-                                    Spacer()
-                                    BioView(title: "Debut Year", info: player.debutYear)
-                                    Spacer()
-                                    BioView(title: "College", info: player.college)
-                                    
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    BioView(title: "HomeTown", info: player.hometown)
-                                    Spacer()
-                                    BioView(title: "Height", info: player.height)
-                                    Spacer()
-                                    BioView(title: "Weight", info: player.weight)
-                                }
-                                
-                                //ROW 3
-                                HStack(alignment: .center) {
-                                    BioView(title: "Age", info: player.age)
-                                    Spacer()
-                                    BioView(title: "", info: " ")
-                                    Spacer()
-                                    BioView(title: "", info: " ")
-                                }
-                                Spacer()
-                            }.padding(.all, 20)
-                        }
-                        .ignoresSafeArea(.top)
-                    } else if(pickerSelectedItem == 1) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: CGFloat(max(240, 130 * playerStats.groups.reduce(1) { $0 + $1.rows.count })))
-                                .foregroundStyle(Color(uiColor: .systemBackground))
+    /// The Statistics tab before `statistics(league:)` has answered.
+    var placeholderStatistics: PlayerSheetGrid { get }
 
-                            VStack(alignment: .leading, spacing: 15) {
-                                ForEach(playerStats.groups) { group in
-                                    Text(group.title)
-                                        .font(.system(size: 17))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(teamColor)
-                                        .padding(.top, 5)
+    /// Loads the player's season statistics in `league`.
+    func statistics(league: LeagueID) async -> PlayerSheetGrid
+}
 
-                                    ForEach(Array(group.rows.enumerated()), id: \.offset) { _, row in
-                                        HStack(alignment: .center) {
-                                            ForEach(row) { stat in
-                                                StatView(title: stat.label, info: stat.display)
-                                            }
-                                            // Keep three columns so rows line
-                                            // up under the header.
-                                            ForEach(0 ..< max(0, 3 - row.count), id: \.self) { _ in
-                                                Color.clear
-                                                    .frame(width: (containerSize.width/4), height: containerSize.width/3)
-                                            }
-                                        }
-                                    }
-                                }
+extension BasketballPlayer: PlayerSheetDescribing {
+    var about: PlayerSheetGrid {
+        PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: position),
+                .fact(title: "Class", info: grade),
+                .fact(title: "Status", info: status),
+            ],
+            [
+                .fact(title: "Height", info: height),
+                .fact(title: "Weight", info: weight),
+                .fact(title: "HomeTown", info: hometown),
+            ],
+        ])
+    }
 
-                                if playerStats.loaded && playerStats.groups.isEmpty {
-                                    Text("No season statistics are available for this player yet.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                }
+    var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
 
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                    }
-                    Spacer()
-                }
-            }
-            
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .task {
-            playerStats = await downloadFootballPlayerStats(playerID: player.playerID, league: team.league)
-        }
+    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+        Self.grid(await downloadBasketballPlayerStats(playerID: playerID, league: league))
+    }
+
+    private static func grid(_ stats: BasketballPlayerStats) -> PlayerSheetGrid {
+        func average(_ value: Float) -> String { String(format: "%.1f", value) }
+
+        return PlayerSheetGrid(rows: [
+            [
+                .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
+                .stat(title: "Average Minutes", info: average(stats.avgMinutes)),
+                .stat(title: "Average Points", info: average(stats.avgPoints)),
+            ],
+            [
+                .percentage(title: "Field Goal Percentage", progress: Double(stats.fieldGoalPct) / 100),
+                .percentage(title: "3-Point Percentage", progress: Double(stats.threePointFieldGoalPct) / 100),
+                .percentage(title: "Free Throw Percentage", progress: Double(stats.freeThrowPct) / 100),
+            ],
+            [
+                .stat(title: "Average Rebounds", info: average(stats.avgRebounds)),
+                .stat(title: "Avg. Defensive Rebounds", info: average(stats.avgDefensiveRebounds)),
+                .stat(title: "Avg. Offensive Rebounds", info: average(stats.avgOffensiveRebounds)),
+            ],
+            [
+                .stat(title: "Average Assists", info: average(stats.avgAssists)),
+                .stat(title: "Average Blocks", info: average(stats.avgBlocks)),
+                .stat(title: "Average Steals", info: average(stats.avgSteals)),
+            ],
+            [
+                .stat(title: "Average Fouls", info: average(stats.avgFouls)),
+                .stat(title: "Average Turnovers", info: average(stats.avgTurnovers)),
+                .blankStat,
+            ],
+        ])
     }
 }
 
-struct BaseballPlayerDetailView: View {
-    @Environment(\.containerSize) private var containerSize
+extension FootBallPlayer: PlayerSheetDescribing {
+    var about: PlayerSheetGrid {
+        PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: position),
+                .fact(title: "Debut Year", info: debutYear),
+                .fact(title: "College", info: college),
+            ],
+            [
+                .fact(title: "HomeTown", info: hometown),
+                .fact(title: "Height", info: height),
+                .fact(title: "Weight", info: weight),
+            ],
+            [
+                .fact(title: "Age", info: age),
+                .blankFact,
+                .blankFact,
+            ],
+        ])
+    }
 
-    var player: BaseballPlayer
-    var teamColor: Color
-    var team: TeamRef
-    @Environment(\.dismiss) private var dismiss
-    @State var pickerSelectedItem = 0
-    @State var playerStats = BaseballPlayerStats(EarnedRunAverage: 0, wins: 0, losses: 0, saves: 0, saveOpportunities: 0, gamesPlayed: 0, gamesStarted: 0, completeGames: 0, innings: 0.0, hits: 0, runs: 0, earnedRuns: 0, homeRuns: 0, walks: 0, strikeouts: 0, opponentAvg: 0.0, AtBats: 0, Runs: 0, Hits: 0, Doubles: 0, Triples: 0, HomeRuns: 0, RBIs: 0.0, Walks: 0, HitByPitch: 0, Strikeouts: 0, StolenBases: 0, CaughtStealing: 0, Avg: 0.0, OnBasePct: 0.0, SlugAvg: 0.0, OPS: 0.0)
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack {
-                ZStack(alignment: .top) {
-                    Rectangle()
-                        .foregroundStyle(teamColor)
-                        .frame(height: 40)
-                    
-                    RoundedRectangle(cornerRadius: 20)
-                        .foregroundStyle(teamColor)
-                    
-                    //TEAM LOGO
-                    team.logoImage
-                        .resizable()
-                        .renderingMode(.original)
-                        .aspectRatio(contentMode: .fill)
-                        .opacity(0.1)
-                        .saturation(0.1)
-                        .contrast(0.5)
-                        .frame(width: 300, height: 300)
-                    
-                    VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                            .frame(width: 100, height: 5)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                                .opacity(0.5)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        //PLAYER NAME
-                        HStack(alignment: .top) {
-                            Text(player.name)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            
-                            Text(player.number)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            .opacity(0.5)
-                        }
-                        
-                        //PLAYER PHOTO
-                        RemoteImage(url: URL(string: player.photo)) {
-                            Image("blank")
-                                .resizable()
-                        }
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 180, height: 180)
-                        
-                        //SELECTOR VIEW
-                        ZStack() {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(height: 30)
-                            
-                            
-                            HStack(spacing: 0) {
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 0
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 0) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("About")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                                .opacity(0.8)
-                                            Text("About")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 1
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 1) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .opacity(0.8)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                            }
-                            
-                        }
-                        .clipShape(.rect(cornerRadius: 20))
-                        .padding([.bottom, .leading, .trailing], 10)
+    var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
+
+    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+        Self.grid(await downloadFootballPlayerStats(playerID: playerID, league: league))
+    }
+
+    /// One titled section per position-appropriate stat group.
+    private static func grid(_ stats: FootballPlayerStats) -> PlayerSheetGrid {
+        PlayerSheetGrid(
+            layout: .titledSections,
+            sections: stats.groups.map { group in
+                PlayerSheetGrid.Section(
+                    title: group.title,
+                    rows: group.rows.map { row in
+                        row.map { PlayerSheetCell.stat(title: $0.label, info: $0.display) }
                     }
-                }
-                
-                
-                VStack(spacing: 0) {
-                    //PLAYER BIO
-                    if(pickerSelectedItem == 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 360)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .leading, spacing: 15) {
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    BioView(title: "Position", info: player.position)
-                                    Spacer()
-                                    BioView(title: "Home Town", info: player.hometown)
-                                    Spacer()
-                                    BioView(title: "College", info: player.college)
-                                    
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    BioView(title: "Age", info: player.age)
-                                    Spacer()
-                                    BioView(title: "Debut Year", info: player.debutYear)
-                                    Spacer()
-                                    BioView(title: "Height", info: player.height)
-                                    
-                                    
-                                }
-                                
-                                //ROW 3
-                                HStack(alignment: .center) {
-                                    BioView(title: "Weight", info: player.weight)
-                                    Spacer()
-                                    BioView(title: "Batting Hand", info: player.batHand)
-                                    Spacer()
-                                    BioView(title: "Throwing Hand", info: player.throwHand)
-                                }
-                                
-                                Spacer()
-                            }.padding(.all, 20)
-                        }
-                        .ignoresSafeArea(.top)
-                    } else if(pickerSelectedItem == 1) {
-                        if(player.position.contains("Pitcher")) {
-                            ZStack(alignment: .top) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (containerSize.width - 25), height: 720)
-                                    .foregroundStyle(Color(uiColor: .systemBackground))
-                                
-                                VStack(alignment: .leading, spacing: 15) {
-                                    //ROW 1
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Games Played", info: "\(playerStats.gamesPlayed)")
-                                        Spacer()
-                                        StatView(title: "Games Started", info: "\(playerStats.gamesStarted)")
-                                        Spacer()
-                                        StatView(title: "Complete Games", info: "\(playerStats.completeGames)")
-                                    }
-                                    
-                                    //ROW 2
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Innings Pitched", info: "\(playerStats.innings)")
-                                        Spacer()
-                                        StatView(title: "Wins", info: "\(playerStats.wins)")
-                                        Spacer()
-                                        StatView(title: "Losses", info: "\(playerStats.losses)")
-                                    }
-                                    
-                                    //ROW 3
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Saves", info: "\(playerStats.saves)")
-                                        Spacer()
-                                        StatView(title: "Save Opportunites", info: "\(playerStats.saveOpportunities)")
-                                        Spacer()
-                                        StatView(title: "Opp. Batting Avg.", info: "\(playerStats.opponentAvg)")
-                                    }
-                                    
-                                    //ROW 4
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Runs", info: "\(playerStats.runs)")
-                                        Spacer()
-                                        StatView(title: "Earned Run Avg.", info: String(format: "%.2f", playerStats.EarnedRunAverage))
-                                        Spacer()
-                                        StatView(title: "Earned Runs", info: "\(playerStats.earnedRuns)")
-                                    }
-                                    
-                                    //ROW 5
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Hits", info: "\(playerStats.hits)")
-                                        Spacer()
-                                        StatView(title: "Home Runs", info: "\(playerStats.homeRuns)")
-                                        Spacer()
-                                        StatView(title: "Strikeouts", info: "\(playerStats.strikeouts)")
-                                    }
-                                    
-                                    //ROW 6
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Walks", info: "\(playerStats.walks)")
-                                        Spacer()
-                                        StatView(title: "", info: " ")
-                                        Spacer()
-                                        StatView(title: "", info: " ")
-                                    }
-                                    
-                                    Spacer()
-                                }.padding([.all], 20)
-                            }
-                            .ignoresSafeArea(.top)
-                        } else {
-                            ZStack(alignment: .top) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (containerSize.width - 25), height: 600)
-                                    .foregroundStyle(Color(uiColor: .systemBackground))
-                                
-                                VStack(alignment: .leading, spacing: 15) {
-                                    //ROW 1
-                                    HStack(alignment: .center) {
-                                        StatView(title: "At Bats", info: "\(playerStats.AtBats)")
-                                        Spacer()
-                                        StatView(title: "Runs", info: "\(playerStats.Runs)")
-                                        Spacer()
-                                        StatView(title: "Hits", info: "\(playerStats.Hits)")
-                                    }
-                                    
-                                    //ROW 2
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Doubles", info: "\(playerStats.Doubles)")
-                                        Spacer()
-                                        StatView(title: "Triples", info: "\(playerStats.Triples)")
-                                        Spacer()
-                                        StatView(title: "Home Runs", info: "\(playerStats.HomeRuns)")
-                                    }
-                                    
-                                    //ROW 3
-                                    HStack(alignment: .center) {
-                                        StatView(title: "RBIs", info: "\(playerStats.RBIs)")
-                                        Spacer()
-                                        StatView(title: "Walks", info: "\(playerStats.Walks)")
-                                        Spacer()
-                                        StatView(title: "Hit By Pitches", info: "\(playerStats.HitByPitch)")
-                                    }
-                                    
-                                    //ROW 4
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Strikeouts", info: "\(playerStats.Strikeouts)")
-                                        Spacer()
-                                        StatView(title: "Stolen Bases", info: "\(playerStats.StolenBases)")
-                                        Spacer()
-                                        StatView(title: "Caught Stealing", info: "\(playerStats.CaughtStealing)")
-                                    }
-                                    
-                                    //ROW 5
-                                    HStack(alignment: .center) {
-                                        StatView(title: "OPS", info: "\(playerStats.OPS)")
-                                        Spacer()
-                                        StatView(title: "", info: " ")
-                                        Spacer()
-                                        StatView(title: "", info: " ")
-                                    }                                        
-                                    Spacer()
-                                }.padding([.all], 20)
-                            }
-                            .ignoresSafeArea(.top)
-                        }
-                    }
-                    Spacer()
-                }
-            }
-            
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .task {
-            playerStats = await downloadBaseballPlayerStats(
-                playerID: player.playerID,
-                playerPosition: player.position,
-                league: team.league
-            )
-        }
+                )
+            },
+            message: stats.loaded && stats.groups.isEmpty
+                ? "No season statistics are available for this player yet."
+                : nil
+        )
     }
 }
 
-struct SoccerPlayerDetailView: View {
-    @Environment(\.containerSize) private var containerSize
+extension BaseballPlayer: PlayerSheetDescribing {
+    var about: PlayerSheetGrid {
+        PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: position),
+                .fact(title: "Home Town", info: hometown),
+                .fact(title: "College", info: college),
+            ],
+            [
+                .fact(title: "Age", info: age),
+                .fact(title: "Debut Year", info: debutYear),
+                .fact(title: "Height", info: height),
+            ],
+            [
+                .fact(title: "Weight", info: weight),
+                .fact(title: "Batting Hand", info: batHand),
+                .fact(title: "Throwing Hand", info: throwHand),
+            ],
+        ])
+    }
 
-    var player: SoccerPlayer
-    var teamColor: Color
-    var team: TeamRef
+    var placeholderStatistics: PlayerSheetGrid { grid(.empty) }
+
+    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+        grid(await downloadBaseballPlayerStats(
+            playerID: playerID,
+            playerPosition: position,
+            league: league
+        ))
+    }
+
+    /// Pitchers get the pitching line; everyone else the batting line.
+    private func grid(_ stats: BaseballPlayerStats) -> PlayerSheetGrid {
+        if position.contains("Pitcher") {
+            return PlayerSheetGrid(rows: [
+                [
+                    .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
+                    .stat(title: "Games Started", info: "\(stats.gamesStarted)"),
+                    .stat(title: "Complete Games", info: "\(stats.completeGames)"),
+                ],
+                [
+                    .stat(title: "Innings Pitched", info: "\(stats.innings)"),
+                    .stat(title: "Wins", info: "\(stats.wins)"),
+                    .stat(title: "Losses", info: "\(stats.losses)"),
+                ],
+                [
+                    .stat(title: "Saves", info: "\(stats.saves)"),
+                    .stat(title: "Save Opportunites", info: "\(stats.saveOpportunities)"),
+                    .stat(title: "Opp. Batting Avg.", info: "\(stats.opponentAvg)"),
+                ],
+                [
+                    .stat(title: "Runs", info: "\(stats.runs)"),
+                    .stat(title: "Earned Run Avg.", info: String(format: "%.2f", stats.EarnedRunAverage)),
+                    .stat(title: "Earned Runs", info: "\(stats.earnedRuns)"),
+                ],
+                [
+                    .stat(title: "Hits", info: "\(stats.hits)"),
+                    .stat(title: "Home Runs", info: "\(stats.homeRuns)"),
+                    .stat(title: "Strikeouts", info: "\(stats.strikeouts)"),
+                ],
+                [
+                    .stat(title: "Walks", info: "\(stats.walks)"),
+                    .blankStat,
+                    .blankStat,
+                ],
+            ])
+        }
+
+        return PlayerSheetGrid(rows: [
+            [
+                .stat(title: "At Bats", info: "\(stats.AtBats)"),
+                .stat(title: "Runs", info: "\(stats.Runs)"),
+                .stat(title: "Hits", info: "\(stats.Hits)"),
+            ],
+            [
+                .stat(title: "Doubles", info: "\(stats.Doubles)"),
+                .stat(title: "Triples", info: "\(stats.Triples)"),
+                .stat(title: "Home Runs", info: "\(stats.HomeRuns)"),
+            ],
+            [
+                .stat(title: "RBIs", info: "\(stats.RBIs)"),
+                .stat(title: "Walks", info: "\(stats.Walks)"),
+                .stat(title: "Hit By Pitches", info: "\(stats.HitByPitch)"),
+            ],
+            [
+                .stat(title: "Strikeouts", info: "\(stats.Strikeouts)"),
+                .stat(title: "Stolen Bases", info: "\(stats.StolenBases)"),
+                .stat(title: "Caught Stealing", info: "\(stats.CaughtStealing)"),
+            ],
+            [
+                .stat(title: "OPS", info: "\(stats.OPS)"),
+                .blankStat,
+                .blankStat,
+            ],
+        ])
+    }
+}
+
+extension SoccerPlayer: PlayerSheetDescribing {
+    var about: PlayerSheetGrid {
+        PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: position),
+                .fact(title: "Age", info: age),
+                .fact(title: "Birth Country", info: birthPlace),
+            ],
+            [
+                .fact(title: "Citizenship", info: citizenshipCountry),
+                .fact(title: "Height", info: height),
+                .fact(title: "Weight", info: weight),
+            ],
+        ])
+    }
+
+    /// The season totals arrive with the roster, so there is nothing to wait
+    /// for.
+    var placeholderStatistics: PlayerSheetGrid { seasonTotals }
+
+    func statistics(league: LeagueID) async -> PlayerSheetGrid { seasonTotals }
+
+    /// Keepers get the goalkeeping line; everyone else the outfield line.
+    private var seasonTotals: PlayerSheetGrid {
+        if position.contains("Goalkeeper") {
+            return PlayerSheetGrid(rows: [
+                [
+                    .stat(title: "Starts", info: "\(appearances)"),
+                    .stat(title: "Shots Faced", info: "\(shotsFaced)"),
+                    .stat(title: "Goals Saved", info: "\(saves)"),
+                ],
+                [
+                    .stat(title: "Goals Conceded", info: "\(goalsConceded)"),
+                    .percentage(title: "Save Percentage", progress: Double(saves) / Double(shotsFaced)),
+                    .percentage(title: "Conceded Percentage", progress: Double(goalsConceded) / Double(shotsFaced)),
+                ],
+                [
+                    .stat(title: "Fouls Committed", info: "\(fouls)"),
+                    .stat(title: "Yellow Cards", info: "\(yellowCards)"),
+                    .stat(title: "Red Cards", info: "\(redCards)"),
+                ],
+            ])
+        }
+
+        return PlayerSheetGrid(rows: [
+            [
+                .stat(title: "Games Started", info: "\(appearances)"),
+                .stat(title: "Games Played", info: "\(subAppearances + appearances)"),
+                .stat(title: "Goal Assists", info: "\(goalAssists)"),
+            ],
+            [
+                .stat(title: "Total Shots", info: "\(totalShots)"),
+                .stat(title: "Shots On Target", info: "\(shotsOnTarget)"),
+                .stat(title: "Total Goals", info: "\(totalGoals)"),
+            ],
+            [
+                .percentage(title: "Goal Percentage", progress: Double(totalGoals) / Double(totalShots)),
+                .percentage(title: "On Target Percentage", progress: Double(shotsOnTarget) / Double(totalShots)),
+                .stat(title: "Own Goals", info: "\(ownGoals)"),
+            ],
+            [
+                .stat(title: "Offsides", info: "\(offsides)"),
+                .stat(title: "Fouls Suffered", info: "\(foulsSuffered)"),
+                .stat(title: "Fouls Committed", info: "\(fouls)"),
+            ],
+            [
+                .stat(title: "Yellow Cards", info: "\(yellowCards)"),
+                .stat(title: "Red Cards", info: "\(redCards)"),
+                .blankStat,
+            ],
+        ])
+    }
+}
+
+// MARK: - Sheet
+
+/// The sheet a roster card opens: the player's photo over an About tab and a
+/// Statistics tab, in the team's colours.
+struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
+    @Environment(\.containerSize) private var containerSize
     @Environment(\.dismiss) private var dismiss
-    
-    @State var pickerSelectedItem = 0
-    
+
+    let player: Player
+    let team: TeamRef
+
+    @State private var pickerSelectedItem = 0
+    @State private var statistics: PlayerSheetGrid
+
+    init(player: Player, team: TeamRef) {
+        self.player = player
+        self.team = team
+        _statistics = State(initialValue: player.placeholderStatistics)
+    }
+
+    private var teamColor: Color { team.color }
+
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        ScrollView(.vertical) {
             VStack {
                 ZStack(alignment: .top) {
                     Rectangle()
                         .foregroundStyle(teamColor)
                         .frame(height: 40)
-                    
+
                     RoundedRectangle(cornerRadius: 20)
                         .foregroundStyle(teamColor)
-                    
+
                     //TEAM LOGO
                     team.logoImage
                         .resizable()
@@ -832,37 +402,37 @@ struct SoccerPlayerDetailView: View {
                         .saturation(0.1)
                         .contrast(0.5)
                         .frame(width: 300, height: 300)
-                    
+
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
                         Button(action: {
                             dismiss()
                         }) {
                             RoundedRectangle(cornerRadius: 20)
-                            .frame(width: 100, height: 5)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
+                                .frame(width: 100, height: 5)
+                                .foregroundStyle(Color(uiColor: .systemBackground))
                                 .opacity(0.5)
                         }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        //?USED TO TAKE UP ALL SPACE?//
+
+                        // Takes up the sheet's full width.
                         HStack() {
                             Spacer()
                         }
-                        
+
                         //PLAYER NAME
                         HStack(alignment: .top) {
                             Text(player.name)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            
+                                .fontWeight(.bold)
+                                .font(.system(size: 35))
+                                .foregroundStyle(Color.white)
+
                             Text(player.number)
-                            .fontWeight(.bold)
-                            .font(.system(size: 35))
-                            .foregroundStyle(Color.white)
-                            .opacity(0.5)
+                                .fontWeight(.bold)
+                                .font(.system(size: 35))
+                                .foregroundStyle(Color.white)
+                                .opacity(0.5)
                         }
-                        
+
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
                             Image("blank")
@@ -870,210 +440,126 @@ struct SoccerPlayerDetailView: View {
                         }
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
-                        
+
                         //SELECTOR VIEW
                         ZStack() {
                             RoundedRectangle(cornerRadius: 20)
                                 .frame(height: 30)
-                            
-                            
+
                             HStack(spacing: 0) {
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 0
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 0) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("About")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                                .opacity(0.8)
-                                            Text("About")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
-                                
-                                Button(action: {
-                                    pickerSelectedItem = 1
-                                }) {
-                                    
-                                    
-                                    if(pickerSelectedItem == 1) {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    } else {
-                                        ZStack(alignment: .center) {
-                                            Rectangle()
-                                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                                .frame(height: 30)
-                                                .opacity(0.8)
-                                                .clipped()
-                                            Text("Statistics")
-                                        }
-                                    }
-                                    
-                                }.buttonStyle(.plain)
+                                tabButton("About", tag: 0)
+                                tabButton("Statistics", tag: 1)
                             }
-                            
                         }
                         .clipShape(.rect(cornerRadius: 20))
                         .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
-                
-                
+
                 VStack(spacing: 0) {
-                    //PLAYER BIO
                     if(pickerSelectedItem == 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 240)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .leading, spacing: 15) {
-                                //ROW 1
-                                HStack(alignment: .center) {
-                                    BioView(title: "Position", info: player.position)
-                                    Spacer()
-                                    BioView(title: "Age", info: player.age)
-                                    Spacer()
-                                    BioView(title: "Birth Country", info: player.birthPlace)
-                                    
-                                }
-                                
-                                //ROW 2
-                                HStack(alignment: .center) {
-                                    BioView(title: "Citizenship", info: player.citizenshipCountry)
-                                    Spacer()
-                                    BioView(title: "Height", info: player.height)
-                                    Spacer()
-                                    BioView(title: "Weight", info: player.weight)
-                                }
-                                Spacer()
-                            }.padding(.all, 20)
-                        }
-                        .ignoresSafeArea(.top)
+                        card(player.about)
                     } else if(pickerSelectedItem == 1) {
-                        if(player.position.contains("Goalkeeper")) {
-                            ZStack(alignment: .top) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (containerSize.width - 25), height: 360)
-                                    .foregroundStyle(Color(uiColor: .systemBackground))
-                                
-                                VStack(alignment: .leading, spacing: 15) {
-                                    //ROW 1
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Starts", info: "\(player.appearances)")
-                                        Spacer()
-                                        StatView(title: "Shots Faced", info: "\(player.shotsFaced)")
-                                        Spacer()
-                                        StatView(title: "Goals Saved", info: "\(player.saves)")
-                                    }
-                                    
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Goals Conceded", info: "\(player.goalsConceded)")
-                                        Spacer()
-                                        StatPercentageView(progress: CGFloat(Double(player.saves)/Double(player.shotsFaced)), color: UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00), title: "Save Percentage")
-                                            .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                        Spacer()
-                                        StatPercentageView(progress: CGFloat(Double(player.goalsConceded)/Double(player.shotsFaced)), color: UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00), title: "Conceded Percentage")
-                                            .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                    }
-                                    
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Fouls Committed", info: "\(player.fouls)")
-                                        Spacer()
-                                        StatView(title: "Yellow Cards", info: "\(player.yellowCards)")
-                                        Spacer()
-                                        StatView(title: "Red Cards", info: "\(player.redCards)")
-                                    }
-                                    Spacer()
-                                }.padding([.all], 20)
-                            }
-                            .ignoresSafeArea(.top)
-                        } else {
-                            ZStack(alignment: .top) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: (containerSize.width - 25), height: 600)
-                                    .foregroundStyle(Color(uiColor: .systemBackground))
-                                
-                                VStack(alignment: .leading, spacing: 15) {
-                                    //ROW 1
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Games Started", info: "\(player.appearances)")
-                                        Spacer()
-                                        StatView(title: "Games Played", info: "\(player.subAppearances + player.appearances)")
-                                        Spacer()
-                                        StatView(title: "Goal Assists", info: "\(player.goalAssists)")
-                                    }
-                                    
-                                    //ROW 2
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Total Shots", info: "\(player.totalShots)")
-                                        Spacer()
-                                        StatView(title: "Shots On Target", info: "\(player.shotsOnTarget)")
-                                        Spacer()
-                                        StatView(title: "Total Goals", info: "\(player.totalGoals)")
-                                    }
-                                    
-                                    //ROW 3
-                                    HStack(alignment: .center) {
-                                        StatPercentageView(progress: CGFloat(Double(player.totalGoals)/Double(player.totalShots)), color: UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00), title: "Goal Percentage")
-                                            .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                        Spacer()
-                                        StatPercentageView(progress: CGFloat(Double(player.shotsOnTarget)/Double(player.totalShots)), color: UIColor(red: 0/255, green: 42/255, blue: 92/255, alpha: 1.00), title: "On Target Percentage")
-                                            .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0))
-                                        Spacer()
-                                        StatView(title: "Own Goals", info: "\(player.ownGoals)")
-                                    }
-                                    
-                                    
-                                    //ROW 4
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Offsides", info: "\(player.offsides)")
-                                        Spacer()
-                                        StatView(title: "Fouls Suffered", info: "\(player.foulsSuffered)")
-                                        Spacer()
-                                        StatView(title: "Fouls Committed", info: "\(player.fouls)")
-                                    }
-                                    
-                                    //ROW 5
-                                    HStack(alignment: .center) {
-                                        StatView(title: "Yellow Cards", info: "\(player.yellowCards)")
-                                        Spacer()
-                                        StatView(title: "Red Cards", info: "\(player.redCards)")
-                                        Spacer()
-                                        StatView(title: "", info: " ")
-                                    }
-                                    Spacer()
-                                }.padding([.all], 20)
-                            }
-                            .ignoresSafeArea(.top)
-                        }
+                        card(statistics)
                     }
                     Spacer()
                 }
             }
-            
+
             Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        }
+        .scrollIndicators(.hidden)
+        .background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
+        .task {
+            statistics = await player.statistics(league: team.league)
+        }
+    }
+
+    /// One segment of the About / Statistics picker; the unselected one is
+    /// faded.
+    private func tabButton(_ title: String, tag: Int) -> some View {
+        Button(action: {
+            pickerSelectedItem = tag
+        }) {
+            ZStack(alignment: .center) {
+                Rectangle()
+                    .foregroundStyle(Color(uiColor: .systemBackground))
+                    .frame(height: 30)
+                    .clipped()
+                    .opacity(pickerSelectedItem == tag ? 1 : 0.8)
+                Text(title)
+            }
+        }.buttonStyle(.plain)
+    }
+
+    /// A tab's grid on its rounded card.
+    private func card(_ grid: PlayerSheetGrid) -> some View {
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 20)
+                .frame(width: (containerSize.width - 25), height: grid.cardHeight)
+                .foregroundStyle(Color(uiColor: .systemBackground))
+
+            VStack(alignment: .leading, spacing: 15) {
+                ForEach(Array(grid.sections.enumerated()), id: \.offset) { _, section in
+                    if let title = section.title {
+                        Text(title)
+                            .font(.system(size: 17))
+                            .fontWeight(.bold)
+                            .foregroundStyle(teamColor)
+                            .padding(.top, 5)
+                    }
+
+                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
+                        gridRow(row, layout: grid.layout)
+                    }
+                }
+
+                if let message = grid.message {
+                    Text(message)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+
+                Spacer()
+            }.padding([.all], 20)
+        }
+        .ignoresSafeArea(.top)
+    }
+
+    private func gridRow(_ row: [PlayerSheetCell], layout: PlayerSheetGrid.Layout) -> some View {
+        HStack(alignment: .center) {
+            ForEach(Array(row.enumerated()), id: \.offset) { index, cell in
+                if layout == .spread, index > 0 {
+                    Spacer()
+                }
+                cellView(cell)
+            }
+
+            if layout == .titledSections {
+                // Keep three columns so rows line up under the header.
+                ForEach(0 ..< max(0, 3 - row.count), id: \.self) { _ in
+                    Color.clear
+                        .frame(width: (containerSize.width/4), height: containerSize.width/3)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cellView(_ cell: PlayerSheetCell) -> some View {
+        switch cell {
+        case .fact(let title, let info):
+            BioView(title: title, info: info)
+        case .stat(let title, let info):
+            StatView(title: title, info: info)
+        case .percentage(let title, let progress):
+            StatPercentageView(progress: CGFloat(progress), color: UIColor(teamColor), title: title)
+                .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0), value: progress)
+        }
     }
 }

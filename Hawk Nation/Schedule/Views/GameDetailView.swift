@@ -8,1366 +8,344 @@
 
 import SwiftUI
 
-struct BasketballGameDetailView: View {
+/// The sheet a schedule card opens: the venue, the scoreline and the box
+/// score, refreshed while the game is live.
+///
+/// The box score comes through `LeagueDescriptor.downloadGameSheet`, which
+/// reduces each sport's statistics to the same `BoxScore` rows.
+struct GameDetailView: View {
     @Environment(\.containerSize) private var containerSize
 
-    @Environment(\.dismiss) private var dismiss
     let game: Game
-    var teamColor: Color
-    @State private var gameTeamStats = BasketballGameTeamStats.placeholderPair
+    let team: TeamRef
+
+    @State private var boxScore: BoxScore?
     @State private var gameInfo = GameInfo.empty
-    var team: TeamRef
     @State private var loading = true
-    
-    
-    
+
+    private var league: LeagueDescriptor { team.league.descriptor }
+
+    /// The followed team's name beside its crest: the schedule feed's name
+    /// for it, from the same field as the opponent's name opposite, or the
+    /// catalog's short name when the feed gave none.
+    private var teamLabel: String {
+        game.team.isEmpty ? team.shortName : game.team
+    }
+
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            if(loading == false) {
+        ScrollView(.vertical) {
+            if loading {
+                GameDetailSkeleton()
+            } else {
                 VStack {
-                    ZStack(alignment: .top) {
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        RemoteImage(url: URL(string: gameInfo.venueImage))
-                            .id(gameInfo.venueImage)
-                            .frame(width: containerSize.width, height: 200)
-                            .clipShape(.rect(cornerRadius: 10))
-                        
-                        Rectangle()
-                            .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                            .background(Color(uiColor: .black))
-                            .opacity(0.6)
-                            .frame(width: containerSize.width, height: 200)
-                            .clipShape(.rect(cornerRadius: 10))
-                        
-                        //GAME DETAILS
-                        VStack(spacing: 0) {
-                            //DISMISS BUTTON
-                            Button(action: {
-                                dismiss()
-                            }) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: 100, height: 5)
-                                    .foregroundStyle(Color(uiColor: .white))
-                                    .opacity(0.7)
-                            }.padding([.top, .trailing, .leading, .bottom], 10)
-                            
-                            
-                            
-                            Text(game.competitionName)
-                                .fontWeight(.bold)
-                                .font(.system(size: 25))
-                                .minimumScaleFactor(0.2)
-                                .lineLimit(1)
-                                .foregroundStyle(.white)
-                                .padding(.top, 5)
-                            
-                            Spacer()
-                            
-                            
-                            Text(game.time)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Text(game.date)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Text(game.channel)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Spacer()
-                            
-                            Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                        }.padding(.horizontal, 15)
-                    }.frame(height: 200)
-                    
+                    header
+
                     VStack(spacing: 0) {
                         ZStack(alignment: .top) {
                             RoundedRectangle(cornerRadius: 20)
                                 .frame(width: (containerSize.width - 25), height: 600)
                                 .foregroundStyle(Color(uiColor: .systemBackground))
-                            
+
                             VStack(alignment: .center, spacing: 15) {
                                 if(game.cancelled) {
                                     Spacer()
-                                    
-                                    Text("This game has been canceled.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
+
+                                    message("This game has been canceled.")
                                 } else if (game.postponed) {
                                     Spacer()
-                                    
-                                    Text("This game has been postponed.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
-                                } else {
-                                    if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
-                                        HStack(alignment: .top) {
-                                            if(game.gameHome) {
-                                                HStack() {
-                                                    VStack(alignment: .leading, spacing: 5) {
-                                                        //HOME TEAM PHOTO
-                                                        team.logoImage
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text("Kansas")
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                    
-                                                    
-                                                    VStack(alignment: .center) {
-                                                        Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
-                                                            .font(.system(size: 30))
-                                                            //.foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                        
-                                                        if(game.completed) {
-                                                            Text("Final")
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        } else if(game.gameHalftime) {
-                                                            Text("Halftime")
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                        } else {
-                                                            Text(team.periodName(game.gamePeriod))
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            
-                                                            Text(game.gameClock)
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                        }
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                    
-                                                    
-                                                    VStack(alignment: .trailing, spacing: 5) {
-                                                        //AWAY TEAM PHOTO
-                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                                Image("blankTeam")
-                                                                    .resizable()
-                                                        }
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text(game.opponent)
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                                }
-                                            } else {
-                                                HStack() {
-                                                    VStack(alignment: .leading, spacing: 5) {
-                                                        //HOME TEAM PHOTO
-                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                                Image("blankTeam")
-                                                                    .resizable()
-                                                        }
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text(game.opponent)
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                    
-                                                    VStack(alignment: .center) {
-                                                        Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
-                                                            .font(.system(size: 30))
-                                                            //.foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                        
-                                                        if(game.completed) {
-                                                            Text("Final")
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        } else {
-                                                            Text(team.periodName(game.gamePeriod))
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                            
-                                                            Text(game.gameClock)
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        }
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                    
-                                                    //AWAY TEAM PHOTO
-                                                    VStack(alignment: .trailing, spacing: 5) {
-                                                        //PLAYER PHOTO
-                                                        team.logoImage
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text("Kansas")
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                                }
-                                            }
-                                        }.ignoresSafeArea()
-                                        
-                                        Group {
-                                            StatRowView(title: "Field Goals", homeStat: gameTeamStats[1].fieldGoals.replacingOccurrences(of: "-", with: "/"), awayStat: gameTeamStats[0].fieldGoals.replacingOccurrences(of: "-", with: "/"))
-                                            
-                                            StatRowView(title: "Field Goal %", homeStat: "\(Int(gameTeamStats[1].fieldGoalPct))%", awayStat: "\(Int(gameTeamStats[0].fieldGoalPct))%")
-                                            
-                                            StatRowView(title: "Three Points", homeStat: gameTeamStats[1].threePoints.replacingOccurrences(of: "-", with: "/"), awayStat: gameTeamStats[0].threePoints.replacingOccurrences(of: "-", with: "/"))
-                                            
-                                            StatRowView(title: "Three Point %", homeStat: "\(Int(gameTeamStats[1].threePointPct))%", awayStat: "\(Int(gameTeamStats[0].threePointPct))%")
-                                            
-                                            StatRowView(title: "Free Throws", homeStat: gameTeamStats[1].freeThrows.replacingOccurrences(of: "-", with: "/"), awayStat: gameTeamStats[0].freeThrows.replacingOccurrences(of: "-", with: "/"))
-                                            
-                                            StatRowView(title: "Free Throw %", homeStat: "\(Int(gameTeamStats[1].freeThrowPct))%", awayStat: "\(Int(gameTeamStats[0].freeThrowPct))%")
-                                            
-                                            StatRowView(title: "Offensive Rebounds", homeStat: "\(gameTeamStats[1].offensiveRebounds)", awayStat: "\(gameTeamStats[0].offensiveRebounds)")
-                                            
-                                            StatRowView(title: "Defensive Rebounds", homeStat: "\(gameTeamStats[1].defensiveRebounds)", awayStat: "\(gameTeamStats[0].defensiveRebounds)")
-                                            
-                                            StatRowView(title: "Assists", homeStat: "\(gameTeamStats[1].assists)", awayStat: "\(gameTeamStats[0].assists)")
-                                            
-                                            StatRowView(title: "Blocks", homeStat: "\(gameTeamStats[1].blocks)", awayStat: "\(gameTeamStats[0].blocks)")
-                                        }
-                                        
-                                        Group {
-                                            StatRowView(title: "Steals", homeStat: "\(gameTeamStats[1].steals)", awayStat: "\(gameTeamStats[0].steals)")
-                                            
-                                            StatRowView(title: "Turnovers", homeStat: "\(gameTeamStats[1].turnOvers)", awayStat: "\(gameTeamStats[0].turnOvers)")
-                                            
-                                            StatRowView(title: "Fouls", homeStat: "\(gameTeamStats[1].fouls)", awayStat: "\(gameTeamStats[0].fouls)")
-                                        }
-                                    } else {
-                                        
-                                        Spacer()
-                                        
-                                        Text("No game statistics at this time. Please check back later.")
-                                            .font(.system(size: 15))
-                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                            .fontWeight(.bold)
-                                            .minimumScaleFactor(0.5)
-                                            .multilineTextAlignment(.center)
-                                            .padding(.horizontal, 30)
-                                            .offset(y: -50)
-                                    }
-                                }
-                                
-                                
-                                
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                        Spacer()
-                    }
-                }
-            }
-            else {
-                VStack {
-                    ZStack(alignment: .top) {
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        LoadingView()
-                            .frame(width: containerSize.width, height: 200)
-                        
-                        //GAME DETAILS
-                        VStack(spacing: 5) {
-                            //DISMISS BUTTON
-                            Button(action: {
-                                dismiss()
-                            }) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: 100, height: 5)
-                                    .foregroundStyle(Color(uiColor: .white))
-                                    .opacity(0.7)
-                            }.padding([.top, .trailing, .leading, .bottom], 10)
-                            
-                            LoadingView()
-                                .frame(width: containerSize.width-20, height: 25)
-                            
-                            Spacer()
-                            
-                            LoadingView()
-                                .frame(width: 100, height: 15)
-                            
-                            LoadingView()
-                                .frame(width: 120, height: 15)
-                            
-                            LoadingView()
-                                .frame(width: 50, height: 15)
-                            
-                            Spacer()
-                            
-                            LoadingView()
-                                .frame(width: 200, height: 15)
-                                .padding(.bottom, 10)
-                        }.padding(.horizontal, 15)
-                    }.frame(height: 200)
-                    
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 600)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .center, spacing: 15) {
-                                HStack() {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        LoadingViewCircle()
-                                            .frame(width: 50, height: 50)
-                                        
-                                        
-                                        LoadingView()
-                                            .frame(width: 75, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                    
-                                    
-                                    VStack(alignment: .center) {
-                                        LoadingView()
-                                            .frame(width: 200, height: 30)
-                                        
-                                        LoadingView()
-                                            .frame(width: 50, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                    
-                                    
-                                    VStack(alignment: .trailing, spacing: 5) {
-                                        LoadingViewCircle()
-                                            .frame(width: 50, height: 50)
-                                        
-                                        
-                                        LoadingView()
-                                            .frame(width: 75, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                }
-                                
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                        Spacer()
-                    }
-                }
-            }
-            
-            
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .pollingTask {
-            guard let detail = await downloadBasketballGameDetail(gameID: game.gameID, team: team) else {
-                // Keep the last good box score through a failed refresh.
-                // With nothing loaded yet, show the "no statistics" message
-                // rather than a blank sheet while retrying.
-                if loading {
-                    gameTeamStats = []
-                    loading = false
-                }
-                return GameDetail<BasketballGameTeamStats>.retryInterval
-            }
 
-            gameTeamStats = detail.stats
-            gameInfo = detail.info
-            loading = false
-            return detail.refreshInterval
-        }
-    }
-}
+                                    message("This game has been postponed.")
+                                } else if game.dateAsDate <= Date(), let boxScore {
+                                    scoreboard(boxScore)
 
-struct FootballGameDetailView: View {
-    @Environment(\.containerSize) private var containerSize
-
-    @Environment(\.dismiss) private var dismiss
-    var game: Game
-    var teamColor: Color
-    @State private var gameTeamStats = FootballGameTeamStats.placeholderPair
-    @State private var gameInfo = GameInfo.empty
-    var team: TeamRef
-    @State private var loading = true
-    
-    
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            if(loading == false) {
-                VStack {
-                    ZStack(alignment: .top) {
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        RemoteImage(url: URL(string: gameInfo.venueImage))
-                            //.id(gameInfo.venueImage)
-                            .frame(width: containerSize.width, height: 200)
-                            .clipShape(.rect(cornerRadius: 10))
-                        
-                        Rectangle()
-                            .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                            .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
-                            .opacity(0.6)
-                            .frame(width: containerSize.width, height: 200)
-                            .clipShape(.rect(cornerRadius: 10))
-                        
-                        //GAME DETAILS
-                        VStack(spacing: 0) {
-                            //DISMISS BUTTON
-                            Button(action: {
-                                dismiss()
-                            }) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: 100, height: 5)
-                                    .foregroundStyle(Color(uiColor: .white))
-                                    .opacity(0.7)
-                            }.padding([.top, .trailing, .leading, .bottom], 10)
-                            
-                            
-                            
-                            Text(game.competitionName)
-                                .fontWeight(.bold)
-                                .font(.system(size: 25))
-                                .minimumScaleFactor(0.2)
-                                .lineLimit(1)
-                                .foregroundStyle(.white)
-                                .padding(.top, 5)
-                            
-                            Spacer()
-                            
-                            
-                            Text(game.time)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Text(game.date)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Text(game.channel)
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                            
-                            Spacer()
-                            
-                            Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
-                                .fontWeight(.bold)
-                                .font(.system(size: 15))
-                                .foregroundStyle(.white)
-                                .padding(.bottom, 10)
-                                .minimumScaleFactor(0.2)
-                        }.padding(.horizontal, 15)
-                    }.frame(height: 200)
-                    
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 600)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .center, spacing: 15) {
-                                if(game.cancelled) {
-                                    Spacer()
-                                    
-                                    Text("This game has been canceled.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
-                                } else if (game.postponed) {
-                                    Spacer()
-                                    
-                                    Text("This game has been postponed.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
-                                } else {
-                                    if game.dateAsDate <= Date(), gameTeamStats.count >= 2 {
-                                        HStack(alignment: .top) {
-                                            if(game.gameHome) {
-                                                HStack() {
-                                                    VStack(alignment: .leading, spacing: 5) {
-                                                        //HOME TEAM PHOTO
-                                                        team.logoImage
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text("Chiefs")
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                    
-                                                    
-                                                    VStack(alignment: .center) {
-                                                        Text("\(gameTeamStats[0].score) - \(gameTeamStats[0].opponentScore)")
-                                                            .font(.system(size: 30))
-                                                            //.foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                        
-                                                        if(game.completed) {
-                                                            Text("Final")
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        } else {
-                                                            Text(team.periodName(game.gamePeriod))
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                            
-                                                            Text(game.gameClock)
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        }
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                    
-                                                    
-                                                    VStack(alignment: .trailing, spacing: 5) {
-                                                        //AWAY TEAM PHOTO
-                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                                Image("blankTeam")
-                                                                    .resizable()
-                                                        }
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text(game.opponent)
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                                }
-                                            } else {
-                                                HStack() {
-                                                    VStack(alignment: .leading, spacing: 5) {
-                                                        //HOME TEAM PHOTO
-                                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                                Image("blankTeam")
-                                                                    .resizable()
-                                                        }
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text(game.opponent)
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                    
-                                                    VStack(alignment: .center) {
-                                                        Text("\(gameTeamStats[0].opponentScore) - \(gameTeamStats[0].score)")
-                                                            .font(.system(size: 30))
-                                                            //.foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                        
-                                                        if(game.completed) {
-                                                            Text("Final")
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        } else {
-                                                            Text(team.periodName(game.gamePeriod))
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                            
-                                                            Text(game.gameClock)
-                                                                .font(.system(size: 15))
-                                                                .fontWeight(.bold)
-                                                                .minimumScaleFactor(0.5)
-                                                            //.foregroundStyle(Color.white)
-                                                        }
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                    
-                                                    //AWAY TEAM PHOTO
-                                                    VStack(alignment: .trailing, spacing: 5) {
-                                                        //PLAYER PHOTO
-                                                        team.logoImage
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                        
-                                                        Text("Chiefs")
-                                                            .font(.system(size: 15))
-                                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                                            .fontWeight(.bold)
-                                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                                }
-                                            }
-                                        }.ignoresSafeArea()
-                                         Group {
-                                            StatRowView(title: "Total Yards", homeStat: "\(gameTeamStats[1].yards)", awayStat: "\(gameTeamStats[0].yards)")
-                                         
-                                         StatRowView(title: "Passing Yards", homeStat: "\(gameTeamStats[1].passingYards)", awayStat: "\(gameTeamStats[0].passingYards)")
-                                         
-                                         StatRowView(title: "Rushing Yards", homeStat: "\(gameTeamStats[1].rushingYards)", awayStat: "\(gameTeamStats[0].rushingYards)")
-                                         
-                                         StatRowView(title: "First Downs", homeStat: "\(gameTeamStats[1].firstDowns)", awayStat: "\(gameTeamStats[0].firstDowns)")
-                                         
-                                         StatRowView(title: "Drives", homeStat: "\(gameTeamStats[1].drives)", awayStat: "\(gameTeamStats[0].drives)")
-                                         
-                                         StatRowView(title: "Interceptions", homeStat: "\(gameTeamStats[1].interceptions)", awayStat: "\(gameTeamStats[0].interceptions)")
-                                         
-                                         StatRowView(title: "Possession Time", homeStat: "\(gameTeamStats[1].possesionTime)", awayStat: "\(gameTeamStats[0].possesionTime)")
-                                         
-                                         StatRowView(title: "Completion Attempts", homeStat: "\(gameTeamStats[1].completionAttempts)", awayStat: "\(gameTeamStats[0].completionAttempts)")
-                                         }
-                                    } else {
-                                        Spacer()
-                                        
-                                        Text("No game statistics at this time. Please check back later.")
-                                            .font(.system(size: 15))
-                                            .foregroundStyle(Color(uiColor: .systemGray))
-                                            .fontWeight(.bold)
-                                            .minimumScaleFactor(0.5)
-                                            .multilineTextAlignment(.center)
-                                            .padding(.horizontal, 30)
-                                            .offset(y: -50)
-                                    }
-                                }
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                        Spacer()
-                    }
-                }
-            }
-            else {
-                VStack {
-                    ZStack(alignment: .top) {
-                        //?USED TO TAKE UP ALL SPACE?//
-                        HStack() {
-                            Spacer()
-                        }
-                        
-                        LoadingView()
-                            .frame(width: containerSize.width, height: 200)
-                        
-                        //GAME DETAILS
-                        VStack(spacing: 5) {
-                            //DISMISS BUTTON
-                            Button(action: {
-                                dismiss()
-                            }) {
-                                RoundedRectangle(cornerRadius: 20)
-                                    .frame(width: 100, height: 5)
-                                    .foregroundStyle(Color(uiColor: .white))
-                                    .opacity(0.7)
-                            }.padding([.top, .trailing, .leading, .bottom], 10)
-                            
-                            LoadingView()
-                                .frame(width: containerSize.width-20, height: 25)
-                            
-                            Spacer()
-                            
-                            LoadingView()
-                                .frame(width: 100, height: 15)
-                            
-                            LoadingView()
-                                .frame(width: 120, height: 15)
-                            
-                            LoadingView()
-                                .frame(width: 50, height: 15)
-                            
-                            Spacer()
-                            
-                            LoadingView()
-                                .frame(width: 200, height: 15)
-                                .padding(.bottom, 10)
-                        }.padding(.horizontal, 15)
-                    }.frame(height: 200)
-                    
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 600)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                            
-                            VStack(alignment: .center, spacing: 15) {
-                                HStack() {
-                                    VStack(alignment: .leading, spacing: 5) {
-                                        LoadingViewCircle()
-                                            .frame(width: 50, height: 50)
-                                        
-                                        
-                                        LoadingView()
-                                            .frame(width: 75, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                    
-                                    
-                                    VStack(alignment: .center) {
-                                        LoadingView()
-                                            .frame(width: 200, height: 30)
-                                        
-                                        LoadingView()
-                                            .frame(width: 50, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                    
-                                    
-                                    VStack(alignment: .trailing, spacing: 5) {
-                                        LoadingViewCircle()
-                                            .frame(width: 50, height: 50)
-                                        
-                                        
-                                        LoadingView()
-                                            .frame(width: 75, height: 15)
-                                    }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                }
-                                
-                                Spacer()
-                            }.padding([.all], 20)
-                        }
-                        .ignoresSafeArea(.top)
-                        Spacer()
-                    }
-                }
-            }
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .pollingTask {
-            guard let detail = await downloadFootballGameDetail(gameID: game.gameID, team: team) else {
-                // Keep the last good box score through a failed refresh.
-                // With nothing loaded yet, show the "no statistics" message
-                // rather than a blank sheet while retrying.
-                if loading {
-                    gameTeamStats = []
-                    loading = false
-                }
-                return GameDetail<FootballGameTeamStats>.retryInterval
-            }
-
-            gameTeamStats = detail.stats
-            gameInfo = detail.info
-            loading = false
-            return detail.refreshInterval
-        }
-    }
-}
-
-struct BaseballGameDetailView: View {
-    @Environment(\.containerSize) private var containerSize
-
-    @Environment(\.dismiss) private var dismiss
-    var game: Game
-    var teamColor: Color
-    @State private var gameInfo = GameInfo.empty
-    @State private var gameTeamStats: [BaseballGameTeamStats] = []
-    var team: TeamRef
-    
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack {
-                ZStack(alignment: .top) {//?USED TO TAKE UP ALL SPACE?//
-                    HStack() {
-                        Spacer()
-                    }
-                    
-                    RemoteImage(url: URL(string: gameInfo.venueImage), reloading: true)
-                        .id(gameInfo.venueImage)
-                        .frame(width: containerSize.width, height: 200)
-                        .clipShape(.rect(cornerRadius: 10))
-                    
-                    Rectangle()
-                        .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                        .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
-                        .opacity(0.6)
-                        .frame(width: containerSize.width, height: 200)
-                        .clipShape(.rect(cornerRadius: 10))
-                    
-                    //GAME DETAILS
-                    VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: 100, height: 5)
-                                .foregroundStyle(Color(uiColor: .white))
-                                .opacity(0.7)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        
-                        
-                        Text(game.competitionName)
-                            .fontWeight(.bold)
-                            .font(.system(size: 25))
-                            .minimumScaleFactor(0.2)
-                            .lineLimit(1)
-                            .foregroundStyle(.white)
-                            .padding(.top, 5)
-                        
-                        Spacer()
-                        
-                        
-                        Text(game.time)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Text(game.date)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Text(game.channel)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Spacer()
-                        
-                        Text("\(game.location) | \(gameInfo.city), \(gameInfo.state)")
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                    }.padding(.horizontal, 15)
-                }.frame(height: 200)
-                
-                VStack(spacing: 0) {
-                    ZStack(alignment: .top) {
-                        RoundedRectangle(cornerRadius: 20)
-                            .frame(width: (containerSize.width - 25), height: 600)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                        
-                        VStack(alignment: .center, spacing: 15) {
-                            if(game.cancelled) {
-                                Spacer()
-                                
-                                Text("This game has been canceled.")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Color(uiColor: .systemGray))
-                                    .fontWeight(.bold)
-                                    .minimumScaleFactor(0.5)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 30)
-                            } else {
-                                if game.dateAsDate <= Date(),
-                                   let homeLine = gameTeamStats.first(where: { $0.homeAway == "home" }),
-                                   let awayLine = gameTeamStats.first(where: { $0.homeAway == "away" }) {
-                                    HStack(alignment: .top) {
-                                        if(game.gameHome) {
-                                            HStack() {
-                                                VStack(alignment: .leading, spacing: 5) {
-                                                    //HOME TEAM PHOTO
-                                                    team.logoImage
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text("Royals")
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                
-                                                
-                                                VStack(alignment: .center) {
-                                                    Text("\(homeLine.runs) - \(awayLine.runs)")
-                                                        .font(.system(size: 30))
-                                                        //.foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                    
-                                                    if(game.completed) {
-                                                        Text("Final")
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    } else {
-                                                        Text(team.periodName(game.gamePeriod))
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                        
-                                                        Text(game.gameClock)
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    }
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                
-                                                
-                                                VStack(alignment: .trailing, spacing: 5) {
-                                                    //AWAY TEAM PHOTO
-                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                            Image("blankTeam")
-                                                                .resizable()
-                                                    }
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text(game.opponent)
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                            }
-                                        } else {
-                                            HStack() {
-                                                VStack(alignment: .leading, spacing: 5) {
-                                                    //HOME TEAM PHOTO
-                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                            Image("blankTeam")
-                                                                .resizable()
-                                                    }
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text(game.opponent)
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                
-                                                VStack(alignment: .center) {
-                                                    Text("\(homeLine.runs) - \(awayLine.runs)")
-                                                        .font(.system(size: 30))
-                                                        //.foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                    
-                                                    if(game.completed) {
-                                                        Text("Final")
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    } else {
-                                                        Text(team.periodName(game.gamePeriod))
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                        
-                                                        Text(game.gameClock)
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    }
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                
-                                                //AWAY TEAM PHOTO
-                                                VStack(alignment: .trailing, spacing: 5) {
-                                                    //PLAYER PHOTO
-                                                    team.logoImage
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text("Royals")
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                            }
-                                        }
-                                    }.ignoresSafeArea()
-
-                                    Group {
-                                        StatRowView(title: "Runs", homeStat: "\(homeLine.runs)", awayStat: "\(awayLine.runs)")
-
-                                        StatRowView(title: "Hits", homeStat: "\(homeLine.hits)", awayStat: "\(awayLine.hits)")
-
-                                        StatRowView(title: "Errors", homeStat: "\(homeLine.errors)", awayStat: "\(awayLine.errors)")
+                                    ForEach(boxScore.rows) { row in
+                                        StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
                                     }
                                 } else {
-                                    
                                     Spacer()
-                                    
-                                    Text("No game statistics at this time. Please check back later.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
+
+                                    message("No game statistics at this time. Please check back later.")
                                         .offset(y: -50)
                                 }
-                            }
-                            
-                            
-                            
-                            Spacer()
-                        }.padding([.all], 20)
-                    }
-                    .ignoresSafeArea(.top)
-                    Spacer()
-                }
-            }
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .pollingTask {
-            guard let detail = await downloadBaseballGameDetail(gameID: game.gameID, team: team) else {
-                // Keep the last good box score through a failed refresh.
-                return GameDetail<BaseballGameTeamStats>.retryInterval
-            }
 
-            gameTeamStats = detail.stats
-            gameInfo = detail.info
-            return detail.refreshInterval
-        }
-    }
-}
-
-struct SoccerGameDetailView: View {
-    @Environment(\.containerSize) private var containerSize
-
-    @Environment(\.dismiss) private var dismiss
-    var game: Game
-    var teamColor: Color
-    @State private var gameTeamStats: [SoccerGameTeamStats] = []
-    @State private var gameInfo = GameInfo.empty
-    var team: TeamRef
-    
-    
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack {
-                ZStack(alignment: .top) {//?USED TO TAKE UP ALL SPACE?//
-                    HStack() {
+                                Spacer()
+                            }.padding([.all], 20)
+                        }
+                        .ignoresSafeArea(.top)
                         Spacer()
                     }
-                    
-                    Image("soccerField")
+                }
+            }
+
+            Spacer()
+        }
+        .scrollIndicators(.hidden)
+        .background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
+        .ignoresSafeArea(.all)
+        .pollingTask {
+            guard let sheet = await league.downloadGameSheet(
+                gameID: game.gameID,
+                team: team,
+                followedIsHome: game.gameHome
+            ) else {
+                // Keep the last good box score through a failed refresh.
+                // With nothing loaded yet, show the "no statistics" message
+                // rather than a blank sheet while retrying.
+                if loading {
+                    boxScore = nil
+                    loading = false
+                }
+                return GameSheet.retryInterval
+            }
+
+            boxScore = sheet.boxScore
+            gameInfo = sheet.info
+            loading = false
+            return sheet.refreshInterval
+        }
+    }
+
+    // MARK: - Header
+
+    /// The venue behind the competition, kick-off, channel and location.
+    private var header: some View {
+        ZStack(alignment: .top) {
+            // Takes up the sheet's full width.
+            HStack() {
+                Spacer()
+            }
+
+            if let backdrop = league.venueBackdropAsset {
+                Image(backdrop)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: containerSize.width, height: 200)
+                    .clipShape(.rect(cornerRadius: 10))
+            } else {
+                RemoteImage(url: URL(string: gameInfo.venueImage))
+                    .id(gameInfo.venueImage)
+                    .frame(width: containerSize.width, height: 200)
+                    .clipShape(.rect(cornerRadius: 10))
+            }
+
+            Rectangle()
+                .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                .background(Color(uiColor: .black))
+                .opacity(0.6)
+                .frame(width: containerSize.width, height: 200)
+                .clipShape(.rect(cornerRadius: 10))
+
+            VStack(spacing: 0) {
+                GameDetailDismissHandle()
+
+                Text(game.competitionName)
+                    .fontWeight(.bold)
+                    .font(.system(size: 25))
+                    .minimumScaleFactor(0.2)
+                    .lineLimit(1)
+                    .foregroundStyle(.white)
+                    .padding(.top, 5)
+
+                Spacer()
+
+                headerLine(game.time)
+                headerLine(game.date)
+                headerLine(game.channel)
+
+                Spacer()
+
+                headerLine(venueLine)
+            }.padding(.horizontal, 15)
+        }.frame(height: 200)
+    }
+
+    /// The venue, then its city and state where the league's summaries give
+    /// them cleanly. See `LeagueDescriptor.venueBackdropAsset`.
+    private var venueLine: String {
+        league.venueBackdropAsset == nil
+            ? "\(game.location) | \(gameInfo.city), \(gameInfo.state)"
+            : game.location
+    }
+
+    private func headerLine(_ text: String) -> some View {
+        Text(text)
+            .fontWeight(.bold)
+            .font(.system(size: 15))
+            .foregroundStyle(.white)
+            .padding(.bottom, 10)
+            .minimumScaleFactor(0.2)
+    }
+
+    // MARK: - Scoreboard
+
+    /// Both crests and the scoreline, home team on the left.
+    private func scoreboard(_ boxScore: BoxScore) -> some View {
+        HStack(alignment: .top) {
+            HStack() {
+                side(followed: game.gameHome, alignment: .leading)
+
+                VStack(alignment: .center) {
+                    Text("\(boxScore.homeScore) - \(boxScore.awayScore)")
+                        .font(.system(size: 30))
+                        .fontWeight(.bold)
+
+                    status
+                }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+
+                side(followed: !game.gameHome, alignment: .trailing)
+            }
+        }.ignoresSafeArea()
+    }
+
+    /// One team's crest over its name.
+    private func side(followed: Bool, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 5) {
+            if followed {
+                team.logoImage
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 50, height: 50)
+            } else {
+                RemoteImage(url: URL(string: game.opponentLogo)) {
+                    Image("blankTeam")
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: containerSize.width, height: 200)
-                        .clipShape(.rect(cornerRadius: 10))
-                    
-                    Rectangle()
-                        .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                        .background(Color(uiColor: .black))//LinearGradient(gradient: Gradient(colors: [.clear, .black]), startPoint: .top, endPoint: .bottom))
-                        .opacity(0.6)
-                        .frame(width: containerSize.width, height: 200)
-                        .clipShape(.rect(cornerRadius: 10))
-                    
-                    //GAME DETAILS
-                    VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: 100, height: 5)
-                                .foregroundStyle(Color(uiColor: .white))
-                                .opacity(0.7)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
-                        
-                        
-                        
-                        Text(game.competitionName)
-                            .fontWeight(.bold)
-                            .font(.system(size: 25))
-                            .minimumScaleFactor(0.2)
-                            .lineLimit(1)
-                            .foregroundStyle(.white)
-                            .padding(.top, 5)
-                        
-                        Spacer()
-                        
-                        
-                        Text(game.time)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Text(game.date)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Text(game.channel)
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                        
-                        Spacer()
-                        
-                        Text("\(game.location)")
-                            .fontWeight(.bold)
-                            .font(.system(size: 15))
-                            .foregroundStyle(.white)
-                            .padding(.bottom, 10)
-                            .minimumScaleFactor(0.2)
-                    }.padding(.horizontal, 15)
-                }.frame(height: 200)
-                
-                VStack(spacing: 0) {
-                    ZStack(alignment: .top) {
-                        RoundedRectangle(cornerRadius: 20)
-                            .frame(width: (containerSize.width - 25), height: 600)
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                        
-                        VStack(alignment: .center, spacing: 15) {
-                            if(game.cancelled) {
-                                Spacer()
-                                
-                                Text("This game has been canceled.")
-                                    .font(.system(size: 15))
-                                    .foregroundStyle(Color(uiColor: .systemGray))
-                                    .fontWeight(.bold)
-                                    .minimumScaleFactor(0.5)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal, 30)
-                            } else {
-                                if game.dateAsDate <= Date(),
-                                   let homeLine = gameTeamStats.first(where: { $0.homeAway == "home" }),
-                                   let awayLine = gameTeamStats.first(where: { $0.homeAway == "away" }) {
-                                    HStack(alignment: .top) {
-                                        if(game.gameHome) {
-                                            HStack() {
-                                                VStack(alignment: .leading, spacing: 5) {
-                                                    //HOME TEAM PHOTO
-                                                    team.logoImage
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text("Kansas City")
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                
-                                                
-                                                VStack(alignment: .center) {
-                                                    Text("\(homeLine.goals) - \(awayLine.goals)")
-                                                        .font(.system(size: 30))
-                                                        //.foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                    
-                                                    if(game.completed) {
-                                                        Text("Final")
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    } else {
-                                                        Text(team.periodName(game.gamePeriod))
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                        
-                                                        Text(game.gameClock)
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    }
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                
-                                                
-                                                VStack(alignment: .trailing, spacing: 5) {
-                                                    //AWAY TEAM PHOTO
-                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                            Image("blankTeam")
-                                                                .resizable()
-                                                    }
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text(game.opponent)
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                            }
-                                        } else {
-                                            HStack() {
-                                                VStack(alignment: .leading, spacing: 5) {
-                                                    //HOME TEAM PHOTO
-                                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                                            Image("blankTeam")
-                                                                .resizable()
-                                                    }
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text(game.opponent)
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
-                                                
-                                                VStack(alignment: .center) {
-                                                    Text("\(homeLine.goals) - \(awayLine.goals)")
-                                                        .font(.system(size: 30))
-                                                        //.foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                    
-                                                    if(game.completed) {
-                                                        Text("Final")
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    } else {
-                                                        Text(team.periodName(game.gamePeriod))
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                        
-                                                        Text(game.gameClock)
-                                                            .font(.system(size: 15))
-                                                            .fontWeight(.bold)
-                                                            .minimumScaleFactor(0.5)
-                                                            .foregroundStyle(Color.white)
-                                                    }
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
-                                                
-                                                //AWAY TEAM PHOTO
-                                                VStack(alignment: .trailing, spacing: 5) {
-                                                    //PLAYER PHOTO
-                                                    team.logoImage
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fill)
-                                                        .frame(width: 50, height: 50)
-                                                    
-                                                    Text("Kansas City")
-                                                        .font(.system(size: 15))
-                                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                                        .fontWeight(.bold)
-                                                }.frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
-                                            }
-                                        }
-                                    }.ignoresSafeArea()
-
-                                    Group {
-                                        StatRowView(title: "Goals", homeStat: "\(homeLine.goals)", awayStat: "\(awayLine.goals)")
-
-                                        StatRowView(title: "Shots", homeStat: "\(homeLine.shots)", awayStat: "\(awayLine.shots)")
-
-                                        StatRowView(title: "Possession", homeStat: "\(Int(homeLine.possessionPct.rounded()))%", awayStat: "\(Int(awayLine.possessionPct.rounded()))%")
-
-                                        StatRowView(title: "Corner Kicks", homeStat: "\(homeLine.corners)", awayStat: "\(awayLine.corners)")
-                                    }
-                                } else {
-                                    
-                                    Spacer()
-                                    
-                                    Text("No game statistics at this time. Please check back later.")
-                                        .font(.system(size: 15))
-                                        .foregroundStyle(Color(uiColor: .systemGray))
-                                        .fontWeight(.bold)
-                                        .minimumScaleFactor(0.5)
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 30)
-                                        .offset(y: -50)
-                                }
-                            }
-                            
-                            
-                            
-                            Spacer()
-                        }.padding([.all], 20)
-                    }
-                    .ignoresSafeArea(.top)
-                    Spacer()
                 }
-            }
-            Spacer()
-        }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
-        .pollingTask {
-            guard let detail = await downloadSoccerGameDetail(gameID: game.gameID, team: team) else {
-                // Keep the last good box score through a failed refresh.
-                return GameDetail<SoccerGameTeamStats>.retryInterval
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 50, height: 50)
             }
 
-            gameTeamStats = detail.stats
-            gameInfo = detail.info
-            return detail.refreshInterval
+            Text(followed ? teamLabel : game.opponent)
+                .font(.system(size: 15))
+                .foregroundStyle(Color(uiColor: .systemGray))
+                .fontWeight(.bold)
+        }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
+    }
+
+    /// "Final", "Halftime", or the period and clock beneath the scoreline.
+    @ViewBuilder
+    private var status: some View {
+        if(game.completed) {
+            statusLine("Final")
+        } else if(game.gameHalftime) {
+            statusLine("Halftime")
+        } else {
+            statusLine(team.periodName(game.gamePeriod))
+            statusLine(game.gameClock)
         }
+    }
+
+    private func statusLine(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15))
+            .fontWeight(.bold)
+            .minimumScaleFactor(0.5)
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15))
+            .foregroundStyle(Color(uiColor: .systemGray))
+            .fontWeight(.bold)
+            .minimumScaleFactor(0.5)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 30)
     }
 }
 
+/// The bar at the top of a game sheet that closes it.
+private struct GameDetailDismissHandle: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button(action: {
+            dismiss()
+        }) {
+            RoundedRectangle(cornerRadius: 20)
+                .frame(width: 100, height: 5)
+                .foregroundStyle(Color(uiColor: .white))
+                .opacity(0.7)
+        }.padding([.top, .trailing, .leading, .bottom], 10)
+    }
+}
+
+/// The game sheet's placeholder until its first summary arrives, laid out
+/// like the header and scoreboard it stands in for.
+private struct GameDetailSkeleton: View {
+    @Environment(\.containerSize) private var containerSize
+
+    var body: some View {
+        VStack {
+            ZStack(alignment: .top) {
+                // Takes up the sheet's full width.
+                HStack() {
+                    Spacer()
+                }
+
+                LoadingView()
+                    .frame(width: containerSize.width, height: 200)
+
+                VStack(spacing: 5) {
+                    GameDetailDismissHandle()
+
+                    LoadingView()
+                        .frame(width: containerSize.width-20, height: 25)
+
+                    Spacer()
+
+                    LoadingView()
+                        .frame(width: 100, height: 15)
+
+                    LoadingView()
+                        .frame(width: 120, height: 15)
+
+                    LoadingView()
+                        .frame(width: 50, height: 15)
+
+                    Spacer()
+
+                    LoadingView()
+                        .frame(width: 200, height: 15)
+                        .padding(.bottom, 10)
+                }.padding(.horizontal, 15)
+            }.frame(height: 200)
+
+            VStack(spacing: 0) {
+                ZStack(alignment: .top) {
+                    RoundedRectangle(cornerRadius: 20)
+                        .frame(width: (containerSize.width - 25), height: 600)
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+
+                    VStack(alignment: .center, spacing: 15) {
+                        HStack() {
+                            crest(alignment: .leading)
+
+                            VStack(alignment: .center) {
+                                LoadingView()
+                                    .frame(width: 200, height: 30)
+
+                                LoadingView()
+                                    .frame(width: 50, height: 15)
+                            }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+
+                            crest(alignment: .trailing)
+                        }
+
+                        Spacer()
+                    }.padding([.all], 20)
+                }
+                .ignoresSafeArea(.top)
+                Spacer()
+            }
+        }
+    }
+
+    private func crest(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 5) {
+            LoadingViewCircle()
+                .frame(width: 50, height: 50)
+
+            LoadingView()
+                .frame(width: 75, height: 15)
+        }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
+    }
+}

@@ -280,7 +280,7 @@ struct NewsSection<Player: RosterPlayer>: View {
     }
 }
 
-/// The scrolling body shared by all four team pages.
+/// The scrolling body of every team page.
 struct TeamHomeLayout<Content: View>: View {
     @ViewBuilder var content: Content
 

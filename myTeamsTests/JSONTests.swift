@@ -187,7 +187,7 @@ struct JSONTests {
         #expect(json["asText"].stringValue == "offense")
 
         // The failure mode if ESPN nests them instead: "" — which routes
-        // every football player to unit "" (ChiefsHome's filters match
+        // every football player to unit "" (the NFL unit filters match
         // nobody) and every soccer player to "N/A" citizenship.
         #expect(json["asObject"].stringValue == "")
         #expect(json["asArray"].stringValue == "")

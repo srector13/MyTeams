@@ -46,15 +46,6 @@ struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
     /// A team's line is identified by the team, so a refreshed box score
     /// compares equal to the one it replaces when nothing has changed.
     var id: String { name }
-
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: BasketballGameTeamStats(
-        name: "", fieldGoals: "0", fieldGoalPct: 0, threePoints: "0",
-        threePointPct: 0, freeThrows: "0", freeThrowPct: 0, offensiveRebounds: 0,
-        defensiveRebounds: 0, assists: 0, steals: 0, blocks: 0, turnOvers: 0,
-        fouls: 0, largestLead: 0, projection: 0, score: 0, opponentScore: 0,
-        gameClock: ""
-    ), count: 2)
 }
 
 struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
@@ -73,13 +64,6 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
 
     /// See `BasketballGameTeamStats.id`.
     var id: String { name }
-
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: FootballGameTeamStats(
-        name: "", yards: 0, passingYards: 0, rushingYards: 0, firstDowns: 0,
-        drives: 0, score: 0, interceptions: 0, possesionTime: "",
-        completionAttempts: 0, opponentScore: 0, gameClock: ""
-    ), count: 2)
 }
 
 /// One team's line in a baseball game's box score.
@@ -448,4 +432,165 @@ func downloadSoccerGameDetail(gameID: String, team: TeamRef) async -> GameDetail
         return nil
     }
     return GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
+}
+
+// MARK: - The detail sheet's box score
+
+/// A game's box score as the detail sheet draws it, whatever the sport: the
+/// scoreline, then one row per statistic, home side on the left.
+struct BoxScore: Hashable, Sendable {
+    struct Row: Hashable, Sendable, Identifiable {
+        var title: String
+        var home: String
+        var away: String
+
+        /// Titles are distinct within a sport's box score.
+        var id: String { title }
+    }
+
+    var homeScore: Int
+    var awayScore: Int
+    var rows: [Row]
+
+    /// Reads a basketball box score. The lines come away first, home second,
+    /// and each carries the followed team's score first.
+    init?(basketball lines: [BasketballGameTeamStats], followedIsHome: Bool) {
+        guard lines.count >= 2 else { return nil }
+        let away = lines[0]
+        let home = lines[1]
+
+        func row(_ title: String, _ value: (BasketballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = followedIsHome ? away.score : away.opponentScore
+        awayScore = followedIsHome ? away.opponentScore : away.score
+        rows = [
+            row("Field Goals") { $0.fieldGoals.replacingOccurrences(of: "-", with: "/") },
+            row("Field Goal %") { "\(Int($0.fieldGoalPct))%" },
+            row("Three Points") { $0.threePoints.replacingOccurrences(of: "-", with: "/") },
+            row("Three Point %") { "\(Int($0.threePointPct))%" },
+            row("Free Throws") { $0.freeThrows.replacingOccurrences(of: "-", with: "/") },
+            row("Free Throw %") { "\(Int($0.freeThrowPct))%" },
+            row("Offensive Rebounds") { "\($0.offensiveRebounds)" },
+            row("Defensive Rebounds") { "\($0.defensiveRebounds)" },
+            row("Assists") { "\($0.assists)" },
+            row("Blocks") { "\($0.blocks)" },
+            row("Steals") { "\($0.steals)" },
+            row("Turnovers") { "\($0.turnOvers)" },
+            row("Fouls") { "\($0.fouls)" },
+        ]
+    }
+
+    /// Reads a football box score, laid out as `init(basketball:)` describes.
+    init?(football lines: [FootballGameTeamStats], followedIsHome: Bool) {
+        guard lines.count >= 2 else { return nil }
+        let away = lines[0]
+        let home = lines[1]
+
+        func row(_ title: String, _ value: (FootballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = followedIsHome ? away.score : away.opponentScore
+        awayScore = followedIsHome ? away.opponentScore : away.score
+        rows = [
+            row("Total Yards") { "\($0.yards)" },
+            row("Passing Yards") { "\($0.passingYards)" },
+            row("Rushing Yards") { "\($0.rushingYards)" },
+            row("First Downs") { "\($0.firstDowns)" },
+            row("Drives") { "\($0.drives)" },
+            row("Interceptions") { "\($0.interceptions)" },
+            row("Possession Time") { "\($0.possesionTime)" },
+            row("Completion Attempts") { "\($0.completionAttempts)" },
+        ]
+    }
+
+    /// Reads a baseball box score, whose lines carry their own side.
+    init?(baseball lines: [BaseballGameTeamStats]) {
+        guard let home = lines.first(where: { $0.homeAway == "home" }),
+              let away = lines.first(where: { $0.homeAway == "away" })
+        else { return nil }
+
+        func row(_ title: String, _ value: (BaseballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = home.runs
+        awayScore = away.runs
+        rows = [
+            row("Runs") { "\($0.runs)" },
+            row("Hits") { "\($0.hits)" },
+            row("Errors") { "\($0.errors)" },
+        ]
+    }
+
+    /// Reads a soccer box score, whose lines carry their own side.
+    init?(soccer lines: [SoccerGameTeamStats]) {
+        guard let home = lines.first(where: { $0.homeAway == "home" }),
+              let away = lines.first(where: { $0.homeAway == "away" })
+        else { return nil }
+
+        func row(_ title: String, _ value: (SoccerGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = home.goals
+        awayScore = away.goals
+        rows = [
+            row("Goals") { "\($0.goals)" },
+            row("Shots") { "\($0.shots)" },
+            row("Possession") { "\(Int($0.possessionPct.rounded()))%" },
+            row("Corner Kicks") { "\($0.corners)" },
+        ]
+    }
+}
+
+/// Everything a game's detail sheet draws from one summary fetch, whatever
+/// the sport. See `GameDetail`.
+struct GameSheet: Sendable {
+    /// `nil` when the summary carries no box score for both sides yet.
+    var boxScore: BoxScore?
+    var info: GameInfo
+    /// How long to wait before refetching, or `nil` to stop.
+    var refreshInterval: Duration?
+
+    init<Stats: Sendable>(_ detail: GameDetail<Stats>, boxScore: ([Stats]) -> BoxScore?) {
+        self.boxScore = boxScore(detail.stats)
+        self.info = detail.info
+        self.refreshInterval = detail.refreshInterval
+    }
+
+    /// How long a sheet waits after a fetch that produced no document.
+    static var retryInterval: Duration { GameDetail<BoxScore>.retryInterval }
+}
+
+extension LeagueDescriptor {
+    /// Loads a game's detail sheet in this league, reading the box score with
+    /// the league's sport's parser. `nil` when the fetch produced no document.
+    ///
+    /// - Parameter followedIsHome: the schedule's `gameHome` for the game;
+    ///   basketball and football lines carry the followed team's score first.
+    func downloadGameSheet(gameID: String, team: TeamRef, followedIsHome: Bool) async -> GameSheet? {
+        switch kind {
+        case .basketball:
+            guard let detail = await downloadBasketballGameDetail(gameID: gameID, team: team) else { return nil }
+            return GameSheet(detail) { BoxScore(basketball: $0, followedIsHome: followedIsHome) }
+        case .football:
+            guard let detail = await downloadFootballGameDetail(gameID: gameID, team: team) else { return nil }
+            return GameSheet(detail) { BoxScore(football: $0, followedIsHome: followedIsHome) }
+        case .baseball:
+            guard let detail = await downloadBaseballGameDetail(gameID: gameID, team: team) else { return nil }
+            return GameSheet(detail) { BoxScore(baseball: $0) }
+        case .soccer:
+            guard let detail = await downloadSoccerGameDetail(gameID: gameID, team: team) else { return nil }
+            return GameSheet(detail) { BoxScore(soccer: $0) }
+        case .other:
+            // No box-score parser for this sport: the venue and phase only.
+            guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
+                return nil
+            }
+            return GameSheet(GameDetail<BoxScore>(json: json, team: team, stats: [])) { _ in nil }
+        }
+    }
 }

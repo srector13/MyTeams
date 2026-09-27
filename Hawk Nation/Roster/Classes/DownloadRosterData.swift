@@ -181,8 +181,8 @@ func parseFootballRoster(from json: JSON) -> [FootBallPlayer] {
         // the unit ("offense", "defense", "specialTeam"). Unlike the athlete
         // `position` below, it is not an object. If the feed ever changes it
         // to one, `stringValue` yields "" and every player is filed under ""
-        // — ChiefsHome's unit filters would then match nobody and all three
-        // roster sections render empty. See JSONTests for the coercion rule.
+        // — the NFL unit filters (`LeagueDescriptor.rosterFilters`) would
+        // then match nobody and all three render empty. See JSONTests for the coercion rule.
         let unit = group["position"].stringValue
 
         for (_, athlete): (String, JSON) in group["items"] {

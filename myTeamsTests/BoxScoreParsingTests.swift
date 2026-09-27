@@ -402,3 +402,76 @@ struct BoxScoreParsingTests {
         #expect(interval(JSON(data: Data())) == .seconds(10))
     }
 }
+
+/// The game sheet draws every sport from one `BoxScore`: home score on the
+/// left, then rows with the home side first. These pin what each sport's
+/// typed lines reduce to, using the golden fixtures.
+@Suite("Detail-sheet box score")
+struct DetailSheetBoxScoreTests {
+    private func row(_ boxScore: BoxScore, _ title: String) -> BoxScore.Row? {
+        boxScore.rows.first { $0.title == title }
+    }
+
+    @Test("Basketball: lines are away then home; the scoreline follows gameHome")
+    func basketball() throws {
+        let lines = parseBasketballGameTeamStats(from: try Fixture.json("jayhawks_summary_final_401851305"), team: .jayhawks)
+        // KU (47) is listed away at a neutral site; Houston (69) is home.
+        let boxScore = try #require(BoxScore(basketball: lines, followedIsHome: false))
+        #expect(boxScore.homeScore == 69)
+        #expect(boxScore.awayScore == 47)
+        #expect(boxScore.rows.map(\.title) == [
+            "Field Goals", "Field Goal %", "Three Points", "Three Point %",
+            "Free Throws", "Free Throw %", "Offensive Rebounds", "Defensive Rebounds",
+            "Assists", "Blocks", "Steals", "Turnovers", "Fouls",
+        ])
+        #expect(row(boxScore, "Field Goals") == BoxScore.Row(title: "Field Goals", home: "22/53", away: "14/57"))
+        #expect(row(boxScore, "Three Points") == BoxScore.Row(title: "Three Points", home: "10/18", away: "7/23"))
+        #expect(row(boxScore, "Defensive Rebounds") == BoxScore.Row(title: "Defensive Rebounds", home: "32", away: "22"))
+
+        #expect(BoxScore(basketball: Array(lines.prefix(1)), followedIsHome: true) == nil)
+    }
+
+    @Test("Football: the followed team's score lands on its own side")
+    func football() throws {
+        let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_final_401872945"), team: .chiefs)
+        // Colts (30) away in lines[0], Chiefs (33) home in lines[1].
+        let boxScore = try #require(BoxScore(football: lines, followedIsHome: true))
+        #expect(boxScore.homeScore == 33)
+        #expect(boxScore.awayScore == 30)
+        #expect(boxScore.rows.map(\.title) == [
+            "Total Yards", "Passing Yards", "Rushing Yards", "First Downs",
+            "Drives", "Interceptions", "Possession Time", "Completion Attempts",
+        ])
+        #expect(row(boxScore, "Total Yards") == BoxScore.Row(title: "Total Yards", home: "523", away: "329"))
+        #expect(row(boxScore, "Possession Time") == BoxScore.Row(title: "Possession Time", home: "37:00", away: "33:00"))
+    }
+
+    @Test("Baseball: sides come from each line's homeAway")
+    func baseball() throws {
+        let lines = parseBaseballGameTeamStats(from: try Fixture.json("royals_summary_final_401817094"))
+        let boxScore = try #require(BoxScore(baseball: lines))
+        #expect(boxScore.homeScore == 5)  // Royals
+        #expect(boxScore.awayScore == 11)  // Guardians
+        #expect(boxScore.rows == [
+            BoxScore.Row(title: "Runs", home: "5", away: "11"),
+            BoxScore.Row(title: "Hits", home: "10", away: "14"),
+            BoxScore.Row(title: "Errors", home: "2", away: "1"),
+        ])
+
+        #expect(BoxScore(baseball: lines.filter { $0.homeAway == "home" }) == nil)
+    }
+
+    @Test("Soccer: possession rounds to a whole percentage")
+    func soccer() throws {
+        let lines = parseSoccerGameTeamStats(from: try Fixture.json("sporting_summary_final_761450"))
+        let boxScore = try #require(BoxScore(soccer: lines))
+        #expect(boxScore.homeScore == 3)  // San Jose
+        #expect(boxScore.awayScore == 0)  // Kansas City
+        #expect(boxScore.rows == [
+            BoxScore.Row(title: "Goals", home: "3", away: "0"),
+            BoxScore.Row(title: "Shots", home: "17", away: "7"),
+            BoxScore.Row(title: "Possession", home: "44%", away: "56%"),
+            BoxScore.Row(title: "Corner Kicks", home: "15", away: "3"),
+        ])
+    }
+}

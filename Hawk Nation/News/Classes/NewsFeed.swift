@@ -20,28 +20,14 @@ enum NewsFeed {
         "https://newsapi.org/v2/everything?\(query)&sortBy=publishedAt&apiKey=\(apiKey)"
     }
 
-    static var jayhawks: String {
-        feed(
-            query: "q=+jayhawks+basketball&qInTitle=kansas"
-                + "&domains=espn.com,bleacherreport.com,foxsport.com"
-        )
+    /// The feed for `team`: its catalogued query, or else a search for its
+    /// full name.
+    static func url(for team: TeamRef) -> String {
+        feed(query: team.newsQuery ?? defaultQuery(for: team))
     }
 
-    static var chiefs: String {
-        feed(
-            query: "qInTitle=+chiefs"
-                + "&domains=espn.com,bleacherreport.com,foxsport.com,nfl.com"
-        )
-    }
-
-    static var royals: String {
-        feed(
-            query: "q=+royals+kansas+city"
-                + "&domains=espn.com,bleacherreport.com,foxsport.com"
-        )
-    }
-
-    static var sporting: String {
-        feed(query: "q=+sporting+kc+mls")
+    private static func defaultQuery(for team: TeamRef) -> String {
+        let phrase = "\"\(team.displayName)\""
+        return "q=" + (phrase.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")
     }
 }
