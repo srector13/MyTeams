@@ -34,9 +34,11 @@ struct GameTimelineProvider: TimelineProvider {
     /// after one dropped request was the old behaviour.
     private let retryInterval: TimeInterval = 5 * 60
 
-    /// How long the gallery preview waits for real data before settling for
-    /// the placeholder.
+    /// How long a snapshot waits for real data before settling for the
+    /// placeholder. WidgetKit wants snapshots back promptly, and the gallery
+    /// preview most of all.
     private let previewDeadline: Duration = .seconds(3)
+    private let snapshotDeadline: Duration = .seconds(10)
 
     func placeholder(in context: Context) -> WidgetEntry {
         WidgetEntry(date: .now, tempGame: .placeholder(for: team))
@@ -45,14 +47,9 @@ struct GameTimelineProvider: TimelineProvider {
     /// Renders the real next fixture — in the widget gallery too, where it
     /// waits only briefly before falling back to the placeholder.
     func getSnapshot(in context: Context, completion: @escaping (WidgetEntry) -> Void) {
-        let isPreview = context.isPreview
+        let deadline = context.isPreview ? previewDeadline : snapshotDeadline
         Task {
-            let result: WidgetLoadResult
-            if isPreview {
-                result = await WidgetScheduleLoader.nextGame(for: team, within: previewDeadline)
-            } else {
-                result = await WidgetScheduleLoader.nextGame(for: team)
-            }
+            let result = await WidgetScheduleLoader.nextGame(for: team, within: deadline)
 
             let game: WidgetGame
             switch result {

@@ -329,7 +329,7 @@ struct ScheduleParsingTests {
         #expect(first == second)
 
         #expect(first.first?.id == "401700001")
-        #expect(first.last?.id == "2026-11-08T01:00Z|Duke")
+        #expect(first.last?.id == "2026-11-08T01:00Z|Duke|1")
         #expect(Set(first.map(\.id)).count == first.count)
     }
 

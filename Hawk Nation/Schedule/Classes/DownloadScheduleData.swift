@@ -10,7 +10,7 @@ import Foundation
 
 struct Game: Identifiable, Hashable, Sendable {
     /// ESPN's id for the event, or — for a feed entry that carries none — a
-    /// key built from its raw date and opponent. See `id`.
+    /// key built from its raw date, opponent and feed position. See `id`.
     var eventID = ""
     var team: String
     var opponent: String
@@ -208,10 +208,11 @@ private func parseGame(
 
     // Prefer the event's own id; the competition id is the same number on
     // every feed seen so far. The last resort uses the raw date string, not
-    // `dateAsDate`, which falls back to "now" when the date is unreadable.
+    // `dateAsDate`, which falls back to "now" when the date is unreadable,
+    // plus the feed position so an id-less doubleheader stays two games.
     var eventID = event["id"].stringValue
     if eventID.isEmpty { eventID = gameID }
-    if eventID.isEmpty { eventID = "\(event["date"].stringValue)|\(opponent)" }
+    if eventID.isEmpty { eventID = "\(event["date"].stringValue)|\(opponent)|\(pointer)" }
 
     return Game(
         eventID: eventID,
