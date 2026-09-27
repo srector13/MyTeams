@@ -585,7 +585,7 @@ extension LeagueDescriptor {
         case .soccer:
             guard let detail = await downloadSoccerGameDetail(gameID: gameID, team: team) else { return nil }
             return GameSheet(detail) { BoxScore(soccer: $0) }
-        case .other:
+        case .hockey, .other:
             // No box-score parser for this sport: the venue and phase only.
             guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
                 return nil

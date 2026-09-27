@@ -101,6 +101,7 @@ struct RemoteImage<Placeholder: View>: View {
 
     private let url: URL?
     private let reloading: Bool
+    private let showsProgress: Bool
     private let placeholder: Placeholder
 
     @State private var phase: Phase = .loading
@@ -108,10 +109,12 @@ struct RemoteImage<Placeholder: View>: View {
     init(
         url: URL?,
         reloading: Bool = false,
+        showsProgress: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.url = url
         self.reloading = reloading
+        self.showsProgress = showsProgress
         self.placeholder = placeholder()
     }
 
@@ -123,7 +126,7 @@ struct RemoteImage<Placeholder: View>: View {
             } else {
                 placeholder
                     .overlay {
-                        if url != nil, case .loading = phase {
+                        if showsProgress, url != nil, case .loading = phase {
                             ProgressView()
                         }
                     }

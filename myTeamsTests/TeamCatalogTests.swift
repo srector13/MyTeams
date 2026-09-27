@@ -150,7 +150,8 @@ struct TeamCatalogTests {
 
         // An unknown league still gets a descriptor, keyed on its sport.
         let nhl = LeagueID(sport: "hockey", league: "nhl")
-        #expect(nhl.descriptor.kind == .other)
+        #expect(nhl.descriptor.kind == .hockey)
+        #expect(LeagueID(sport: "lacrosse", league: "nll").descriptor.kind == .other)
         #expect(LeagueID(sport: "basketball", league: "nba").descriptor.kind == .basketball)
         #expect(nhl.descriptor.periodName("1") == "")
     }

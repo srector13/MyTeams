@@ -65,8 +65,10 @@
 		BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
 		056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
 		CA55107148FE3854E9BE41FF /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
+		357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */; };
 		F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */; };
 		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
+		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -165,8 +167,10 @@
 		2DC2D7827160987765974061 /* myTeamsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5883C4F774D9544E81195578 /* LogoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStore.swift"; sourceTree = "<group>"; };
 		A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalog.swift"; sourceTree = "<group>"; };
+		A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogo.swift"; sourceTree = "<group>"; };
 		82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalogTests.swift"; sourceTree = "<group>"; };
 		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
+		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -264,6 +268,7 @@
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
 				5883C4F774D9544E81195578 /* LogoStore.swift */,
 				A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */,
+				A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */,
 			);
 			path = "Networking";
 			sourceTree = "<group>";
@@ -411,6 +416,7 @@
 				85ADA55D78EE908E3737EFAC /* TeamCatalogTests.swift */,
 				82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */,
 				B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */,
+				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
 				BD5786509BA63FD87FE7AD03 /* FIXTURES.md */,
@@ -622,6 +628,7 @@
 				DD8B5E279E378CED42EDFE79 /* StatRowView.swift in Sources */,
 				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
 				056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */,
+				357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -656,6 +663,7 @@
 				07BFE42C24ACB22870DAD8F2 /* TeamCatalogTests.swift in Sources */,
 				F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */,
 				015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */,
+				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

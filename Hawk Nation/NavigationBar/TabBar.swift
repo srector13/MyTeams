@@ -60,17 +60,18 @@ private struct TeamPage<Content: View>: View {
 
             ScrollView(.vertical) {
                 VStack {
-                    team.logoImage
-                        .resizable()
-                        .opacity(0.5)
-                        .frame(
-                            width: containerSize.width - 50,
-                            height: containerSize.width - 50
-                        )
-                        .offset(x: 50)
-                        // The crest deliberately overflows its slot: only the
-                        // top sliver shows until the page is scrolled.
-                        .frame(height: containerSize.height / 14)
+                    // Drawn over the team colour, so a dark background takes
+                    // the dark crest where the feed has one.
+                    TeamLogo(
+                        team: team,
+                        size: max(containerSize.width - 50, 0),
+                        forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
+                    )
+                    .opacity(0.5)
+                    .offset(x: 50)
+                    // The crest deliberately overflows its slot: only the
+                    // top sliver shows until the page is scrolled.
+                    .frame(height: containerSize.height / 14)
 
                     VStack {
                         HStack(alignment: .bottom) {
@@ -139,9 +140,7 @@ private struct TeamPicker: View {
                     selection = team.id
                 } label: {
                     HStack(spacing: 6) {
-                        team.logoImage
-                            .resizable()
-                            .frame(width: 25, height: 25)
+                        TeamLogo(team: team, size: 25)
 
                         if selection == team.id {
                             Text(team.shortName)
@@ -174,9 +173,7 @@ struct TopView: View {
 
     var body: some View {
         HStack(alignment: .center) {
-            team.logoImage
-                .resizable()
-                .frame(width: 40, height: 40)
+            TeamLogo(team: team, size: 40)
                 .padding(.leading)
 
             Text(team.displayName)

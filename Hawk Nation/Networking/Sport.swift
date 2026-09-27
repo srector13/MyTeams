@@ -15,6 +15,9 @@ enum SportKind: String, Codable, Sendable {
     case basketball
     case baseball
     case soccer
+    /// Hockey leagues are catalogued and badged, but have no dedicated views
+    /// yet; they render as `other` does.
+    case hockey
     /// A sport the app has no dedicated views for.
     case other
 }

@@ -23,7 +23,7 @@ struct TeamHomeView: View {
         case .football: TeamHomeContent(team: team, loadRoster: downloadFootballRoster(team:))
         case .baseball: TeamHomeContent(team: team, loadRoster: downloadBaseballRoster(team:))
         case .soccer: TeamHomeContent(team: team, loadRoster: downloadSoccerRoster(team:))
-        case .other: EmptyView()
+        case .hockey, .other: EmptyView()
         }
     }
 }

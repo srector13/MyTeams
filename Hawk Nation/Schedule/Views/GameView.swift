@@ -40,14 +40,10 @@ struct GameView : View {
                 Rectangle()
                     .foregroundStyle(teamColor)
 
-                team.logoImage
-                    .resizable()
-                    .renderingMode(.original)
-                    .aspectRatio(contentMode: .fill)
+                TeamLogo(team: team, size: 200, forceVariant: .default)
                     .opacity(0.1)
                     .saturation(0.1)
                     .contrast(0.5)
-                    .frame(width: 200, height: 200)
                     .offset(x: 40, y: 50)
                 if(game.cancelled || game.postponed) {
                     Group {

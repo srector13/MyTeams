@@ -201,10 +201,7 @@ struct GameDetailView: View {
     private func side(followed: Bool, alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 5) {
             if followed {
-                team.logoImage
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 50, height: 50)
+                TeamLogo(team: team, size: 50)
             } else {
                 RemoteImage(url: URL(string: game.opponentLogo)) {
                     Image("blankTeam")

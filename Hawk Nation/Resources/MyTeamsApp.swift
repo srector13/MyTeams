@@ -13,6 +13,14 @@ struct MyTeamsApp: App {
     var body: some Scene {
         WindowGroup {
             Home()
+                .task {
+                    // Put the bundled crests on disk once, then keep the
+                    // favorites' crests current (weekly revalidation).
+                    await LogoStore.seedBundledCrestsIfNeeded()
+                    for team in FavoriteTeams.teams {
+                        await LogoStore.prefetchAllVariants(team, favorite: true)
+                    }
+                }
         }
     }
 }

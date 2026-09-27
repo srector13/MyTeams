@@ -142,8 +142,11 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     var logoURL: URL?
     var logoDarkURL: URL?
 
-    /// The bundled crest's asset name, for the teams that ship with one. The
-    /// app and the widget each carry a copy of these imagesets.
+    /// The bundled crest's asset name, for the seed teams only; teams loaded
+    /// from ESPN have none. Only the app bundles these imagesets now: views
+    /// draw crests through `TeamLogo`, which falls back to this asset, and
+    /// `LogoStore.seedBundledCrestsIfNeeded` copies them to disk for the
+    /// widget.
     var logoAsset: String?
 
     /// The stable key for persistence and widgets: `"<leaguePath>:<espnID>"`,
@@ -158,9 +161,6 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
 
     /// The team's colour for SwiftUI views.
     var color: Color { Color(hexString: colorHex) }
-
-    /// The team crest. Teams without a bundled crest get the blank one.
-    var logoImage: Image { Image(logoAsset ?? "blankTeam") }
 
     /// The label for one of this team's game periods. See
     /// `LeagueDescriptor.periodName`.

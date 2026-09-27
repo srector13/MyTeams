@@ -394,14 +394,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                         .foregroundStyle(teamColor)
 
                     //TEAM LOGO
-                    team.logoImage
-                        .resizable()
-                        .renderingMode(.original)
-                        .aspectRatio(contentMode: .fill)
+                    TeamLogo(team: team, size: 300, forceVariant: .default)
                         .opacity(0.1)
                         .saturation(0.1)
                         .contrast(0.5)
-                        .frame(width: 300, height: 300)
 
                     VStack(spacing: 0) {
                         //DISMISS BUTTON
