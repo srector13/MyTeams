@@ -402,13 +402,13 @@ struct BasketballGameDetailView: View {
             Spacer()
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
-        .task(repeatingEvery: .seconds(10)) {
-            async let stats = downloadBasketballGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+        .pollingTask {
+            let detail = await downloadBasketballGameDetail(gameID: game.gameID, team: team)
 
-            gameTeamStats = await stats
-            gameInfo = await info
+            gameTeamStats = detail.stats
+            gameInfo = detail.info
             loading = false
+            return detail.refreshInterval
         }
     }
 }
@@ -785,13 +785,13 @@ struct FootballGameDetailView: View {
             Spacer()
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
-        .task(repeatingEvery: .seconds(10)) {
-            async let stats = downloadFootballGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+        .pollingTask {
+            let detail = await downloadFootballGameDetail(gameID: game.gameID, team: team)
 
-            gameTeamStats = await stats
-            gameInfo = await info
+            gameTeamStats = detail.stats
+            gameInfo = detail.info
             loading = false
+            return detail.refreshInterval
         }
     }
 }
@@ -1060,12 +1060,12 @@ struct BaseballGameDetailView: View {
             Spacer()
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
-        .task(repeatingEvery: .seconds(10)) {
-            async let stats = downloadBaseballGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+        .pollingTask {
+            let detail = await downloadBaseballGameDetail(gameID: game.gameID, team: team)
 
-            gameTeamStats = await stats
-            gameInfo = await info
+            gameTeamStats = detail.stats
+            gameInfo = detail.info
+            return detail.refreshInterval
         }
     }
 }
@@ -1337,12 +1337,12 @@ struct SoccerGameDetailView: View {
             Spacer()
         }.background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
-        .task(repeatingEvery: .seconds(10)) {
-            async let stats = downloadSoccerGameTeamStatsData(gameID: game.gameID)
-            async let info = downloadGameInfo(gameID: game.gameID, team: team)
+        .pollingTask {
+            let detail = await downloadSoccerGameDetail(gameID: game.gameID, team: team)
 
-            gameTeamStats = await stats
-            gameInfo = await info
+            gameTeamStats = detail.stats
+            gameInfo = detail.info
+            return detail.refreshInterval
         }
     }
 }

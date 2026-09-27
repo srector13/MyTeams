@@ -369,4 +369,36 @@ struct BoxScoreParsingTests {
         #expect(parseBaseballGameTeamStats(from: headerOnly).isEmpty)
         #expect(parseSoccerGameTeamStats(from: headerOnly).isEmpty)
     }
+
+    // MARK: - Detail sheet polling
+
+    /// A summary whose header status carries `state` and `completed`.
+    private func summary(state: String, completed: Bool) -> JSON {
+        JSON(data: Data("""
+        {"header": {"competitions": [{"status": {"type": {
+          "state": "\(state)", "completed": \(completed)
+        }}}]}}
+        """.utf8))
+    }
+
+    @Test("The summary header's status decides the game phase")
+    func gamePhase() {
+        #expect(parseGamePhase(from: summary(state: "pre", completed: false)) == .pre)
+        #expect(parseGamePhase(from: summary(state: "in", completed: false)) == .live)
+        #expect(parseGamePhase(from: summary(state: "post", completed: true)) == .final)
+        // A postponed game ends up "post" without ever completing.
+        #expect(parseGamePhase(from: summary(state: "post", completed: false)) == .final)
+        #expect(parseGamePhase(from: JSON(data: Data())) == .unknown)
+    }
+
+    @Test("Detail sheets poll live games, slow down pre-game and stop once final")
+    func detailRefreshInterval() {
+        func interval(_ json: JSON) -> Duration? {
+            GameDetail<SoccerGameTeamStats>(json: json, team: .sporting, stats: []).refreshInterval
+        }
+        #expect(interval(summary(state: "in", completed: false)) == .seconds(10))
+        #expect(interval(summary(state: "pre", completed: false)) == .seconds(60))
+        #expect(interval(summary(state: "post", completed: true)) == nil)
+        #expect(interval(JSON(data: Data())) == .seconds(10))
+    }
 }
