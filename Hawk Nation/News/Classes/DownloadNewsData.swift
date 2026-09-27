@@ -9,7 +9,6 @@
 import Foundation
 
 struct News: Identifiable, Equatable, Hashable, Sendable {
-    var id = UUID()
     let author: String?
     let title: String
     let articleDescription: String?
@@ -18,6 +17,10 @@ struct News: Identifiable, Equatable, Hashable, Sendable {
     let publishedAt: Date
     let content: String?
     let source: String
+
+    /// An article is identified by its link, which stays the same however
+    /// often the feed is fetched.
+    var id: String { url.absoluteString }
 }
 
 /// Parses the `publishedAt` timestamps NewsAPI returns, e.g.
@@ -51,7 +54,8 @@ func downloadNewsData(queryURL: String) async -> [News] {
             source: subJson["source"]["name"].stringValue
         )
 
-        if !articles.contains(where: { $0.title == article.title }) {
+        // Matching links are dropped too: the link is the article's `id`.
+        if !articles.contains(where: { $0.title == article.title || $0.url == article.url }) {
             articles.append(article)
         }
     }

@@ -8,8 +8,7 @@
 
 import Foundation
 
-struct BasketballPlayerStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
+struct BasketballPlayerStats: Hashable, Sendable {
     var gamesPlayed: Int
     var avgMinutes: Float
     var fieldGoalPct: Float
@@ -36,7 +35,9 @@ struct BasketballPlayerStats: Identifiable, Hashable, Sendable {
 
 /// One statistic in an NFL player's season splits.
 struct FootballStat: Identifiable, Hashable, Sendable {
-    var id = UUID()
+    /// The feed's name for the stat, e.g. "passingYards" — unique within a
+    /// player's splits, so it identifies the stat across refetches.
+    var id: String
     var label: String
     var display: String
 
@@ -54,9 +55,11 @@ struct FootballStat: Identifiable, Hashable, Sendable {
 /// A position-appropriate block of stats — Passing, Rushing, Defense — under
 /// one header.
 struct FootballStatGroup: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var title: String
     var stats: [FootballStat]
+
+    /// Group titles are distinct, so the title identifies the group.
+    var id: String { title }
 
     /// The stats in the three-column rows the detail view renders, matching
     /// the basketball layout.
@@ -67,8 +70,7 @@ struct FootballStatGroup: Identifiable, Hashable, Sendable {
     }
 }
 
-struct FootballPlayerStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
+struct FootballPlayerStats: Hashable, Sendable {
     var groups: [FootballStatGroup]
 
     /// Whether the splits fetch has finished; lets the view tell "loading"
@@ -238,7 +240,7 @@ func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats 
         for entry in spec.entries {
             guard let raw = feed[entry.name], !claimed.contains(entry.name) else { continue }
             claimed.insert(entry.name)
-            stats.append(FootballStat(label: entry.label, display: footballStatDisplay(name: entry.name, raw: raw)))
+            stats.append(FootballStat(id: entry.name, label: entry.label, display: footballStatDisplay(name: entry.name, raw: raw)))
         }
         if stats.contains(where: { !$0.isZero }) {
             groups.append(FootballStatGroup(title: spec.title, stats: stats))
@@ -250,7 +252,7 @@ func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats 
     let unknown = names.filter { !claimed.contains($0) }
     if !unknown.isEmpty {
         let stats = unknown.map {
-            FootballStat(label: humaniseStatName($0), display: footballStatDisplay(name: $0, raw: feed[$0] ?? ""))
+            FootballStat(id: $0, label: humaniseStatName($0), display: footballStatDisplay(name: $0, raw: feed[$0] ?? ""))
         }
         if stats.contains(where: { !$0.isZero }) {
             groups.append(FootballStatGroup(title: "Statistics", stats: stats))
@@ -260,8 +262,7 @@ func downloadFootballPlayerStats(playerID: String) async -> FootballPlayerStats 
     return FootballPlayerStats(groups: groups, loaded: true)
 }
 
-struct SoccerPlayerStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
+struct SoccerPlayerStats: Hashable, Sendable {
     var starts: String
     var saves: String
     var cleanSheets: String
@@ -272,9 +273,7 @@ struct SoccerPlayerStats: Identifiable, Hashable, Sendable {
     )
 }
 
-struct BaseballPlayerStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
-
+struct BaseballPlayerStats: Hashable, Sendable {
     // Pitching
     var EarnedRunAverage: Float
     var wins: Int

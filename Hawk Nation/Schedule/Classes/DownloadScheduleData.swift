@@ -9,7 +9,9 @@
 import Foundation
 
 struct Game: Identifiable, Hashable, Sendable {
-    var id = UUID()
+    /// ESPN's id for the event, or — for a feed entry that carries none — a
+    /// key built from its raw date and opponent. See `id`.
+    var eventID = ""
     var team: String
     var opponent: String
     var score: String
@@ -31,6 +33,18 @@ struct Game: Identifiable, Hashable, Sendable {
     var gameClock: String
     var gamePeriod: String
     var gameHalftime: Bool
+
+    /// The game's identity, stable across the once-a-minute schedule refresh.
+    ///
+    /// A fresh `UUID()` per parse made every refresh look like a brand-new set
+    /// of games to `ForEach`, tearing down each card and restarting its logo
+    /// load. The event id (or, for a game built without one, the competition
+    /// id, then the start and opponent) names the same fixture every time.
+    var id: String {
+        if !eventID.isEmpty { return eventID }
+        if !gameID.isEmpty { return gameID }
+        return "\(dateAsDate.timeIntervalSince1970)|\(opponent)"
+    }
 
     /// Whether the game stands level — an MLS draw or an NFL tie once played.
     ///
@@ -192,7 +206,15 @@ private func parseGame(
         }
     }
 
+    // Prefer the event's own id; the competition id is the same number on
+    // every feed seen so far. The last resort uses the raw date string, not
+    // `dateAsDate`, which falls back to "now" when the date is unreadable.
+    var eventID = event["id"].stringValue
+    if eventID.isEmpty { eventID = gameID }
+    if eventID.isEmpty { eventID = "\(event["date"].stringValue)|\(opponent)" }
+
     return Game(
+        eventID: eventID,
         team: teamName,
         opponent: opponent,
         score: score,
@@ -228,8 +250,17 @@ func downloadScheduleData(
     teamNameField: TeamNameField = .nickname
 ) async -> [Game] {
     let json = await HTTPClient.json(from: queryURL)
+    return parseSchedule(from: json, teamName: teamName, teamNameField: teamNameField)
+}
 
-    return json["events"].enumerated().map { pointer, element in
+/// Builds the season's games from a schedule document. See
+/// `downloadScheduleData`.
+func parseSchedule(
+    from json: JSON,
+    teamName: String,
+    teamNameField: TeamNameField = .nickname
+) -> [Game] {
+    json["events"].enumerated().map { pointer, element in
         parseGame(
             from: element.1,
             teamName: teamName,

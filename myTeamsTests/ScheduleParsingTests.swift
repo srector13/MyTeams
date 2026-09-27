@@ -296,6 +296,43 @@ struct ScheduleParsingTests {
         #expect(!shouldPollLiveScore(game: anonymous, now: now))
     }
 
+    /// Two events: one carrying ESPN's event id, one with neither an event
+    /// nor a competition id, which falls back to its date and opponent.
+    static let scheduleFeed = """
+    {"events": [
+      {"id": "401700001", "date": "2026-11-04T01:00Z", "name": "Howard at Kansas",
+       "competitions": [{"id": "401700001",
+         "status": {"type": {"completed": false}},
+         "competitors": [
+           {"homeAway": "home", "team": {"nickname": "Kansas"}},
+           {"homeAway": "away", "team": {"nickname": "Howard"}}
+         ]}]},
+      {"date": "2026-11-08T01:00Z", "name": "Kansas at Duke",
+       "competitions": [{
+         "status": {"type": {"completed": false}},
+         "competitors": [
+           {"homeAway": "away", "team": {"nickname": "Kansas"}},
+           {"homeAway": "home", "team": {"nickname": "Duke"}}
+         ]}]}
+    ]}
+    """
+
+    @Test("Game ids are identical across two parses of the same feed")
+    func deterministicGameIDs() {
+        let first = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), teamName: "Kansas")
+        let second = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), teamName: "Kansas")
+
+        #expect(first.count == 2)
+        #expect(first.map(\.id) == second.map(\.id))
+        // Stable ids also make an unchanged refresh compare equal, so SwiftUI
+        // sees nothing to redraw.
+        #expect(first == second)
+
+        #expect(first.first?.id == "401700001")
+        #expect(first.last?.id == "2026-11-08T01:00Z|Duke")
+        #expect(Set(first.map(\.id)).count == first.count)
+    }
+
     private func game(
         pointer: Int,
         completed: Bool,

@@ -9,7 +9,6 @@
 import Foundation
 
 struct BasketballPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var number: String
@@ -25,7 +24,6 @@ struct BasketballPlayer: Identifiable, Hashable, Sendable {
 }
 
 struct FootBallPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var numberInt: Int
@@ -43,7 +41,6 @@ struct FootBallPlayer: Identifiable, Hashable, Sendable {
 }
 
 struct SoccerPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var number: String
     var numberInt: Int
@@ -74,7 +71,6 @@ struct SoccerPlayer: Identifiable, Hashable, Sendable {
 }
 
 struct BaseballPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var number: String
@@ -90,6 +86,26 @@ struct BaseballPlayer: Identifiable, Hashable, Sendable {
     var throwHand: String
     var age: String
     var lastName: String
+}
+
+// Roster players are identified by their ESPN athlete id, so a refetched
+// roster matches the cards already on screen instead of replacing them all.
+// A player the feed gives no id falls back to name and number.
+
+extension BasketballPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension FootBallPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension SoccerPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension BaseballPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
 }
 
 /// Shown in place of a headshot the feed has no image for.

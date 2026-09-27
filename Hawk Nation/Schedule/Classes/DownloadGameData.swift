@@ -8,8 +8,7 @@
 
 import Foundation
 
-struct GameInfo: Identifiable, Hashable, Sendable {
-    var id = UUID()
+struct GameInfo: Hashable, Sendable {
     var venueImage: String
     var city: String
     var state: String
@@ -24,7 +23,6 @@ struct GameInfo: Identifiable, Hashable, Sendable {
 }
 
 struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var fieldGoals: String
     var fieldGoalPct: Float
@@ -45,6 +43,10 @@ struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
     var opponentScore: Int
     var gameClock: String
 
+    /// A team's line is identified by the team, so a refreshed box score
+    /// compares equal to the one it replaces when nothing has changed.
+    var id: String { name }
+
     /// The pair of blank lines a detail view shows before its box score loads.
     static let placeholderPair = [Self](repeating: BasketballGameTeamStats(
         name: "", fieldGoals: "0", fieldGoalPct: 0, threePoints: "0",
@@ -56,7 +58,6 @@ struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
 }
 
 struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var yards: Int
     var passingYards: Int
@@ -69,6 +70,9 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     var completionAttempts: Int
     var opponentScore: Int
     var gameClock: String
+
+    /// See `BasketballGameTeamStats.id`.
+    var id: String { name }
 
     /// The pair of blank lines a detail view shows before its box score loads.
     static let placeholderPair = [Self](repeating: FootballGameTeamStats(
@@ -84,19 +88,20 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
 /// home), so each line carries the `homeAway` side it belongs to and callers
 /// pick the side they need rather than indexing by position.
 struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     /// `"home"` or `"away"`, as the box score labels this line.
     var homeAway: String
     var runs: Int
     var hits: Int
     var errors: Int
+
+    /// A line is identified by its side, falling back to the team name.
+    var id: String { homeAway.isEmpty ? name : homeAway }
 }
 
 /// One team's line in a soccer game's box score. See
 /// `BaseballGameTeamStats` for why lines carry their side.
 struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     /// `"home"` or `"away"`, as the box score labels this line.
     var homeAway: String
@@ -104,6 +109,9 @@ struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
     var shots: Int
     var possessionPct: Float
     var corners: Int
+
+    /// See `BaseballGameTeamStats.id`.
+    var id: String { homeAway.isEmpty ? name : homeAway }
 }
 
 /// The current score of a game, read from its summary document.
