@@ -87,15 +87,77 @@ struct ScheduleParsingTests {
         // The carousel pointer clamps to the last game, which under the old
         // `pointer < nextGame` rule made that finale invisible to the record.
         #expect(getNextGame(schedule: schedule) == 2)
-        #expect(seasonRecord(games: schedule) == (wins: 2, losses: 1))
+        #expect(seasonRecord(games: schedule) == (wins: 2, losses: 1, draws: 0))
     }
 
-    @Test("A completed game with no winner set counts as a loss")
+    @Test("A completed game lost on the scoreboard counts as a loss")
+    func unequalScoreIsLoss() {
+        let schedule = [
+            game(pointer: 0, completed: true, win: false, score: "1", opponentScore: "2"),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1, draws: 0))
+    }
+
+    @Test("A completed game with no winner and no scores still counts as a loss")
     func forfeitCountsAsLoss() {
+        // No scoreline to call it level, so the old rule stands.
         let schedule = [
             game(pointer: 0, completed: true, win: false),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1, draws: 0))
+    }
+
+    @Test("A level MLS match is a draw, not a loss")
+    func soccerDrawIsNotLoss() {
+        // Neither side's winner flag is set on a 1-1 draw.
+        let schedule = [
+            game(pointer: 0, completed: true, win: true, score: "2", opponentScore: "0"),
+            game(pointer: 1, completed: true, win: false, score: "1", opponentScore: "1"),
+            game(pointer: 2, completed: true, win: false, score: "0", opponentScore: "3"),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 1, draws: 1))
+
+        // The soccer tab's date fallback counts a past, level fixture as a
+        // draw too.
+        let unflagged = game(
+            pointer: 0, completed: false, score: "0", opponentScore: "0",
+            date: Date().addingTimeInterval(-6 * 3600)
+        )
+        #expect(
+            seasonRecord(games: [unflagged], pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 0, draws: 1)
+        )
+    }
+
+    @Test("A tied NFL game is a tie, not a loss")
+    func footballTieIsNotLoss() {
+        let tie = game(pointer: 0, completed: true, win: false, score: "20", opponentScore: "20")
+        #expect(tie.isDraw)
+        #expect(seasonRecord(games: [tie]) == (wins: 0, losses: 0, draws: 1))
+    }
+
+    @Test("Only a level, unwon scoreline is a draw")
+    func drawDetection() {
+        #expect(game(pointer: 0, completed: true, score: "1", opponentScore: "1").isDraw)
+        #expect(!game(pointer: 0, completed: true, score: "2", opponentScore: "1").isDraw)
+        // No scores published yet.
+        #expect(!game(pointer: 0, completed: false).isDraw)
+        #expect(!game(pointer: 0, completed: true, score: "1", opponentScore: "").isDraw)
+        // A winner flag wins out over a level scoreline (e.g. a shootout).
+        #expect(!game(pointer: 0, completed: true, win: true, score: "1", opponentScore: "1").isDraw)
+    }
+
+    @Test("A level game in progress is neither draw nor loss")
+    func liveLevelGameExcluded() {
+        let live = game(
+            pointer: 0, completed: false, score: "1", opponentScore: "1",
+            date: Date().addingTimeInterval(-1 * 3600)
+        )
+        #expect(seasonRecord(games: [live]) == (wins: 0, losses: 0, draws: 0))
+        #expect(
+            seasonRecord(games: [live], pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 0, draws: 0)
+        )
     }
 
     @Test("Unplayed games are neither win nor loss")
@@ -105,7 +167,7 @@ struct ScheduleParsingTests {
             game(pointer: 0, completed: true, win: true),
             game(pointer: 1, completed: false, date: later),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 0, draws: 0))
     }
 
     @Test("Cancelled fixtures are losses only on the baseball rule")
@@ -114,10 +176,10 @@ struct ScheduleParsingTests {
             game(pointer: 0, completed: false, cancelled: true),
             game(pointer: 1, completed: false, postponed: true),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0, draws: 0))
         #expect(
             seasonRecord(games: schedule, countingAbandonedAsLosses: true)
-                == (wins: 0, losses: 2)
+                == (wins: 0, losses: 2, draws: 0)
         )
     }
 
@@ -129,10 +191,10 @@ struct ScheduleParsingTests {
         ]
         // Past the grace window: a fixture whose kickoff is hours gone counts
         // as played only where the feed ships no completion flag.
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0, draws: 0))
         #expect(
             seasonRecord(games: schedule, pastDatesCountAsPlayed: true)
-                == (wins: 0, losses: 1)
+                == (wins: 0, losses: 1, draws: 0)
         )
 
         let inProgress = game(
@@ -141,7 +203,7 @@ struct ScheduleParsingTests {
         )
         #expect(
             seasonRecord(games: [inProgress], pastDatesCountAsPlayed: true)
-                == (wins: 0, losses: 0)
+                == (wins: 0, losses: 0, draws: 0)
         )
     }
 
@@ -240,10 +302,12 @@ struct ScheduleParsingTests {
         win: Bool = false,
         cancelled: Bool = false,
         postponed: Bool = false,
+        score: String = "",
+        opponentScore: String = "",
         date: Date = .now
     ) -> Game {
         Game(
-            team: "Jayhawks", opponent: "Bears", score: "", opponentScore: "",
+            team: "Jayhawks", opponent: "Bears", score: score, opponentScore: opponentScore,
             time: "", date: "", dateAsDate: date, opponentLogo: "", channel: "TBD",
             location: "", gameHome: true, gameID: "\(pointer)", pointer: pointer,
             gameWin: win, completed: completed, competitionName: "",

@@ -31,6 +31,18 @@ struct Game: Identifiable, Hashable, Sendable {
     var gameClock: String
     var gamePeriod: String
     var gameHalftime: Bool
+
+    /// Whether the game stands level — an MLS draw or an NFL tie once played.
+    ///
+    /// Neither competitor's `winner` flag is set on a level game, so a caller
+    /// that reads "played and not won" as a loss must check this first. A game
+    /// with no scores published yet is never a draw.
+    var isDraw: Bool {
+        guard !gameWin, let score = Int(score), let opponentScore = Int(opponentScore) else {
+            return false
+        }
+        return score == opponentScore
+    }
 }
 
 /// Which field of an ESPN `team` object names the team a schedule belongs to.

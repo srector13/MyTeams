@@ -86,11 +86,11 @@ final class TeamModel<Player: RosterPlayer> {
         self.loadRoster = loadRoster
     }
 
-    /// The team's record so far this season, as wins and losses.
+    /// The team's record so far this season, as wins, losses and draws.
     ///
     /// `countingAbandonedAsLosses` selects the baseball tab's rule; see
     /// `RoyalsHome` and `seasonRecord`.
-    func displayRecord(countingAbandonedAsLosses: Bool = false) -> (wins: Int, losses: Int) {
+    func displayRecord(countingAbandonedAsLosses: Bool = false) -> (wins: Int, losses: Int, draws: Int) {
         seasonRecord(
             games: games,
             countingAbandonedAsLosses: countingAbandonedAsLosses,
@@ -218,11 +218,14 @@ final class TeamModel<Player: RosterPlayer> {
     }
 }
 
-/// Wins and losses from a schedule, counted from each game's own state.
+/// Wins, losses and draws from a schedule, counted from each game's own state.
 ///
 /// Deliberately independent of `nextGame`: that carousel pointer clamps to the
 /// last slot once the season ends, which silently dropped a finale that is not
 /// a win (a loss, or a fixture whose feed never set a winner) from the record.
+///
+/// A played game that is neither won nor level is a loss; a level one (an MLS
+/// draw, an NFL tie — see `Game.isDraw`) counts in the draws column instead.
 ///
 /// - Parameters:
 ///   - countingAbandonedAsLosses: the baseball tab's rule — cancelled and
@@ -238,8 +241,19 @@ func seasonRecord(
     countingAbandonedAsLosses: Bool = false,
     pastDatesCountAsPlayed: Bool = false,
     now: Date = Date()
-) -> (wins: Int, losses: Int) {
+) -> (wins: Int, losses: Int, draws: Int) {
+    /// Whether a fixture that was not won has been played out.
+    func played(_ game: Game) -> Bool {
+        if game.completed { return true }
+        return pastDatesCountAsPlayed
+            && game.dateAsDate.addingTimeInterval(4 * 3600) < now
+    }
+
     let wins = games.count { $0.gameWin }
+    let draws = games.count { game in
+        !game.gameWin && !game.cancelled && !game.postponed
+            && game.isDraw && played(game)
+    }
     let losses = games.count { game in
         if game.gameWin { return false }
         if game.cancelled || game.postponed {
@@ -247,11 +261,9 @@ func seasonRecord(
             // losses column. Everywhere else it is neither win nor loss.
             return countingAbandonedAsLosses
         }
-        if game.completed { return true }
-        return pastDatesCountAsPlayed
-            && game.dateAsDate.addingTimeInterval(4 * 3600) < now
+        return !game.isDraw && played(game)
     }
-    return (wins, losses)
+    return (wins, losses, draws)
 }
 
 /// Whether a game's summary should be polled for a live score right now.
