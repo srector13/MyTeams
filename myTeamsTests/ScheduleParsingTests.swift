@@ -353,3 +353,114 @@ struct ScheduleParsingTests {
         )
     }
 }
+
+// MARK: - Competitions
+
+/// A schedule made of a league and its cups (`mergeSchedules`), and games
+/// read from the competition their team plays in.
+@Suite("Schedule competitions")
+struct ScheduleCompetitionTests {
+    private let arsenal = TeamRef(
+        league: .premierLeague, espnID: "359",
+        displayName: "Arsenal", shortName: "Arsenal", abbreviation: "ARS", location: "London",
+        colorHex: "", alternateColorHex: "",
+        logoURL: nil, logoDarkURL: nil, logoAsset: nil
+    )
+
+    @Test("Soccer leagues name their cups; other leagues have none")
+    func registryCups() {
+        #expect(LeagueID.premierLeague.descriptor.cupCompetitions
+            == [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")])
+        #expect(LeagueID.laLiga.descriptor.cupCompetitions == [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")])
+        #expect(LeagueID.ligaMX.descriptor.cupCompetitions == [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")])
+        #expect(LeagueID.mls.descriptor.cupCompetitions.contains(.soccer("usa.open")))
+        #expect(LeagueID.nwsl.descriptor.cupCompetitions.isEmpty)
+        for league in [LeagueID.nfl, .nba, .nhl, .mlb, .collegeFootball, .mensCollegeBasketball] {
+            #expect(league.descriptor.cupCompetitions.isEmpty, "\(league)")
+        }
+        // A cup's team schedule is the league's endpoint under the cup's path.
+        #expect(LeagueID.soccer("eng.fa").scheduleURL(teamID: "359")
+            == "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.fa/teams/359/schedule")
+    }
+
+    @Test("Soccer events carry their competition; other feeds name none")
+    func eventCompetition() throws {
+        // epl_schedule: every event's league.slug is "eng.1".
+        let games = parseSchedule(from: try Fixture.json("epl_schedule"), team: arsenal)
+        #expect(games.allSatisfy { $0.competition == .premierLeague })
+        #expect(games.allSatisfy { $0.isLeagueGame(of: .premierLeague) })
+
+        // chiefs_schedule events have no `league`: unnamed, unless the
+        // caller says which feed they came from.
+        let (event, pointer) = try Fixture.event("401872931", in: try Fixture.json("chiefs_schedule"))
+        #expect(parseGame(from: event, team: .chiefs, pointer: pointer).competition == nil)
+        #expect(parseGame(from: event, team: .chiefs, pointer: pointer, competition: .nfl).competition == .nfl)
+    }
+
+    @Test("An event with several competitions is read from the followed team's")
+    func severalCompetitions() throws {
+        // chiefs_schedule 401872931: Arrowhead Stadium. A decoy competition
+        // without the Chiefs goes after it (where the old loop's last one
+        // won), then before it.
+        let (event, pointer) = try Fixture.event("401872931", in: try Fixture.json("chiefs_schedule"))
+        let real = event["competitions", 0]
+        let decoy = real
+            .setting(["venue", "fullName"], to: .string("Decoy Stadium"))
+            .setting(["competitors"], to: .array([]))
+
+        for competitions in [[real, decoy], [decoy, real]] {
+            let variant = event.setting(["competitions"], to: .array(competitions))
+            let game = parseGame(from: variant, team: .chiefs, pointer: pointer)
+            #expect(game.location == "Arrowhead Stadium")
+            #expect(game.gameID == "401872931")
+            #expect(!game.opponent.isEmpty)
+        }
+    }
+
+    @Test("Cup ties merge into the league schedule in kick-off order, this season only, once each")
+    func mergesCups() throws {
+        // epl_schedule lists five league games newest first:
+        // 401879274 (Sep 19), 401878779 (Sep 12), 401879292 (Sep 6),
+        // 401879295 (Aug 31), 401879301 (Aug 21).
+        let league = try Fixture.json("epl_schedule")
+        let base = league["events", 0]
+
+        // A Carabao Cup tie on Sep 24, made from a real event.
+        let cupTie = base
+            .setting(["id"], to: .string("401900001"))
+            .setting(["date"], to: .string("2026-09-24T18:45Z"))
+            .setting(["league", "slug"], to: .string("eng.league_cup"))
+        // Last season's run, which a cup feed answers with when it has
+        // nothing current (the FA Cup in September).
+        let lastSeason = base
+            .setting(["id"], to: .string("401800001"))
+            .setting(["date"], to: .string("2026-01-10T15:00Z"))
+            .setting(["season", "year"], to: .number(2025))
+        // And a fixture the league feed already lists.
+        let cupFeed = JSON.object(["events": .array([cupTie, lastSeason, base])])
+
+        let games = mergeSchedules(
+            league: league,
+            cups: [(competition: .soccer("eng.league_cup"), json: cupFeed)],
+            team: arsenal
+        )
+        #expect(games.map(\.eventID) == ["401879301", "401879295", "401879292", "401878779", "401879274", "401900001"])
+        #expect(games.map(\.pointer) == Array(0..<6))
+        #expect(games.last?.competition == .soccer("eng.league_cup"))
+        #expect(games.dropLast().allSatisfy { $0.competition == .premierLeague })
+
+        // The cup tie is a copy of the Brighton loss; the league record
+        // leaves it out.
+        #expect(scheduleRecord(games: games, league: .premierLeague).summary == "4-1-0")
+    }
+
+    @Test("With no cup fixtures the league's games are kept, in kick-off order")
+    func mergesNothing() throws {
+        let league = try Fixture.json("epl_schedule")
+        let empty = JSON.object(["events": .array([])])
+        let games = mergeSchedules(league: league, cups: [(competition: .soccer("eng.fa"), json: empty)], team: arsenal)
+        #expect(games.map(\.eventID) == ["401879301", "401879295", "401879292", "401878779", "401879274"])
+        #expect(games.map(\.pointer) == Array(0..<5))
+        #expect(mergeSchedules(league: league, cups: [], team: arsenal).map(\.eventID) == games.map(\.eventID))
+    }
+}

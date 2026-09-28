@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50CF848EFDCDCB9AF31230CA /* RecordTests.swift */; };
+		0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */; };
 		749E671F2916273F3E45E498 /* Standings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346F15839B839382E7E93D52 /* Standings.swift */; };
 		65D076717FCEAD9E6C2663EB /* Record.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2A095EAB5992522D7B70CC /* Record.swift */; };
 		2BF4005DE2F3F7D27EDCF84D /* TeamPagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */; };
@@ -123,6 +125,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		50CF848EFDCDCB9AF31230CA /* RecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordTests.swift"; sourceTree = "<group>"; };
+		F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StandingsTests.swift"; sourceTree = "<group>"; };
 		346F15839B839382E7E93D52 /* Standings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Standings.swift"; sourceTree = "<group>"; };
 		0D2A095EAB5992522D7B70CC /* Record.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Record.swift"; sourceTree = "<group>"; };
 		DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamPagesTests.swift"; sourceTree = "<group>"; };
@@ -444,6 +448,8 @@
 			children = (
 				DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */,
 				B8D4F2A16C3E5D7F9A0B1C2D /* LeagueRegistryTests.swift */,
+				50CF848EFDCDCB9AF31230CA /* RecordTests.swift */,
+				F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */,
 				371481114143CD723EB69303 /* LeagueScoreboardTests.swift */,
 				E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */,
 				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
@@ -703,6 +709,8 @@
 			files = (
 				2BF4005DE2F3F7D27EDCF84D /* TeamPagesTests.swift in Sources */,
 				A7C3E1F05B2D4C6E8F9A0B1C /* LeagueRegistryTests.swift in Sources */,
+				26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */,
+				0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */,
 				4F108876A45CFE6959601590 /* LeagueScoreboardTests.swift in Sources */,
 				4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */,
 				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,

@@ -310,6 +310,48 @@ root {name, season, seasons, children: [
 - Stats are found by `name` (`wins`, `losses`, `gamesBehind`, `points`, …);
   their order differs by league.
 
+### Reading the standings (P3-b)
+
+`StandingsTests.swift` runs `parseStandings` over all nine trees. What the
+parser has to allow for, found in these captures:
+
+- **Stat `name`s repeat in college rows.** NCAAF and NCAAW rows carry every
+  stat once per split (home, away, conference, vs AP Top 25), all under the
+  same `name` (`wins`); only `type` tells them apart (`wins`,
+  `homerecord_wins`, `vsconf_wins`). `type` is unique within a row, so the
+  parser keys on it.
+- **NCAAF rows have no `losses` stat.** Losses come from the `overall`
+  summary (`type: total`, `"1-2"`).
+- **Soccer's `ties` are draws, and its summary is W-D-L**: NWSL Gotham
+  `"16-6-4"` is 16 W, 6 D, 4 L. Tables rank by the `rank` stat.
+- **NHL rows carry both `otLosses` and `overtimeLosses`** (equal); the
+  summary is `"W-L-OTL, N PTS"`.
+- **`points` means different things.** Soccer and NHL: league points. NBA
+  and WNBA: games over .500 (`8.0` for a 30–14 Dream) — not read.
+- **Row order is not always first place first.** NCAAW conference tables list
+  the lowest seed first; rows are ordered by `rank`/`playoffSeed` when every
+  row has one. The NBA and NHL captures are preseason: every stat 0, every
+  seed 0, teams alphabetical — kept in feed order.
+- The NHL test gives the Ducks' preseason row a season by rewriting four
+  `value`s in memory (`JSON.setting`); the fixture is unchanged.
+
+No rankings document was captured. The college fallback
+(`https://site.api.espn.com/apis/site/v2/sports/{league}/rankings`:
+`rankings[].ranks[]` of `current`, `recordSummary`, `team`) is tested with
+a hand-written document in that shape, checked against the live endpoint on
+2026-09-28.
+
+### Cup schedules (P3-b)
+
+A soccer team's cups are fetched from the same team schedule endpoint under
+the cup's path (`soccer/eng.fa/teams/359/schedule`). Checked live on
+2026-09-28 for Arsenal, LALIGA 83, Liga MX 227 and Sporting KC: a cup the
+team has no current fixtures in answers with its **previous edition** (the
+FA Cup returned the 2025-26 run), so cup events are kept only when their
+`season.year` matches the league feed's. `usa.nwsl.cup` listed nothing and
+is not registered. No cup schedule was captured; the merge tests build a
+cup feed from `epl_schedule` events.
+
 ### Roster shapes
 
 As the recon expected: basketball (nba, wnba, ncaaw) and soccer feeds are
