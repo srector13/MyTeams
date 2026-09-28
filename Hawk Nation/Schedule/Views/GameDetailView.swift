@@ -12,7 +12,9 @@ import SwiftUI
 /// score, refreshed while the game is live.
 ///
 /// The box score comes through `LeagueDescriptor.downloadGameSheet`, which
-/// reduces each sport's statistics to the same `BoxScore` rows. Each refresh
+/// reduces each sport's statistics to the same `BoxScore` rows, with a
+/// linescore sized from the summary's format beneath the scoreline and, for
+/// hockey and soccer, the sport's own player tables below. Each refresh
 /// is one summary request, whose document fills the box score and the venue
 /// alike; only a game with its clock running refreshes every ten seconds.
 struct GameDetailView: View {
@@ -22,6 +24,9 @@ struct GameDetailView: View {
     let team: TeamRef
 
     @State private var boxScore: BoxScore?
+    @State private var linescore: Linescore?
+    @State private var hockey: HockeyBoxScore?
+    @State private var soccerLineups: SoccerLineups?
     @State private var gameInfo = GameInfo.empty
     @State private var loading = true
 
@@ -64,8 +69,21 @@ struct GameDetailView: View {
                                 } else if game.dateAsDate <= Date(), let boxScore {
                                     scoreboard(boxScore)
 
+                                    if let linescore {
+                                        LinescoreView(linescore: linescore)
+                                    }
+
                                     ForEach(boxScore.rows) { row in
                                         StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
+                                    }
+
+                                    // The sport's own tables, beneath the
+                                    // comparison rows every sport shares.
+                                    if let hockey {
+                                        HockeyBoxScoreView(boxScore: hockey)
+                                    }
+                                    if let soccerLineups {
+                                        SoccerLineupsView(lineups: soccerLineups)
                                     }
                                 } else {
                                     Spacer()
@@ -109,6 +127,9 @@ struct GameDetailView: View {
             }
 
             boxScore = sheet.boxScore
+            linescore = sheet.linescore
+            hockey = sheet.hockey
+            soccerLineups = sheet.soccerLineups
             gameInfo = sheet.info
             loading = false
             backoff.reset()
@@ -242,7 +263,7 @@ struct GameDetailView: View {
         } else if(game.gameHalftime) {
             statusLine("Halftime")
         } else {
-            statusLine(team.periodName(game.gamePeriod))
+            statusLine(league.liveCardPeriodLabel(game.gamePeriod))
             statusLine(game.gameClock)
         }
     }

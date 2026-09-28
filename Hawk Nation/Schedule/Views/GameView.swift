@@ -159,7 +159,7 @@ struct GameView : View {
             if(game.gameHalftime) {
                 liveLine("Halftime", size: 15)
             } else {
-                liveLine(team.periodName(game.gamePeriod), size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
                 liveLine(game.gameClock, size: 15)
             }
 
@@ -184,14 +184,14 @@ struct GameView : View {
                         .foregroundStyle(Color.green)
                 }
 
-                liveLine(team.periodName(game.gamePeriod), size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
                 liveLine(game.gameClock, size: 15)
             }
         } else if let liveScore, liveScore.score == liveScore.opponentScore {
             VStack {
                 liveScoreText(liveScore)
 
-                liveLine(team.periodName(game.gamePeriod), size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
                 liveLine(game.gameClock, size: 15)
             }
         } else if let liveScore {
@@ -204,7 +204,7 @@ struct GameView : View {
                         .foregroundStyle(Color.red)
                 }
 
-                liveLine(team.periodName(game.gamePeriod), size: 12)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 12)
                 liveLine(game.gameClock, size: 12)
             }
         }
