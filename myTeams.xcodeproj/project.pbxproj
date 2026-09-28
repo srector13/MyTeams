@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		28F633D9E078351031277B79 /* Linescore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBB22AFEE3DC375613908F /* Linescore.swift */; };
+		D3A38E5F59A963197CBC0758 /* HockeyBoxScore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */; };
+		C6578E236813A98439400C34 /* SoccerLineups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530A3635B00B73AE346D38AB /* SoccerLineups.swift */; };
 		26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50CF848EFDCDCB9AF31230CA /* RecordTests.swift */; };
 		0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */; };
 		749E671F2916273F3E45E498 /* Standings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346F15839B839382E7E93D52 /* Standings.swift */; };
@@ -125,6 +128,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		3FFBB22AFEE3DC375613908F /* Linescore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Linescore.swift"; sourceTree = "<group>"; };
+		E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HockeyBoxScore.swift"; sourceTree = "<group>"; };
+		530A3635B00B73AE346D38AB /* SoccerLineups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SoccerLineups.swift"; sourceTree = "<group>"; };
 		50CF848EFDCDCB9AF31230CA /* RecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordTests.swift"; sourceTree = "<group>"; };
 		F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StandingsTests.swift"; sourceTree = "<group>"; };
 		346F15839B839382E7E93D52 /* Standings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Standings.swift"; sourceTree = "<group>"; };
@@ -389,6 +395,9 @@
 				AD3C5F108853415329D714E8 /* DownloadScoreboardData.swift */,
 				EAF61F5573297A98A78E7FDC /* DownloadGameData.swift */,
 				72E172747265D9C939F96796 /* DownloadScheduleData.swift */,
+				3FFBB22AFEE3DC375613908F /* Linescore.swift */,
+				E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */,
+				530A3635B00B73AE346D38AB /* SoccerLineups.swift */,
 			);
 			path = "Classes";
 			sourceTree = "<group>";
@@ -679,6 +688,9 @@
 				712E5226E4DF0A7BE1609DE4 /* GameView.swift in Sources */,
 				1CD5FF6E028E55CEBF833F15 /* GetNextGame.swift in Sources */,
 				DD8B5E279E378CED42EDFE79 /* StatRowView.swift in Sources */,
+				28F633D9E078351031277B79 /* Linescore.swift in Sources */,
+				D3A38E5F59A963197CBC0758 /* HockeyBoxScore.swift in Sources */,
+				C6578E236813A98439400C34 /* SoccerLineups.swift in Sources */,
 				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
 				056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */,
 				357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */,

@@ -536,6 +536,14 @@ struct BoxScore: Hashable, Sendable {
 struct GameSheet: Sendable {
     /// `nil` when the summary carries no box score for both sides yet.
     var boxScore: BoxScore?
+    /// The period-by-period score, sized from the summary's own format.
+    /// `nil` when the header does not list both sides.
+    var linescore: Linescore?
+    /// A hockey game's skater and goalie tables; `nil` for other sports.
+    var hockey: HockeyBoxScore?
+    /// A soccer game's lineups; `nil` for other sports, or a summary with
+    /// no rosters yet.
+    var soccerLineups: SoccerLineups?
     var info: GameInfo
     var phase: GamePhase
     /// How long to wait before refetching, or `nil` to stop.
@@ -568,23 +576,36 @@ extension LeagueDescriptor {
     /// - Parameter followedIsHome: the schedule's `gameHome` for the game;
     ///   basketball and football lines carry the followed team's score first.
     func gameSheet(from json: JSON, team: TeamRef, followedIsHome: Bool) -> GameSheet {
+        var sheet: GameSheet
         switch kind {
         case .basketball:
             let detail = GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json, team: team))
-            return GameSheet(detail) { BoxScore(basketball: $0, followedIsHome: followedIsHome) }
+            sheet = GameSheet(detail) { BoxScore(basketball: $0, followedIsHome: followedIsHome) }
         case .football:
             let detail = GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json, team: team))
-            return GameSheet(detail) { BoxScore(football: $0, followedIsHome: followedIsHome) }
+            sheet = GameSheet(detail) { BoxScore(football: $0, followedIsHome: followedIsHome) }
         case .baseball:
             let detail = GameDetail(json: json, team: team, stats: parseBaseballGameTeamStats(from: json))
-            return GameSheet(detail) { BoxScore(baseball: $0) }
+            sheet = GameSheet(detail) { BoxScore(baseball: $0) }
         case .soccer:
             let detail = GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
-            return GameSheet(detail) { BoxScore(soccer: $0) }
-        case .hockey, .other:
+            sheet = GameSheet(detail) { BoxScore(soccer: $0) }
+            sheet.soccerLineups = SoccerLineups(summary: json)
+        case .hockey:
+            // The comparison strip is the box score's rows; the skater and
+            // goalie tables ride alongside.
+            let hockey = HockeyBoxScore(summary: json)
+            let detail = GameDetail(json: json, team: team, stats: hockey.map { [$0] } ?? [])
+            sheet = GameSheet(detail) { lines in lines.first.map(BoxScore.init(hockey:)) }
+            sheet.hockey = hockey
+        case .other:
             // No box-score parser for this sport: the venue and phase only.
-            return GameSheet(GameDetail<BoxScore>(json: json, team: team, stats: [])) { _ in nil }
+            sheet = GameSheet(GameDetail<BoxScore>(json: json, team: team, stats: [])) { _ in nil }
         }
+        // Every sport's periods come from the same reader, sized by the
+        // summary's `format`.
+        sheet.linescore = Linescore(summary: json, league: self)
+        return sheet
     }
 
     /// Loads a game's detail sheet in this league: one summary request per
