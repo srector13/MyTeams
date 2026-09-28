@@ -10,6 +10,8 @@ import SwiftUI
 
 @main
 struct MyTeamsApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         // Load (or seed) the favorites before the launch task below marks
         // the crests seeded: the store reads that mark to tell an existing
