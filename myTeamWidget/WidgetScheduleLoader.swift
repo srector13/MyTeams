@@ -47,11 +47,9 @@ struct WidgetGame: Sendable {
     }
 }
 
-// The teams the widgets cover come from the bundled catalog
-// (`TeamCatalog`, Networking/TeamRef.swift, shared with the app target; the
-// widget bundles its own copy of teams.json). WidgetTeam used to be a
-// fourth-hand copy of the team list and had no Sporting case — the reason
-// Sporting KC lacked a widget until the bundle grew its fourth entry.
+// The team a widget covers comes from its configuration (`SelectTeamIntent`)
+// or the reader's favorites, resolved by `WidgetTeams` (TeamEntity.swift);
+// the legacy fixed-team widgets pin a seed team from `TeamCatalog`.
 
 /// Shows the day of the week alongside the date, e.g. "Mon Jan 18, 2021".
 private let widgetDateFormatter: DateFormatter = {

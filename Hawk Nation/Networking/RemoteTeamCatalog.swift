@@ -115,10 +115,8 @@ actor RemoteTeamCatalog {
 
     /// The team with the given `TeamRef.id`, e.g. `"football/nfl:12"`.
     func team(id: TeamRef.ID) async -> TeamRef? {
-        guard let separator = id.lastIndex(of: ":"),
-              let league = LeagueID(path: String(id[..<separator]))
-        else { return nil }
-        return await teams(for: league).first { $0.id == id }
+        guard let parsed = TeamRef.parse(id: id) else { return nil }
+        return await teams(for: parsed.league).first { $0.id == id }
     }
 
     /// A seed team with the names, colours and crest URLs of the latest

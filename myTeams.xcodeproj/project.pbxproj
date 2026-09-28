@@ -71,6 +71,7 @@
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
 		2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBB71827C45A79D38B20049 /* FavoritesStore.swift */; };
 		129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1204CF56986AC1138C1805E /* TeamBrowserView.swift */; };
+		806F811BCA02858268F722FC /* TeamEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293381D72B47893F6410908F /* TeamEntity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -176,6 +177,7 @@
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
 		DDBB71827C45A79D38B20049 /* FavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStore.swift"; sourceTree = "<group>"; };
 		D1204CF56986AC1138C1805E /* TeamBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamBrowserView.swift"; sourceTree = "<group>"; };
+		293381D72B47893F6410908F /* TeamEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamEntity.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -403,6 +405,7 @@
 		8C956299E51B1007EBDA4A18 /* myTeamWidget */ = {
 			isa = PBXGroup;
 			children = (
+				293381D72B47893F6410908F /* TeamEntity.swift */,
 				51CD6BF2A976D0F89BED3A66 /* Assets.xcassets */,
 				95813F172EB4B27F0B0B1BC5 /* Info.plist */,
 				2D7E42B65C657DF94CC0AE71 /* WidgetScheduleLoader.swift */,
@@ -646,6 +649,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				806F811BCA02858268F722FC /* TeamEntity.swift in Sources */,
 				477887CC8A151717D679F0BE /* WidgetScheduleLoader.swift in Sources */,
 				BC4F15C17EBC1A2178883B7D /* myTeamWidget.swift in Sources */,
 				021E035614A3AA570735F9A7 /* HTTPClient.swift in Sources */,

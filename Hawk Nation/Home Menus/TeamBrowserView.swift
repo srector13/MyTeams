@@ -8,68 +8,12 @@
 
 import SwiftUI
 
-// MARK: - Leagues
+// MARK: - Remote search
 
-/// A league offered in the picker's chip row.
-struct BrowsableLeague: Identifiable, Hashable, Sendable {
-    /// The chip and badge text, e.g. `"NCAAF"`.
-    let label: String
-    let league: LeagueID
-
-    var id: LeagueID { league }
-}
-
-extension LeagueID {
-    /// The leagues the picker lists, in chip order.
-    static let browsable: [BrowsableLeague] = [
-        BrowsableLeague(label: "NFL", league: .nfl),
-        BrowsableLeague(label: "NBA", league: LeagueID(sport: "basketball", league: "nba")),
-        BrowsableLeague(label: "MLB", league: .mlb),
-        BrowsableLeague(label: "NHL", league: LeagueID(sport: "hockey", league: "nhl")),
-        BrowsableLeague(label: "MLS", league: .mls),
-        BrowsableLeague(label: "WNBA", league: LeagueID(sport: "basketball", league: "wnba")),
-        BrowsableLeague(label: "NCAAF", league: LeagueID(sport: "football", league: "college-football")),
-        BrowsableLeague(label: "NCAAM", league: .mensCollegeBasketball),
-        BrowsableLeague(label: "NCAAW", league: LeagueID(sport: "basketball", league: "womens-college-basketball")),
-        BrowsableLeague(label: "EPL", league: LeagueID(sport: "soccer", league: "eng.1")),
-    ]
-
-    /// The short label a team row's badge shows, e.g. `"NFL"`. Leagues the
-    /// picker does not list show their league path component, uppercased.
-    var badge: String {
-        Self.browsable.first { $0.league == self }?.label ?? league.uppercased()
-    }
-}
-
-// MARK: - Search
-
-/// Matching teams against a search query, and ESPN's search as a fallback.
-enum TeamSearch {
-    /// `text` lowercased and without diacritics, so "malmo" finds "Malmö".
-    static func fold(_ text: String) -> String {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-    }
-
-    /// The names a team can be found by: display name, short name,
-    /// abbreviation, location, and the nickname (the display name after its
-    /// location — `TeamRef` keeps no separate nickname).
-    static func searchableFields(of team: TeamRef) -> [String] {
-        var fields = [team.displayName, team.shortName, team.abbreviation, team.location]
-        if !team.location.isEmpty, team.displayName.hasPrefix(team.location) {
-            let nickname = team.displayName.dropFirst(team.location.count).trimmingCharacters(in: .whitespaces)
-            if !nickname.isEmpty { fields.append(nickname) }
-        }
-        return fields.filter { !$0.isEmpty }
-    }
-
-    /// Whether any of the team's names contains the query, ignoring case and
-    /// diacritics. An empty query matches every team.
-    static func matches(_ team: TeamRef, query: String) -> Bool {
-        let folded = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
-        guard !folded.isEmpty else { return true }
-        return searchableFields(of: team).contains { fold($0).contains(folded) }
-    }
-
+/// ESPN's search, the fallback for queries no loaded catalog matches. Local
+/// matching (`TeamSearch.matches`) lives beside `TeamRef`, shared with the
+/// widget.
+extension TeamSearch {
     /// ESPN's site search, limited to ten results.
     static func searchURL(query: String) -> URL? {
         var components = URLComponents(string: "https://site.web.api.espn.com/apis/search/v2")
