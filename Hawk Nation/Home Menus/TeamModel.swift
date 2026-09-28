@@ -70,10 +70,13 @@ final class TeamModel<Player: RosterPlayer> {
 
     private(set) var games: [Game] = []
     private(set) var articles: [News] = []
+    /// The league's standings, or `nil` until they load.
+    private(set) var standings: Standings?
 
     private(set) var rosterState: SectionLoadState = .loading
     private(set) var scheduleState: SectionLoadState = .loading
     private(set) var newsState: SectionLoadState = .loading
+    private(set) var standingsState: SectionLoadState = .loading
 
     /// Live scores for the games in the live window, keyed by `Game.gameID`,
     /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
@@ -104,6 +107,7 @@ final class TeamModel<Player: RosterPlayer> {
     let team: TeamRef
     private let newsURL: String
     private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
+    private let loadStandings: @Sendable (LeagueID) async -> Result<Standings, NetworkError>
     private let scoreboards: LeagueScoreboardCenter
 
     /// The page's standing request for its league's scoreboard, held while
@@ -120,49 +124,52 @@ final class TeamModel<Player: RosterPlayer> {
         team: TeamRef,
         newsURL: String,
         loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>,
+        loadStandings: @escaping @Sendable (LeagueID) async -> Result<Standings, NetworkError> = { await downloadStandings(league: $0) },
         scoreboards: LeagueScoreboardCenter = .shared
     ) {
         self.team = team
         self.newsURL = newsURL
         self.loadRoster = loadRoster
+        self.loadStandings = loadStandings
         self.scoreboards = scoreboards
     }
 
-    /// The team's record so far this season, as wins, losses and draws,
-    /// counted under the league's `RecordRule`. See `seasonRecord`.
-    func displayRecord() -> (wins: Int, losses: Int, draws: Int) {
-        seasonRecord(
-            games: games,
-            countingAbandonedAsLosses: recordRule.countsAbandonedGamesAsLosses,
-            pastDatesCountAsPlayed: recordRule.usesDateForNextGame
-        )
+    /// The team's league record so far this season, in its sport's shape,
+    /// counted from the schedule under the league's `RecordRule`. Cup ties
+    /// are on the schedule but not in the record. See `scheduleRecord`.
+    func displayRecord() -> Record {
+        scheduleRecord(games: games, league: team.league)
     }
 
     // MARK: - Loading
 
-    /// Loads the roster, schedule and news feeds together, then keeps the
-    /// schedule fresh for as long as the page is on screen.
+    /// Loads the roster, schedule, news and standings feeds together, then
+    /// keeps the schedule fresh for as long as the page is on screen.
     ///
     /// Scores and clocks move during a game, so the schedule is refetched every
-    /// minute; rosters and news do not, so they are fetched once. The model
-    /// outlives its page (`TeamPages`), so a page coming back refetches only
-    /// the schedule, and whichever other feed has not loaded yet.
+    /// minute; rosters, news and standings do not, so they are fetched once.
+    /// The model outlives its page (`TeamPages`), so a page coming back
+    /// refetches only the schedule, and whichever other feed has not loaded
+    /// yet.
     func load() async {
         // A page that failed last time it appeared shows its skeletons again
         // while it retries.
         if rosterState == .failed { rosterState = .loading }
         if scheduleState == .failed { scheduleState = .loading }
         if newsState == .failed { newsState = .loading }
+        if standingsState == .failed { standingsState = .loading }
 
         async let roster = fetchRosterUnlessLoaded()
         async let schedule = fetchSchedule()
         async let news = fetchNewsUnlessLoaded()
+        async let leagueStandings = fetchStandingsUnlessLoaded()
 
-        let (loadedRoster, loadedSchedule, loadedNews) = await (roster, schedule, news)
+        let (loadedRoster, loadedSchedule, loadedNews, loadedStandings) = await (roster, schedule, news, leagueStandings)
 
         if let loadedRoster { apply(roster: loadedRoster) }
         apply(schedule: loadedSchedule)
         if let loadedNews { apply(news: loadedNews) }
+        if let loadedStandings { apply(standings: loadedStandings) }
 
         await refreshSchedulePeriodically()
     }
@@ -235,6 +242,12 @@ final class TeamModel<Player: RosterPlayer> {
         apply(news: await downloadNewsData(queryURL: newsURL))
     }
 
+    /// Refetches the standings after a failed load.
+    func reloadStandings() async {
+        standingsState = .loading
+        apply(standings: await loadStandings(team.league))
+    }
+
     // MARK: - Applying results
 
     private func fetchSchedule() async -> Result<[Game], NetworkError> {
@@ -251,6 +264,12 @@ final class TeamModel<Player: RosterPlayer> {
     private func fetchNewsUnlessLoaded() async -> Result<[News], NetworkError>? {
         guard newsState != .loaded else { return nil }
         return await downloadNewsData(queryURL: newsURL)
+    }
+
+    /// The standings, or `nil` when they are already on screen.
+    private func fetchStandingsUnlessLoaded() async -> Result<Standings, NetworkError>? {
+        guard standingsState != .loaded else { return nil }
+        return await loadStandings(team.league)
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen
@@ -282,6 +301,16 @@ final class TeamModel<Player: RosterPlayer> {
             applyFilterAndSort()
         case .failure(let error):
             fail(&rosterState, with: error, hasContent: !allPlayers.isEmpty)
+        }
+    }
+
+    private func apply(standings result: Result<Standings, NetworkError>) {
+        switch result {
+        case .success(let loaded):
+            standingsState = .loaded
+            standings = loaded
+        case .failure(let error):
+            fail(&standingsState, with: error, hasContent: standings.map { !$0.isEmpty } ?? false)
         }
     }
 
