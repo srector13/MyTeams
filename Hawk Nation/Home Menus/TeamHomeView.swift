@@ -16,35 +16,67 @@ import SwiftUI
 /// built around.
 struct TeamHomeView: View {
     let team: TeamRef
+    /// Keeps the page's model while the page is not mounted.
+    let pages: TeamPages
 
     var body: some View {
         switch team.league.descriptor.kind {
-        case .basketball: TeamHomeContent(team: team, loadRoster: downloadBasketballRoster(team:))
-        case .football: TeamHomeContent(team: team, loadRoster: downloadFootballRoster(team:))
-        case .baseball: TeamHomeContent(team: team, loadRoster: downloadBaseballRoster(team:))
-        case .soccer: TeamHomeContent(team: team, loadRoster: downloadSoccerRoster(team:))
+        case .basketball: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadBasketballRoster(team:)))
+        case .football: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadFootballRoster(team:)))
+        case .baseball: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadBaseballRoster(team:)))
+        case .soccer: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadSoccerRoster(team:)))
         case .hockey, .other: EmptyView()
         }
+    }
+}
+
+/// The team pages' state that outlives the pages themselves.
+///
+/// `Home` mounts only the selected team's page. Each team's model is kept
+/// here, so a page that comes back shows what it had loaded at once and
+/// fetches only its schedule again; so is its scroll offset, which the page
+/// restores. Deliberately not observable: nothing redraws when an entry is
+/// added or a scroll offset is recorded.
+@MainActor
+final class TeamPages {
+    private var models: [TeamRef.ID: AnyObject] = [:]
+    private var scrollOffsets: [TeamRef.ID: CGFloat] = [:]
+
+    /// The team's model, made on first use.
+    func model<Player: RosterPlayer>(
+        for team: TeamRef,
+        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>
+    ) -> TeamModel<Player> {
+        if let model = models[team.id] as? TeamModel<Player> {
+            return model
+        }
+        let model = TeamModel(team: team, newsURL: team.newsURL, loadRoster: loadRoster)
+        models[team.id] = model
+        return model
+    }
+
+    /// How far down the reader left the team's page, in points.
+    func scrollOffset(for teamID: TeamRef.ID) -> CGFloat {
+        scrollOffsets[teamID] ?? 0
+    }
+
+    func setScrollOffset(_ offset: CGFloat, for teamID: TeamRef.ID) {
+        scrollOffsets[teamID] = offset
+    }
+
+    /// Forgets every team but `teamIDs`, such as one just unfollowed.
+    func retain(_ teamIDs: [TeamRef.ID]) {
+        let kept = Set(teamIDs)
+        models = models.filter { kept.contains($0.key) }
+        scrollOffsets = scrollOffsets.filter { kept.contains($0.key) }
     }
 }
 
 /// A team page for one sport's player type.
 private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
     let team: TeamRef
-
-    @State private var model: TeamModel<Player>
-
-    init(
-        team: TeamRef,
-        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>
-    ) {
-        self.team = team
-        _model = State(initialValue: TeamModel(
-            team: team,
-            newsURL: team.newsURL,
-            loadRoster: loadRoster
-        ))
-    }
+    /// Owned by `TeamPages`, so it outlives this view.
+    let model: TeamModel<Player>
 
     var body: some View {
         TeamHomeLayout {
@@ -71,7 +103,10 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
 
             NewsSection(model: model, teamColor: team.color)
         }
-        .task { await model.load() }
+        // `Home` mounts only the selected team's page, so this runs — and
+        // polls — only while the team is selected: a new selection is a new
+        // page, and the old page's task is cancelled with it.
+        .task(id: team.id) { await model.load() }
     }
 }
 
@@ -110,5 +145,5 @@ private struct RosterFilterMenu<Player: RosterPlayer>: View {
 }
 
 #Preview {
-    TeamHomeView(team: TeamCatalog.seeded(league: .nfl, espnID: "12"))
+    TeamHomeView(team: TeamCatalog.seeded(league: .nfl, espnID: "12"), pages: TeamPages())
 }

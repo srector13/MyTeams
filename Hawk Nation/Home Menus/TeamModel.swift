@@ -141,26 +141,28 @@ final class TeamModel<Player: RosterPlayer> {
     // MARK: - Loading
 
     /// Loads the roster, schedule and news feeds together, then keeps the
-    /// schedule fresh for as long as the tab is on screen.
+    /// schedule fresh for as long as the page is on screen.
     ///
     /// Scores and clocks move during a game, so the schedule is refetched every
-    /// minute; rosters and news do not, so they are fetched once.
+    /// minute; rosters and news do not, so they are fetched once. The model
+    /// outlives its page (`TeamPages`), so a page coming back refetches only
+    /// the schedule, and whichever other feed has not loaded yet.
     func load() async {
-        // A tab that failed last time it appeared shows its skeletons again
+        // A page that failed last time it appeared shows its skeletons again
         // while it retries.
         if rosterState == .failed { rosterState = .loading }
         if scheduleState == .failed { scheduleState = .loading }
         if newsState == .failed { newsState = .loading }
 
-        async let roster = loadRoster(team)
+        async let roster = fetchRosterUnlessLoaded()
         async let schedule = fetchSchedule()
-        async let news = downloadNewsData(queryURL: newsURL)
+        async let news = fetchNewsUnlessLoaded()
 
         let (loadedRoster, loadedSchedule, loadedNews) = await (roster, schedule, news)
 
-        apply(roster: loadedRoster)
+        if let loadedRoster { apply(roster: loadedRoster) }
         apply(schedule: loadedSchedule)
-        apply(news: loadedNews)
+        if let loadedNews { apply(news: loadedNews) }
 
         await refreshSchedulePeriodically()
     }
@@ -237,6 +239,18 @@ final class TeamModel<Player: RosterPlayer> {
 
     private func fetchSchedule() async -> Result<[Game], NetworkError> {
         await downloadScheduleData(team: team)
+    }
+
+    /// The roster, or `nil` when it is already on screen.
+    private func fetchRosterUnlessLoaded() async -> Result<[Player], NetworkError>? {
+        guard rosterState != .loaded else { return nil }
+        return await loadRoster(team)
+    }
+
+    /// The news, or `nil` when it is already on screen.
+    private func fetchNewsUnlessLoaded() async -> Result<[News], NetworkError>? {
+        guard newsState != .loaded else { return nil }
+        return await downloadNewsData(queryURL: newsURL)
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen

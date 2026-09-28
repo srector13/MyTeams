@@ -22,17 +22,33 @@ struct Home: View {
 
     @State private var showsBrowser = false
 
+    /// Each team's model and scroll offset, kept while its page is not
+    /// mounted.
+    @State private var pages = TeamPages()
+
     @Bindable private var store = FavoritesStore.shared
+
+    private var selectedTeam: TeamRef? {
+        teams.first { $0.id == selection }
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                // Every page stays mounted and is shown by opacity, so each
-                // keeps its scroll position and its loaded data when the
-                // reader moves between teams.
-                ForEach(teams) { team in
-                    TeamPage(team: team) { TeamHomeView(team: team) }
-                        .opacity(selection == team.id ? 1 : 0)
+                // Only the selected team's page is mounted, so only it loads
+                // and polls: its task is keyed on the selection, and leaving
+                // the page cancels it. Every page used to stay mounted, each
+                // polling on its own. `pages` keeps each team's loaded data
+                // and scroll offset for when the reader comes back.
+                if let team = selectedTeam {
+                    TeamPage(
+                        team: team,
+                        savedOffset: pages.scrollOffset(for: team.id),
+                        saveOffset: { pages.setScrollOffset($0, for: team.id) }
+                    ) {
+                        TeamHomeView(team: team, pages: pages)
+                    }
+                    .id(team.id)
                 }
 
                 if teams.isEmpty {
@@ -56,6 +72,7 @@ struct Home: View {
             .environment(\.containerSize, proxy.size)
         }
         .task(id: store.teamIDs) {
+            pages.retain(store.teamIDs)
             teams = await store.teamRefs()
             if !teams.contains(where: { $0.id == selection }) {
                 selection = teams.first?.id ?? ""
@@ -74,12 +91,21 @@ struct Home: View {
 
 /// One team's scrolling page: the crest scrolls away under a title bar that
 /// takes its place at the top.
+///
+/// The page is mounted only while its team is selected, so it reports its
+/// scroll offset as it moves (`saveOffset`) and opens where it was left
+/// (`savedOffset`) through a `ScrollPosition`.
 private struct TeamPage<Content: View>: View {
     let team: TeamRef
+    /// How far down the reader last left this team's page, in points.
+    let savedOffset: CGFloat
+    let saveOffset: @MainActor (CGFloat) -> Void
     @ViewBuilder var content: Content
 
     /// Whether the crest has scrolled far enough to hand off to the sticky bar.
     @State private var showsStickyHeader = false
+
+    @State private var position = ScrollPosition(edge: .top)
 
     @Environment(\.containerSize) private var containerSize
 
@@ -134,6 +160,19 @@ private struct TeamPage<Content: View>: View {
             .scrollIndicators(.hidden)
             .scrollBounceBehavior(.basedOnSize)
             .ignoresSafeArea(edges: .top)
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                saveOffset(max(offset, 0))
+            }
+            .onAppear {
+                // The team's model outlives the page, so its content is
+                // already laid out at full height here.
+                if savedOffset > 0 {
+                    position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
+                }
+            }
             .onPreferenceChange(ScrollOffsetKey.self) { offset in
                 let scrolledPast = -offset > (containerSize.height / 4) - 50
                 guard scrolledPast != showsStickyHeader else { return }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2BF4005DE2F3F7D27EDCF84D /* TeamPagesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */; };
 		4F108876A45CFE6959601590 /* LeagueScoreboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 371481114143CD723EB69303 /* LeagueScoreboardTests.swift */; };
 		A6230D4AA20CC9D1ACFE7EFF /* LeagueScoreboardCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */; };
 		476464CAAE86817C53BEFF90 /* DownloadScoreboardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3C5F108853415329D714E8 /* DownloadScoreboardData.swift */; };
@@ -119,6 +120,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamPagesTests.swift"; sourceTree = "<group>"; };
 		371481114143CD723EB69303 /* LeagueScoreboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeagueScoreboardTests.swift"; sourceTree = "<group>"; };
 		A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeagueScoreboardCenter.swift"; sourceTree = "<group>"; };
 		AD3C5F108853415329D714E8 /* DownloadScoreboardData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadScoreboardData.swift"; sourceTree = "<group>"; };
@@ -432,6 +434,7 @@
 		FE5F5EA714353F16ED8FB48C /* myTeamsTests */ = {
 			isa = PBXGroup;
 			children = (
+				DFFB126D041F9FDA0AF91C5B /* TeamPagesTests.swift */,
 				371481114143CD723EB69303 /* LeagueScoreboardTests.swift */,
 				E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */,
 				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
@@ -687,6 +690,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2BF4005DE2F3F7D27EDCF84D /* TeamPagesTests.swift in Sources */,
 				4F108876A45CFE6959601590 /* LeagueScoreboardTests.swift in Sources */,
 				4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */,
 				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,
