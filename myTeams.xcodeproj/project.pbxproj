@@ -70,6 +70,7 @@
 		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
 		2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBB71827C45A79D38B20049 /* FavoritesStore.swift */; };
+		129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1204CF56986AC1138C1805E /* TeamBrowserView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -174,6 +175,7 @@
 		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
 		DDBB71827C45A79D38B20049 /* FavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStore.swift"; sourceTree = "<group>"; };
+		D1204CF56986AC1138C1805E /* TeamBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamBrowserView.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -246,6 +248,7 @@
 		B589460F49A851E6DFD8E653 /* Home Menus */ = {
 			isa = PBXGroup;
 			children = (
+				D1204CF56986AC1138C1805E /* TeamBrowserView.swift */,
 				DDBB71827C45A79D38B20049 /* FavoritesStore.swift */,
 				295F3B13CE1F1A66438291C3 /* HomeSections.swift */,
 				8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */,
@@ -601,6 +604,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */,
 				2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */,
 				A859F30DBC1A5231139E8E2E /* CircularProgress.swift in Sources */,
 				27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */,
