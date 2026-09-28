@@ -85,6 +85,18 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
         "\(Self.siteAPI)/\(path)/summary?event=\(gameID)"
     }
 
+    /// Every game in the league on one day, `YYYYMMDD` as
+    /// `scoreboardDay(for:)` forms it. One request answers for every team in
+    /// the league (see `LeagueScoreboardCenter`).
+    ///
+    /// College basketball's scoreboard lists only featured games unless it is
+    /// asked for all of Division I (`groups=50`); college football's default
+    /// is FBS, which `groups=50` would narrow instead, so it is left alone.
+    func scoreboardURL(day: String) -> String {
+        let divisionI = isCollege && sport == "basketball" ? "&groups=50&limit=1000" : ""
+        return "\(Self.siteAPI)/\(path)/scoreboard?dates=\(day)" + divisionI
+    }
+
     /// An athlete's profile, including the headline stats summary.
     func athleteURL(athleteID: String) -> String {
         "\(Self.commonAPI)/\(path)/athletes/\(athleteID)"

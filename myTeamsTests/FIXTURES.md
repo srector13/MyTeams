@@ -117,6 +117,33 @@ Notes on the live shape:
   grayscale and twelve 4096 px `guid/…` brand-service images. Default is first
   in the feed, so the selection test reverses the Chiefs' array in memory.
 
+## League scoreboards (P2-c)
+
+`LeagueScoreboardTests.swift` reads three scoreboard documents, captured on
+**2026-09-28 at 03:44Z** (Sunday evening US time) from this host:
+
+```sh
+base=https://site.api.espn.com/apis/site/v2/sports
+curl -s "$base/football/nfl/scoreboard?dates=20260927" -o nfl_scoreboard_20260927.json
+curl -s "$base/baseball/mlb/scoreboard?dates=20260927" -o mlb_scoreboard_20260927.json
+curl -s "$base/football/nfl/scoreboard?dates=20260928" -o nfl_scoreboard_20260928.json
+```
+
+The responses carried `Cache-Control: max-age=4` (NFL) and `max-age=3` (MLB).
+The two Sunday boards were **trimmed to three events** each, keeping feed
+order and every other key; each kept event is unchanged. They were
+re-serialised compactly (`separators=(',', ':')`, `ensure_ascii=False`).
+Monday's board has one event and is as captured.
+
+| File | Events (capture → kept) | Bytes (capture → trimmed) | Kept |
+|---|---|---|---|
+| `nfl_scoreboard_20260927.json` | 14 → 3 | 239,943 → 49,076 | 401872962 Rams (14) at Broncos (7), **`in`**, 26–23 with 0:48 left, kicked off 00:20Z Monday (so on Sunday's board); 401872952 Chiefs (12) at Dolphins (15), final 24–10 (the event of `chiefs_summary_live_401872952`); 401872961 Raiders (13) at Saints (18), final 35–27 |
+| `mlb_scoreboard_20260927.json` | 15 → 3 | 402,061 → 68,343 | 401817103 Orioles (1) at Yankees (10), `STATUS_CANCELED` (`post`, not completed, 0–0); 401817106 Mets (21) at Nationals (20), final 6–4 to Washington; 401817109 Guardians (5) at Royals (7), final 3–2 (the event of `royals_summary_pregame_401817109`) |
+| `nfl_scoreboard_20260928.json` | 1 → 1 | 23,187 (as captured) | 401872963, Monday night, `pre`, both scores `"0"` |
+
+Scoreboard competitors carry `score` as a bare string (`"23"`), like the
+summary header, not the schedule's `{"displayValue": …}`.
+
 ## Refreshing
 
 1. Re-run the requests above, for example:

@@ -75,10 +75,21 @@ final class TeamModel<Player: RosterPlayer> {
     private(set) var scheduleState: SectionLoadState = .loading
     private(set) var newsState: SectionLoadState = .loading
 
-    /// Live scores for the games the model is currently polling summaries for,
-    /// keyed by `Game.gameID`. Schedule cards render from this instead of each
-    /// card fetching its own summary document.
-    private(set) var liveScores: [String: LiveGameScore] = [:]
+    /// Live scores for the games in the live window, keyed by `Game.gameID`,
+    /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
+    /// Schedule cards render from this instead of each card fetching its own
+    /// summary document. A game that left the window (finished, postponed,
+    /// or too old) drops out; its score comes from the schedule feed itself.
+    var liveScores: [String: LiveGameScore] {
+        let now = Date()
+        var scores: [String: LiveGameScore] = [:]
+        for game in games where shouldPollLiveScore(game: game, now: now) {
+            if let score = scoreboards.liveScore(for: game, team: team) {
+                scores[game.gameID] = score
+            }
+        }
+        return scores
+    }
 
     /// The index in `games` of the next game still to be played. The schedule
     /// carousel opens scrolled to it.
@@ -93,6 +104,11 @@ final class TeamModel<Player: RosterPlayer> {
     let team: TeamRef
     private let newsURL: String
     private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
+    private let scoreboards: LeagueScoreboardCenter
+
+    /// The page's standing request for its league's scoreboard, held while
+    /// the schedule refresh runs (see `refreshSchedulePeriodically`).
+    @ObservationIgnored private var scoreboardSubscription: LeagueScoreboardCenter.Subscription?
 
     /// How the league turns the schedule into a record and a next game: MLS
     /// completion flags are unreliable, so there a past kick-off also counts
@@ -103,11 +119,13 @@ final class TeamModel<Player: RosterPlayer> {
     init(
         team: TeamRef,
         newsURL: String,
-        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>
+        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>,
+        scoreboards: LeagueScoreboardCenter = .shared
     ) {
         self.team = team
         self.newsURL = newsURL
         self.loadRoster = loadRoster
+        self.scoreboards = scoreboards
     }
 
     /// The team's record so far this season, as wins, losses and draws,
@@ -144,16 +162,31 @@ final class TeamModel<Player: RosterPlayer> {
         apply(schedule: loadedSchedule)
         apply(news: loadedNews)
 
-        await refreshLiveScores()
         await refreshSchedulePeriodically()
     }
 
     /// Refetches the schedule once a minute until the surrounding task is
-    /// cancelled, which SwiftUI does when the view goes away.
+    /// cancelled, which SwiftUI does when the page goes away.
     ///
-    /// Live scores ride along in the same loop: only games inside the live
-    /// window get a summary request, so a quiet Home screen makes zero.
+    /// For as long as it runs, the page is subscribed to its league's
+    /// scoreboard for the days of its games in the live window, and the
+    /// scoreboard supplies `liveScores`. A quiet day wants no days, so a
+    /// quiet page makes no score requests; and leaving the page cancels the
+    /// loop and withdraws the subscription, stopping the league's poller
+    /// unless another page shares it.
     private func refreshSchedulePeriodically() async {
+        // The page went away during the first load.
+        guard !Task.isCancelled else { return }
+
+        let subscription = scoreboards.subscribe(team, days: liveScoreboardDays())
+        scoreboardSubscription = subscription
+        defer {
+            scoreboards.unsubscribe(subscription)
+            if scoreboardSubscription == subscription {
+                scoreboardSubscription = nil
+            }
+        }
+
         while !Task.isCancelled {
             do {
                 try await Task.sleep(for: .seconds(60))
@@ -161,43 +194,21 @@ final class TeamModel<Player: RosterPlayer> {
                 return
             }
             apply(schedule: await fetchSchedule())
-            await refreshLiveScores()
+            // The live window moves with the clock, not only with the feed.
+            updateScoreboardSubscription()
         }
     }
 
-    /// Fetches summaries for the games that qualify under
-    /// `shouldPollLiveScore` and publishes them through `liveScores`.
-    ///
-    /// Fetch failures keep the last known score rather than dropping the
-    /// entry, so an ESPN rate-limit window cannot paint a live game 0–0.
-    private func refreshLiveScores(now: Date = Date()) async {
-        let pollable = games.filter { shouldPollLiveScore(game: $0, now: now) }
+    /// The scoreboard days (`scoreboardDay(for:)`) of the games that qualify
+    /// under `shouldPollLiveScore`: the ones the league's scoreboard is
+    /// polled for.
+    private func liveScoreboardDays(now: Date = Date()) -> Set<String> {
+        Set(games.filter { shouldPollLiveScore(game: $0, now: now) }.map { scoreboardDay(for: $0.dateAsDate) })
+    }
 
-        // A game that left the window (finished, postponed, or too old) stops
-        // being live; its score now comes from the schedule feed itself.
-        let liveIDs = Set(pollable.map(\.gameID))
-        liveScores = liveScores.filter { liveIDs.contains($0.key) }
-        guard !pollable.isEmpty else { return }
-
-        let results = await withTaskGroup(of: (String, LiveGameScore?).self) { group in
-            let team = self.team
-            for game in pollable {
-                group.addTask {
-                    (game.gameID, await downloadLiveGameScore(gameID: game.gameID, team: team, isHome: game.gameHome))
-                }
-            }
-            var collected: [(String, LiveGameScore?)] = []
-            for await result in group {
-                collected.append(result)
-            }
-            return collected
-        }
-
-        for (gameID, score) in results {
-            if let score {
-                liveScores[gameID] = score
-            }
-        }
+    private func updateScoreboardSubscription() {
+        guard let scoreboardSubscription else { return }
+        scoreboards.update(scoreboardSubscription, days: liveScoreboardDays())
     }
 
     // MARK: - Retrying
@@ -213,7 +224,7 @@ final class TeamModel<Player: RosterPlayer> {
     func reloadSchedule() async {
         scheduleState = .loading
         apply(schedule: await fetchSchedule())
-        await refreshLiveScores()
+        updateScoreboardSubscription()
     }
 
     /// Refetches the news after a failed load.
@@ -354,12 +365,13 @@ func seasonRecord(
     return (wins, losses, draws)
 }
 
-/// Whether a game's summary should be polled for a live score right now.
+/// Whether a game should show a live score right now, which is also whether
+/// its day's league scoreboard is polled for one (`LeagueScoreboardCenter`).
 ///
 /// The old per-card poll asked for every fixture on the carousel, every
 /// minute, forever. A season is overwhelmingly games that already finished or
 /// start days from now — none of which change while you watch. This confines
-/// the requests to the one or two fixtures actually in progress: unplayed or
+/// the polling to the one or two fixtures actually in progress: unplayed or
 /// live games whose start is near the current moment.
 ///
 /// The window is deliberately asymmetric. A game starts up to eight hours
@@ -370,7 +382,8 @@ func seasonRecord(
 ///
 /// - Parameters:
 ///   - game: the fixture to judge. One whose feed gave no game id cannot be
-///     addressed at the summary endpoint, so it never qualifies.
+///     matched on a scoreboard or addressed at the summary endpoint, so it
+///     never qualifies.
 ///   - now: the current instant.
 func shouldPollLiveScore(game: Game, now: Date = Date()) -> Bool {
     guard !game.gameID.isEmpty else { return false }

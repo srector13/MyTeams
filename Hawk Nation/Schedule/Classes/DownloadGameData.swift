@@ -98,7 +98,8 @@ struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
     var id: String { homeAway.isEmpty ? name : homeAway }
 }
 
-/// The current score of a game, read from its summary document.
+/// The current score of a game, as its league's scoreboard (see
+/// `LeagueScoreboardCenter`) or its summary document reports it.
 ///
 /// Schedule cards need nothing livelier than the two team totals; the full
 /// box-score loaders behind the detail sheets fetch far more than a card
@@ -108,33 +109,26 @@ struct LiveGameScore: Sendable, Hashable {
     var opponentScore: Int
 }
 
-/// Reads the current score from a game's summary document.
+/// Reads a competitor's score, or `nil` when it has none.
 ///
-/// `isHome` is the schedule feed's `gameHome` flag for the followed team, and
-/// the home/away side is the primary key; the competitor's `team.id` only
-/// decides when a header omits `homeAway`.
-///
-/// Returns `nil` when the fetch failed or the document cannot be attributed,
-/// so a caller can keep its last known figures instead of painting a
-/// rate-limited or partial response as a 0–0 game.
-func downloadLiveGameScore(gameID: String, team: TeamRef, isHome: Bool) async -> LiveGameScore? {
-    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-        return nil
-    }
-    return parseLiveGameScore(from: json, team: team, isHome: isHome)
-}
-
-/// Reads a header competitor's score, or `nil` when it has none.
-///
-/// The summary header publishes `score` as a bare string (`"3"`); the schedule
-/// feed wraps it as `{"value": 3.0, "displayValue": "3"}`. Both are accepted.
+/// The summary header and the league scoreboards publish `score` as a bare
+/// string (`"3"`); the schedule feed wraps it as
+/// `{"value": 3.0, "displayValue": "3"}`. Both are accepted.
 func competitorScore(_ competitor: JSON) -> Int? {
     let score = competitor["score"]
     return score.dictionary == nil ? score.int : score["displayValue"].int
 }
 
-/// Extracts the current score from a game's summary document. See
-/// `downloadLiveGameScore`.
+/// Extracts the current score from a game's summary document.
+///
+/// `isHome` is the schedule feed's `gameHome` flag for the followed team, and
+/// the home/away side is the primary key; the competitor's `team.id` only
+/// decides when a header omits `homeAway`.
+///
+/// Returns `nil` when the document cannot be attributed, so a caller can keep
+/// its last known figures instead of painting a partial response as a 0–0
+/// game. Schedule cards now read their scores from the league scoreboard
+/// (`parseScoreboard`); this reads the same figures from a summary.
 func parseLiveGameScore(from json: JSON, team: TeamRef, isHome: Bool) -> LiveGameScore? {
     var score: Int?
     var opponentScore: Int?
