@@ -94,6 +94,11 @@
 		806F811BCA02858268F722FC /* TeamEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293381D72B47893F6410908F /* TeamEntity.swift */; };
 		F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */; };
 		9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */; };
+		A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */; };
+		7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */; };
+		2C7DFA31B60B1565FB9D03D2 /* ScoreAlertEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */; };
+		4018B7D252391342C25956F8 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 940348FF9580BF614B9B5506 /* AppDelegate.swift */; };
+		5C80F187EEED1E73DD283D0C /* ScoreDiffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -222,6 +227,11 @@
 		293381D72B47893F6410908F /* TeamEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamEntity.swift"; sourceTree = "<group>"; };
 		71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStoreTests.swift"; sourceTree = "<group>"; };
 		B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamSearchTests.swift"; sourceTree = "<group>"; };
+		0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertsPermissions.swift"; sourceTree = "<group>"; };
+		77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiff.swift"; sourceTree = "<group>"; };
+		73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertEngine.swift"; sourceTree = "<group>"; };
+		940348FF9580BF614B9B5506 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate.swift"; sourceTree = "<group>"; };
+		DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiffTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -295,6 +305,9 @@
 			isa = PBXGroup;
 			children = (
 				A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */,
+				73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */,
+				77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */,
+				0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */,
 				346F15839B839382E7E93D52 /* Standings.swift */,
 				0D2A095EAB5992522D7B70CC /* Record.swift */,
 				D1204CF56986AC1138C1805E /* TeamBrowserView.swift */,
@@ -368,6 +381,7 @@
 			children = (
 				63E84FD53AFF22D9D6671091 /* Assets.xcassets */,
 				3A4E6F7749EA7D0396162F3F /* MyTeamsApp.swift */,
+				940348FF9580BF614B9B5506 /* AppDelegate.swift */,
 				C70E8AAB2B78655365888D80 /* teams.json */,
 			);
 			path = "Resources";
@@ -485,6 +499,7 @@
 				50CF848EFDCDCB9AF31230CA /* RecordTests.swift */,
 				F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */,
 				371481114143CD723EB69303 /* LeagueScoreboardTests.swift */,
+				DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */,
 				E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */,
 				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
 				71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */,
@@ -684,6 +699,10 @@
 				8E4848E75EFA1A90824D11E1 /* StatLeaders.swift in Sources */,
 				1E3BCB241DA1C6CB2812914D /* LeadersViews.swift in Sources */,
 				A6230D4AA20CC9D1ACFE7EFF /* LeagueScoreboardCenter.swift in Sources */,
+				4018B7D252391342C25956F8 /* AppDelegate.swift in Sources */,
+				2C7DFA31B60B1565FB9D03D2 /* ScoreAlertEngine.swift in Sources */,
+				7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */,
+				A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */,
 				749E671F2916273F3E45E498 /* Standings.swift in Sources */,
 				65D076717FCEAD9E6C2663EB /* Record.swift in Sources */,
 				476464CAAE86817C53BEFF90 /* DownloadScoreboardData.swift in Sources */,
@@ -759,6 +778,7 @@
 				26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */,
 				0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */,
 				4F108876A45CFE6959601590 /* LeagueScoreboardTests.swift in Sources */,
+				5C80F187EEED1E73DD283D0C /* ScoreDiffTests.swift in Sources */,
 				4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */,
 				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,
 				F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */,
