@@ -58,9 +58,8 @@ private let widgetDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "E MMM d, y"
     // Same presentation zone as the app's schedule formatters (see
-    // `scheduleDisplayZone` in DownloadScheduleData.swift): game dates read
-    // in US Central regardless of where the phone is.
-    formatter.timeZone = TimeZone(identifier: "America/Chicago")
+    // `scheduleDisplayZone` in DownloadScheduleData.swift): the device's own.
+    formatter.timeZone = .autoupdatingCurrent
     return formatter
 }()
 

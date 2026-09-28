@@ -49,6 +49,19 @@ private let detailPath: [JSON.Index] = ["competitions", 0, "status", "type", "de
 /// strings hold for US English, the locale the simulators run in.
 private var isUSEnglish: Bool { Locale.current.identifier.hasPrefix("en_US") }
 
+/// Game text is shown in the device's time zone (P2-b; it was pinned to US
+/// Central). The literal golden strings are Central readings, so they are
+/// checked only on a device set to Central; `displayed` checks every zone.
+private var isUSCentral: Bool { TimeZone.current.identifier == "America/Chicago" }
+
+/// `date` as the schedule's display formatters render it on this device.
+private func displayed(_ date: Date, _ format: String) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = format
+    formatter.timeZone = .current
+    return formatter.string(from: date)
+}
+
 // MARK: - Schedule
 
 @Suite("Golden: schedule parsing", .tags(.golden))
@@ -85,7 +98,9 @@ struct GoldenScheduleTests {
 
         // .date "2025-11-04T01:00Z" is the UTC instant 1762218000.
         #expect(game.dateAsDate == Date(timeIntervalSince1970: 1_762_218_000))
-        if isUSEnglish {
+        #expect(game.date == displayed(game.dateAsDate, "MMM dd, yyyy"))
+        #expect(game.time == displayed(game.dateAsDate, "h:mm a"))
+        if isUSEnglish && isUSCentral {
             // 01:00Z is 7:00 PM the previous evening in Central (CST, UTC-6).
             #expect(game.date == "Nov 03, 2025")
             #expect(game.time == "7:00 PM")
@@ -154,7 +169,9 @@ struct GoldenScheduleTests {
         #expect(game.channel == "NBC")
         #expect(game.location == "Arrowhead Stadium")
         #expect(game.dateAsDate == Date(timeIntervalSince1970: 1_789_950_000))  // "2026-09-21T00:20Z"
-        if isUSEnglish {
+        #expect(game.date == displayed(game.dateAsDate, "MMM dd, yyyy"))
+        #expect(game.time == displayed(game.dateAsDate, "h:mm a"))
+        if isUSEnglish && isUSCentral {
             #expect(game.date == "Sep 20, 2026")  // 19:20 CDT (UTC-5)
             #expect(game.time == "7:20 PM")
         }

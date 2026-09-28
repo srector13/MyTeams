@@ -83,12 +83,13 @@ enum TeamNameField: String, Sendable {
 // parsed per refresh; `DateFormatter` is `Sendable`, and none of these are
 // mutated after creation.
 
-/// The zone every game time is presented in: US Central, the home zone of all
-/// four seeded teams. Display is pinned to this zone while the underlying `Date`
-/// stays the true instant, so schedule text reads identically on any device
-/// and clock comparisons (`dateAsDate < Date()`) remain correct. The zone is
-/// DST-aware, unlike the fixed six-hour shift this replaced.
-private let scheduleDisplayZone = TimeZone(identifier: "America/Chicago")
+/// The zone game times are presented in: the device's own, following it if
+/// it changes while the app runs. The feed's timestamps are UTC instants
+/// (`eventDateParser`), so only display depends on this; `dateAsDate` and
+/// clock comparisons (`dateAsDate < Date()`) are zone-free. Display used to
+/// be pinned to US Central, the home zone of the four seed teams, which read
+/// wrong for anyone following a team from elsewhere.
+private let scheduleDisplayZone = TimeZone.autoupdatingCurrent
 
 /// Formats a game's calendar date for display, e.g. "Jan 18, 2021".
 private let gameDateFormatter: DateFormatter = {
@@ -121,8 +122,8 @@ private let eventDateParser: DateFormatter = {
 /// `2021-01-18T23:00Z`, as the exact instant it names.
 ///
 /// The returned `Date` is timezone-neutral — correct for comparisons against
-/// `Date()` anywhere. Presentation in US Central time happens in the display
-/// formatters above, not by shifting the instant itself.
+/// `Date()` anywhere. Presentation in the device's time zone happens in the
+/// display formatters above, not by shifting the instant itself.
 func parseGameDate(_ raw: String) -> Date? {
     let cleaned = raw
         .replacingOccurrences(of: "T", with: " ")
