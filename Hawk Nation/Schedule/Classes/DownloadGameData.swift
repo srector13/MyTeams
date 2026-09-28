@@ -255,8 +255,10 @@ func parseGameInfo(from json: JSON, team: TeamRef) -> GameInfo {
 /// Extracts both teams' box score lines from a basketball game's summary
 /// document. Every line carries `team`'s score first.
 ///
-/// Statistics are addressed by position because the feed lists them in a fixed
-/// order without stable identifiers.
+/// Statistics are read by `name` (`boxscoreStatistic`). They used to be read
+/// by position, and the feed's list had shifted under that reading: from
+/// assists on, every figure was its neighbour's. College, NBA and WNBA
+/// summaries all name the same statistics.
 func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [BasketballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
@@ -278,22 +280,26 @@ func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [B
         let team = element.1
         let statistics = team["statistics"]
 
+        func stat(_ name: String) -> JSON {
+            boxscoreStatistic(statistics, named: name)["displayValue"]
+        }
+
         return BasketballGameTeamStats(
             name: team["team"]["name"].stringValue,
-            fieldGoals: statistics[0]["displayValue"].stringValue,
-            fieldGoalPct: statistics[1]["displayValue"].floatValue,
-            threePoints: statistics[2]["displayValue"].stringValue,
-            threePointPct: statistics[3]["displayValue"].floatValue,
-            freeThrows: statistics[4]["displayValue"].stringValue,
-            freeThrowPct: statistics[5]["displayValue"].floatValue,
-            offensiveRebounds: statistics[7]["displayValue"].intValue,
-            defensiveRebounds: statistics[8]["displayValue"].intValue,
-            assists: statistics[10]["displayValue"].intValue,
-            steals: statistics[11]["displayValue"].intValue,
-            blocks: statistics[12]["displayValue"].intValue,
-            turnOvers: statistics[13]["displayValue"].intValue,
-            fouls: statistics[19]["displayValue"].intValue,
-            largestLead: statistics[20]["displayValue"].intValue,
+            fieldGoals: stat("fieldGoalsMade-fieldGoalsAttempted").stringValue,
+            fieldGoalPct: stat("fieldGoalPct").floatValue,
+            threePoints: stat("threePointFieldGoalsMade-threePointFieldGoalsAttempted").stringValue,
+            threePointPct: stat("threePointFieldGoalPct").floatValue,
+            freeThrows: stat("freeThrowsMade-freeThrowsAttempted").stringValue,
+            freeThrowPct: stat("freeThrowPct").floatValue,
+            offensiveRebounds: stat("offensiveRebounds").intValue,
+            defensiveRebounds: stat("defensiveRebounds").intValue,
+            assists: stat("assists").intValue,
+            steals: stat("steals").intValue,
+            blocks: stat("blocks").intValue,
+            turnOvers: stat("turnovers").intValue,
+            fouls: stat("fouls").intValue,
+            largestLead: stat("largestLead").intValue,
             // The box score lists the away team first, matching the
             // predictor's away/home pair.
             projection: index == 0
@@ -308,6 +314,12 @@ func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [B
 
 /// Extracts both teams' box score lines from a football game's summary
 /// document. Every line carries `team`'s score first.
+///
+/// Statistics are read by `name`: the NFL lists 25, college football 15 in
+/// another order, so no one position fits both. A statistic a feed does not
+/// carry (college football has no `totalDrives`; a pre-game summary lists
+/// only season averages) reads as zero. `interceptions` appears twice in the
+/// NFL list, with the same value; the first is read.
 func parseFootballGameTeamStats(from json: JSON, team followed: TeamRef) -> [FootballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
@@ -319,17 +331,21 @@ func parseFootballGameTeamStats(from json: JSON, team followed: TeamRef) -> [Foo
     return json["boxscore"]["teams"].map { _, team in
         let statistics = team["statistics"]
 
+        func stat(_ name: String) -> JSON {
+            boxscoreStatistic(statistics, named: name)["displayValue"]
+        }
+
         return FootballGameTeamStats(
             name: team["team"]["name"].stringValue,
-            yards: statistics[7]["displayValue"].intValue,
-            passingYards: statistics[10]["displayValue"].intValue,
-            rushingYards: statistics[15]["displayValue"].intValue,
-            firstDowns: statistics[0]["displayValue"].intValue,
-            drives: statistics[9]["displayValue"].intValue,
+            yards: stat("totalYards").intValue,
+            passingYards: stat("netPassingYards").intValue,
+            rushingYards: stat("rushingYards").intValue,
+            firstDowns: stat("firstDowns").intValue,
+            drives: stat("totalDrives").intValue,
             score: teamScore,
-            interceptions: statistics[13]["displayValue"].intValue,
-            possesionTime: statistics[24]["displayValue"].stringValue,
-            completionAttempts: statistics[11]["displayValue"].intValue,
+            interceptions: stat("interceptions").intValue,
+            possesionTime: stat("possessionTime").stringValue,
+            completionAttempts: stat("completionAttempts").intValue,
             opponentScore: opponentScore,
             gameClock: gameClock
         )

@@ -617,34 +617,32 @@ struct GoldenSummaryTests {
 
     // MARK: Basketball box score
 
-    // KNOWN-BUG (§7 #11): basketball stats are read by position, and the
-    // feed's list has shifted: [9] is assists but the parser reads
-    // assists=[10] (steals), steals=[11] (blocks), blocks=[12] (turnovers),
-    // turnOvers=[13] (teamTurnovers), fouls=[19] (fastBreakPoints),
-    // largestLead=[20] (pointsInPaint). Correct: read each stat by `name`.
-    @Test("KU final box score (regulation, KU listed second)", .tags(.knownBug))
+    // Was KNOWN-BUG (§7 #11): the stats were read by position, and the
+    // feed's list had shifted — assists read [10] (steals), and so on down
+    // to largestLead reading [20] (pointsInPaint). Each is now read by name.
+    @Test("KU final box score (regulation, KU listed second)")
     func basketballBoxScore() throws {
         // jayhawks_summary_final_401851305.json — detail "Final"
         let lines = parseBasketballGameTeamStats(from: try Fixture.json("jayhawks_summary_final_401851305"), team: .jayhawks)
         try #require(lines.count == 2)  // boxscore.teams
 
-        // boxscore.teams[0] (Jayhawks, away) .statistics[i].displayValue
+        // boxscore.teams[0] (Jayhawks, away) .statistics[name].displayValue
         let kansas = lines[0]
         #expect(kansas.name == "Jayhawks")
-        #expect(kansas.fieldGoals == "14-57")  // [0]
-        #expect(approx(kansas.fieldGoalPct, 25))  // [1]
-        #expect(kansas.threePoints == "7-23")  // [2]
-        #expect(approx(kansas.threePointPct, 30))  // [3]
-        #expect(kansas.freeThrows == "12-18")  // [4]
-        #expect(approx(kansas.freeThrowPct, 67))  // [5]
-        #expect(kansas.offensiveRebounds == 15)  // [7]
-        #expect(kansas.defensiveRebounds == 22)  // [8]
-        #expect(kansas.assists == 3)  // KNOWN-BUG: [10] steals; assists [9] is 8
-        #expect(kansas.steals == 2)  // KNOWN-BUG: [11] blocks; steals is 3
-        #expect(kansas.blocks == 8)  // KNOWN-BUG: [12] turnovers; blocks is 2
-        #expect(kansas.turnOvers == 0)  // KNOWN-BUG: [13] teamTurnovers; turnovers is 8
-        #expect(kansas.fouls == 9)  // KNOWN-BUG: [19] fastBreakPoints; fouls [21] is 11
-        #expect(kansas.largestLead == 14)  // KNOWN-BUG: [20] pointsInPaint; largestLead [22] is 0
+        #expect(kansas.fieldGoals == "14-57")  // fieldGoalsMade-fieldGoalsAttempted
+        #expect(approx(kansas.fieldGoalPct, 25))
+        #expect(kansas.threePoints == "7-23")
+        #expect(approx(kansas.threePointPct, 30))
+        #expect(kansas.freeThrows == "12-18")
+        #expect(approx(kansas.freeThrowPct, 67))
+        #expect(kansas.offensiveRebounds == 15)
+        #expect(kansas.defensiveRebounds == 22)
+        #expect(kansas.assists == 8)  // was 3, steals
+        #expect(kansas.steals == 3)
+        #expect(kansas.blocks == 2)
+        #expect(kansas.turnOvers == 8)
+        #expect(kansas.fouls == 11)
+        #expect(kansas.largestLead == 0)
         #expect(kansas.projection == 0)  // no "predictor" in a final summary
         // Score: competitors[0].team.id is "248" (Houston), so KU is index 1;
         // linescores [25, 22] = 47 and Houston's [33, 36] = 69.
@@ -663,12 +661,12 @@ struct GoldenSummaryTests {
         #expect(approx(houston.freeThrowPct, 79))
         #expect(houston.offensiveRebounds == 10)
         #expect(houston.defensiveRebounds == 32)
-        #expect(houston.assists == 4)  // KNOWN-BUG: [10] steals
-        #expect(houston.steals == 4)  // KNOWN-BUG: [11] blocks
-        #expect(houston.blocks == 8)  // KNOWN-BUG: [12] turnovers
-        #expect(houston.turnOvers == 3)  // KNOWN-BUG: [13] teamTurnovers
-        #expect(houston.fouls == 0)  // KNOWN-BUG: [19] fastBreakPoints
-        #expect(houston.largestLead == 12)  // KNOWN-BUG: [20] pointsInPaint
+        #expect(houston.assists == 11)
+        #expect(houston.steals == 4)
+        #expect(houston.blocks == 4)
+        #expect(houston.turnOvers == 8)
+        #expect(houston.fouls == 15)
+        #expect(houston.largestLead == 24)
         // Both lines carry KU's score first, whichever team they describe.
         #expect(houston.score == 47)
         #expect(houston.opponentScore == 69)
@@ -751,11 +749,12 @@ struct GoldenSummaryTests {
         }
     }
 
-    // KNOWN-BUG: before kickoff boxscore.teams[*].statistics holds eight
-    // season *averages* (totalPointsPerGame … rushingYardsPerGameAllowed),
-    // which the positional reader shows as game stats. Correct: no game
-    // lines (or labelled season averages) for a pre-game summary.
-    @Test("NFL pre-game box score reads season averages positionally", .tags(.knownBug))
+    // Before kickoff boxscore.teams[*].statistics holds eight season
+    // *averages* (totalPointsPerGame … rushingYardsPerGameAllowed). The
+    // positional reader used to show them as game stats (firstDowns read
+    // "32.0", yards "90.0"); read by name, none of them is a game stat, so
+    // every figure is zero until the game starts.
+    @Test("NFL pre-game box score shows no season averages as game stats")
     func footballPregameBoxScore() throws {
         // chiefs_summary_pregame_401872976.json
         let lines = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_pregame_401872976"), team: .chiefs)
@@ -763,17 +762,17 @@ struct GoldenSummaryTests {
 
         let chiefs = lines[0]
         #expect(chiefs.name == "Chiefs")
-        #expect(chiefs.firstDowns == 32)  // KNOWN-BUG: [0] totalPointsPerGame "32.0"
-        #expect(chiefs.yards == 90)  // KNOWN-BUG: [7] rushingYardsPerGameAllowed "90.0"
-        #expect(chiefs.drives == 0)  // [9] absent
-        #expect(chiefs.passingYards == 0)  // [10] absent
-        #expect(chiefs.rushingYards == 0)  // [15] absent
-        #expect(chiefs.possesionTime == "")  // [24] absent
+        #expect(chiefs.firstDowns == 0)  // not totalPointsPerGame "32.0"
+        #expect(chiefs.yards == 0)  // not yardsPerGame / rushingYardsPerGameAllowed
+        #expect(chiefs.drives == 0)
+        #expect(chiefs.passingYards == 0)
+        #expect(chiefs.rushingYards == 0)
+        #expect(chiefs.possesionTime == "")
 
         let raiders = lines[1]
         #expect(raiders.name == "Raiders")
-        #expect(raiders.firstDowns == 26)  // KNOWN-BUG: "26.5" truncated
-        #expect(raiders.yards == 100)  // KNOWN-BUG: "100.5" truncated
+        #expect(raiders.firstDowns == 0)
+        #expect(raiders.yards == 0)
 
         for line in lines {
             #expect(line.score == 0)  // header competitors carry no score yet
