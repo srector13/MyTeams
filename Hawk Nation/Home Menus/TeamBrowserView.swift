@@ -238,6 +238,11 @@ struct TeamBrowserView: View {
         let followed = store.isFavorite(team.id)
         return Button {
             store.toggle(team)
+            // New favorites want alerts (`FavoriteTeam.notify`), so the
+            // first follow is where the reader is asked for them.
+            if !followed {
+                Task { await ScoreAlertsPermissions.requestIfNeeded() }
+            }
         } label: {
             HStack(spacing: 12) {
                 TeamLogo(team: team, size: 24)
