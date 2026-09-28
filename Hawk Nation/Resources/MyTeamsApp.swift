@@ -10,6 +10,8 @@ import SwiftUI
 
 @main
 struct MyTeamsApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     init() {
         // Load (or seed) the favorites before the launch task below marks
         // the crests seeded: the store reads that mark to tell an existing
@@ -26,6 +28,12 @@ struct MyTeamsApp: App {
                     await LogoStore.seedBundledCrestsIfNeeded()
                     for team in await FavoritesStore.shared.teamRefs() {
                         await LogoStore.prefetchAllVariants(team, favorite: true)
+                    }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // Pick up favorites edited on other devices meanwhile.
+                    if phase == .active {
+                        FavoritesStore.shared.synchronize()
                     }
                 }
         }
