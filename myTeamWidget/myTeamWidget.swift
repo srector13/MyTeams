@@ -18,8 +18,7 @@ struct WidgetEntry: TimelineEntry {
     var followedTeam = ""
 }
 
-/// Builds a team's entries. Shared by the configurable widget's provider
-/// and the legacy fixed-team one.
+/// Builds a team's entries for the configurable widget's provider.
 enum WidgetTimelines {
     /// How long a rendered fixture stays good for.
     ///
@@ -111,34 +110,6 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
             await WidgetScheduleLoader.refreshCatalog(for: team)
         }
         return timeline
-    }
-}
-
-/// Supplies one fixed team's next fixture, ignoring favorites. Only the
-/// legacy per-team widgets use it.
-struct GameTimelineProvider: TimelineProvider {
-    let team: TeamRef
-
-    func placeholder(in context: Context) -> WidgetEntry {
-        WidgetTimelines.placeholder(for: team)
-    }
-
-    func getSnapshot(in context: Context, completion: @escaping (WidgetEntry) -> Void) {
-        let isPreview = context.isPreview
-        Task {
-            completion(await WidgetTimelines.snapshot(for: team, isPreview: isPreview))
-        }
-    }
-
-    func getTimeline(in context: Context, completion: @escaping (Timeline<WidgetEntry>) -> Void) {
-        Task {
-            completion(await WidgetTimelines.timeline(for: team))
-
-            // After the timeline is handed over, so the league's team list
-            // (up to a megabyte for college leagues) is never parsed while
-            // the schedule is in memory.
-            await WidgetScheduleLoader.refreshCatalog(for: team)
-        }
     }
 }
 
@@ -278,60 +249,13 @@ struct TeamScheduleWidget: Widget {
     }
 }
 
-// Legacy fixed-team widgets, kept for one release so placed Chiefs, Royals
-// and Sporting widgets survive the move to the configurable one. Each pins
-// its seed team and ignores favorites. Remove in the release after next;
-// removing a kind deletes its placed widgets.
-
-struct ChiefsScheduleWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(
-            kind: "myTeamsWidget2",
-            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .nfl, espnID: "12"))
-        ) { entry in
-            WidgetEntryView(entry: entry)
-        }
-        .configurationDisplayName("Chiefs Schedule (Legacy)")
-        .description("The Kansas City Chiefs' next game. Use Team Schedule for any team.")
-        .supportedFamilies([.systemSmall])
-    }
-}
-
-struct RoyalsScheduleWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(
-            kind: "myTeamsWidget3",
-            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .mlb, espnID: "7"))
-        ) { entry in
-            WidgetEntryView(entry: entry)
-        }
-        .configurationDisplayName("Royals Schedule (Legacy)")
-        .description("The Kansas City Royals' next game. Use Team Schedule for any team.")
-        .supportedFamilies([.systemSmall])
-    }
-}
-
-struct SportingScheduleWidget: Widget {
-    var body: some WidgetConfiguration {
-        StaticConfiguration(
-            kind: "myTeamsWidget4",
-            provider: GameTimelineProvider(team: TeamCatalog.seeded(league: .mls, espnID: "186"))
-        ) { entry in
-            WidgetEntryView(entry: entry)
-        }
-        .configurationDisplayName("Sporting Schedule (Legacy)")
-        .description("Sporting Kansas City's next game. Use Team Schedule for any team.")
-        .supportedFamilies([.systemSmall])
-    }
-}
-
+// The legacy fixed-team kinds ("myTeamsWidget2" to "myTeamsWidget4": the
+// Chiefs, Royals and Sporting) are retired; their placed widgets are removed
+// and can be replaced by a Team Schedule widget set to the same team.
 @main
 struct ScheduleWidgets: WidgetBundle {
     var body: some Widget {
         TeamScheduleWidget()
-        ChiefsScheduleWidget()
-        RoyalsScheduleWidget()
-        SportingScheduleWidget()
     }
 }
 
