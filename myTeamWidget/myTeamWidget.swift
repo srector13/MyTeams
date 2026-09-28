@@ -16,6 +16,8 @@ struct WidgetEntry: TimelineEntry {
     let tempGame: WidgetGame
     /// The followed team's short name, for the Lock Screen layouts.
     var followedTeam = ""
+    /// The followed team's `TeamRef.id`, for the link a tap opens.
+    var teamID: TeamRef.ID?
 }
 
 /// Builds a team's entries for the configurable widget's provider.
@@ -39,7 +41,7 @@ enum WidgetTimelines {
     static let snapshotDeadline: Duration = .seconds(10)
 
     static func placeholder(for team: TeamRef) -> WidgetEntry {
-        WidgetEntry(date: .now, tempGame: .placeholder(for: team), followedTeam: team.shortName)
+        WidgetEntry(date: .now, tempGame: .placeholder(for: team), followedTeam: team.shortName, teamID: team.id)
     }
 
     /// Renders the real next fixture — in the widget gallery too, where it
@@ -57,7 +59,7 @@ enum WidgetTimelines {
         case .failed:
             game = .placeholder(for: team)
         }
-        return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName)
+        return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
     }
 
     static func timeline(for team: TeamRef) async -> Timeline<WidgetEntry> {
@@ -82,7 +84,7 @@ enum WidgetTimelines {
         }
 
         return Timeline(
-            entries: [WidgetEntry(date: now, tempGame: game, followedTeam: team.shortName)],
+            entries: [WidgetEntry(date: now, tempGame: game, followedTeam: team.shortName, teamID: team.id)],
             policy: .after(reload)
         )
     }
@@ -119,14 +121,18 @@ struct WidgetEntryView: View {
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        switch family {
-        #if os(iOS)
-        case .accessoryRectangular, .accessoryCircular:
-            AccessoryEntryView(entry: entry, family: family)
-        #endif
-        default:
-            systemSmall
+        Group {
+            switch family {
+            #if os(iOS)
+            case .accessoryRectangular, .accessoryCircular:
+                AccessoryEntryView(entry: entry, family: family)
+            #endif
+            default:
+                systemSmall
+            }
         }
+        // A tap opens the followed team's page in the app.
+        .widgetURL(entry.teamID.flatMap(WidgetDeepLink.url(forTeamID:)))
     }
 
     private var systemSmall: some View {

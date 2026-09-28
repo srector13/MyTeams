@@ -17,9 +17,17 @@ struct MyTeamsApp: App {
         _ = FavoritesStore.shared
     }
 
+    /// The team a widget tap asked for, until `Home` shows it.
+    @State private var deepLinkedTeamID: TeamRef.ID?
+
     var body: some Scene {
         WindowGroup {
-            Home()
+            Home(deepLinkedTeamID: $deepLinkedTeamID)
+                .onOpenURL { url in
+                    if let teamID = WidgetDeepLink.teamID(from: url) {
+                        deepLinkedTeamID = teamID
+                    }
+                }
                 .task {
                     // Put the bundled crests on disk once, then keep the
                     // favorites' crests current (weekly revalidation).
