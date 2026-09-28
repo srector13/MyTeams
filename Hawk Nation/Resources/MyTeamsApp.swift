@@ -27,6 +27,13 @@ struct MyTeamsApp: App {
                     // for no permission; following a team does.
                     ScoreAlertEngine.shared.start()
 
+                    // And for Live Activities of their games under way.
+                    #if canImport(ActivityKit)
+                    if #available(iOS 16.2, *) {
+                        LiveActivityManager.shared.start()
+                    }
+                    #endif
+
                     // Put the bundled crests on disk once, then keep the
                     // favorites' crests current (weekly revalidation).
                     await LogoStore.seedBundledCrestsIfNeeded()
