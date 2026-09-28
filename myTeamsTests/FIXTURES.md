@@ -39,6 +39,11 @@ splits URLs in `Roster/Classes`) and checked against each document's
 | `chiefs_news.json` | `https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?team=12&limit=25` (25 articles; newest `published` 2026-09-27T18:50:54Z) | 19:33Z (file time; the feed has no timestamp field) |
 | `_athletes.json` | Not a response. It lists the athlete ids chosen for splits: jayhawks 4872739 (Elmarko Jackson), chiefs 4912218 (Cyrus Allen), royals 5136077 (Spencer Bivens, RP), sporting 249729 (Stefan Cleveland, GK) | — |
 
+The `{team}_…` rows expand to `chiefs_`/`jayhawks_`/`royals_`/`sporting_`
+`schedule`, `roster` and one `splits` each: `chiefs_splits_4912218`,
+`jayhawks_splits_4872739`, `royals_splits_5136077`, plus `royals_roster`,
+`sporting_roster`, `sporting_schedule` and the rest named above.
+
 ### Game phase of each summary
 
 `header.competitions[0].status.type`:
@@ -349,8 +354,9 @@ the cup's path (`soccer/eng.fa/teams/359/schedule`). Checked live on
 team has no current fixtures in answers with its **previous edition** (the
 FA Cup returned the 2025-26 run), so cup events are kept only when their
 `season.year` matches the league feed's. `usa.nwsl.cup` listed nothing and
-is not registered. No cup schedule was captured; the merge tests build a
-cup feed from `epl_schedule` events.
+is not registered. The merge tests build a cup feed from `epl_schedule`
+events; P3-e captured one real cup schedule, `ucl_schedule_359` (see
+"Cross-league acceptance (P3-e)").
 
 ### Roster shapes
 
@@ -517,6 +523,69 @@ What the readers rely on:
   appearances, 2 `subIns`; athlete "23 (2)"), so the sheet's starts are
   `appearances − subIns`. Some players have no `statistics` block at all
   (5 of Arsenal's 27, e.g. William Saliba 277385).
+
+## Cross-league acceptance (P3-e)
+
+`CrossLeagueAcceptanceTests.swift` walks four teams — Hawks (NBA 1), Ducks
+(NHL 25), Arsenal (EPL 359), Kansas (NCAAF 2305) — through schedule,
+roster, news, standings and a finished game's sheet, reusing the P3-a and
+P3-d fixtures above. `LeagueScoreboardTests.swift` ("favorites in the new
+leagues") polls the P3-a scoreboards plus two P3-e ones. Seven documents
+were added on **2026-09-28 at 06:12Z** by the checked-in script:
+
+```sh
+python3 scripts/capture_fixtures_p3e.py     # captures, trims, prints the table
+python3 scripts/verify_acceptance_p3e.py    # Python port of the parsers: 137 values, PASS/FAIL
+```
+
+Client rules, trimming and validation are imported from
+`capture_fixtures_p3a.py`. Summaries are byte-for-byte; the two trimmed
+files are re-serialised compactly as in P3-a.
+
+| File | League | URL | Captured | What it exercises |
+|---|---|---|---|---|
+| `nba_schedule_2026.json` | NBA | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/1/schedule?season=2026` | 06:12:10Z | The Hawks' 2025-26 regular season, **trimmed 82 → 12 events** (the first 11 plus 401811028): results, a 7-5 record, `winner`/`score.displayValue` on played games |
+| `nba_summary_final_401811028.json` | NBA | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401811028` | 06:12:10Z | Cavaliers (5) at Hawks, **124–102 Final**, Apr 10 2026: the basketball sheet, 4-quarter linescore, venue |
+| `nhl_summary_final_401879368.json` | NHL | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401879368` | 06:12:11Z | Sharks (18) at Ducks, **6–2 Final**, preseason Sep 20 2026 (event 0 of `nhl_schedule`): skater/goalie tables (one Ducks goalie for 60:00, two Sharks), Sennecke hat trick, 3-period linescore |
+| `ncaaf_summary_final_401856769.json` | NCAAF | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401856769` | 06:12:11Z | Long Island (2341) at Kansas, **51–6 Final**, Sep 4 2026 (event 0 of `ncaaf_schedule`): college team statistics (15 names, no `totalDrives`), `completionAttempts` "18/25" |
+| `ucl_schedule_359.json` | UEFA Champions League (Arsenal's cup) | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/teams/359/schedule` | 06:12:12Z | Arsenal's one tie so far: 1–0 at Napoli (114), Sep 9, `league.slug` `uefa.champions`, `season.year` 2026 (matches `epl_schedule`, so the merge keeps it) |
+| `ucl_scoreboard_20260909.json` | UEFA Champions League | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20260909` | 06:12:12Z | **Trimmed 6 → 3 events** (401915424 Barcelona 5–1 Feyenoord, 401915448 Stuttgart 3–1 Viking, 401915423 Napoli 0–1 Arsenal); `leagues[0].events` dropped. The cup board the scoreboard center now polls for cup ties |
+| `epl_scoreboard_20260909.json` | EPL | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260909` | 06:12:14Z | The Premier League's board on the same day: `events: []`. What the league-only poller saw on a cup night |
+
+Gotchas:
+
+- **Finished games had to come from elsewhere.** P3-a's samples left three
+  of the four teams without a final of their own: the NBA summary is a
+  Heat–Raptors pregame, the NHL one a Maple Leafs game, the NCAAF one
+  USC's. The Hawks' live feed is all preseason, so their final is last
+  season's (`?season=2026`, which the app never asks for — like
+  `jayhawks_schedule_2026`).
+- **The NBA and NHL standings are preseason** (every stat 0, every seed 0):
+  the walkthrough asserts zeros and no rank, and asserts the Ducks' header
+  record (`1-3-0`, from four exhibitions) *differs* from their table row
+  (`0-0-0`) — a known gap, not a fixture problem.
+- **News counts are after the https filter**: `epl_news` 25 → 24 (one
+  `http://` match report), `ncaaf_news` 25 → 19 (six `http://`
+  previews/recaps). NBA and NHL keep all 25.
+- **Soccer possession is `64.5`/`35.5`**; the sheet rounds half away from
+  zero, so it reads 65% / 36%.
+- **Cup ties share the league's team ids** (Arsenal is 359 in `eng.1` and
+  `uefa.champions`), which is what lets one cup board fan out to favorites
+  from several leagues (Barcelona's LALIGA 83 gets its line from the same
+  document).
+- `nhl_summary_final_401879368` reports attendance `"10000"` (a preseason
+  round number) and `header.season` 2027 type 1.
+
+### Coverage check
+
+Every JSON under `Fixtures/` for a P3 league (`nba`, `wnba`, `nhl`,
+`ncaaf`, `ncaaw`, `ncaam`, `epl`, `laliga`, `ligamx`, `nwsl`, `mls`,
+`nfl`/`mlb` leaders, `ucl`) is named in a table above. To re-check:
+
+```sh
+cd myTeamsTests/Fixtures
+for f in *.json; do grep -q "${f%.json}" ../FIXTURES.md || echo "undocumented: $f"; done
+```
 
 ## Refreshing
 
