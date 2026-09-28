@@ -15,8 +15,9 @@ enum SportKind: String, Codable, Sendable {
     case basketball
     case baseball
     case soccer
-    /// Hockey leagues are catalogued and badged, but have no dedicated views
-    /// yet; they render as `other` does.
+    /// Hockey: a team page with its roster, schedule cards named by period,
+    /// and a box score of skater and goalie tables (`HockeyBoxScore`).
+    /// Players' season statistics are not read yet.
     case hockey
     /// A sport the app has no dedicated views for.
     case other

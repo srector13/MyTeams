@@ -25,7 +25,8 @@ struct TeamHomeView: View {
         case .football: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadFootballRoster(team:)))
         case .baseball: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadBaseballRoster(team:)))
         case .soccer: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadSoccerRoster(team:)))
-        case .hockey, .other: EmptyView()
+        case .hockey: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadHockeyRoster(team:)))
+        case .other: EmptyView()
         }
     }
 }

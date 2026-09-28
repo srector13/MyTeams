@@ -88,6 +88,22 @@ struct BaseballPlayer: Identifiable, Hashable, Sendable {
     var lastName: String
 }
 
+struct HockeyPlayer: Identifiable, Hashable, Sendable {
+    var playerID: String
+    var name: String
+    var number: String
+    var numberInt: Int
+    var height: String
+    var weight: String
+    var position: String
+    var hometown: String
+    var photo: String
+    var age: String
+    /// The hand the player shoots (or, for a goalie, catches) with.
+    var shoots: String
+    var lastName: String
+}
+
 // Roster players are identified by their ESPN athlete id, so a refetched
 // roster matches the cards already on screen instead of replacing them all.
 // A player the feed gives no id falls back to name and number.
@@ -105,6 +121,10 @@ extension SoccerPlayer {
 }
 
 extension BaseballPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension HockeyPlayer {
     var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
 }
 
@@ -312,6 +332,50 @@ func parseSoccerRoster(from json: JSON) -> [SoccerPlayer] {
             saves: saves,
             shotsFaced: saves + goalsConceded,
             goalsConceded: goalsConceded,
+            lastName: athlete["lastName"].stringValue
+        )
+    }
+
+    return roster.sorted { $0.lastName < $1.lastName }
+}
+
+/// Loads a hockey team's roster, sorted by surname.
+///
+/// The NHL feed groups athletes by position ("Centers", "Defense",
+/// "Goalies" …); each group's `items` are flattened into a single roster.
+func downloadHockeyRoster(team: TeamRef) async -> Result<[HockeyPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseHockeyRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadHockeyRoster`.
+func parseHockeyRoster(from json: JSON) -> [HockeyPlayer] {
+    // A hockey league outside the registry is assumed flat
+    // (`LeagueDescriptor.descriptor(for:)`), so an entry with no `items`
+    // is read as an athlete itself.
+    let athletes = json["athletes"].arrayValue.flatMap { (entry: JSON) -> [JSON] in
+        entry["items"].array ?? [entry]
+    }
+
+    let roster = athletes.map { (athlete: JSON) -> HockeyPlayer in
+        // North American players list a state or province; others only a
+        // country.
+        let city = athlete["birthPlace"]["city"].stringValue
+        let region = athlete["birthPlace"]["state"].stringValue.isEmpty
+            ? athlete["birthPlace"]["country"].stringValue
+            : athlete["birthPlace"]["state"].stringValue
+
+        return HockeyPlayer(
+            playerID: athlete["id"].stringValue,
+            name: athlete["fullName"].stringValue,
+            number: athlete["jersey"].stringValue,
+            numberInt: athlete.jerseyNumber,
+            height: athlete["displayHeight"].stringValue,
+            weight: athlete["displayWeight"].stringValue,
+            position: athlete["position"]["displayName"].stringValue,
+            hometown: city.isEmpty ? "N/A" : "\(city), \(region)",
+            photo: athlete.headshotURL,
+            age: athlete["age"].stringValue,
+            shoots: athlete["hand"]["displayValue"].stringValue,
             lastName: athlete["lastName"].stringValue
         )
     }

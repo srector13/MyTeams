@@ -33,6 +33,7 @@ extension FootBallPlayer: RosterPlayer {
 }
 extension BaseballPlayer: RosterPlayer {}
 extension SoccerPlayer: RosterPlayer {}
+extension HockeyPlayer: RosterPlayer {}
 
 /// How the roster carousel is ordered. The choice also decides which detail —
 /// number, or position — each player card shows beneath the name.

@@ -360,6 +360,35 @@ extension SoccerPlayer: PlayerSheetDescribing {
     }
 }
 
+extension HockeyPlayer: PlayerSheetDescribing {
+    var about: PlayerSheetGrid {
+        PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: position),
+                .fact(title: "Age", info: age),
+                .fact(title: "Shoots", info: shoots),
+            ],
+            [
+                .fact(title: "Height", info: height),
+                .fact(title: "Weight", info: weight),
+                .fact(title: "HomeTown", info: hometown),
+            ],
+        ])
+    }
+
+    /// No season statistics are read for hockey players yet; the tab says
+    /// so rather than drawing a grid of zeros.
+    var placeholderStatistics: PlayerSheetGrid {
+        PlayerSheetGrid(
+            layout: .titledSections,
+            sections: [],
+            message: "Season statistics for hockey players are not available yet."
+        )
+    }
+
+    func statistics(league: LeagueID) async -> PlayerSheetGrid { placeholderStatistics }
+}
+
 // MARK: - Sheet
 
 /// The sheet a roster card opens: the player's photo over an About tab and a
