@@ -133,8 +133,10 @@ struct ScheduleRecordTests {
     func hockeyOvertimeLosses() throws {
         // nhl_schedule: the Ducks' four preseason games, all "Final" in
         // period 3 — won 6–2 (events[0]), then lost 1–2, 0–10 and 2–6.
+        // Marked regular season here so the record counts them.
         let ducks = followed(.nhl, "25")
-        let games = parseSchedule(from: try Fixture.json("nhl_schedule"), team: ducks)
+        var games = parseSchedule(from: try Fixture.json("nhl_schedule"), team: ducks)
+        for index in games.indices { games[index].seasonType = 2 }
         let regulation = scheduleRecord(games: games, league: .nhl)
         #expect(regulation == Record(wins: 1, losses: 3, format: .winLossOvertimeLoss))
         #expect(regulation.summary == "1-3-0")
@@ -151,6 +153,52 @@ struct ScheduleRecordTests {
         // A win in overtime is still just a win.
         overtime[0].gamePeriod = "4"
         #expect(scheduleRecord(games: overtime, league: .nhl).summary == "1-1-2")
+    }
+
+    @Test("Preseason games are on the schedule but not in the record")
+    func preseasonLeftOut() throws {
+        // Deliberate change: the Ducks' header read 1-3-0 from four
+        // preseason games (seasonType 1) while the standings showed 0-0-0.
+        let ducks = followed(.nhl, "25")
+        let games = parseSchedule(from: try Fixture.json("nhl_schedule"), team: ducks)
+        #expect(games.count == 4)
+        #expect(games.allSatisfy { $0.seasonType == 1 && !$0.countsTowardRecord })
+        let record = scheduleRecord(games: games, league: .nhl)
+        #expect(record == Record(wins: 0, losses: 0, format: .winLossOvertimeLoss))
+        #expect(record.summary == "0-0-0")
+
+        // The same games once the season proper starts do count.
+        var regular = games
+        for index in regular.indices { regular[index].seasonType = 2 }
+        #expect(scheduleRecord(games: regular, league: .nhl).summary == "1-3-0")
+
+        // wnba_schedule mixes both: the Dream's (20) two preseason games,
+        // a win and a loss, then ten regular-season ones, 7–3. Only the ten
+        // count; all twelve would read 8-4.
+        let dream = parseSchedule(from: try Fixture.json("wnba_schedule"), team: followed(.wnba, "20"))
+        let seasonTypes: [Int?] = [1, 1] + Array(repeating: 2, count: 10)
+        #expect(dream.map(\.seasonType) == seasonTypes)
+        #expect(scheduleRecord(games: dream, league: .wnba).summary == "7-3")
+    }
+
+    @Test("Postseason games count; all-star games and exhibitions do not; no season type counts")
+    func seasonTypes() throws {
+        let games = parseSchedule(from: try Fixture.json("chiefs_schedule"), team: .chiefs)
+        #expect(scheduleRecord(games: games, league: .nfl).summary == "2-0")
+
+        let won = try #require(games.first { $0.gameWin })
+        func record(seasonType: Int?) -> String {
+            var game = won
+            game.seasonType = seasonType
+            return scheduleRecord(games: [game], league: .nfl).summary
+        }
+        #expect(record(seasonType: 1) == "0-0")
+        #expect(record(seasonType: 2) == "1-0")
+        #expect(record(seasonType: 3) == "1-0")
+        #expect(record(seasonType: 4) == "0-0")
+        #expect(record(seasonType: nil) == "1-0")
+        // A soccer feed's season id is not an exhibition marker.
+        #expect(record(seasonType: 13846) == "1-0")
     }
 
     @Test("Cup ties are on the schedule but not in the league record")

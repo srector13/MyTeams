@@ -227,7 +227,8 @@ struct DucksAcceptanceTests {
         #expect(opener.score == "6" && opener.opponentScore == "2")
         #expect(opener.location == "Honda Center")
         #expect(opener.gamePeriod == "3")  // regulation
-        #expect(scheduleRecord(games: games, league: .nhl).summary == "1-3-0")
+        // All four are preseason (seasonType 1), which the record leaves out.
+        #expect(scheduleRecord(games: games, league: .nhl).summary == "0-0-0")
     }
 
     @Test("Roster: 56 players by position group, with a skater's and a goalie's season line")
@@ -266,7 +267,7 @@ struct DucksAcceptanceTests {
         #expect(articles.first?.publishedAt == newest)
     }
 
-    @Test("Standings: W-L-OTL in the West, all zero in preseason — while the header counts exhibitions")
+    @Test("Standings: W-L-OTL in the West, all zero in preseason — and the header agrees")
     func standings() throws {
         let table = parseStandings(from: try Fixture.json("nhl_standings"), league: .nhl)
         let row = try #require(table.entry(for: "25"))
@@ -275,11 +276,13 @@ struct DucksAcceptanceTests {
         #expect(row.record.summary == "0-0-0")
         #expect(row.rank == nil)
 
-        // Known gap (P3-e report): the header's record counts the four
-        // preseason games the standings leave out.
+        // Once a known gap (P3-e report): the header counted the four
+        // preseason games the standings leave out, reading 1-3-0. It now
+        // leaves them out too. (The table row also carries points, which the
+        // header does not, so the two compare by summary.)
         let games = parseSchedule(from: try Fixture.json("nhl_schedule"), team: ducks)
-        #expect(scheduleRecord(games: games, league: .nhl).summary == "1-3-0")
-        #expect(scheduleRecord(games: games, league: .nhl) != row.record)
+        #expect(scheduleRecord(games: games, league: .nhl).summary == "0-0-0")
+        #expect(scheduleRecord(games: games, league: .nhl).summary == row.record.summary)
     }
 
     @Test("Game sheet: Sharks at the Ducks, 6–2 — skater and goalie tables, three periods")

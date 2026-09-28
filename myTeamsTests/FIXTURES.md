@@ -562,8 +562,9 @@ Gotchas:
   `jayhawks_schedule_2026`).
 - **The NBA and NHL standings are preseason** (every stat 0, every seed 0):
   the walkthrough asserts zeros and no rank, and asserts the Ducks' header
-  record (`1-3-0`, from four exhibitions) *differs* from their table row
-  (`0-0-0`) — a known gap, not a fixture problem.
+  record agrees with their table row (`0-0-0`). The four `nhl_schedule`
+  games are exhibitions (`seasonType.type` 1), which the header record
+  leaves out; before that fix it read `1-3-0`.
 - **News counts are after the https filter**: `epl_news` 25 → 24 (one
   `http://` match report), `ncaaf_news` 25 → 19 (six `http://`
   previews/recaps). NBA and NHL keep all 25.

@@ -135,7 +135,14 @@ def parse_game(event, team_id, name_field, pointer, feed_competition=None, sport
     slug = string_value(get(event, "league", "slug"))
     g["competition"] = f"{sport}/{slug}" if slug else feed_competition
     g["pointer"] = pointer
+    g["seasonType"] = get(event, "seasonType", "type")
     return g
+
+
+def counts_toward_record(g):
+    """DownloadScheduleData.swift Game.countsTowardRecord: preseason (1) and
+    all-star (4) games are left out; no season type counts."""
+    return g.get("seasonType") not in (1, 4)
 
 
 def parse_schedule(doc, team_id, name_field, competition=None, sport="soccer"):
@@ -172,7 +179,7 @@ def is_draw(g):
 
 def schedule_record(games, league_path, fmt, regulation=None):
     """Record.swift scheduleRecord (no MLS date rule for these four)."""
-    lg = [g for g in games if g["competition"] in (None, league_path)]
+    lg = [g for g in games if g["competition"] in (None, league_path) and counts_toward_record(g)]
     wins = sum(1 for g in lg if g["gameWin"])
     draws = sum(1 for g in lg if not g["gameWin"] and not g["cancelled"] and not g["postponed"]
                 and is_draw(g) and g["completed"])
@@ -785,7 +792,7 @@ EXPECTED = {
 
     # Ducks (NHL)
     "nhl.schedule.ids": ["401879368", "401879369", "401879370", "401879371"],
-    "nhl.schedule.record": "1-3-0",
+    "nhl.schedule.record": "0-0-0",
     "nhl.schedule.nextGame": 3,
     "nhl.schedule.game": dict(opponent="Sharks", opponentID="18", home=True, win=True, score="6", opp="2",
                               location="Honda Center", period="3"),
@@ -923,8 +930,8 @@ EXPECTED = {
 AGREEMENTS = [
     ("Hawks: preseason header 0-0 == table 0-0",
      lambda o: o["nba"]["schedule"]["preseasonRecord"] == f"{o['nba']['standings']['wins']}-{o['nba']['standings']['losses']}"),
-    ("Ducks: header 1-3-0 != table 0-0-0 (known gap: preseason counted)",
-     lambda o: o["nhl"]["schedule"]["record"] != "0-0-0" and o["nhl"]["standings"]["total"].startswith("0-0-0")),
+    ("Ducks: header 0-0-0 == table 0-0-0 (preseason left out)",
+     lambda o: o["nhl"]["standings"]["total"].startswith(o["nhl"]["schedule"]["record"])),
     ("Arsenal: header W-L-D == table W, L, D",
      lambda o: o["epl"]["schedule"]["record"] == "{wins}-{losses}-{ties}".format(**o["epl"]["standings"])),
     ("Kansas: header == table overall summary",

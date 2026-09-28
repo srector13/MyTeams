@@ -42,11 +42,25 @@ struct Game: Identifiable, Hashable, Sendable {
     /// `league.slug`, which the soccer feeds carry; `nil` for feeds that name
     /// none, which are always the league's own games.
     var competition: LeagueID? = nil
+    /// ESPN's season type for the event (`seasonType.type`): 1 preseason,
+    /// 2 regular season, 3 postseason, 4 all-star. The soccer feeds use
+    /// their own season ids (13846, 14308, …) here instead. `nil` when the
+    /// event carries none.
+    var seasonType: Int? = nil
 
     /// Whether the game is one of the team's league games rather than a cup
     /// tie. See `competition`.
     func isLeagueGame(of league: LeagueID) -> Bool {
         competition == nil || competition == league
+    }
+
+    /// Whether the game counts toward the header's record: everything but
+    /// exhibitions — preseason (1) and all-star (4) games, which the
+    /// standings leave out too. Postseason games count, so an NCAA
+    /// tournament run stays in the record; an event with no season type, or
+    /// a soccer season id, counts as a regular-season game.
+    var countsTowardRecord: Bool {
+        seasonType != 1 && seasonType != 4
     }
 
     /// The game's identity, stable across the once-a-minute schedule refresh.
@@ -280,7 +294,8 @@ func parseGame(
         gameClock: gameClock,
         gamePeriod: gamePeriod,
         gameHalftime: halftime,
-        competition: competition
+        competition: competition,
+        seasonType: event["seasonType"]["type"].int
     )
 }
 

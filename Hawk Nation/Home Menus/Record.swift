@@ -136,13 +136,18 @@ extension LeagueDescriptor {
 /// record the standings table shows. Games from a feed that names no
 /// competition count, which is every non-soccer feed.
 ///
+/// Exhibitions do not count either (`Game.countsTowardRecord`): a hockey
+/// team's September preseason once read 1-3-0 in the header beside the
+/// standings' 0-0-0. Only games whose feed marks them preseason or all-star
+/// are left out; an event with no season type counts.
+///
 /// The wins, losses and draws are `seasonRecord`'s, under the league's
 /// `RecordRule`. Hockey then moves every loss decided after regulation — a
 /// completed game whose final period is past the third — into the
 /// overtime-loss column.
 func scheduleRecord(games: [Game], league: LeagueID, now: Date = Date()) -> Record {
     let descriptor = league.descriptor
-    let leagueGames = games.filter { $0.isLeagueGame(of: league) }
+    let leagueGames = games.filter { $0.isLeagueGame(of: league) && $0.countsTowardRecord }
     let counted = seasonRecord(
         games: leagueGames,
         countingAbandonedAsLosses: descriptor.recordRule.countsAbandonedGamesAsLosses,
