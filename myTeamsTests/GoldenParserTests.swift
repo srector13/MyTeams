@@ -1111,16 +1111,24 @@ struct GoldenAthleteTests {
         #expect(stats.groups.isEmpty)
     }
 
-    @Test("MLS keeper headline stats; outfield players read N/A")
+    @Test("MLS keeper headline stats; the outfield line reads what a keeper's summary has")
     func soccerAthlete() throws {
-        // sporting_athlete_249729.json athlete.statsSummary.statistics[i].value:
-        // [0] starts-subIns 17.0, [1] saves 59.0, [2] cleanSheet 1.0, [3] goalsConceded 38.0
+        // sporting_athlete_249729.json athlete.statsSummary.statistics, by name:
+        // starts-subIns 17.0 ("17 (0)"), saves 59.0, cleanSheet 1.0, goalsConceded 38.0
         let json = try Fixture.json("sporting_athlete_249729")
         let keeper = parseSoccerPlayerStats(from: json, playerPosition: "Goalkeeper")  // athlete.position.displayName
         #expect(keeper == SoccerPlayerStats(starts: "17", saves: "59", cleanSheets: "1", goalsConceded: "38"))
 
+        // P3-d: outfield players used to read "N/A" throughout, whatever the
+        // summary held. Read as an outfield player, this keeper's summary
+        // gives the starts and substitute appearances it has, and "N/A" for
+        // the goals, assists and shots it does not list. Real outfield
+        // summaries are in PlayerSeasonStatsTests.
         let outfield = parseSoccerPlayerStats(from: json, playerPosition: "Forward")
-        #expect(outfield == SoccerPlayerStats(starts: "N/A", saves: "N/A", cleanSheets: "N/A", goalsConceded: "N/A"))
+        #expect(outfield == SoccerPlayerStats(
+            starts: "17", saves: "N/A", cleanSheets: "N/A", goalsConceded: "N/A",
+            substituteAppearances: "0", goals: "N/A", assists: "N/A", shots: "N/A"
+        ))
     }
 }
 
