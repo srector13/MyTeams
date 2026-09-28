@@ -84,6 +84,8 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     /// standings path answers with an empty stub.
     private static let standingsAPI = "https://site.api.espn.com/apis/v2/sports"
     private static let commonAPI = "https://site.web.api.espn.com/apis/common/v3/sports"
+    /// Stat leaders are served by the v3 site API; the v2 path is a 404.
+    private static let siteAPIv3 = "https://site.api.espn.com/apis/site/v3/sports"
 
     /// Every team in the league. The default page is short, so ask for more
     /// than any league has; college leagues also name the all-divisions group
@@ -146,6 +148,24 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     /// See `downloadStandings`.
     var rankingsURL: String {
         "\(Self.siteAPI)/\(path)/rankings"
+    }
+
+    /// The league's statistical leaders, `limit` players deep in each
+    /// category — or, given `teamID`, that team's own. See FIXTURES.md,
+    /// "Stat leaders".
+    ///
+    /// `season` is named only for a league with a `leadersSeasonType`
+    /// (soccer), together with that type; `leadersSeason(at:)` gives it.
+    /// Every other league's feed answers with its latest regular season —
+    /// in an NBA preseason, the one just finished.
+    func leadersURL(teamID: String? = nil, season: Int? = nil, limit: Int = 10) -> String {
+        var query = ["limit=\(limit)"]
+        if let seasonType = descriptor.leadersSeasonType, let season {
+            query.append("season=\(season)")
+            query.append("seasontype=\(seasonType)")
+        }
+        if let teamID { query.append("team=\(teamID)") }
+        return "\(Self.siteAPIv3)/\(path)/leaders?" + query.joined(separator: "&")
     }
 
     /// An athlete's profile, including the headline stats summary.

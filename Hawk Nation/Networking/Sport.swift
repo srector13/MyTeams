@@ -16,8 +16,8 @@ enum SportKind: String, Codable, Sendable {
     case baseball
     case soccer
     /// Hockey: a team page with its roster, schedule cards named by period,
-    /// and a box score of skater and goalie tables (`HockeyBoxScore`).
-    /// Players' season statistics are not read yet.
+    /// a box score of skater and goalie tables (`HockeyBoxScore`), and each
+    /// player's season line from the athlete splits (`SplitsSeasonLine`).
     case hockey
     /// A sport the app has no dedicated views for.
     case other
@@ -187,6 +187,25 @@ struct LeagueDescriptor: Sendable, Identifiable {
     /// a live team schedule on 2026-09-28.
     var cupCompetitions: [LeagueID] = []
 
+    /// The `seasontype` a stat leaders request names, alongside the season
+    /// `seasonNaming` gives (`leadersSeason(at:)`); `nil` leaves both to the
+    /// feed. Soccer needs `"1"`: asked for nothing, its leaders feed answered
+    /// a cup playoff round (Liga MX, NWSL), an all-star stub (MLS) or 404
+    /// (Premier League, LALIGA) on 2026-09-28. The other leagues' feeds pick
+    /// their latest regular season themselves. See `LeagueID.leadersURL`.
+    var leadersSeasonType: String?
+
+    /// The season a stat leaders request names at `date`, or `nil` to take
+    /// the feed's own. Only leagues with a `leadersSeasonType` name one.
+    func leadersSeason(at date: Date) -> Int? {
+        guard leadersSeasonType != nil else { return nil }
+        return seasonNaming?.season(at: date)
+    }
+
+    /// The leaderboards a leaders screen shows, in order. See
+    /// `SportKind.leaderCategories`.
+    var leaderCategories: [LeaderCategorySpec] { kind.leaderCategories }
+
     /// The label for a game period as the feeds number it (`status.period`).
     ///
     /// Only regulation periods are named; overtime and innings read as blank.
@@ -285,8 +304,13 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .calendarYear,
-        cupCompetitions: [.soccer("usa.open"), .soccer("concacaf.leagues.cup"), .soccer("concacaf.champions")]
+        cupCompetitions: [.soccer("usa.open"), .soccer("concacaf.leagues.cup"), .soccer("concacaf.champions")],
+        leadersSeasonType: soccerLeadersSeasonType
     )
+
+    /// The regular season's `seasontype` in every soccer leaders feed. See
+    /// `leadersSeasonType`.
+    private static let soccerLeadersSeasonType = "1"
 
     /// The positions a basketball roster feed names every player by.
     private static let basketballRosterFilters: [RosterFilterEntry] = RosterFilter.positions(
@@ -402,7 +426,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")]
+        cupCompetitions: [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")],
+        leadersSeasonType: soccerLeadersSeasonType
     )
 
     static let laLiga = LeagueDescriptor(
@@ -417,7 +442,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")]
+        cupCompetitions: [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")],
+        leadersSeasonType: soccerLeadersSeasonType
     )
 
     static let ligaMX = LeagueDescriptor(
@@ -432,7 +458,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")]
+        cupCompetitions: [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")],
+        leadersSeasonType: soccerLeadersSeasonType
     )
 
     static let nwsl = LeagueDescriptor(
@@ -448,7 +475,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         // Like MLS, the summaries fold the state into the city.
         venueBackdropAsset: "soccerField",
         // No cups: the Challenge Cup's team feed listed nothing when checked.
-        seasonNaming: .calendarYear
+        seasonNaming: .calendarYear,
+        leadersSeasonType: soccerLeadersSeasonType
     )
 
     /// Every known league's descriptor, keyed by id. `LeagueID.knownLeagues`
@@ -475,5 +503,143 @@ struct LeagueDescriptor: Sendable, Identifiable {
             competitorNameField: .shortDisplayName,
             periodStyle: .unnamed
         )
+    }
+}
+
+// MARK: - Stat leaders
+
+/// How a leaderboard shows a leader's `value`.
+///
+/// The leaders feed's own `displayValue` cannot be shown as the figure: MLB
+/// puts a whole stat line there (`"179-567, 42 HR, …"`), soccer's
+/// `goalsLeaders` a sentence (`"Matches: 5, Goals: 5"`), and the NFL rounds
+/// 3.5 sacks to `"4"`. So the number is formatted from `value`, and a
+/// `displayValue` with words in it is kept as the row's detail line.
+enum LeaderValueFormat: Sendable, Hashable {
+    /// `53`
+    case whole
+    /// `3.5`, but `4` for a whole number — sacks.
+    case wholeOrTenths
+    /// `33.5`
+    case tenths
+    /// `2.02`
+    case hundredths
+    /// Three places with no leading zero, as batting averages and save
+    /// percentages are written: `.316`, `.921`, `1.033`.
+    case rate
+    /// A sign on anything above zero: `+57`, `-2`, `0`.
+    case signed
+    /// The feed's `displayValue` as it stands.
+    case feed
+
+    func format(_ value: Double, displayValue: String) -> String {
+        switch self {
+        case .whole:
+            return String(format: "%.0f", value)
+        case .wholeOrTenths:
+            return value.rounded() == value ? String(format: "%.0f", value) : String(format: "%.1f", value)
+        case .tenths:
+            return String(format: "%.1f", value)
+        case .hundredths:
+            return String(format: "%.2f", value)
+        case .rate:
+            let text = String(format: "%.3f", value)
+            if text.hasPrefix("0.") { return String(text.dropFirst()) }
+            if text.hasPrefix("-0.") { return "-" + String(text.dropFirst(2)) }
+            return text
+        case .signed:
+            let text = String(format: "%.0f", value)
+            return value.rounded() > 0 ? "+" + text : text
+        case .feed:
+            return displayValue
+        }
+    }
+}
+
+/// One leaderboard a leaders screen shows: the leaders feed's category
+/// `name`, and how the screen labels and formats it.
+struct LeaderCategorySpec: Sendable, Hashable {
+    /// The feed's category `name`, e.g. `"pointsPerGame"`.
+    var name: String
+    /// The board's heading, e.g. `"Points"`.
+    var title: String
+    /// The short label beside each figure, e.g. `"PPG"`.
+    var label: String
+    var format: LeaderValueFormat
+
+    init(_ name: String, _ title: String, _ label: String, _ format: LeaderValueFormat = .whole) {
+        self.name = name
+        self.title = title
+        self.label = label
+        self.format = format
+    }
+}
+
+extension SportKind {
+    /// The leaderboards a leaders screen shows for the sport, in order.
+    ///
+    /// Every league of a sport names its categories alike (checked against
+    /// all 13 registered leagues' leaders feeds on 2026-09-28), so the choice
+    /// is made per sport, not per league. A category a feed lacks is skipped.
+    /// `.other` has none: its screen shows every category the feed lists,
+    /// under the feed's own names. See `leaderBoards(from:kind:depth:)`.
+    var leaderCategories: [LeaderCategorySpec] {
+        switch self {
+        case .basketball:
+            [
+                LeaderCategorySpec("pointsPerGame", "Points", "PPG", .tenths),
+                LeaderCategorySpec("reboundsPerGame", "Rebounds", "RPG", .tenths),
+                LeaderCategorySpec("assistsPerGame", "Assists", "APG", .tenths),
+                LeaderCategorySpec("stealsPerGame", "Steals", "SPG", .tenths),
+                LeaderCategorySpec("blocksPerGame", "Blocks", "BPG", .tenths),
+                // A percentage out of 100 (`68.2`), unlike the feed's
+                // `3PointPct`, which is a fraction and so not shown.
+                LeaderCategorySpec("fieldGoalPercentage", "Field Goal %", "FG%", .tenths),
+            ]
+        case .hockey:
+            [
+                LeaderCategorySpec("goals", "Goals", "G"),
+                LeaderCategorySpec("assists", "Assists", "A"),
+                LeaderCategorySpec("points", "Points", "PTS"),
+                LeaderCategorySpec("plusMinus", "Plus/Minus", "+/-", .signed),
+                LeaderCategorySpec("wins", "Goalie Wins", "W"),
+                LeaderCategorySpec("avgGoalsAgainst", "Goals Against Average", "GAA", .hundredths),
+                LeaderCategorySpec("savePct", "Save Percentage", "SV%", .rate),
+                LeaderCategorySpec("shutouts", "Shutouts", "SO"),
+            ]
+        case .football:
+            [
+                LeaderCategorySpec("passingYards", "Passing Yards", "PASS YDS"),
+                LeaderCategorySpec("passingTouchdowns", "Passing Touchdowns", "PASS TD"),
+                LeaderCategorySpec("rushingYards", "Rushing Yards", "RUSH YDS"),
+                LeaderCategorySpec("receivingYards", "Receiving Yards", "REC YDS"),
+                LeaderCategorySpec("receptions", "Receptions", "REC"),
+                LeaderCategorySpec("totalTackles", "Tackles", "TCKL"),
+                LeaderCategorySpec("sacks", "Sacks", "SACK", .wholeOrTenths),
+                LeaderCategorySpec("interceptions", "Interceptions", "INT"),
+            ]
+        case .soccer:
+            [
+                // The `…Leaders` boards, not `goals`/`assists`: same values,
+                // plus the matches played in their `displayValue`.
+                LeaderCategorySpec("goalsLeaders", "Goals", "G"),
+                LeaderCategorySpec("assistsLeaders", "Assists", "A"),
+                LeaderCategorySpec("shotsOnTarget", "Shots on Target", "SOT"),
+                LeaderCategorySpec("saves", "Saves", "SV"),
+            ]
+        case .baseball:
+            [
+                LeaderCategorySpec("avg", "Batting Average", "AVG", .rate),
+                LeaderCategorySpec("homeRuns", "Home Runs", "HR"),
+                LeaderCategorySpec("RBIs", "Runs Batted In", "RBI"),
+                LeaderCategorySpec("stolenBases", "Stolen Bases", "SB"),
+                LeaderCategorySpec("ERA", "Earned Run Average", "ERA", .hundredths),
+                LeaderCategorySpec("wins", "Wins", "W"),
+                LeaderCategorySpec("strikeouts", "Strikeouts", "K"),
+                LeaderCategorySpec("saves", "Saves", "SV"),
+            ]
+        case .other:
+            []
+        }
     }
 }

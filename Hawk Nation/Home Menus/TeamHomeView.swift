@@ -8,7 +8,8 @@
 
 import SwiftUI
 
-/// One team's page: its roster, schedule, league standings and news.
+/// One team's page: its roster, schedule, league standings, stat leaders
+/// and news.
 ///
 /// Everything that differs between teams comes from the `TeamRef` and its
 /// league's `LeagueDescriptor`. The only branch is on the league's sport,
@@ -103,6 +104,9 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
             }
 
             StandingsSection(model: model, team: team)
+
+            // The team's stat leaders, and the way into the league's.
+            LeadersSection(team: team)
 
             NewsSection(model: model, teamColor: team.color)
         }
