@@ -123,8 +123,10 @@ final class LeagueScoreboardCenter {
     private func reconcilePoller(for league: LeagueID) {
         let wanted = !days(wantedIn: league).isEmpty
         if wanted, pollers[league] == nil {
-            pollers[league] = Task { [weak self] in
-                await self?.poll(league)
+            // The task holds the center while it polls; unsubscribing
+            // cancels it.
+            pollers[league] = Task {
+                await self.poll(league)
             }
         } else if !wanted, let poller = pollers.removeValue(forKey: league) {
             poller.cancel()

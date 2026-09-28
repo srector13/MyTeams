@@ -37,11 +37,16 @@ private final class ScriptedSleeper: @unchecked Sendable {
     }
 }
 
-/// The next `count` waits a sleeper reports: one per poller tick.
-private func nextWaits(_ count: Int, from iterator: inout AsyncStream<Duration>.Iterator) async -> [Duration] {
+/// The next `count` waits a sleeper reports: one per poller tick. Runs on
+/// the caller's actor, so the (non-Sendable) iterator never crosses one.
+private func nextWaits(
+    _ count: Int,
+    from iterator: inout AsyncStream<Duration>.Iterator,
+    isolation: isolated (any Actor)? = #isolation
+) async -> [Duration] {
     var waits: [Duration] = []
     for _ in 0..<count {
-        guard let wait = await iterator.next() else { break }
+        guard let wait = await iterator.next(isolation: isolation) else { break }
         waits.append(wait)
     }
     return waits
@@ -72,6 +77,7 @@ private func scoreboardTransport() -> RecordingTransport {
         } else {
             ""
         }
+        guard !name.isEmpty else { return .status(404) }
         return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
     }
 }
@@ -219,7 +225,8 @@ struct LeagueScoreboardCenterTests {
         #expect(center.pollingLeagues == [.nfl, .mlb])
 
         // One tick of each league's poller.
-        #expect(await nextWaits(2, from: &waits) == [.seconds(60), .seconds(60)])
+        let ticks = await nextWaits(2, from: &waits)
+        #expect(ticks == [.seconds(60), .seconds(60)])
 
         #expect(transport.requestCount == 2)
         #expect(Set(transport.urls.map(\.absoluteString)) == [
@@ -334,7 +341,8 @@ struct LeagueScoreboardCenterTests {
         let center = makeCenter(transport, sleeper, favorites: nflFavorites)
         let chiefs = center.subscribe(nflFavorites[0], days: [day])
 
-        #expect(await nextWaits(4, from: &waits) == [
+        let delays = await nextWaits(4, from: &waits)
+        #expect(delays == [
             .seconds(120),  // 429: the 60-second interval, doubled
             .seconds(300),  // 429 again: doubled to 240, but Retry-After says 300
             .seconds(60),   // 200: back to the interval (max-age=4 is shorter)

@@ -112,8 +112,11 @@ struct GameDetailView: View {
             loading = false
             backoff.reset()
             // A summary that stays fresh longer than the phase's interval is
-            // not asked for again before it goes stale.
-            return sheet.refreshInterval.map { max($0, load.response.maxAge ?? .zero) }
+            // not asked for again before it goes stale, within the backoff's
+            // cap, so a long max-age cannot freeze a live sheet.
+            return sheet.refreshInterval.map { interval in
+                max(interval, min(load.response.maxAge ?? .zero, backoff.cap))
+            }
         }
     }
 
