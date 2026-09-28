@@ -72,6 +72,8 @@
 		2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBB71827C45A79D38B20049 /* FavoritesStore.swift */; };
 		129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1204CF56986AC1138C1805E /* TeamBrowserView.swift */; };
 		806F811BCA02858268F722FC /* TeamEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293381D72B47893F6410908F /* TeamEntity.swift */; };
+		F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */; };
+		9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -178,6 +180,8 @@
 		DDBB71827C45A79D38B20049 /* FavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStore.swift"; sourceTree = "<group>"; };
 		D1204CF56986AC1138C1805E /* TeamBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamBrowserView.swift"; sourceTree = "<group>"; };
 		293381D72B47893F6410908F /* TeamEntity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamEntity.swift"; sourceTree = "<group>"; };
+		71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStoreTests.swift"; sourceTree = "<group>"; };
+		B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamSearchTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -418,6 +422,8 @@
 		FE5F5EA714353F16ED8FB48C /* myTeamsTests */ = {
 			isa = PBXGroup;
 			children = (
+				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
+				71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */,
 				C215F1D687B2267DDC42D736 /* JSONTests.swift */,
 				B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */,
 				6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */,
@@ -667,6 +673,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,
+				F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */,
 				3BBFED87D728D7319D475FEB /* JSONTests.swift in Sources */,
 				E7E921A83B474F55A0120398 /* BoxScoreParsingTests.swift in Sources */,
 				4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */,

@@ -12,10 +12,10 @@ import UIKit
 
 @testable import myTeams
 
-/// Runs against the real store directories. Without the App Group
-/// entitlement those are the test host's own Application Support and Caches,
-/// and every test files its crests under an ESPN id no real team has, then
-/// deletes them.
+/// Runs against the real store directories: the App Group's (or, in a host
+/// signed without the group, its own Application Support and Caches). Every
+/// test files its crests under an ESPN id no real team has, then deletes
+/// them.
 @Suite("Logo store", .serialized)
 struct LogoStoreTests {
     /// A made-up team in a made-up league, so nothing collides with real
