@@ -52,6 +52,11 @@ struct ScoreboardGame: Sendable, Hashable {
     /// Each competitor's `team.shortDisplayName`, by ESPN team id. For score
     /// alerts.
     var teamNames: [String: String] = [:]
+    /// `status.displayClock`: `"12:34"`, `"67'"`, `"90'+5'"`; `"0:00"` where
+    /// the sport keeps no clock. For Live Activities (`LiveActivityManager`).
+    var clock: String = ""
+    /// The competition's `date`, its scheduled start. For Live Activities.
+    var startDate: Date? = nil
 
     /// The score as `teamID` sees it, or `nil` when the game does not list
     /// that team against one opponent, or has no score worth showing yet.
@@ -123,6 +128,10 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
             if status.dictionary == nil { status = event["status", "type"] }
             var period = competition["status", "period"]
             if period.int == nil { period = event["status", "period"] }
+            var clock = competition["status", "displayClock"]
+            if clock.string == nil { clock = event["status", "displayClock"] }
+            var date = competition["date"]
+            if date.string == nil { date = event["date"] }
 
             var teamNames: [String: String] = [:]
             for (_, competitor) in competition["competitors"] {
@@ -147,7 +156,9 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
                 completed: status["completed"].boolValue,
                 competitors: competitors,
                 period: period.intValue,
-                teamNames: teamNames
+                teamNames: teamNames,
+                clock: clock.stringValue,
+                startDate: parseGameDate(date.stringValue)
             ))
         }
     }
