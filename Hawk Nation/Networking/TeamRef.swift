@@ -459,7 +459,7 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     /// A `TeamRef.id`, `"<leaguePath>:<espnID>"`.
     let teamID: String
     var addedAt: Date
-    /// Whether game alerts are wanted for the team. Nothing reads it yet.
+    /// Whether game alerts are wanted for the team (`ScoreAlertEngine`).
     var notify: Bool
 
     var id: String { teamID }

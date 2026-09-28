@@ -44,6 +44,10 @@ final class LeagueScoreboardCenter {
     /// `TeamRef.ID`. See `liveScore(for:team:)`.
     private(set) var lines: [TeamRef.ID: [ScoreboardLine]] = [:]
 
+    /// Every game on each league's kept scoreboards, for readers that follow
+    /// whole games rather than a favorite's score (`ScoreAlertEngine`).
+    private(set) var games: [LeagueID: [ScoreboardGame]] = [:]
+
     private let client: HTTPClient
     private let interval: Duration
     private let favoriteIDs: @MainActor () -> [TeamRef.ID]
@@ -209,6 +213,13 @@ final class LeagueScoreboardCenter {
     /// are its league's games and its cups' together, so one competition's
     /// refresh never drops another's scores.
     private func fanOut(_ league: LeagueID) {
+        let leagueGames = (scoreboards[league] ?? [:])
+            .sorted { $0.key < $1.key }
+            .flatMap { $0.value.games }
+        if games[league] != leagueGames {
+            games[league] = leagueGames
+        }
+
         for teamID in registry(for: league) {
             guard let team = TeamRef.parse(id: teamID) else { continue }
             let competitions = [team.league] + team.league.descriptor.cupCompetitions

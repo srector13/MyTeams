@@ -46,6 +46,12 @@ struct ScoreboardGame: Sendable, Hashable {
     /// called off.
     var completed: Bool
     var competitors: [ScoreboardCompetitor]
+    /// `status.period`: the quarter, half, period or inning; 0 before the
+    /// start. For score alerts (`ScoreAlertEngine`).
+    var period: Int = 0
+    /// Each competitor's `team.shortDisplayName`, by ESPN team id. For score
+    /// alerts.
+    var teamNames: [String: String] = [:]
 
     /// The score as `teamID` sees it, or `nil` when the game does not list
     /// that team against one opponent, or has no score worth showing yet.
@@ -115,6 +121,15 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
             // same object on every board seen so far.
             var status = competition["status", "type"]
             if status.dictionary == nil { status = event["status", "type"] }
+            var period = competition["status", "period"]
+            if period.int == nil { period = event["status", "period"] }
+
+            var teamNames: [String: String] = [:]
+            for (_, competitor) in competition["competitors"] {
+                let teamID = competitor["team", "id"].stringValue
+                guard !teamID.isEmpty else { continue }
+                teamNames[teamID] = competitor["team", "shortDisplayName"].stringValue
+            }
 
             let competitors: [ScoreboardCompetitor] = competition["competitors"].compactMap { _, competitor in
                 let teamID = competitor["team", "id"].stringValue
@@ -130,7 +145,9 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
                 gameID: gameID,
                 state: status["state"].stringValue,
                 completed: status["completed"].boolValue,
-                competitors: competitors
+                competitors: competitors,
+                period: period.intValue,
+                teamNames: teamNames
             ))
         }
     }

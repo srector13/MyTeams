@@ -21,6 +21,10 @@ struct MyTeamsApp: App {
         WindowGroup {
             Home()
                 .task {
+                    // Watch the live scoreboards for favorites' alerts. Asks
+                    // for no permission; following a team does.
+                    ScoreAlertEngine.shared.start()
+
                     // Put the bundled crests on disk once, then keep the
                     // favorites' crests current (weekly revalidation).
                     await LogoStore.seedBundledCrestsIfNeeded()
