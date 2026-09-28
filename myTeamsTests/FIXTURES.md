@@ -391,6 +391,133 @@ What the readers rely on:
   `yellowCards`, `redCards`); in `epl_summary_final_401879301` they agree
   with `keyEvents`. Every soccer summary captured has 11 starters a side.
 
+## Stat leaders (P3-d)
+
+`StatLeadersTests.swift` reads 17 leaders documents — every registered
+league's, and four teams' — captured on **2026-09-28 between 05:49:36Z and
+05:49:55Z** from this host by the checked-in script, which also captures the
+athlete documents below:
+
+```sh
+python3 scripts/capture_fixtures_p3d.py              # everything
+python3 scripts/capture_fixtures_p3d.py leaders      # just the leaders
+python3 scripts/capture_fixtures_p3d.py athletes     # just the athletes
+```
+
+Same client rules as P3-a (plain `curl`, 0.5 s apart, one retry on 403/429).
+
+### The endpoint
+
+`https://site.api.espn.com/apis/site/v3/sports/{league}/leaders` — **v3**; the
+`/apis/site/v2/…/leaders` and `/apis/v2/…/leaders` paths answer 404, and
+`/apis/site/v2/…/teams/{id}/leaders` answers `{}`. `LeagueID.leadersURL`
+builds it. Checked live for all 13 leagues on 2026-09-28, league-wide and
+with `team=` (sample teams as in P3-a, plus NFL 12, MLB 7, NCAAM 2305,
+MLS 186): every one answered 200 with categories.
+
+- `limit=N` caps each category's leaders (the default is deep: 2.4 MB for the
+  NBA). The fixtures use `limit=5`; the app asks for 10 (league) or 1 (team).
+- `team={id}` gives that team's own leaders; every leader in every category
+  is on that team. A team's category with no leader is listed with an empty
+  `leaders` array (Ducks `shutouts`, Kansas football `interceptions`).
+- **Soccer needs `season={year}&seasontype=1`.** With no parameters the MLS
+  feed answered an empty 2025 "All-Star Game", Liga MX and NWSL a 2025
+  playoff round, the Premier League and LALIGA 404; `seasontype=1` alone gave
+  2025. `season` follows the league's own numbering (`2026` is the Premier
+  League's 2026-27). The registry's `leadersSeasonType` carries the `"1"`.
+- **The other leagues need nothing.** In the NBA/NHL/NCAA basketball
+  preseason the feed answers with the season just finished (`requestedSeason`
+  2026, "2025-26", Regular Season); `season=2025` gave a postseason.
+- `leaders.categories[]`: `{name, displayName, abbreviation, leaders:
+  [{displayValue, value, athlete {id, displayName, shortName, headshot?,
+  position}, team {id, abbreviation, …}, statistics {}}]}`. Category names
+  are the same across a sport's leagues, but a team's list differs from its
+  league's (the Hawks' has `defensiveReboundsPerGame`, `3PointMadePerGame`;
+  the NBA's `3PointsMadePerGame`, `FreeThrowPct`).
+- **`displayValue` is not always the figure**: MLB's is the player's stat
+  line (`"179-567, 42 HR, …"` for a .316 average), soccer `goalsLeaders`
+  and `assistsLeaders` read `"Matches: 5, Goals: 5"`, the NFL shows 3.5
+  sacks as `"4"`, and the NBA's `3PointPct` value is a fraction shown as
+  `"0.5"`. The app formats `value` itself (`LeaderValueFormat`).
+- Soccer athletes carry no `headshot` in the Premier League, LALIGA and
+  Liga MX feeds.
+
+### Trimming
+
+Each leader repeats arrays the app never reads: the athlete's and team's
+`links`, the team's `logos`, and (US leagues) a `teams` list. The script
+drops those four and nothing else, then re-serialises compactly
+(`separators=(',', ':')`, `ensure_ascii=False`) — e.g. the NBA's 1,226,164
+bytes become 65,025.
+
+| File | URL | Captured | Contents |
+|---|---|---|---|
+| `ncaam_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/basketball/mens-college-basketball/leaders?limit=5` | 2026-09-28T05:49:36Z | season 2026 (2025-26 Regular Season), 14 categories; pointsPerGame: AJ Dybantsa 25.5 |
+| `nfl_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/football/nfl/leaders?limit=5` | 2026-09-28T05:49:37Z | season 2026 (Regular Season), 16 categories; passingYards: Jordan Love 844 |
+| `mlb_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/baseball/mlb/leaders?limit=5` | 2026-09-28T05:49:42Z | season 2026 (Regular Season), 20 categories; avg: Yordan Alvarez .316 |
+| `mls_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/usa.1/leaders?limit=5&season=2026&seasontype=1` | 2026-09-28T05:49:42Z | season 2026 (Regular Season), 12 categories; goalsLeaders: Lionel Messi 20 |
+| `nba_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/basketball/nba/leaders?limit=5` | 2026-09-28T05:49:43Z | season 2026 (2025-26 Regular Season), 16 categories; pointsPerGame: Luka Doncic 33.5 |
+| `wnba_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/basketball/wnba/leaders?limit=5` | 2026-09-28T05:49:44Z | season 2026 (Regular Season), 15 categories; pointsPerGame: A'ja Wilson 26.2 |
+| `ncaaw_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/basketball/womens-college-basketball/leaders?limit=5` | 2026-09-28T05:49:44Z | season 2026 (2025-26 Regular Season), 14 categories; pointsPerGame: Mikayla Blakes 27.0 |
+| `nhl_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/hockey/nhl/leaders?limit=5` | 2026-09-28T05:49:45Z | season 2026 (2025-26 Regular Season), 9 categories; goals: Nathan MacKinnon 53 |
+| `ncaaf_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/football/college-football/leaders?limit=5` | 2026-09-28T05:49:45Z | season 2026 (Regular Season), 13 categories; passingYards: Jayden Maiava 1499 |
+| `epl_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/eng.1/leaders?limit=5&season=2026&seasontype=1` | 2026-09-28T05:49:46Z | season 2026 (2026-27 English Premier League), 12 categories; goalsLeaders: Erling Haaland 5 |
+| `laliga_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/esp.1/leaders?limit=5&season=2026&seasontype=1` | 2026-09-28T05:49:46Z | season 2026 (2026-27 LALIGA), 12 categories; goalsLeaders: Raphinha 12 |
+| `ligamx_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/mex.1/leaders?limit=5&season=2026&seasontype=1` | 2026-09-28T05:49:47Z | season 2026 (Torneo Apertura), 12 categories; goalsLeaders: Salomón Rondón 10 |
+| `nwsl_leaders.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/usa.nwsl/leaders?limit=5&season=2026&seasontype=1` | 2026-09-28T05:49:48Z | season 2026 (Regular Season), 12 categories; goalsLeaders: Ashley Sanchez 19 |
+| `nba_leaders_team_1.json` | `https://site.api.espn.com/apis/site/v3/sports/basketball/nba/leaders?limit=5&team=1` | 2026-09-28T05:49:48Z | Hawks: 14 categories; pointsPerGame: Jalen Johnson 22.5 |
+| `nhl_leaders_team_25.json` | `https://site.api.espn.com/apis/site/v3/sports/hockey/nhl/leaders?limit=5&team=25` | 2026-09-28T05:49:48Z | Ducks: 9 categories, `shutouts` empty; goals: Cutter Gauthier 41 |
+| `epl_leaders_team_359.json` | `https://site.api.espn.com/apis/site/v3/sports/soccer/eng.1/leaders?limit=5&season=2026&seasontype=1&team=359` | 2026-09-28T05:49:49Z | Arsenal: 12 categories; goalsLeaders: Bukayo Saka 3 |
+| `ncaaf_leaders_team_2305.json` | `https://site.api.espn.com/apis/site/v3/sports/football/college-football/leaders?limit=5&team=2305` | 2026-09-28T05:49:55Z | Kansas: 14 categories, `interceptions` empty; passingLeader: Isaiah Marshall |
+
+## Player statistics (P3-d)
+
+`PlayerSeasonStatsTests.swift` reads 11 athlete documents, captured by the
+same script at 05:49:55Z–05:50:00Z, byte-for-byte as ESPN returned them.
+
+| File | URL | Captured | Contents |
+|---|---|---|---|
+| `epl_athlete_280555.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/eng.1/athletes/280555` | 2026-09-28T05:49:55Z | Bukayo Saka, Arsenal forward. 2026-27 Premier League Stats: starts-subIns=5 (0), totalGoals=3, goalAssists=0, totalShots=15 |
+| `laliga_athlete_231050.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/esp.1/athletes/231050` | 2026-09-28T05:49:55Z | Raphinha, Barcelona forward. 2026-27 LALIGA Stats: starts-subIns=7 (0), totalGoals=12, goalAssists=3, totalShots=25 |
+| `ligamx_athlete_93184.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/mex.1/athletes/93184` | 2026-09-28T05:49:56Z | Henry Martín, América forward. 2026-27 Liga MX Stats: starts-subIns=7 (0), totalGoals=3, goalAssists=2, totalShots=13 |
+| `nwsl_athlete_402432.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.nwsl/athletes/402432` | 2026-09-28T05:49:57Z | Maiara Niehues, NWSL 21422 midfielder. 2026 NWSL Stats: starts-subIns=15 (4), totalGoals=9, goalAssists=0, totalShots=46 |
+| `mls_athlete_293695.json` | `https://site.web.api.espn.com/apis/common/v3/sports/soccer/usa.1/athletes/293695` | 2026-09-28T05:49:57Z | Calvin Harris, Sporting KC forward. 2026 MLS Stats: starts-subIns=23 (2), totalGoals=4, goalAssists=6, totalShots=48 |
+| `nhl_splits_5080145.json` | `https://site.web.api.espn.com/apis/common/v3/sports/hockey/nhl/athletes/5080145/splits` | 2026-09-28T05:49:58Z | Cutter Gauthier, Ducks left wing. 15 names; splits All Splits/Home/Away/Day/Night |
+| `nhl_splits_4588165.json` | `https://site.web.api.espn.com/apis/common/v3/sports/hockey/nhl/athletes/4588165/splits` | 2026-09-28T05:49:58Z | Lukas Dostal, Ducks goaltender. 12 names (goalie set); same splits |
+| `nba_splits_4869342.json` | `https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/4869342/splits` | 2026-09-28T05:49:59Z | Dyson Daniels, Hawks guard. 17 names; splits All Splits/Home/Road/vs. Division/… |
+| `wnba_splits_3058901.json` | `https://site.web.api.espn.com/apis/common/v3/sports/basketball/wnba/athletes/3058901/splits` | 2026-09-28T05:49:59Z | Allisha Gray, Dream guard. 17 names; one split, All Splits |
+| `ncaaw_splits_5108548.json` | `https://site.web.api.espn.com/apis/common/v3/sports/basketball/womens-college-basketball/athletes/5108548/splits` | 2026-09-28T05:50:00Z | Sania Copeland, Kansas guard. 17 names; splits Home/Away |
+| `ncaaf_splits_5079604.json` | `https://site.web.api.espn.com/apis/common/v3/sports/football/college-football/athletes/5079604/splits` | 2026-09-28T05:50:00Z | Isaiah Marshall, Kansas quarterback. 15 names; splits Season/Home |
+
+What the readers rely on:
+
+- **Splits rows differ by league.** Men's and women's college basketball
+  list only Home and Away (weighted together by games played); the NBA leads
+  with All Splits, then Home, Road, …; the WNBA has All Splits alone; the NHL
+  All Splits, Home, Away, Day, Night; college football Season, Home. The
+  basketball reader used to take `[0]` and `[1]` as home and away, which
+  made Daniels's 76 games 113. It now takes the All Splits/Season row when
+  there is one. Every splits document has `names`, `labels` (abbreviations)
+  and `displayNames`, parallel to each row's `stats`; values are read by
+  `names`.
+- **NHL skaters and goalies have different `names`** (skaters: `games`,
+  `goals`, …, `timeOnIcePerGame`, `production`; goalies: `gameStarted`,
+  `wins`, …, `savePct`, `shutouts`). `SplitsSeasonLine` zips them by name.
+- **Soccer has no splits** (`/splits` and `/stats` answer 404 for soccer
+  athletes). An athlete's `statsSummary.statistics` names four figures — an
+  outfield player's `starts-subIns`, `totalGoals`, `goalAssists`,
+  `totalShots`; a keeper's `starts-subIns`, `saves`, `cleanSheet`,
+  `goalsConceded` — the same in all five soccer leagues. `starts-subIns` has
+  the starts as its `value` and both as its `displayValue`, `"15 (4)"`.
+  **No soccer feed carries minutes played.**
+- **The soccer rosters' season totals** (`athletes[].statistics.splits.
+  categories`: `general`, `offensive`, `goalKeeping`) name the same 15 stats,
+  in the same order, in all five leagues; the reader now keys them by `name`.
+  `appearances` counts substitute appearances too (Harris: roster 25
+  appearances, 2 `subIns`; athlete "23 (2)"), so the sheet's starts are
+  `appearances − subIns`. Some players have no `statistics` block at all
+  (5 of Arsenal's 27, e.g. William Saliba 277385).
+
 ## Refreshing
 
 1. Re-run the requests above, for example:
