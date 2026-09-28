@@ -69,6 +69,7 @@
 		F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */; };
 		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
+		2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBB71827C45A79D38B20049 /* FavoritesStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -172,6 +173,7 @@
 		82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalogTests.swift"; sourceTree = "<group>"; };
 		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
+		DDBB71827C45A79D38B20049 /* FavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStore.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -244,6 +246,7 @@
 		B589460F49A851E6DFD8E653 /* Home Menus */ = {
 			isa = PBXGroup;
 			children = (
+				DDBB71827C45A79D38B20049 /* FavoritesStore.swift */,
 				295F3B13CE1F1A66438291C3 /* HomeSections.swift */,
 				8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */,
 				BF854E8FC1231BAD448D63BA /* TeamModel.swift */,
@@ -598,6 +601,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */,
 				A859F30DBC1A5231139E8E2E /* CircularProgress.swift in Sources */,
 				27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */,
 				43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */,

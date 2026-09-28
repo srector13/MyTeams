@@ -15,14 +15,29 @@ private let logger = Logger(subsystem: "com.myTeams", category: "logos")
 
 // MARK: - Shared paths
 
-/// Where the app and the widget keep files they both read.
+/// Where the app and the widget keep files and settings they both read.
 ///
-/// Both resolve to the App Group container once the entitlement is added. Until
-/// then `containerURL(forSecurityApplicationGroupIdentifier:)` returns `nil`
-/// and each process uses its own directories — the app its own, the widget
-/// its own — so nothing here changes when the group is switched on.
+/// Both targets carry the App Group entitlement, so these resolve to the
+/// group container. A process without the group (a misconfigured signing
+/// profile) gets `nil` from `containerURL(forSecurityApplicationGroupIdentifier:)`
+/// and falls back to its own directories and `UserDefaults.standard`.
 enum SharedPaths {
     static var appGroup: String { "group.PolarReailty.Hawk-Nation" }
+
+    /// The App Group's `UserDefaults`, or `.standard` without the group.
+    static var defaults: UserDefaults {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil,
+              let shared = UserDefaults(suiteName: appGroup)
+        else { return .standard }
+        return shared
+    }
+
+    /// The favorites' `TeamRef.id`s, in order, as the app last saved them.
+    /// Empty when none are stored. The widget reads favorites through this,
+    /// not through the app's `FavoritesStore`.
+    static func favoriteTeamIDs() -> [String] {
+        FavoritesCodec.storedIDs(in: defaults) ?? []
+    }
 
     /// The App Group container, or `fallback` while the process has no group.
     static func container(_ fallback: URL) -> URL {

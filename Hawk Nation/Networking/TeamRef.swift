@@ -264,14 +264,18 @@ enum TeamCatalog {
 
 // MARK: - Favorites
 
-/// The teams shown in the tab picker and offered as widgets, in order.
+/// The four teams the app followed before favorites were editable.
 ///
-/// Still a static list: the four seeded teams. When favorites become
-/// user-editable they will persist as `TeamRef.id` strings; `resolve` already
-/// reads those, and migrates any retired `Team` raw value it meets.
+/// Now only the seed: `FavoritesCodec.loadOrSeed` writes them as the first
+/// favorites of an install that has none, and the widget falls back to them.
+/// The live, user-edited list is `FavoritesStore` in the app and
+/// `SharedPaths.favoriteTeamIDs()` in the widget.
 enum FavoriteTeams {
-    /// The favorites, in tab order.
+    /// The seed teams, in their original tab order.
     static var teams: [TeamRef] { TeamCatalog.all }
+
+    /// The seed teams' `TeamRef.id`s, in order.
+    static var seedIDs: [TeamRef.ID] { teams.map(\.id) }
 
     /// Turns stored identifiers into teams, in order, dropping unknown and
     /// repeated ones. Accepts both `TeamRef.id` values and the retired `Team`
@@ -284,5 +288,123 @@ enum FavoriteTeams {
             else { return nil }
             return team
         }
+    }
+}
+
+/// One followed team, as persisted. The array's order is the display order.
+///
+/// Holds only the id: names, colours and crests are resolved through
+/// `RemoteTeamCatalog.team(id:)`, whose disk cache and bundled seed keep that
+/// working offline.
+struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
+    /// A `TeamRef.id`, `"<leaguePath>:<espnID>"`.
+    let teamID: String
+    var addedAt: Date
+    /// Whether game alerts are wanted for the team. Nothing reads it yet.
+    var notify: Bool
+
+    var id: String { teamID }
+
+    init(teamID: String, addedAt: Date = Date(), notify: Bool = true) {
+        self.teamID = teamID
+        self.addedAt = addedAt
+        self.notify = notify
+    }
+}
+
+/// The iCloud side of the favorites mirror. `NSUbiquitousKeyValueStore`
+/// conforms as is; tests substitute an in-memory store.
+protocol FavoritesCloudStore: AnyObject {
+    func data(forKey key: String) -> Data?
+    func set(_ value: Any?, forKey key: String)
+}
+
+extension NSUbiquitousKeyValueStore: FavoritesCloudStore {}
+
+/// Reads and writes the favorites list, with no UI or WidgetKit in the way.
+///
+/// The list is JSON `[FavoriteTeam]` under `key` in the App Group's
+/// `UserDefaults`, which the widget reads directly, and the same bytes are
+/// mirrored to iCloud key-value storage for other devices.
+enum FavoritesCodec {
+    /// The favorites JSON, in the shared defaults and in iCloud.
+    static let key = "favorites.v1"
+    /// Set once the favorites have been seeded or restored, so the seed never
+    /// runs twice.
+    static let seededKey = "favorites.v1.seeded"
+
+    /// Where the favorites a load returned came from.
+    enum Source: Equatable, Sendable {
+        /// The shared defaults already held them.
+        case local
+        /// The shared defaults had none; iCloud did.
+        case restoredFromCloud
+        /// Neither store had any and the seed had not run: the seed teams.
+        case seeded
+        /// The seed has run before but no list is stored. Empty.
+        case empty
+    }
+
+    static func encode(_ favorites: [FavoriteTeam]) -> Data? {
+        try? encoder.encode(favorites)
+    }
+
+    /// `nil` for missing or unreadable data.
+    static func decode(_ data: Data?) -> [FavoriteTeam]? {
+        guard let data else { return nil }
+        return try? decoder.decode([FavoriteTeam].self, from: data)
+    }
+
+    /// The stored favorites' ids, in order, or `nil` when none are stored.
+    static func storedIDs(in defaults: UserDefaults) -> [TeamRef.ID]? {
+        decode(defaults.data(forKey: key))?.map(\.teamID)
+    }
+
+    /// Loads the favorites, restoring or seeding them the first time.
+    ///
+    /// In order: the list in `defaults`, even an empty one; else the iCloud
+    /// copy, written back to `defaults`; else, unless `seededKey` is set, the
+    /// `seedIDs`, written to both stores. Seeding and restoring set
+    /// `seededKey`; nothing here overwrites a stored list.
+    static func loadOrSeed(
+        defaults: UserDefaults,
+        cloud: (any FavoritesCloudStore)?,
+        seedIDs: [TeamRef.ID],
+        now: Date = Date()
+    ) -> (favorites: [FavoriteTeam], source: Source) {
+        if let local = decode(defaults.data(forKey: key)) {
+            return (local, .local)
+        }
+        if let data = cloud?.data(forKey: key), let restored = decode(data) {
+            defaults.set(data, forKey: key)
+            defaults.set(true, forKey: seededKey)
+            return (restored, .restoredFromCloud)
+        }
+        guard !defaults.bool(forKey: seededKey) else {
+            return ([], .empty)
+        }
+        let seeded = seedIDs.map { FavoriteTeam(teamID: $0, addedAt: now) }
+        save(seeded, defaults: defaults, cloud: cloud)
+        defaults.set(true, forKey: seededKey)
+        return (seeded, .seeded)
+    }
+
+    /// Writes the list to `defaults` and mirrors the same JSON to `cloud`.
+    static func save(_ favorites: [FavoriteTeam], defaults: UserDefaults, cloud: (any FavoritesCloudStore)?) {
+        guard let data = encode(favorites) else { return }
+        defaults.set(data, forKey: key)
+        cloud?.set(data, forKey: key)
+    }
+
+    private static var encoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }
