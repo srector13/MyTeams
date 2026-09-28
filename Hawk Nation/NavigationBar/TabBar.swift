@@ -8,15 +8,21 @@
 
 import SwiftUI
 
-// The teams on this screen are `FavoriteTeams.teams`, drawn from the bundled
-// catalog (Networking/TeamRef.swift).
+// The teams on this screen are the reader's favorites (`FavoritesStore`),
+// resolved through `RemoteTeamCatalog` and shown in favorites order.
 
 /// The app's root screen: one scrolling team page at a time, with a crest
 /// picker pinned to the bottom.
 struct Home: View {
-    private let teams = FavoriteTeams.teams
+    /// The favorites as teams. Starts with those the bundled catalog knows,
+    /// so the first frame has the seed teams, then fills in from the catalog.
+    @State private var teams: [TeamRef] = FavoritesStore.shared.teamIDs.compactMap(TeamCatalog.team(id:))
 
-    @State private var selection: TeamRef.ID = FavoriteTeams.teams.first?.id ?? ""
+    @State private var selection: TeamRef.ID = FavoritesStore.shared.teamIDs.first ?? ""
+
+    @State private var showsBrowser = false
+
+    @Bindable private var store = FavoritesStore.shared
 
     var body: some View {
         GeometryReader { proxy in
@@ -28,14 +34,40 @@ struct Home: View {
                     TeamPage(team: team) { TeamHomeView(team: team) }
                         .opacity(selection == team.id ? 1 : 0)
                 }
+
+                if teams.isEmpty {
+                    ContentUnavailableView {
+                        Label("No Teams", systemImage: "star")
+                    } description: {
+                        Text("Follow a team to see its schedule, roster and news.")
+                    } actions: {
+                        Button("Pick Your Teams") { showsBrowser = true }
+                    }
+                }
             }
             // Attaching the picker as a safe area inset lets SwiftUI sit it
             // above the home indicator and extend its material behind it,
             // which the original did by hand from the window's insets.
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                TeamPicker(teams: teams, selection: $selection)
+                TeamPicker(teams: teams, selection: $selection) {
+                    showsBrowser = true
+                }
             }
             .environment(\.containerSize, proxy.size)
+        }
+        .task(id: store.teamIDs) {
+            teams = await store.teamRefs()
+            if !teams.contains(where: { $0.id == selection }) {
+                selection = teams.first?.id ?? ""
+            }
+        }
+        .sheet(isPresented: $showsBrowser) {
+            TeamBrowserView()
+        }
+        // A fresh install opens on "Pick your teams", the seed teams already
+        // checked. Dismissing it, however, finishes onboarding.
+        .sheet(isPresented: $store.needsOnboarding, onDismiss: { store.completeOnboarding() }) {
+            TeamBrowserView(title: "Pick Your Teams")
         }
     }
 }
@@ -128,39 +160,57 @@ private struct ScrollOffsetKey: PreferenceKey {
 }
 
 /// The crest row pinned to the bottom of the screen. The selected team's crest
-/// grows a label and a coloured capsule.
+/// grows a label and a coloured capsule. Scrolls sideways once the favorites
+/// outgrow the width, and ends in a button that opens the team picker.
 private struct TeamPicker: View {
     let teams: [TeamRef]
     @Binding var selection: TeamRef.ID
+    let editTeams: () -> Void
 
     var body: some View {
-        HStack {
-            ForEach(Array(teams.enumerated()), id: \.element.id) { index, team in
-                Button {
-                    selection = team.id
-                } label: {
-                    HStack(spacing: 6) {
-                        TeamLogo(team: team, size: 25)
+        ScrollViewReader { reader in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 4) {
+                    ForEach(teams) { team in
+                        Button {
+                            selection = team.id
+                        } label: {
+                            HStack(spacing: 6) {
+                                TeamLogo(team: team, size: 25)
 
-                        if selection == team.id {
-                            Text(team.shortName)
-                                .foregroundStyle(.white)
+                                if selection == team.id {
+                                    Text(team.shortName)
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .padding(.vertical, 10)
+                            .padding(.horizontal)
+                            .background(selection == team.id ? team.color : .clear)
+                            .clipShape(.capsule)
                         }
+                        .accessibilityLabel(team.displayName)
+                        .id(team.id)
                     }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal)
-                    .background(selection == team.id ? team.color : .clear)
-                    .clipShape(.capsule)
-                }
-                .accessibilityLabel(team.displayName)
 
-                if index < teams.count - 1 {
-                    Spacer(minLength: 0)
+                    Button(action: editTeams) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 35, height: 35)
+                            .background(Color.secondary.opacity(0.15))
+                            .clipShape(.circle)
+                    }
+                    .padding(.leading, 6)
+                    .accessibilityLabel("Add or Edit Teams")
+                }
+                .padding(.horizontal, 25)
+            }
+            .onChange(of: selection) { _, selected in
+                withAnimation {
+                    reader.scrollTo(selected)
                 }
             }
         }
         .animation(.default, value: selection)
-        .padding(.horizontal, 25)
         .padding(.top)
         .padding(.bottom, 10)
         .background(.bar)

@@ -10,6 +10,13 @@ import SwiftUI
 
 @main
 struct MyTeamsApp: App {
+    init() {
+        // Load (or seed) the favorites before the launch task below marks
+        // the crests seeded: the store reads that mark to tell an existing
+        // install from a fresh one when deciding on onboarding.
+        _ = FavoritesStore.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             Home()
@@ -17,7 +24,7 @@ struct MyTeamsApp: App {
                     // Put the bundled crests on disk once, then keep the
                     // favorites' crests current (weekly revalidation).
                     await LogoStore.seedBundledCrestsIfNeeded()
-                    for team in FavoriteTeams.teams {
+                    for team in await FavoritesStore.shared.teamRefs() {
                         await LogoStore.prefetchAllVariants(team, favorite: true)
                     }
                 }
