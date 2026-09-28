@@ -44,6 +44,36 @@ struct RecordRule: Sendable, Hashable {
     var usesDateForNextGame = false
 }
 
+/// How ESPN numbers a league's seasons.
+///
+/// The feeds file a season under one year, and which year differs by league:
+/// the 2026-27 NBA season is 2027, the 2026-27 Premier League season 2026.
+/// See FIXTURES.md, "Seasons the feeds returned".
+enum SeasonNaming: Sendable, Hashable {
+    /// Played within one calendar year: MLB, MLS, the WNBA and NWSL.
+    case calendarYear
+    /// Filed under the year it starts. The new season begins in
+    /// `rolloverMonth` (1–12): February for football, whose seasons end with
+    /// the January bowls and playoffs, June for European soccer.
+    case startingYear(rolloverMonth: Int)
+    /// Filed under the year it ends: the NBA, NHL and college basketball,
+    /// whose next season is named from `rolloverMonth` onwards.
+    case endingYear(rolloverMonth: Int)
+
+    /// The season in progress, or next to start, at `date`.
+    func season(at date: Date) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        return switch self {
+        case .calendarYear: year
+        case .startingYear(let rolloverMonth): month >= rolloverMonth ? year : year - 1
+        case .endingYear(let rolloverMonth): month >= rolloverMonth ? year + 1 : year
+        }
+    }
+}
+
 /// How a schedule card draws a game in progress.
 enum LiveCardStyle: Sendable {
     /// The period and clock (or "Halftime"), with the live score beneath.
@@ -145,6 +175,17 @@ struct LeagueDescriptor: Sendable, Identifiable {
     /// conference), `"50"` Division I basketball. See `LeagueID.standingsURL`.
     var standingsGroup: String?
 
+    /// How ESPN numbers the league's seasons, for asking for the current
+    /// one explicitly (`season(at:)`); `nil` leaves it to the feed.
+    var seasonNaming: SeasonNaming?
+
+    /// The cups and continental competitions a team in this league may also
+    /// play in, each an ESPN league of its own. A team's schedule fetches
+    /// each alongside the league (`downloadScheduleData`); a team not in a
+    /// cup gets an empty feed from it. Every path here was checked against
+    /// a live team schedule on 2026-09-28.
+    var cupCompetitions: [LeagueID] = []
+
     /// The label for a game period as the feeds number it (`status.period`).
     ///
     /// Only regulation periods are named; overtime and innings read as blank.
@@ -173,7 +214,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
             .filter(RosterFilter(label: "Forwards", position: "Forward")),
             .filter(RosterFilter(label: "Guards", position: "Guard")),
         ],
-        standingsGroup: "50"
+        standingsGroup: "50",
+        seasonNaming: .endingYear(rolloverMonth: 7)
     )
 
     static let nfl = LeagueDescriptor(
@@ -210,7 +252,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
                 "specialTeam",
                 positions: ["Long Snapper", "Place Kicker", "Punter"]
             )),
-        ]
+        ],
+        seasonNaming: .startingYear(rolloverMonth: 2)
     )
 
     static let mlb = LeagueDescriptor(
@@ -225,7 +268,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: RosterFilter.positions([
             "Catcher", "Center Fielder", "First Baseman", "Relief Pitcher",
             "Second Baseman", "Shortstop", "Starting Pitcher", "Third Baseman",
-        ]).map(RosterFilterEntry.filter)
+        ]).map(RosterFilterEntry.filter),
+        seasonNaming: .calendarYear
     )
 
     static let mls = LeagueDescriptor(
@@ -238,7 +282,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
         competitorNameField: .shortDisplayName,
         periodStyle: .halves,
         rosterFilters: soccerRosterFilters,
-        venueBackdropAsset: "soccerField"
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .calendarYear,
+        cupCompetitions: [.soccer("usa.open"), .soccer("concacaf.leagues.cup"), .soccer("concacaf.champions")]
     )
 
     /// The positions a basketball roster feed names every player by.
@@ -263,7 +309,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         recordRule: RecordRule(),
         competitorNameField: .shortDisplayName,
         periodStyle: .quarters,
-        rosterFilters: basketballRosterFilters
+        rosterFilters: basketballRosterFilters,
+        seasonNaming: .endingYear(rolloverMonth: 7)
     )
 
     static let wnba = LeagueDescriptor(
@@ -275,7 +322,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         recordRule: RecordRule(),
         competitorNameField: .shortDisplayName,
         periodStyle: .quarters,
-        rosterFilters: basketballRosterFilters
+        rosterFilters: basketballRosterFilters,
+        seasonNaming: .calendarYear
     )
 
     static let womensCollegeBasketball = LeagueDescriptor(
@@ -289,7 +337,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         // Women's college basketball plays four quarters, not two halves.
         periodStyle: .quarters,
         rosterFilters: basketballRosterFilters,
-        standingsGroup: "50"
+        standingsGroup: "50",
+        seasonNaming: .endingYear(rolloverMonth: 7)
     )
 
     static let nhl = LeagueDescriptor(
@@ -305,7 +354,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: RosterFilter.positions(
             ["Center", "Left Wing", "Right Wing", "Defense", "Goaltender"],
             labels: ["Center": "Centers", "Left Wing": "Left Wings", "Right Wing": "Right Wings", "Goaltender": "Goalies"]
-        ).map(RosterFilterEntry.filter)
+        ).map(RosterFilterEntry.filter),
+        seasonNaming: .endingYear(rolloverMonth: 7)
     )
 
     static let collegeFootball = LeagueDescriptor(
@@ -335,7 +385,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
                 positions: ["Long Snapper", "Place Kicker", "Punter"]
             )),
         ],
-        standingsGroup: "80"
+        standingsGroup: "80",
+        seasonNaming: .startingYear(rolloverMonth: 2)
     )
 
     static let premierLeague = LeagueDescriptor(
@@ -348,7 +399,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
         competitorNameField: .shortDisplayName,
         periodStyle: .halves,
         rosterFilters: soccerRosterFilters,
-        venueBackdropAsset: "soccerField"
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")]
     )
 
     static let laLiga = LeagueDescriptor(
@@ -361,7 +414,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
         competitorNameField: .shortDisplayName,
         periodStyle: .halves,
         rosterFilters: soccerRosterFilters,
-        venueBackdropAsset: "soccerField"
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")]
     )
 
     static let ligaMX = LeagueDescriptor(
@@ -374,7 +429,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
         competitorNameField: .shortDisplayName,
         periodStyle: .halves,
         rosterFilters: soccerRosterFilters,
-        venueBackdropAsset: "soccerField"
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")]
     )
 
     static let nwsl = LeagueDescriptor(
@@ -388,7 +445,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
         periodStyle: .halves,
         rosterFilters: soccerRosterFilters,
         // Like MLS, the summaries fold the state into the city.
-        venueBackdropAsset: "soccerField"
+        venueBackdropAsset: "soccerField",
+        // No cups: the Challenge Cup's team feed listed nothing when checked.
+        seasonNaming: .calendarYear
     )
 
     /// Every known league's descriptor, keyed by id. `LeagueID.knownLeagues`

@@ -37,6 +37,17 @@ struct Game: Identifiable, Hashable, Sendable {
     var gameClock: String
     var gamePeriod: String
     var gameHalftime: Bool
+    /// The competition the game is played in: the team's league, or one of
+    /// its cups (`LeagueDescriptor.cupCompetitions`). Read from the event's
+    /// `league.slug`, which the soccer feeds carry; `nil` for feeds that name
+    /// none, which are always the league's own games.
+    var competition: LeagueID? = nil
+
+    /// Whether the game is one of the team's league games rather than a cup
+    /// tie. See `competition`.
+    func isLeagueGame(of league: LeagueID) -> Bool {
+        competition == nil || competition == league
+    }
 
     /// The game's identity, stable across the once-a-minute schedule refresh.
     ///
@@ -138,12 +149,22 @@ func parseGameDate(_ raw: String) -> Date? {
 /// other competitor is the opponent. Both are named by the league's
 /// `competitorNameField`.
 ///
+/// An event normally holds one competition. Should it hold several, the game
+/// is read from the one the followed team plays in (the first, if none
+/// names it), rather than letting the last one silently overwrite the rest.
+///
+/// - Parameter competition: the league whose feed the event came from, for
+///   an event that does not name its own (`league.slug`). `nil`, the
+///   default, leaves such an event's `competition` unnamed, which counts as
+///   the team's league.
+///
 /// Internal rather than private so the golden fixture tests can drive it
 /// with real ESPN events; `parseSchedule` remains the production entry point.
 func parseGame(
     from event: JSON,
     team: TeamRef,
-    pointer: Int
+    pointer: Int,
+    competition feedCompetition: LeagueID? = nil
 ) -> Game {
     let nameField = team.league.descriptor.competitorNameField
     var teamName = ""
@@ -167,13 +188,16 @@ func parseGame(
     var gamePeriod = ""
     var halftime = false
 
-    for (_, competition): (String, JSON) in event["competitions"] {
-        // Shape pin (M6): every assignment below overwrites the previous
-        // iteration's value, so with more than one competition in an event —
-        // a doubleheader feed, say — the last one silently wins. ESPN's
-        // summary and schedule endpoints carry exactly one competition per
-        // event today; revisit this loop (or assert a count of one) if a
-        // fixture ever shows the wrong venue, time, or score.
+    // Shape pin (M6): ESPN's schedule endpoints carry exactly one
+    // competition per event today. Reading only the followed team's keeps a
+    // multi-competition event (a doubleheader feed, say) from mixing one
+    // competition's venue with another's score.
+    let competitions = event["competitions"].arrayValue
+    let played = competitions.first { competition in
+        competition["competitors"].arrayValue.contains { $0["team"]["id"].stringValue == team.espnID }
+    } ?? competitions.first
+
+    if let competition = played {
         location = competition["venue"]["fullName"].stringValue
         gameID = competition["id"].stringValue
 
@@ -225,6 +249,13 @@ func parseGame(
     if eventID.isEmpty { eventID = gameID }
     if eventID.isEmpty { eventID = "\(event["date"].stringValue)|\(opponent)|\(pointer)" }
 
+    // Soccer events name their competition; every other feed leaves it to
+    // the league the schedule was fetched for.
+    let slug = event["league"]["slug"].stringValue
+    let competition = slug.isEmpty
+        ? feedCompetition
+        : LeagueID(sport: team.league.sport, league: slug)
+
     return Game(
         eventID: eventID,
         team: teamName,
@@ -248,7 +279,8 @@ func parseGame(
         postponed: postponed,
         gameClock: gameClock,
         gamePeriod: gamePeriod,
-        gameHalftime: halftime
+        gameHalftime: halftime,
+        competition: competition
     )
 }
 
@@ -260,16 +292,93 @@ func parseGame(
 ///
 /// A feed that answers with no events is a season with nothing scheduled
 /// (`.success([])`), which is distinct from a feed that could not be reached.
+///
+/// A soccer team plays in more than its league. The league's feed lists
+/// only league fixtures, so each of the league's `cupCompetitions` is
+/// fetched alongside it, from the same team schedule endpoint under the
+/// cup's path, and the fixtures are merged (`mergeSchedules`). The league is
+/// primary: its feed failing fails the schedule, while a cup feed that fails,
+/// or that the team has no fixtures in, simply adds nothing.
 func downloadScheduleData(team: TeamRef) async -> Result<[Game], NetworkError> {
-    await HTTPClient.shared.fetch(team.scheduleURL).map(empty: []) { json in
-        parseSchedule(from: json, team: team)
+    let cups = team.league.descriptor.cupCompetitions
+    guard !cups.isEmpty else {
+        return await HTTPClient.shared.fetch(team.scheduleURL).map(empty: []) { json in
+            parseSchedule(from: json, team: team)
+        }
+    }
+
+    async let league = HTTPClient.shared.fetch(team.scheduleURL)
+    let cupDocuments = await withTaskGroup(of: (Int, JSON?).self) { group in
+        for (index, cup) in cups.enumerated() {
+            group.addTask {
+                let result = await HTTPClient.shared.fetch(cup.scheduleURL(teamID: team.espnID))
+                guard case .success(let json) = result else { return (index, nil) }
+                return (index, json)
+            }
+        }
+        var documents = [JSON?](repeating: nil, count: cups.count)
+        for await (index, json) in group {
+            documents[index] = json
+        }
+        return documents
+    }
+
+    return await league.map(empty: []) { json in
+        let cupSchedules = zip(cups, cupDocuments).compactMap { cup, document in
+            document.map { (competition: cup, json: $0) }
+        }
+        return mergeSchedules(league: json, cups: cupSchedules, team: team)
     }
 }
 
 /// Builds the season's games from a schedule document. See
 /// `downloadScheduleData`.
-func parseSchedule(from json: JSON, team: TeamRef) -> [Game] {
+///
+/// - Parameter competition: the league the document was fetched for, for
+///   events that do not name their own; see `parseGame`.
+func parseSchedule(from json: JSON, team: TeamRef, competition: LeagueID? = nil) -> [Game] {
     json["events"].enumerated().map { pointer, element in
-        parseGame(from: element.1, team: team, pointer: pointer)
+        parseGame(from: element.1, team: team, pointer: pointer, competition: competition)
+    }
+}
+
+/// One schedule of a team's league games and cup ties, in kick-off order.
+///
+/// The league document comes first; each cup document adds the fixtures the
+/// league's did not already list (matched by `Game.id`). A cup feed with no
+/// current fixtures answers with its previous edition — the FA Cup's 2025-26
+/// run in September 2026 — so a cup event counts only when it is filed under
+/// the league document's season (`season.year` on each event). Every game is
+/// then ordered by kick-off, which is also what `getNextGame` expects, and
+/// `pointer` renumbered to match.
+func mergeSchedules(
+    league: JSON,
+    cups: [(competition: LeagueID, json: JSON)],
+    team: TeamRef
+) -> [Game] {
+    var games = parseSchedule(from: league, team: team, competition: team.league)
+    var seen = Set(games.map(\.id))
+    let season = league["season"]["year"].int
+
+    for cup in cups {
+        for (_, event) in cup.json["events"] {
+            if let season, let eventSeason = event["season"]["year"].int, eventSeason != season {
+                continue
+            }
+            let game = parseGame(from: event, team: team, pointer: 0, competition: cup.competition)
+            if seen.insert(game.id).inserted {
+                games.append(game)
+            }
+        }
+    }
+
+    // Stable, so fixtures sharing a kick-off keep their feed order.
+    let ordered = games.enumerated()
+        .sorted { ($0.element.dateAsDate, $0.offset) < ($1.element.dateAsDate, $1.offset) }
+        .map(\.element)
+    return ordered.enumerated().map { pointer, game in
+        var game = game
+        game.pointer = pointer
+        return game
     }
 }

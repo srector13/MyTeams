@@ -573,13 +573,19 @@ extension LeagueDescriptor {
 
     /// Loads a game's detail sheet in this league: one summary request per
     /// call, whatever the sport. See `gameSheet(from:team:followedIsHome:)`.
+    ///
+    /// - Parameter competition: the competition the game belongs to
+    ///   (`Game.competition`). A cup tie's summary is asked for under the
+    ///   cup's path; `nil` means the team's league.
     func downloadGameSheet(
         gameID: String,
         team: TeamRef,
         followedIsHome: Bool,
+        competition: LeagueID? = nil,
         client: HTTPClient = .shared
     ) async -> GameSheetLoad {
-        let response = await client.fetchResponse(team.summaryURL(gameID: gameID))
+        let summaryURL = (competition ?? team.league).summaryURL(gameID: gameID)
+        let response = await client.fetchResponse(summaryURL)
         let sheet = response.result.document.map {
             gameSheet(from: $0, team: team, followedIsHome: followedIsHome)
         }

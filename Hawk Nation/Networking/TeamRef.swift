@@ -58,6 +58,13 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     static let ligaMX = LeagueID(sport: "soccer", league: "mex.1")
     static let nwsl = LeagueID(sport: "soccer", league: "usa.nwsl")
 
+    /// A soccer competition by its ESPN slug, such as a cup a league's teams
+    /// also play in (`LeagueDescriptor.cupCompetitions`): `"eng.fa"`,
+    /// `"uefa.champions"`.
+    static func soccer(_ slug: String) -> LeagueID {
+        LeagueID(sport: "soccer", league: slug)
+    }
+
     /// Every league with its own `LeagueDescriptor`, in registry order. Any
     /// other league still works, with a descriptor derived from its path.
     static let knownLeagues: [LeagueID] = [
@@ -131,6 +138,14 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
         if let season { query.append("season=\(season)") }
         let url = "\(Self.standingsAPI)/\(path)/standings"
         return query.isEmpty ? url : url + "?" + query.joined(separator: "&")
+    }
+
+    /// The league's polls — for college leagues, the AP Top 25 and the
+    /// coaches' poll — each a ranked list of teams with their records. The
+    /// standings fall back to these when a college tree has no table yet.
+    /// See `downloadStandings`.
+    var rankingsURL: String {
+        "\(Self.siteAPI)/\(path)/rankings"
     }
 
     /// An athlete's profile, including the headline stats summary.

@@ -92,7 +92,8 @@ struct GameDetailView: View {
             let load = await league.downloadGameSheet(
                 gameID: game.gameID,
                 team: team,
-                followedIsHome: game.gameHome
+                followedIsHome: game.gameHome,
+                competition: game.competition
             )
             guard let sheet = load.sheet else {
                 // A cancelled request means the sheet closed: stop quietly.
