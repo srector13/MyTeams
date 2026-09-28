@@ -11,6 +11,7 @@
 		1E3BCB241DA1C6CB2812914D /* LeadersViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 256C330BF6A6267F6A81903F /* LeadersViews.swift */; };
 		80E99CF063A654760C1AD6E5 /* StatLeadersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF573B33F27B7BA066BDA6C5 /* StatLeadersTests.swift */; };
 		B309E49C4AE094E66AA42622 /* PlayerSeasonStatsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0066C623D26D8B069BA140CA /* PlayerSeasonStatsTests.swift */; };
+		298B3ECF8760BBDE227651DF /* CrossLeagueAcceptanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9E07087CB94CA29221903A /* CrossLeagueAcceptanceTests.swift */; };
 		28F633D9E078351031277B79 /* Linescore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FFBB22AFEE3DC375613908F /* Linescore.swift */; };
 		D3A38E5F59A963197CBC0758 /* HockeyBoxScore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */; };
 		C6578E236813A98439400C34 /* SoccerLineups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530A3635B00B73AE346D38AB /* SoccerLineups.swift */; };
@@ -138,6 +139,7 @@
 		256C330BF6A6267F6A81903F /* LeadersViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeadersViews.swift"; sourceTree = "<group>"; };
 		AF573B33F27B7BA066BDA6C5 /* StatLeadersTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StatLeadersTests.swift"; sourceTree = "<group>"; };
 		0066C623D26D8B069BA140CA /* PlayerSeasonStatsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlayerSeasonStatsTests.swift"; sourceTree = "<group>"; };
+		FE9E07087CB94CA29221903A /* CrossLeagueAcceptanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CrossLeagueAcceptanceTests.swift"; sourceTree = "<group>"; };
 		3FFBB22AFEE3DC375613908F /* Linescore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Linescore.swift"; sourceTree = "<group>"; };
 		E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HockeyBoxScore.swift"; sourceTree = "<group>"; };
 		530A3635B00B73AE346D38AB /* SoccerLineups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SoccerLineups.swift"; sourceTree = "<group>"; };
@@ -491,6 +493,7 @@
 				3FA214C1BEC40FFD70424DFB /* SportBoxScoreTests.swift */,
 				AF573B33F27B7BA066BDA6C5 /* StatLeadersTests.swift */,
 				0066C623D26D8B069BA140CA /* PlayerSeasonStatsTests.swift */,
+				FE9E07087CB94CA29221903A /* CrossLeagueAcceptanceTests.swift */,
 				6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */,
 				A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */,
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
@@ -750,6 +753,7 @@
 			files = (
 				80E99CF063A654760C1AD6E5 /* StatLeadersTests.swift in Sources */,
 				B309E49C4AE094E66AA42622 /* PlayerSeasonStatsTests.swift in Sources */,
+				298B3ECF8760BBDE227651DF /* CrossLeagueAcceptanceTests.swift in Sources */,
 				2BF4005DE2F3F7D27EDCF84D /* TeamPagesTests.swift in Sources */,
 				A7C3E1F05B2D4C6E8F9A0B1C /* LeagueRegistryTests.swift in Sources */,
 				26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */,
