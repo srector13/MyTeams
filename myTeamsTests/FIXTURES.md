@@ -361,6 +361,36 @@ Wings, Defense, Goalies), not by unit; NCAAF is grouped by unit
 `Offensive Lineman` position, plus three status groups the NFL-style menu
 does not filter on: `injuredReserveOrOut`, `suspended`, `practiceSquad`.
 
+### Box scores by sport (P3-c)
+
+`SportBoxScoreTests.swift` reads the summaries above; no fixture was added.
+What the readers rely on:
+
+- **Period counts come from `format.regulation.periods`**, present in every
+  summary captured: NFL/NCAAF/NBA/WNBA/NCAAW 4, NCAAM and soccer 2, NHL 3,
+  MLB 9. The scoreboards carry no `format`, so a scoreboard linescore falls
+  back to the registry's `regulationPeriods`. `linescores[]` hold one entry
+  per period played, overtime included (`chiefs_summary_final_401872945`:
+  five; `nhl_scoreboard_20260919` event 401881923: four), and are absent
+  before the game (`nba_summary_pregame_401902644`, `nba_scoreboard_20261003`).
+- **NHL `boxscore.players[].statistics[]` are groups by `name`**: `forwards`,
+  `defenses`, `skaters` (empty in the capture), `goalies`. Each has parallel
+  `keys`/`labels`/`descriptions`, and each athlete a bare string `stats`
+  array in `keys` order. Goalies' keys differ from skaters'
+  (`goalsAgainst`, `shotsAgainst`, `saves`, `savePct`, …). `players[]`
+  carries no `homeAway`; it is matched to `boxscore.teams[]` by `team.id`.
+  `boxscore.teams[]` lists Montreal (away) first. In this preseason game each
+  team used two goalies, and every listed athlete has stats.
+- **Team statistics are read by `name` in every sport.** The basketball
+  summaries (NCAAM, WNBA) list the same 25 names; the NFL lists 25 football
+  statistics and NCAAF 15 in a different order (no `totalDrives`).
+- **Soccer `rosters[]`** (one per side, with `formation`) list 18–23
+  players: `starter`, `subbedIn`, `subbedOut`, and `plays[]` whose
+  `substitution` entries carry the minute (`clock.displayValue`, `"68'"`).
+  Each player's `stats` are this game's, by `name` (`totalGoals`,
+  `yellowCards`, `redCards`); in `epl_summary_final_401879301` they agree
+  with `keyEvents`. Every soccer summary captured has 11 starters a side.
+
 ## Refreshing
 
 1. Re-run the requests above, for example:

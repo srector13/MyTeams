@@ -11,6 +11,7 @@
 		D3A38E5F59A963197CBC0758 /* HockeyBoxScore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */; };
 		C6578E236813A98439400C34 /* SoccerLineups.swift in Sources */ = {isa = PBXBuildFile; fileRef = 530A3635B00B73AE346D38AB /* SoccerLineups.swift */; };
 		6799744107ABFA081D1BD126 /* BoxScoreTables.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9696A41597D1B188BFAA270D /* BoxScoreTables.swift */; };
+		8E296C5B1E9D0A2C84BFE95D /* SportBoxScoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA214C1BEC40FFD70424DFB /* SportBoxScoreTests.swift */; };
 		26FB5C8A13EFE3803FDF9E96 /* RecordTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50CF848EFDCDCB9AF31230CA /* RecordTests.swift */; };
 		0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */; };
 		749E671F2916273F3E45E498 /* Standings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 346F15839B839382E7E93D52 /* Standings.swift */; };
@@ -133,6 +134,7 @@
 		E204FC2B5D67A9E685EAE470 /* HockeyBoxScore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HockeyBoxScore.swift"; sourceTree = "<group>"; };
 		530A3635B00B73AE346D38AB /* SoccerLineups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SoccerLineups.swift"; sourceTree = "<group>"; };
 		9696A41597D1B188BFAA270D /* BoxScoreTables.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BoxScoreTables.swift"; sourceTree = "<group>"; };
+		3FA214C1BEC40FFD70424DFB /* SportBoxScoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SportBoxScoreTests.swift"; sourceTree = "<group>"; };
 		50CF848EFDCDCB9AF31230CA /* RecordTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordTests.swift"; sourceTree = "<group>"; };
 		F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StandingsTests.swift"; sourceTree = "<group>"; };
 		346F15839B839382E7E93D52 /* Standings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Standings.swift"; sourceTree = "<group>"; };
@@ -468,6 +470,7 @@
 				71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */,
 				C215F1D687B2267DDC42D736 /* JSONTests.swift */,
 				B9F1546F852F45279E04277F /* BoxScoreParsingTests.swift */,
+				3FA214C1BEC40FFD70424DFB /* SportBoxScoreTests.swift */,
 				6F3B8E21A4C54D7B8E02F9A3 /* AthleteStatsParsingTests.swift */,
 				A93F2D6C18E54B7F9D0C3E12 /* HTTPClientTests.swift */,
 				CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */,
@@ -733,6 +736,7 @@
 				F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */,
 				3BBFED87D728D7319D475FEB /* JSONTests.swift in Sources */,
 				E7E921A83B474F55A0120398 /* BoxScoreParsingTests.swift in Sources */,
+				8E296C5B1E9D0A2C84BFE95D /* SportBoxScoreTests.swift in Sources */,
 				4D2A7C19E0B34F8A9C61D5E2 /* AthleteStatsParsingTests.swift in Sources */,
 				7E3C9A51D2B84F06A1C5E8D4 /* HTTPClientTests.swift in Sources */,
 				CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */,
