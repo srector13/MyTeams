@@ -15,154 +15,70 @@ struct LoadingGameView : View {
     }
 }
 
+/// A game's card in a schedule carousel: the opponent and kick-off, overlaid
+/// with the result, the live state, or a cancellation.
+///
+/// What differs by sport — what a level result is called, and how a game in
+/// progress is drawn — comes from the league's `LeagueDescriptor`.
 struct GameView : View {
-    
+
     var game: Game
-    var teamColor: Color
-    var team: Team
+    var team: TeamRef
 
     /// The in-progress score the team model polls for this game, if any.
     /// Past and future fixtures carry no live score; they render from the
     /// schedule feed's own fields.
     var liveScore: LiveGameScore?
-    
+
+    private var teamColor: Color { team.color }
+
+    private var league: LeagueDescriptor { team.league.descriptor }
+
     var body: some View {
         VStack(spacing: 0) {
             ZStack() {
                 Rectangle()
-                    .foregroundStyle(self.teamColor)
-                
-                team.logoImage
-                    .resizable()
-                    .renderingMode(.original)
-                    .aspectRatio(contentMode: .fill)
+                    .foregroundStyle(teamColor)
+
+                TeamLogo(team: team, size: 200, forceVariant: .default)
                     .opacity(0.1)
                     .saturation(0.1)
                     .contrast(0.5)
-                    .frame(width: 200, height: 200)
                     .offset(x: 40, y: 50)
                 if(game.cancelled || game.postponed) {
                     Group {
                         ZStack {
-                        VStack(alignment: .center, spacing: 0) {
-                            Text(game.opponent)
-                                .font(.system(size: 12))
-                                .fontWeight(.bold)
-                                .foregroundStyle(Color.white)
-                            
-                            if(game.opponentLogo == "") {
-                                Image("blankTeam")
-                                    .resizable()
-                                    .frame(width: 60, height: 60)
-                            } else {
-                                RemoteImage(url: URL(string: game.opponentLogo))
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                            }
-                            
-                            Text(game.date)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                            Text(game.time)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                            Text(game.channel)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                        }
-                            
-                            Rectangle()
-                                .foregroundStyle(teamColor)
-                                .opacity(0.5)
-                            
+                            GameCardDetails(game: game, dimmed: false)
+
+                            tint
+
                             if(game.cancelled) {
                                 Text("Cancelled")
                                     .font(.system(size: 20))
                                     .fontWeight(.bold)
                                     .foregroundStyle(Color.white)
-                            }else if (game.postponed) {
+                            } else if (game.postponed) {
                                 Text("Postponed")
                                     .font(.system(size: 20))
                                     .fontWeight(.bold)
                                     .foregroundStyle(Color.white)
                             }
-                            
-                            
                         }
                     }
                 } else {
                     if(game.completed) {
                         Group {
                             ZStack {
-                                VStack(alignment: .center, spacing: 0) {
-                                    Text(game.opponent)
-                                        .font(.system(size: 12))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                        Image("blankTeam")
-                                            .resizable()
-                                    }
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 60, height: 60)
-                                    .opacity(0.5)
-                                    
-                                    Text(game.date)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                    
-                                    Text(game.time)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                    
-                                    Text(game.channel)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                }//.padding(.all, 0.5)
-                                
-                                Rectangle()
-                                    .foregroundStyle(teamColor)
-                                    .opacity(0.5)
-                                
+                                GameCardDetails(game: game, dimmed: true)
+
+                                tint
+
                                 if (game.gameWin) {
-                                    VStack {
-                                        Text("Win")
-                                            .font(.system(size: 24))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        Text(game.score + " - " + game.opponentScore)
-                                            .font(.system(size: 20))
-                                            .fontWeight(.heavy)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
-                                    }
-                                } else if (!game.gameWin) {
-                                    VStack {
-                                        Text("Loss")
-                                            .font(.system(size: 24))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        Text(game.opponentScore + " - " + game.score)
-                                            .font(.system(size: 20))
-                                            .fontWeight(.heavy)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
-                                    }
+                                    result("Win", score: game.score + " - " + game.opponentScore)
+                                } else if (game.isDraw) {
+                                    result(league.drawLabel, score: game.score + " - " + game.opponentScore)
+                                } else {
+                                    result("Loss", score: game.opponentScore + " - " + game.score)
                                 }
                             }
                         }
@@ -170,495 +86,191 @@ struct GameView : View {
                         if(game.dateAsDate < Date()) {
                             Group {
                                 ZStack {
-                                    VStack(alignment: .center, spacing: 0) {
-                                        Text(game.opponent)
-                                            .font(.system(size: 12))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                            Image("blankTeam")
-                                                .resizable()
-                                        }
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                        .opacity(0.5)
-                                        
-                                        Text(game.date)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                        
-                                        Text(game.time)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                        
-                                        Text(game.channel)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                    }//.padding(.all, 0.5)
-                                    
-                                    Rectangle()
-                                        .foregroundStyle(teamColor)
-                                        .opacity(0.5)
-                                    
-                                    VStack {
-                                        
-                                        if(game.gameHalftime) {
-                                            Text("Halftime")
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        } else {
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                            
-                                            Text(game.gameClock)
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        }
+                                    GameCardDetails(game: game, dimmed: true)
 
-                                        if let liveScore {
-                                            Text("\(liveScore.score) - \(liveScore.opponentScore)")
-                                                .font(.system(size: 24))
-                                                .fontWeight(.heavy)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        }
+                                    tint
+
+                                    switch league.liveCardStyle {
+                                    case .periodFirst:
+                                        periodFirstLiveState
+                                    case .scoreFirst:
+                                        scoreFirstLiveState
                                     }
                                 }
                             }
                         } else {
                             Group {
-                                VStack(alignment: .center, spacing: 0) {
-                                    Text(game.opponent)
-                                        .font(.system(size: 12))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    if(game.opponentLogo == "") {
-                                        Image("blankTeam")
-                                            .resizable()
-                                            .frame(width: 60, height: 60)
-                                    } else {
-                                        RemoteImage(url: URL(string: game.opponentLogo))
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                    }
-                                    
-                                    Text(game.date)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    Text(game.time)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    Text(game.channel)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                }
+                                GameCardDetails(game: game, dimmed: false)
                             }
                         }
                     }
                 }
-                
-                
+
+
             }.frame(height: 120)
             ZStack() {
                 Rectangle()
                     .foregroundStyle(Color(uiColor: .systemGray4))
-                
+
                 Group() {
                     RoundedRectangle(cornerRadius: 20)
                         .frame(width: 80, height: 25)
                         .foregroundStyle(teamColor)
-                    
+
                     Text("Info")
                         .font(.system(size: 12))
                         .fontWeight(.semibold)
                         .foregroundStyle(Color.white)
                 }
-                
+
             }.frame(height: 40)
-            
+
         }.background(Color(uiColor: .systemBackground))
             .frame(width: 120, height: 160)
             .clipShape(.rect(cornerRadius: 10))
     }
+
+    /// The team-coloured wash laid over the details beneath a status.
+    private var tint: some View {
+        Rectangle()
+            .foregroundStyle(teamColor)
+            .opacity(0.5)
+    }
+
+    /// A finished game's outcome over its final score.
+    private func result(_ outcome: String, score: String) -> some View {
+        VStack {
+            Text(outcome)
+                .font(.system(size: 24))
+                .fontWeight(.bold)
+                .foregroundStyle(Color.white)
+
+            Text(score)
+                .font(.system(size: 20))
+                .fontWeight(.heavy)
+                .minimumScaleFactor(0.5)
+                .foregroundStyle(Color.white)
+        }
+    }
+
+    /// A game in progress as `LiveCardStyle.periodFirst` draws it.
+    private var periodFirstLiveState: some View {
+        VStack {
+            if(game.gameHalftime) {
+                liveLine("Halftime", size: 15)
+            } else {
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
+                liveLine(game.gameClock, size: 15)
+            }
+
+            if let liveScore {
+                liveScoreText(liveScore)
+            }
+        }
+    }
+
+    /// A game in progress as `LiveCardStyle.scoreFirst` draws it: an arrow
+    /// beside the score says whether the followed team leads or trails. With
+    /// no live score yet, only the tinted details show.
+    @ViewBuilder
+    private var scoreFirstLiveState: some View {
+        if let liveScore, liveScore.score > liveScore.opponentScore {
+            VStack {
+                HStack() {
+                    liveScoreText(liveScore)
+
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.green)
+                }
+
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
+                liveLine(game.gameClock, size: 15)
+            }
+        } else if let liveScore, liveScore.score == liveScore.opponentScore {
+            VStack {
+                liveScoreText(liveScore)
+
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
+                liveLine(game.gameClock, size: 15)
+            }
+        } else if let liveScore {
+            VStack {
+                HStack() {
+                    liveScoreText(liveScore)
+
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Color.red)
+                }
+
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 12)
+                liveLine(game.gameClock, size: 12)
+            }
+        }
+    }
+
+    private func liveScoreText(_ liveScore: LiveGameScore) -> some View {
+        Text("\(liveScore.score) - \(liveScore.opponentScore)")
+            .font(.system(size: 24))
+            .fontWeight(.heavy)
+            .minimumScaleFactor(0.5)
+            .foregroundStyle(Color.white)
+    }
+
+    private func liveLine(_ text: String, size: CGFloat) -> some View {
+        Text(text)
+            .font(.system(size: size))
+            .fontWeight(.bold)
+            .minimumScaleFactor(0.5)
+            .foregroundStyle(Color.white)
+    }
 }
 
-struct FootballGameView : View {
-    
+/// The opponent, its crest, and the date, time and channel on a game card.
+///
+/// Dimmed beneath a result or live state; full strength on a fixture still to
+/// come, or beneath a cancellation.
+private struct GameCardDetails: View {
     var game: Game
-    var teamColor: Color
-    var team: Team
+    var dimmed: Bool
 
-    /// The in-progress score the team model polls for this game, if any.
-    var liveScore: LiveGameScore?
-    
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack() {
-                Rectangle()
-                    .foregroundStyle(self.teamColor)
-                
-                team.logoImage
+        VStack(alignment: .center, spacing: 0) {
+            Text(game.opponent)
+                .font(.system(size: 12))
+                .fontWeight(.bold)
+                .foregroundStyle(Color.white)
+
+            if dimmed {
+                RemoteImage(url: URL(string: game.opponentLogo)) {
+                    Image("blankTeam")
+                        .resizable()
+                }
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 60, height: 60)
+                .opacity(0.5)
+            } else if(game.opponentLogo == "") {
+                Image("blankTeam")
                     .resizable()
-                    .renderingMode(.original)
+                    .frame(width: 60, height: 60)
+            } else {
+                RemoteImage(url: URL(string: game.opponentLogo))
                     .aspectRatio(contentMode: .fill)
-                    .opacity(0.1)
-                    .saturation(0.1)
-                    .contrast(0.5)
-                    .frame(width: 200, height: 200)
-                    .offset(x: 40, y: 50)
-                if(game.cancelled || game.postponed) {
-                    Group {
-                        ZStack {
-                        VStack(alignment: .center, spacing: 0) {
-                            Text(game.opponent)
-                                .font(.system(size: 12))
-                                .fontWeight(.bold)
-                                .foregroundStyle(Color.white)
-                            
-                            if(game.opponentLogo == "") {
-                                Image("blankTeam")
-                                    .resizable()
-                                    .frame(width: 60, height: 60)
-                            } else {
-                                RemoteImage(url: URL(string: game.opponentLogo))
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                            }
-                            
-                            Text(game.date)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                            Text(game.time)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                            Text(game.channel)
-                                .font(.system(size: 10))
-                                .fontWeight(.medium)
-                                .foregroundStyle(Color.white)
-                            
-                        }
-                            
-                            Rectangle()
-                                .foregroundStyle(teamColor)
-                                .opacity(0.5)
-                            
-                            if(game.cancelled) {
-                                Text("Cancelled")
-                                    .font(.system(size: 20))
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(Color.white)
-                            }else if (game.postponed) {
-                                Text("Postponed")
-                                    .font(.system(size: 20))
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(Color.white)
-                            }
-                            
-                            
-                        }
-                    }
-                } else {
-                    if(game.completed) {
-                        Group {
-                            ZStack {
-                                VStack(alignment: .center, spacing: 0) {
-                                    Text(game.opponent)
-                                        .font(.system(size: 12))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    RemoteImage(url: URL(string: game.opponentLogo)) {
-                                        Image("blankTeam")
-                                            .resizable()
-                                    }
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 60, height: 60)
-                                    .opacity(0.5)
-                                    
-                                    Text(game.date)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                    
-                                    Text(game.time)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                    
-                                    Text(game.channel)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                        .opacity(0.5)
-                                }//.padding(.all, 0.5)
-                                
-                                Rectangle()
-                                    .foregroundStyle(teamColor)
-                                    .opacity(0.5)
-                                
-                                if (game.gameWin) {
-                                    VStack {
-                                        Text("Win")
-                                            .font(.system(size: 24))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        Text(game.score + " - " + game.opponentScore)
-                                            .font(.system(size: 20))
-                                            .fontWeight(.heavy)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
-                                    }
-                                } else if (!game.gameWin) {
-                                    VStack {
-                                        Text("Loss")
-                                            .font(.system(size: 24))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        Text(game.opponentScore + " - " + game.score)
-                                            .font(.system(size: 20))
-                                            .fontWeight(.heavy)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        if(game.dateAsDate < Date()) {
-                            Group {
-                                ZStack {
-                                    VStack(alignment: .center, spacing: 0) {
-                                        Text(game.opponent)
-                                            .font(.system(size: 12))
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(Color.white)
-                                        
-                                        RemoteImage(url: URL(string: game.opponentLogo)) {
-                                            Image("blankTeam")
-                                                .resizable()
-                                        }
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                        .opacity(0.5)
-                                        
-                                        Text(game.date)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                        
-                                        Text(game.time)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                        
-                                        Text(game.channel)
-                                            .font(.system(size: 10))
-                                            .fontWeight(.medium)
-                                            .foregroundStyle(Color.white)
-                                            .opacity(0.5)
-                                    }//.padding(.all, 0.5)
-                                    
-                                    Rectangle()
-                                        .foregroundStyle(teamColor)
-                                        .opacity(0.5)
-                                    
-                                    if let liveScore, liveScore.score > liveScore.opponentScore {
-                                        VStack {
-                                            HStack() {
-                                                Text("\(liveScore.score) - \(liveScore.opponentScore)")
-                                                    .font(.system(size: 24))
-                                                    .fontWeight(.heavy)
-                                                    .minimumScaleFactor(0.5)
-                                                    .foregroundStyle(Color.white)
-                                                
-                                                Image(systemName: "arrow.up")
-                                                    .font(.system(size: 12, weight: .bold))
-                                                    .foregroundStyle(Color.green)
-                                                
-                                            }
-                                            
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                            
-                                            Text(game.gameClock)
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        }
-                                    } else if let liveScore, liveScore.score == liveScore.opponentScore {
-                                        VStack {
-                                            Text("\(liveScore.score) - \(liveScore.opponentScore)")
-                                                .font(.system(size: 24))
-                                                .fontWeight(.heavy)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                            
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                            
-                                            Text(game.gameClock)
-                                                .font(.system(size: 15))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        }
-                                    } else if let liveScore {
-                                        VStack {
-                                            HStack() {
-                                                Text("\(liveScore.score) - \(liveScore.opponentScore)")
-                                                    .font(.system(size: 24))
-                                                    .fontWeight(.heavy)
-                                                    .minimumScaleFactor(0.5)
-                                                    .foregroundStyle(Color.white)
-                                                
-                                                Image(systemName: "arrow.down")
-                                                    .font(.system(size: 12, weight: .bold))
-                                                    .foregroundStyle(Color.red)
-                                                
-                                            }
-                                            
-                                            
-                                            Text(getPeriod(period: game.gamePeriod, team: game.team))
-                                            .font(.system(size: 12))
-                                            .fontWeight(.bold)
-                                            .minimumScaleFactor(0.5)
-                                            .foregroundStyle(Color.white)
-                                            
-                                            
-                                            Text(game.gameClock)
-                                                .font(.system(size: 12))
-                                                .fontWeight(.bold)
-                                                .minimumScaleFactor(0.5)
-                                                .foregroundStyle(Color.white)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            Group {
-                                VStack(alignment: .center, spacing: 0) {
-                                    Text(game.opponent)
-                                        .font(.system(size: 12))
-                                        .fontWeight(.bold)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    if(game.opponentLogo == "") {
-                                        Image("blankTeam")
-                                            .resizable()
-                                            .frame(width: 60, height: 60)
-                                    } else {
-                                        RemoteImage(url: URL(string: game.opponentLogo))
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 60, height: 60)
-                                    }
-                                    
-                                    Text(game.date)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    Text(game.time)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                    Text(game.channel)
-                                        .font(.system(size: 10))
-                                        .fontWeight(.medium)
-                                        .foregroundStyle(Color.white)
-                                    
-                                }//.padding(.all, 0.5)
-                            }
-                        }
-                    }
-                }
-                
-                
-            }.frame(height: 120)
-            ZStack() {
-                Rectangle()
-                    .foregroundStyle(Color(uiColor: .systemGray4))
-                
-                Group() {
-                    RoundedRectangle(cornerRadius: 20)
-                        .frame(width: 80, height: 25)
-                        .foregroundStyle(teamColor)
-                    
-                    Text("Info")
-                        .font(.system(size: 12))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color.white)
-                }
-                
-            }.frame(height: 40)
-            
-        }.background(Color(uiColor: .systemBackground))
-            .frame(width: 120, height: 160)
-            .clipShape(.rect(cornerRadius: 10))
-    }
-}
+                    .frame(width: 60, height: 60)
+            }
 
-func getPeriod(period: String, team: String) -> String {
-    var returnPeriod = ""
-    
-    if(team == "Kansas" || team == "Kansas City") {
-        if(period == "2") {
-            returnPeriod = "2nd Half"
-        } else if (period == "1") {
-            returnPeriod = "1st Half"
-        }
-    } else if (team == "Royals") {
-        
-    } else if (team == "KC") {
-        if(period == "4") {
-            returnPeriod = "4th Quarter"
-        } else if (period == "3") {
-            returnPeriod = "3rd Quarter"
-        } else if(period == "2") {
-            returnPeriod = "2nd Quarter"
-        } else if (period == "1") {
-            returnPeriod = "1st Quarter"
+            line(game.date)
+            line(game.time)
+            line(game.channel)
         }
     }
-    
-    return returnPeriod
-}
 
+    private func line(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10))
+            .fontWeight(.medium)
+            .foregroundStyle(Color.white)
+            .opacity(dimmed ? 0.5 : 1)
+    }
+}

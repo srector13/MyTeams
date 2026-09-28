@@ -9,9 +9,15 @@
 import Foundation
 
 struct Game: Identifiable, Hashable, Sendable {
-    var id = UUID()
+    /// ESPN's id for the event, or — for a feed entry that carries none — a
+    /// key built from its raw date, opponent and feed position. See `id`.
+    var eventID = ""
+    /// The followed team's name as the feed gives it (see `TeamNameField`),
+    /// or empty when the event does not list the team.
     var team: String
     var opponent: String
+    /// The opponent's ESPN team id, or empty when the feed names none.
+    var opponentID = ""
     var score: String
     var opponentScore: String
     var time: String
@@ -31,14 +37,51 @@ struct Game: Identifiable, Hashable, Sendable {
     var gameClock: String
     var gamePeriod: String
     var gameHalftime: Bool
+    /// The competition the game is played in: the team's league, or one of
+    /// its cups (`LeagueDescriptor.cupCompetitions`). Read from the event's
+    /// `league.slug`, which the soccer feeds carry; `nil` for feeds that name
+    /// none, which are always the league's own games.
+    var competition: LeagueID? = nil
+
+    /// Whether the game is one of the team's league games rather than a cup
+    /// tie. See `competition`.
+    func isLeagueGame(of league: LeagueID) -> Bool {
+        competition == nil || competition == league
+    }
+
+    /// The game's identity, stable across the once-a-minute schedule refresh.
+    ///
+    /// A fresh `UUID()` per parse made every refresh look like a brand-new set
+    /// of games to `ForEach`, tearing down each card and restarting its logo
+    /// load. The event id (or, for a game built without one, the competition
+    /// id, then the start and opponent) names the same fixture every time.
+    var id: String {
+        if !eventID.isEmpty { return eventID }
+        if !gameID.isEmpty { return gameID }
+        return "\(dateAsDate.timeIntervalSince1970)|\(opponent)"
+    }
+
+    /// Whether the game stands level — an MLS draw or an NFL tie once played.
+    ///
+    /// Neither competitor's `winner` flag is set on a level game, so a caller
+    /// that reads "played and not won" as a loss must check this first. A game
+    /// with no scores published yet is never a draw.
+    var isDraw: Bool {
+        guard !gameWin, let score = Int(score), let opponentScore = Int(opponentScore) else {
+            return false
+        }
+        return score == opponentScore
+    }
 }
 
-/// Which field of an ESPN `team` object names the team a schedule belongs to.
+/// Which field of an ESPN `team` object a schedule card names a team by.
 ///
-/// The feeds disagree: the basketball and football feeds carry the followed
-/// team's name in `nickname` ("Kansas", "KC"), while the baseball and soccer
-/// feeds name it in `shortDisplayName`. Each team's field is declared on the
-/// `Team` enum (`scheduleNameField` in Sport.swift).
+/// The feeds disagree on which reads best: the basketball and football feeds
+/// carry the short name in `nickname` ("Kansas", "Broncos"), while the
+/// baseball and soccer feeds' `nickname` is absent or a mascot, and their
+/// `shortDisplayName` is the familiar name. Each league's field is declared
+/// on its `LeagueDescriptor` (`competitorNameField`). Names are display only;
+/// teams are matched by id.
 enum TeamNameField: String, Sendable {
     case nickname
     case shortDisplayName
@@ -51,12 +94,13 @@ enum TeamNameField: String, Sendable {
 // parsed per refresh; `DateFormatter` is `Sendable`, and none of these are
 // mutated after creation.
 
-/// The zone every game time is presented in: US Central, the home zone of all
-/// four teams. Display is pinned to this zone while the underlying `Date`
-/// stays the true instant, so schedule text reads identically on any device
-/// and clock comparisons (`dateAsDate < Date()`) remain correct. The zone is
-/// DST-aware, unlike the fixed six-hour shift this replaced.
-private let scheduleDisplayZone = TimeZone(identifier: "America/Chicago")
+/// The zone game times are presented in: the device's own, following it if
+/// it changes while the app runs. The feed's timestamps are UTC instants
+/// (`eventDateParser`), so only display depends on this; `dateAsDate` and
+/// clock comparisons (`dateAsDate < Date()`) are zone-free. Display used to
+/// be pinned to US Central, the home zone of the four seed teams, which read
+/// wrong for anyone following a team from elsewhere.
+private let scheduleDisplayZone = TimeZone.autoupdatingCurrent
 
 /// Formats a game's calendar date for display, e.g. "Jan 18, 2021".
 private let gameDateFormatter: DateFormatter = {
@@ -89,8 +133,8 @@ private let eventDateParser: DateFormatter = {
 /// `2021-01-18T23:00Z`, as the exact instant it names.
 ///
 /// The returned `Date` is timezone-neutral — correct for comparisons against
-/// `Date()` anywhere. Presentation in US Central time happens in the display
-/// formatters above, not by shifting the instant itself.
+/// `Date()` anywhere. Presentation in the device's time zone happens in the
+/// display formatters above, not by shifting the instant itself.
 func parseGameDate(_ raw: String) -> Date? {
     let cleaned = raw
         .replacingOccurrences(of: "T", with: " ")
@@ -101,15 +145,31 @@ func parseGameDate(_ raw: String) -> Date? {
 
 /// Builds one `Game` from an ESPN event object.
 ///
-/// `teamNameField` selects the name the feed uses to identify the followed
-/// team; the competitor that does not match it is the opponent.
-private func parseGame(
+/// The followed team is the competitor whose `team.id` is `team.espnID`; any
+/// other competitor is the opponent. Both are named by the league's
+/// `competitorNameField`.
+///
+/// An event normally holds one competition. Should it hold several, the game
+/// is read from the one the followed team plays in (the first, if none
+/// names it), rather than letting the last one silently overwrite the rest.
+///
+/// - Parameter competition: the league whose feed the event came from, for
+///   an event that does not name its own (`league.slug`). `nil`, the
+///   default, leaves such an event's `competition` unnamed, which counts as
+///   the team's league.
+///
+/// Internal rather than private so the golden fixture tests can drive it
+/// with real ESPN events; `parseSchedule` remains the production entry point.
+func parseGame(
     from event: JSON,
-    teamName: String,
-    teamNameField: TeamNameField,
-    pointer: Int
+    team: TeamRef,
+    pointer: Int,
+    competition feedCompetition: LeagueID? = nil
 ) -> Game {
+    let nameField = team.league.descriptor.competitorNameField
+    var teamName = ""
     var opponent = ""
+    var opponentID = ""
     var score = ""
     var opponentScore = ""
     var time = ""
@@ -128,13 +188,16 @@ private func parseGame(
     var gamePeriod = ""
     var halftime = false
 
-    for (_, competition): (String, JSON) in event["competitions"] {
-        // Shape pin (M6): every assignment below overwrites the previous
-        // iteration's value, so with more than one competition in an event —
-        // a doubleheader feed, say — the last one silently wins. ESPN's
-        // summary and schedule endpoints carry exactly one competition per
-        // event today; revisit this loop (or assert a count of one) if a
-        // fixture ever shows the wrong venue, time, or score.
+    // Shape pin (M6): ESPN's schedule endpoints carry exactly one
+    // competition per event today. Reading only the followed team's keeps a
+    // multi-competition event (a doubleheader feed, say) from mixing one
+    // competition's venue with another's score.
+    let competitions = event["competitions"].arrayValue
+    let played = competitions.first { competition in
+        competition["competitors"].arrayValue.contains { $0["team"]["id"].stringValue == team.espnID }
+    } ?? competitions.first
+
+    if let competition = played {
         location = competition["venue"]["fullName"].stringValue
         gameID = competition["id"].stringValue
 
@@ -160,29 +223,44 @@ private func parseGame(
         }
 
         for (_, competitor): (String, JSON) in competition["competitors"] {
-            if competitor["team"][teamNameField.rawValue].stringValue == teamName {
+            if competitor["team"]["id"].stringValue == team.espnID {
+                teamName = competitor["team"][nameField.rawValue].stringValue
                 gameHome = competitor["homeAway"].stringValue == "home"
                 gameWin = competitor["winner"].boolValue
                 score = competitor["score"]["displayValue"].stringValue
             } else {
-                opponent = competitor["team"][teamNameField.rawValue].stringValue
+                opponent = competitor["team"][nameField.rawValue].stringValue
+                opponentID = competitor["team"]["id"].stringValue
                 opponentScore = competitor["score"]["displayValue"].stringValue
 
-                // Feeds ship a light and a dark variant of every logo. Take
-                // the light one, which reads on the team-coloured cards.
-                for (_, logo): (String, JSON) in competitor["team"]["logos"] {
-                    let link = logo["href"].stringValue
-                    if !link.contains("dark") {
-                        opponentLogo = link
-                    }
-                }
+                // Feeds ship a light and a dark variant of every logo, among
+                // a dozen brand-service ones. Take the default crest, chosen
+                // by its `rel` tokens, which reads on the team-coloured cards.
+                opponentLogo = ESPNLogos.select(competitor["team"]["logos"]).default?.absoluteString ?? ""
             }
         }
     }
 
+    // Prefer the event's own id; the competition id is the same number on
+    // every feed seen so far. The last resort uses the raw date string, not
+    // `dateAsDate`, which falls back to "now" when the date is unreadable,
+    // plus the feed position so an id-less doubleheader stays two games.
+    var eventID = event["id"].stringValue
+    if eventID.isEmpty { eventID = gameID }
+    if eventID.isEmpty { eventID = "\(event["date"].stringValue)|\(opponent)|\(pointer)" }
+
+    // Soccer events name their competition; every other feed leaves it to
+    // the league the schedule was fetched for.
+    let slug = event["league"]["slug"].stringValue
+    let competition = slug.isEmpty
+        ? feedCompetition
+        : LeagueID(sport: team.league.sport, league: slug)
+
     return Game(
+        eventID: eventID,
         team: teamName,
         opponent: opponent,
+        opponentID: opponentID,
         score: score,
         opponentScore: opponentScore,
         time: time,
@@ -201,7 +279,8 @@ private func parseGame(
         postponed: postponed,
         gameClock: gameClock,
         gamePeriod: gamePeriod,
-        gameHalftime: halftime
+        gameHalftime: halftime,
+        competition: competition
     )
 }
 
@@ -210,19 +289,96 @@ private func parseGame(
 /// Games keep the order the feed lists them in, and each carries its position
 /// as `pointer` — the schedule carousels scroll to the next unplayed game by
 /// that index.
-func downloadScheduleData(
-    queryURL: String,
-    teamName: String,
-    teamNameField: TeamNameField = .nickname
-) async -> [Game] {
-    let json = await HTTPClient.json(from: queryURL)
+///
+/// A feed that answers with no events is a season with nothing scheduled
+/// (`.success([])`), which is distinct from a feed that could not be reached.
+///
+/// A soccer team plays in more than its league. The league's feed lists
+/// only league fixtures, so each of the league's `cupCompetitions` is
+/// fetched alongside it, from the same team schedule endpoint under the
+/// cup's path, and the fixtures are merged (`mergeSchedules`). The league is
+/// primary: its feed failing fails the schedule, while a cup feed that fails,
+/// or that the team has no fixtures in, simply adds nothing.
+func downloadScheduleData(team: TeamRef) async -> Result<[Game], NetworkError> {
+    let cups = team.league.descriptor.cupCompetitions
+    guard !cups.isEmpty else {
+        return await HTTPClient.shared.fetch(team.scheduleURL).map(empty: []) { json in
+            parseSchedule(from: json, team: team)
+        }
+    }
 
-    return json["events"].enumerated().map { pointer, element in
-        parseGame(
-            from: element.1,
-            teamName: teamName,
-            teamNameField: teamNameField,
-            pointer: pointer
-        )
+    async let league = HTTPClient.shared.fetch(team.scheduleURL)
+    let cupDocuments = await withTaskGroup(of: (Int, JSON?).self) { group in
+        for (index, cup) in cups.enumerated() {
+            group.addTask {
+                let result = await HTTPClient.shared.fetch(cup.scheduleURL(teamID: team.espnID))
+                guard case .success(let json) = result else { return (index, nil) }
+                return (index, json)
+            }
+        }
+        var documents = [JSON?](repeating: nil, count: cups.count)
+        for await (index, json) in group {
+            documents[index] = json
+        }
+        return documents
+    }
+
+    return await league.map(empty: []) { json in
+        let cupSchedules = zip(cups, cupDocuments).compactMap { cup, document in
+            document.map { (competition: cup, json: $0) }
+        }
+        return mergeSchedules(league: json, cups: cupSchedules, team: team)
+    }
+}
+
+/// Builds the season's games from a schedule document. See
+/// `downloadScheduleData`.
+///
+/// - Parameter competition: the league the document was fetched for, for
+///   events that do not name their own; see `parseGame`.
+func parseSchedule(from json: JSON, team: TeamRef, competition: LeagueID? = nil) -> [Game] {
+    json["events"].enumerated().map { pointer, element in
+        parseGame(from: element.1, team: team, pointer: pointer, competition: competition)
+    }
+}
+
+/// One schedule of a team's league games and cup ties, in kick-off order.
+///
+/// The league document comes first; each cup document adds the fixtures the
+/// league's did not already list (matched by `Game.id`). A cup feed with no
+/// current fixtures answers with its previous edition — the FA Cup's 2025-26
+/// run in September 2026 — so a cup event counts only when it is filed under
+/// the league document's season (`season.year` on each event). Every game is
+/// then ordered by kick-off, which is also what `getNextGame` expects, and
+/// `pointer` renumbered to match.
+func mergeSchedules(
+    league: JSON,
+    cups: [(competition: LeagueID, json: JSON)],
+    team: TeamRef
+) -> [Game] {
+    var games = parseSchedule(from: league, team: team, competition: team.league)
+    var seen = Set(games.map(\.id))
+    let season = league["season"]["year"].int
+
+    for cup in cups {
+        for (_, event) in cup.json["events"] {
+            if let season, let eventSeason = event["season"]["year"].int, eventSeason != season {
+                continue
+            }
+            let game = parseGame(from: event, team: team, pointer: 0, competition: cup.competition)
+            if seen.insert(game.id).inserted {
+                games.append(game)
+            }
+        }
+    }
+
+    // Stable, so fixtures sharing a kick-off keep their feed order.
+    let ordered = games.enumerated()
+        .sorted { ($0.element.dateAsDate, $0.offset) < ($1.element.dateAsDate, $1.offset) }
+        .map(\.element)
+    return ordered.enumerated().map { pointer, game in
+        var game = game
+        game.pointer = pointer
+        return game
     }
 }

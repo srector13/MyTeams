@@ -8,8 +8,7 @@
 
 import Foundation
 
-struct GameInfo: Identifiable, Hashable, Sendable {
-    var id = UUID()
+struct GameInfo: Hashable, Sendable {
     var venueImage: String
     var city: String
     var state: String
@@ -24,7 +23,6 @@ struct GameInfo: Identifiable, Hashable, Sendable {
 }
 
 struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var fieldGoals: String
     var fieldGoalPct: Float
@@ -45,18 +43,12 @@ struct BasketballGameTeamStats: Identifiable, Hashable, Sendable {
     var opponentScore: Int
     var gameClock: String
 
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: BasketballGameTeamStats(
-        name: "", fieldGoals: "0", fieldGoalPct: 0, threePoints: "0",
-        threePointPct: 0, freeThrows: "0", freeThrowPct: 0, offensiveRebounds: 0,
-        defensiveRebounds: 0, assists: 0, steals: 0, blocks: 0, turnOvers: 0,
-        fouls: 0, largestLead: 0, projection: 0, score: 0, opponentScore: 0,
-        gameClock: ""
-    ), count: 2)
+    /// A team's line is identified by the team, so a refreshed box score
+    /// compares equal to the one it replaces when nothing has changed.
+    var id: String { name }
 }
 
 struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var yards: Int
     var passingYards: Int
@@ -66,16 +58,15 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     var score: Int
     var interceptions: Int
     var possesionTime: String
+    /// The completions: the leading figure of the feed's `"18/29"`.
     var completionAttempts: Int
     var opponentScore: Int
     var gameClock: String
+    /// Completions and attempts as the feed writes them, `"18/29"`.
+    var completionAttemptsDisplay = ""
 
-    /// The pair of blank lines a detail view shows before its box score loads.
-    static let placeholderPair = [Self](repeating: FootballGameTeamStats(
-        name: "", yards: 0, passingYards: 0, rushingYards: 0, firstDowns: 0,
-        drives: 0, score: 0, interceptions: 0, possesionTime: "",
-        completionAttempts: 0, opponentScore: 0, gameClock: ""
-    ), count: 2)
+    /// See `BasketballGameTeamStats.id`.
+    var id: String { name }
 }
 
 /// One team's line in a baseball game's box score.
@@ -84,19 +75,20 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
 /// home), so each line carries the `homeAway` side it belongs to and callers
 /// pick the side they need rather than indexing by position.
 struct BaseballGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     /// `"home"` or `"away"`, as the box score labels this line.
     var homeAway: String
     var runs: Int
     var hits: Int
     var errors: Int
+
+    /// A line is identified by its side, falling back to the team name.
+    var id: String { homeAway.isEmpty ? name : homeAway }
 }
 
 /// One team's line in a soccer game's box score. See
 /// `BaseballGameTeamStats` for why lines carry their side.
 struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     /// `"home"` or `"away"`, as the box score labels this line.
     var homeAway: String
@@ -104,9 +96,13 @@ struct SoccerGameTeamStats: Identifiable, Hashable, Sendable {
     var shots: Int
     var possessionPct: Float
     var corners: Int
+
+    /// See `BaseballGameTeamStats.id`.
+    var id: String { homeAway.isEmpty ? name : homeAway }
 }
 
-/// The current score of a game, read from its summary document.
+/// The current score of a game, as its league's scoreboard (see
+/// `LeagueScoreboardCenter`) or its summary document reports it.
 ///
 /// Schedule cards need nothing livelier than the two team totals; the full
 /// box-score loaders behind the detail sheets fetch far more than a card
@@ -116,19 +112,27 @@ struct LiveGameScore: Sendable, Hashable {
     var opponentScore: Int
 }
 
-/// Reads the current score from a game's summary document.
+/// Reads a competitor's score, or `nil` when it has none.
 ///
-/// `isHome` is the schedule feed's `gameHome` flag for the followed team. The
-/// pro summaries carry no `shortDisplayName` on their header competitors, so
-/// the home/away side is the reliable key; the box-score name only
-/// disambiguates when a header omits `homeAway` (or the fixture moved sides).
-///
-/// Returns `nil` when the fetch failed or the document cannot be attributed,
-/// so a caller can keep its last known figures instead of painting a
-/// rate-limited or partial response as a 0–0 game.
-func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> LiveGameScore? {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+/// The summary header and the league scoreboards publish `score` as a bare
+/// string (`"3"`); the schedule feed wraps it as
+/// `{"value": 3.0, "displayValue": "3"}`. Both are accepted.
+func competitorScore(_ competitor: JSON) -> Int? {
+    let score = competitor["score"]
+    return score.dictionary == nil ? score.int : score["displayValue"].int
+}
 
+/// Extracts the current score from a game's summary document.
+///
+/// `isHome` is the schedule feed's `gameHome` flag for the followed team, and
+/// the home/away side is the primary key; the competitor's `team.id` only
+/// decides when a header omits `homeAway`.
+///
+/// Returns `nil` when the document cannot be attributed, so a caller can keep
+/// its last known figures instead of painting a partial response as a 0–0
+/// game. Schedule cards now read their scores from the league scoreboard
+/// (`parseScoreboard`); this reads the same figures from a summary.
+func parseLiveGameScore(from json: JSON, team: TeamRef, isHome: Bool) -> LiveGameScore? {
     var score: Int?
     var opponentScore: Int?
     for (_, competitor): (String, JSON) in json["header", "competitions", 0, "competitors"] {
@@ -137,13 +141,13 @@ func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> Li
         if side == "home" || side == "away" {
             followedTeam = side == (isHome ? "home" : "away")
         } else {
-            followedTeam = competitor["team"]["shortDisplayName"].stringValue == team.boxscoreName
+            followedTeam = competitor["team"]["id"].stringValue == team.espnID
         }
 
         if followedTeam {
-            score = competitor["score"]["displayValue"].intValue
+            score = competitorScore(competitor)
         } else {
-            opponentScore = competitor["score"]["displayValue"].intValue
+            opponentScore = competitorScore(competitor)
         }
     }
 
@@ -151,24 +155,94 @@ func downloadLiveGameScore(gameID: String, team: Team, isHome: Bool) async -> Li
     return LiveGameScore(score: score, opponentScore: opponentScore)
 }
 
-/// Loads the venue details shown behind a game's detail sheet.
-///
-/// The accent colour follows the host: at home the team's own colour is used,
-/// and away the colour comes from whichever competitor is not the followed
-/// team.
-func downloadGameInfo(gameID: String, team: Team) async -> GameInfo {
-    let json = await HTTPClient.json(from: team.summaryURL(gameID: gameID))
+/// Where a game stands, as its summary document reports it.
+enum GamePhase: Sendable, Hashable {
+    /// Not started yet.
+    case pre
+    /// In progress, the clock running.
+    case live
+    /// In progress but stopped: halftime, a weather delay, a suspension.
+    case paused
+    /// Over — played out, or called off.
+    case final
+    /// The document carried no status, e.g. a partial response.
+    case unknown
+}
 
+/// The in-progress statuses (`status.type.name`) whose clock is stopped for
+/// minutes at a time, so a sheet has nothing to refresh every ten seconds.
+private let pausedStatusNames: Set<String> = [
+    "STATUS_HALFTIME", "STATUS_DELAYED", "STATUS_RAIN_DELAY", "STATUS_SUSPENDED",
+]
+
+/// Reads the game's phase from the header of its summary document.
+func parseGamePhase(from json: JSON) -> GamePhase {
+    let type = json["header", "competitions", 0, "status", "type"]
+    if type["completed"].boolValue { return .final }
+
+    switch type["state"].stringValue {
+    case "pre": return .pre
+    case "in": return pausedStatusNames.contains(type["name"].stringValue) ? .paused : .live
+    case "post": return .final
+    default: return .unknown
+    }
+}
+
+/// Everything a game's detail sheet shows, read from one summary document.
+///
+/// The sheets used to fetch the same summary twice per refresh — once for the
+/// box score, once for the venue — and never stopped, even for a game long
+/// finished. One fetch now fills both (`LeagueDescriptor.gameSheet`), and the
+/// phase decides when to ask again (see `refreshInterval`).
+struct GameDetail<Stats: Sendable>: Sendable {
+    var stats: [Stats]
+    var info: GameInfo
+    var phase: GamePhase
+
+    init(json: JSON, team: TeamRef, stats: [Stats]) {
+        self.stats = stats
+        self.info = parseGameInfo(from: json, team: team)
+        self.phase = parseGamePhase(from: json)
+    }
+
+    /// How long a detail sheet waits after a fetch that produced no document.
+    /// Longer than the live rate; a throttled sheet doubles it from here (see
+    /// `PollBackoff`).
+    static var retryInterval: Duration { .seconds(30) }
+
+    /// How long a detail sheet waits before refetching, or `nil` to stop.
+    ///
+    /// Only a game in progress with its clock running (`state` `"in"`)
+    /// refreshes every ten seconds. One not yet started only needs to notice
+    /// kickoff, and one at halftime or in a delay to notice the restart, so
+    /// those check once a minute, as does a document with no status. A
+    /// finished game will not change again.
+    var refreshInterval: Duration? {
+        switch phase {
+        case .live: return .seconds(10)
+        case .pre, .paused, .unknown: return .seconds(60)
+        case .final: return nil
+        }
+    }
+}
+
+/// Reads the venue details shown behind a game's detail sheet.
+///
+/// The accent colour follows the host: when the box score lists the followed
+/// team (by `team.id`) as home, the team's own colour is used; otherwise the
+/// colour comes from whichever box-score team is not the followed one.
+func parseGameInfo(from json: JSON, team: TeamRef) -> GameInfo {
     let venue = json["gameInfo"]["venue"]
     let city = venue["address"]["city"].stringValue
 
+    let boxscoreTeams = json["boxscore", "teams"].map { $0.1 }
+    let followed = boxscoreTeams.first { $0["team", "id"].stringValue == team.espnID }
     let color: String
-    if city == team.homeCity {
-        color = team.brandHex
-    } else if json["boxscore", "teams", 0, "team", "shortDisplayName"].stringValue == team.boxscoreName {
-        color = json["boxscore", "teams", 1, "team", "color"].stringValue
+    if followed?["homeAway"].stringValue == "home" {
+        color = team.colorHex
     } else {
-        color = json["boxscore", "teams", 0, "team", "color"].stringValue
+        let host = boxscoreTeams.first { $0["team", "id"].stringValue != team.espnID }
+        color = host?["team", "color"].stringValue ?? ""
     }
 
     return GameInfo(
@@ -181,47 +255,54 @@ func downloadGameInfo(gameID: String, team: Team) async -> GameInfo {
     )
 }
 
-/// Loads both teams' box score lines for a basketball game.
+/// Extracts both teams' box score lines from a basketball game's summary
+/// document. Every line carries `team`'s score first.
 ///
-/// Statistics are addressed by position because the feed lists them in a fixed
-/// order without stable identifiers.
-func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGameTeamStats] {
-    let json = await HTTPClient.json(from: Team.jayhawks.summaryURL(gameID: gameID))
-
+/// Statistics are read by `name` (`boxscoreStatistic`). They used to be read
+/// by position, and the feed's list had shifted under that reading: from
+/// assists on, every figure was its neighbour's. College, NBA and WNBA
+/// summaries all name the same statistics.
+func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [BasketballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
 
-    /// College basketball scores arrive per half, so a team's total is the sum
-    /// of its line scores.
-    func halfTotal(_ index: Int) -> Int {
-        competitors[index]["linescores", 0, "displayValue"].intValue
-            + competitors[index]["linescores", 1, "displayValue"].intValue
+    /// College basketball scores arrive per period — two halves, then one
+    /// entry per overtime — so a team's total is the sum of all its line
+    /// scores.
+    func lineScoreTotal(_ index: Int) -> Int {
+        competitors[index]["linescores"].reduce(0) { total, period in
+            total + period.1["displayValue"].intValue
+        }
     }
 
-    let jayhawksAreFirst = competitors[0]["team"]["name"].stringValue == "Jayhawks"
-    let teamScore = halfTotal(jayhawksAreFirst ? 0 : 1)
-    let opponentScore = halfTotal(jayhawksAreFirst ? 1 : 0)
+    let followedIsFirst = competitors[0]["team"]["id"].stringValue == followed.espnID
+    let teamScore = lineScoreTotal(followedIsFirst ? 0 : 1)
+    let opponentScore = lineScoreTotal(followedIsFirst ? 1 : 0)
 
     return json["boxscore"]["teams"].enumerated().map { index, element in
         let team = element.1
         let statistics = team["statistics"]
 
+        func stat(_ name: String) -> JSON {
+            boxscoreStatistic(statistics, named: name)["displayValue"]
+        }
+
         return BasketballGameTeamStats(
             name: team["team"]["name"].stringValue,
-            fieldGoals: statistics[0]["displayValue"].stringValue,
-            fieldGoalPct: statistics[1]["displayValue"].floatValue,
-            threePoints: statistics[2]["displayValue"].stringValue,
-            threePointPct: statistics[3]["displayValue"].floatValue,
-            freeThrows: statistics[4]["displayValue"].stringValue,
-            freeThrowPct: statistics[5]["displayValue"].floatValue,
-            offensiveRebounds: statistics[7]["displayValue"].intValue,
-            defensiveRebounds: statistics[8]["displayValue"].intValue,
-            assists: statistics[10]["displayValue"].intValue,
-            steals: statistics[11]["displayValue"].intValue,
-            blocks: statistics[12]["displayValue"].intValue,
-            turnOvers: statistics[13]["displayValue"].intValue,
-            fouls: statistics[19]["displayValue"].intValue,
-            largestLead: statistics[20]["displayValue"].intValue,
+            fieldGoals: stat("fieldGoalsMade-fieldGoalsAttempted").stringValue,
+            fieldGoalPct: stat("fieldGoalPct").floatValue,
+            threePoints: stat("threePointFieldGoalsMade-threePointFieldGoalsAttempted").stringValue,
+            threePointPct: stat("threePointFieldGoalPct").floatValue,
+            freeThrows: stat("freeThrowsMade-freeThrowsAttempted").stringValue,
+            freeThrowPct: stat("freeThrowPct").floatValue,
+            offensiveRebounds: stat("offensiveRebounds").intValue,
+            defensiveRebounds: stat("defensiveRebounds").intValue,
+            assists: stat("assists").intValue,
+            steals: stat("steals").intValue,
+            blocks: stat("blocks").intValue,
+            turnOvers: stat("turnovers").intValue,
+            fouls: stat("fouls").intValue,
+            largestLead: stat("largestLead").intValue,
             // The box score lists the away team first, matching the
             // predictor's away/home pair.
             projection: index == 0
@@ -234,33 +315,43 @@ func downloadBasketballGameTeamStatsData(gameID: String) async -> [BasketballGam
     }
 }
 
-/// Loads both teams' box score lines for a football game.
-func downloadFootballGameTeamStatsData(gameID: String) async -> [FootballGameTeamStats] {
-    let json = await HTTPClient.json(from: Team.chiefs.summaryURL(gameID: gameID))
-
+/// Extracts both teams' box score lines from a football game's summary
+/// document. Every line carries `team`'s score first.
+///
+/// Statistics are read by `name`: the NFL lists 25, college football 15 in
+/// another order, so no one position fits both. A statistic a feed does not
+/// carry (college football has no `totalDrives`; a pre-game summary lists
+/// only season averages) reads as zero. `interceptions` appears twice in the
+/// NFL list, with the same value; the first is read.
+func parseFootballGameTeamStats(from json: JSON, team followed: TeamRef) -> [FootballGameTeamStats] {
     let competitors = json["header", "competitions", 0, "competitors"]
     let gameClock = json["header", "competitions", 0, "status", "type", "detail"].stringValue
 
-    let chiefsAreFirst = competitors[0]["team"]["name"].stringValue == "Chiefs"
-    let teamScore = competitors[chiefsAreFirst ? 0 : 1]["score"].intValue
-    let opponentScore = competitors[chiefsAreFirst ? 1 : 0]["score"].intValue
+    let followedIsFirst = competitors[0]["team"]["id"].stringValue == followed.espnID
+    let teamScore = competitors[followedIsFirst ? 0 : 1]["score"].intValue
+    let opponentScore = competitors[followedIsFirst ? 1 : 0]["score"].intValue
 
     return json["boxscore"]["teams"].map { _, team in
         let statistics = team["statistics"]
 
+        func stat(_ name: String) -> JSON {
+            boxscoreStatistic(statistics, named: name)["displayValue"]
+        }
+
         return FootballGameTeamStats(
             name: team["team"]["name"].stringValue,
-            yards: statistics[7]["displayValue"].intValue,
-            passingYards: statistics[10]["displayValue"].intValue,
-            rushingYards: statistics[15]["displayValue"].intValue,
-            firstDowns: statistics[0]["displayValue"].intValue,
-            drives: statistics[9]["displayValue"].intValue,
+            yards: stat("totalYards").intValue,
+            passingYards: stat("netPassingYards").intValue,
+            rushingYards: stat("rushingYards").intValue,
+            firstDowns: stat("firstDowns").intValue,
+            drives: stat("totalDrives").intValue,
             score: teamScore,
-            interceptions: statistics[13]["displayValue"].intValue,
-            possesionTime: statistics[24]["displayValue"].stringValue,
-            completionAttempts: statistics[11]["displayValue"].intValue,
+            interceptions: stat("interceptions").intValue,
+            possesionTime: stat("possessionTime").stringValue,
+            completionAttempts: stat("completionAttempts").intValue,
             opponentScore: opponentScore,
-            gameClock: gameClock
+            gameClock: gameClock,
+            completionAttemptsDisplay: stat("completionAttempts").stringValue
         )
     }
 }
@@ -294,17 +385,11 @@ func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
         return BaseballGameTeamStats(
             name: team["team", "shortDisplayName"].stringValue,
             homeAway: team["homeAway"].stringValue,
-            runs: boxscoreStatistic(statistics, named: "runs", in: "batting").intValue,
-            hits: boxscoreStatistic(statistics, named: "hits", in: "batting").intValue,
-            errors: boxscoreStatistic(statistics, named: "errors", in: "fielding").intValue
+            runs: boxscoreStatistic(statistics, named: "runs", in: "batting")["displayValue"].intValue,
+            hits: boxscoreStatistic(statistics, named: "hits", in: "batting")["displayValue"].intValue,
+            errors: boxscoreStatistic(statistics, named: "errors", in: "fielding")["displayValue"].intValue
         )
     }
-}
-
-/// Loads both teams' box score lines for a baseball game.
-func downloadBaseballGameTeamStatsData(gameID: String) async -> [BaseballGameTeamStats] {
-    let json = await HTTPClient.json(from: Team.royals.summaryURL(gameID: gameID))
-    return parseBaseballGameTeamStats(from: json)
 }
 
 /// Extracts both teams' box-score lines from a soccer game's summary
@@ -331,15 +416,224 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
             name: team["team", "shortDisplayName"].stringValue,
             homeAway: side,
             goals: goals(side: side),
-            shots: boxscoreStatistic(statistics, named: "totalShots").intValue,
-            possessionPct: boxscoreStatistic(statistics, named: "possessionPct").floatValue,
-            corners: boxscoreStatistic(statistics, named: "wonCorners").intValue
+            shots: boxscoreStatistic(statistics, named: "totalShots")["displayValue"].intValue,
+            possessionPct: boxscoreStatistic(statistics, named: "possessionPct")["displayValue"].floatValue,
+            corners: boxscoreStatistic(statistics, named: "wonCorners")["displayValue"].intValue
         )
     }
 }
 
-/// Loads both teams' box score lines for a soccer game.
-func downloadSoccerGameTeamStatsData(gameID: String) async -> [SoccerGameTeamStats] {
-    let json = await HTTPClient.json(from: Team.sporting.summaryURL(gameID: gameID))
-    return parseSoccerGameTeamStats(from: json)
+// MARK: - The detail sheet's box score
+
+/// A game's box score as the detail sheet draws it, whatever the sport: the
+/// scoreline, then one row per statistic, home side on the left.
+struct BoxScore: Hashable, Sendable {
+    struct Row: Hashable, Sendable, Identifiable {
+        var title: String
+        var home: String
+        var away: String
+
+        /// Titles are distinct within a sport's box score.
+        var id: String { title }
+    }
+
+    var homeScore: Int
+    var awayScore: Int
+    var rows: [Row]
+
+    /// Reads a basketball box score. The lines come away first, home second,
+    /// and each carries the followed team's score first.
+    init?(basketball lines: [BasketballGameTeamStats], followedIsHome: Bool) {
+        guard lines.count >= 2 else { return nil }
+        let away = lines[0]
+        let home = lines[1]
+
+        func row(_ title: String, _ value: (BasketballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = followedIsHome ? away.score : away.opponentScore
+        awayScore = followedIsHome ? away.opponentScore : away.score
+        rows = [
+            row("Field Goals") { $0.fieldGoals.replacingOccurrences(of: "-", with: "/") },
+            row("Field Goal %") { "\(Int($0.fieldGoalPct))%" },
+            row("Three Points") { $0.threePoints.replacingOccurrences(of: "-", with: "/") },
+            row("Three Point %") { "\(Int($0.threePointPct))%" },
+            row("Free Throws") { $0.freeThrows.replacingOccurrences(of: "-", with: "/") },
+            row("Free Throw %") { "\(Int($0.freeThrowPct))%" },
+            row("Offensive Rebounds") { "\($0.offensiveRebounds)" },
+            row("Defensive Rebounds") { "\($0.defensiveRebounds)" },
+            row("Assists") { "\($0.assists)" },
+            row("Blocks") { "\($0.blocks)" },
+            row("Steals") { "\($0.steals)" },
+            row("Turnovers") { "\($0.turnOvers)" },
+            row("Fouls") { "\($0.fouls)" },
+        ]
+    }
+
+    /// Reads a football box score, laid out as `init(basketball:)` describes.
+    init?(football lines: [FootballGameTeamStats], followedIsHome: Bool) {
+        guard lines.count >= 2 else { return nil }
+        let away = lines[0]
+        let home = lines[1]
+
+        func row(_ title: String, _ value: (FootballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = followedIsHome ? away.score : away.opponentScore
+        awayScore = followedIsHome ? away.opponentScore : away.score
+        rows = [
+            row("Total Yards") { "\($0.yards)" },
+            row("Passing Yards") { "\($0.passingYards)" },
+            row("Rushing Yards") { "\($0.rushingYards)" },
+            row("First Downs") { "\($0.firstDowns)" },
+            row("Drives") { "\($0.drives)" },
+            row("Interceptions") { "\($0.interceptions)" },
+            row("Possession Time") { "\($0.possesionTime)" },
+            row("Completion Attempts") { $0.completionAttemptsDisplay.isEmpty ? "\($0.completionAttempts)" : $0.completionAttemptsDisplay },
+        ]
+        // College feeds carry no `totalDrives`: a row of zeros is no row.
+        if home.drives == 0 && away.drives == 0 {
+            rows.removeAll { $0.title == "Drives" }
+        }
+    }
+
+    /// Reads a baseball box score, whose lines carry their own side.
+    init?(baseball lines: [BaseballGameTeamStats]) {
+        guard let home = lines.first(where: { $0.homeAway == "home" }),
+              let away = lines.first(where: { $0.homeAway == "away" })
+        else { return nil }
+
+        func row(_ title: String, _ value: (BaseballGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = home.runs
+        awayScore = away.runs
+        rows = [
+            row("Runs") { "\($0.runs)" },
+            row("Hits") { "\($0.hits)" },
+            row("Errors") { "\($0.errors)" },
+        ]
+    }
+
+    /// Reads a soccer box score, whose lines carry their own side.
+    init?(soccer lines: [SoccerGameTeamStats]) {
+        guard let home = lines.first(where: { $0.homeAway == "home" }),
+              let away = lines.first(where: { $0.homeAway == "away" })
+        else { return nil }
+
+        func row(_ title: String, _ value: (SoccerGameTeamStats) -> String) -> Row {
+            Row(title: title, home: value(home), away: value(away))
+        }
+
+        homeScore = home.goals
+        awayScore = away.goals
+        rows = [
+            row("Goals") { "\($0.goals)" },
+            row("Shots") { "\($0.shots)" },
+            row("Possession") { "\(Int($0.possessionPct.rounded()))%" },
+            row("Corner Kicks") { "\($0.corners)" },
+        ]
+    }
+}
+
+/// Everything a game's detail sheet draws from one summary fetch, whatever
+/// the sport. See `GameDetail`.
+struct GameSheet: Sendable {
+    /// `nil` when the summary carries no box score for both sides yet.
+    var boxScore: BoxScore?
+    /// The period-by-period score, sized from the summary's own format.
+    /// `nil` when the header does not list both sides.
+    var linescore: Linescore?
+    /// A hockey game's skater and goalie tables; `nil` for other sports.
+    var hockey: HockeyBoxScore?
+    /// A soccer game's lineups; `nil` for other sports, or a summary with
+    /// no rosters yet.
+    var soccerLineups: SoccerLineups?
+    var info: GameInfo
+    var phase: GamePhase
+    /// How long to wait before refetching, or `nil` to stop.
+    var refreshInterval: Duration?
+
+    init<Stats: Sendable>(_ detail: GameDetail<Stats>, boxScore: ([Stats]) -> BoxScore?) {
+        self.boxScore = boxScore(detail.stats)
+        self.info = detail.info
+        self.phase = detail.phase
+        self.refreshInterval = detail.refreshInterval
+    }
+
+    /// How long a sheet waits after a fetch that produced no document.
+    static var retryInterval: Duration { GameDetail<BoxScore>.retryInterval }
+}
+
+/// One refresh of a detail sheet: the sheet, or `nil` when the fetch
+/// produced no document, and the response it came from, which paces the
+/// next refresh.
+struct GameSheetLoad: Sendable {
+    var sheet: GameSheet?
+    var response: FetchResponse
+}
+
+extension LeagueDescriptor {
+    /// Reads a game's detail sheet from its summary document with the
+    /// league's sport's parser: the box score, the venue and the phase all
+    /// come from this one document.
+    ///
+    /// - Parameter followedIsHome: the schedule's `gameHome` for the game;
+    ///   basketball and football lines carry the followed team's score first.
+    func gameSheet(from json: JSON, team: TeamRef, followedIsHome: Bool) -> GameSheet {
+        var sheet: GameSheet
+        switch kind {
+        case .basketball:
+            let detail = GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json, team: team))
+            sheet = GameSheet(detail) { BoxScore(basketball: $0, followedIsHome: followedIsHome) }
+        case .football:
+            let detail = GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json, team: team))
+            sheet = GameSheet(detail) { BoxScore(football: $0, followedIsHome: followedIsHome) }
+        case .baseball:
+            let detail = GameDetail(json: json, team: team, stats: parseBaseballGameTeamStats(from: json))
+            sheet = GameSheet(detail) { BoxScore(baseball: $0) }
+        case .soccer:
+            let detail = GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
+            sheet = GameSheet(detail) { BoxScore(soccer: $0) }
+            sheet.soccerLineups = SoccerLineups(summary: json)
+        case .hockey:
+            // The comparison strip is the box score's rows; the skater and
+            // goalie tables ride alongside.
+            let hockey = HockeyBoxScore(summary: json)
+            let detail = GameDetail(json: json, team: team, stats: hockey.map { [$0] } ?? [])
+            sheet = GameSheet(detail) { lines in lines.first.map(BoxScore.init(hockey:)) }
+            sheet.hockey = hockey
+        case .other:
+            // No box-score parser for this sport: the venue and phase only.
+            sheet = GameSheet(GameDetail<BoxScore>(json: json, team: team, stats: [])) { _ in nil }
+        }
+        // Every sport's periods come from the same reader, sized by the
+        // summary's `format`.
+        sheet.linescore = Linescore(summary: json, league: self)
+        return sheet
+    }
+
+    /// Loads a game's detail sheet in this league: one summary request per
+    /// call, whatever the sport. See `gameSheet(from:team:followedIsHome:)`.
+    ///
+    /// - Parameter competition: the competition the game belongs to
+    ///   (`Game.competition`). A cup tie's summary is asked for under the
+    ///   cup's path; `nil` means the team's league.
+    func downloadGameSheet(
+        gameID: String,
+        team: TeamRef,
+        followedIsHome: Bool,
+        competition: LeagueID? = nil,
+        client: HTTPClient = .shared
+    ) async -> GameSheetLoad {
+        let summaryURL = (competition ?? team.league).summaryURL(gameID: gameID)
+        let response = await client.fetchResponse(summaryURL)
+        let sheet = response.result.document.map {
+            gameSheet(from: $0, team: team, followedIsHome: followedIsHome)
+        }
+        return GameSheetLoad(sheet: sheet, response: response)
+    }
 }

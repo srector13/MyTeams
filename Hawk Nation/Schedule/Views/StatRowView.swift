@@ -21,7 +21,7 @@ struct StatRowView: View {
                 .font(.system(size: 20))
                 .fontWeight(.bold)
                 .minimumScaleFactor(0.5)
-                .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .leading)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         
             Text(title)
                 .font(.system(size: 15))
@@ -29,13 +29,13 @@ struct StatRowView: View {
                 .fontWeight(.bold)
                 .lineLimit(1)
                 .minimumScaleFactor(0.1)
-                .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .center)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
             
             Text(awayStat)
                 .font(.system(size: 20))
                 .fontWeight(.bold)
                 .minimumScaleFactor(0.5)
-                .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: .trailing)
+                .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
             
         }
     }

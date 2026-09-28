@@ -87,15 +87,77 @@ struct ScheduleParsingTests {
         // The carousel pointer clamps to the last game, which under the old
         // `pointer < nextGame` rule made that finale invisible to the record.
         #expect(getNextGame(schedule: schedule) == 2)
-        #expect(seasonRecord(games: schedule) == (wins: 2, losses: 1))
+        #expect(seasonRecord(games: schedule) == (wins: 2, losses: 1, draws: 0))
     }
 
-    @Test("A completed game with no winner set counts as a loss")
+    @Test("A completed game lost on the scoreboard counts as a loss")
+    func unequalScoreIsLoss() {
+        let schedule = [
+            game(pointer: 0, completed: true, win: false, score: "1", opponentScore: "2"),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1, draws: 0))
+    }
+
+    @Test("A completed game with no winner and no scores still counts as a loss")
     func forfeitCountsAsLoss() {
+        // No scoreline to call it level, so the old rule stands.
         let schedule = [
             game(pointer: 0, completed: true, win: false),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 1, draws: 0))
+    }
+
+    @Test("A level MLS match is a draw, not a loss")
+    func soccerDrawIsNotLoss() {
+        // Neither side's winner flag is set on a 1-1 draw.
+        let schedule = [
+            game(pointer: 0, completed: true, win: true, score: "2", opponentScore: "0"),
+            game(pointer: 1, completed: true, win: false, score: "1", opponentScore: "1"),
+            game(pointer: 2, completed: true, win: false, score: "0", opponentScore: "3"),
+        ]
+        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 1, draws: 1))
+
+        // The soccer tab's date fallback counts a past, level fixture as a
+        // draw too.
+        let unflagged = game(
+            pointer: 0, completed: false, score: "0", opponentScore: "0",
+            date: Date().addingTimeInterval(-6 * 3600)
+        )
+        #expect(
+            seasonRecord(games: [unflagged], pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 0, draws: 1)
+        )
+    }
+
+    @Test("A tied NFL game is a tie, not a loss")
+    func footballTieIsNotLoss() {
+        let tie = game(pointer: 0, completed: true, win: false, score: "20", opponentScore: "20")
+        #expect(tie.isDraw)
+        #expect(seasonRecord(games: [tie]) == (wins: 0, losses: 0, draws: 1))
+    }
+
+    @Test("Only a level, unwon scoreline is a draw")
+    func drawDetection() {
+        #expect(game(pointer: 0, completed: true, score: "1", opponentScore: "1").isDraw)
+        #expect(!game(pointer: 0, completed: true, score: "2", opponentScore: "1").isDraw)
+        // No scores published yet.
+        #expect(!game(pointer: 0, completed: false).isDraw)
+        #expect(!game(pointer: 0, completed: true, score: "1", opponentScore: "").isDraw)
+        // A winner flag wins out over a level scoreline (e.g. a shootout).
+        #expect(!game(pointer: 0, completed: true, win: true, score: "1", opponentScore: "1").isDraw)
+    }
+
+    @Test("A level game in progress is neither draw nor loss")
+    func liveLevelGameExcluded() {
+        let live = game(
+            pointer: 0, completed: false, score: "1", opponentScore: "1",
+            date: Date().addingTimeInterval(-1 * 3600)
+        )
+        #expect(seasonRecord(games: [live]) == (wins: 0, losses: 0, draws: 0))
+        #expect(
+            seasonRecord(games: [live], pastDatesCountAsPlayed: true)
+                == (wins: 0, losses: 0, draws: 0)
+        )
     }
 
     @Test("Unplayed games are neither win nor loss")
@@ -105,7 +167,7 @@ struct ScheduleParsingTests {
             game(pointer: 0, completed: true, win: true),
             game(pointer: 1, completed: false, date: later),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 1, losses: 0, draws: 0))
     }
 
     @Test("Cancelled fixtures are losses only on the baseball rule")
@@ -114,10 +176,10 @@ struct ScheduleParsingTests {
             game(pointer: 0, completed: false, cancelled: true),
             game(pointer: 1, completed: false, postponed: true),
         ]
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0, draws: 0))
         #expect(
             seasonRecord(games: schedule, countingAbandonedAsLosses: true)
-                == (wins: 0, losses: 2)
+                == (wins: 0, losses: 2, draws: 0)
         )
     }
 
@@ -129,10 +191,10 @@ struct ScheduleParsingTests {
         ]
         // Past the grace window: a fixture whose kickoff is hours gone counts
         // as played only where the feed ships no completion flag.
-        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0))
+        #expect(seasonRecord(games: schedule) == (wins: 0, losses: 0, draws: 0))
         #expect(
             seasonRecord(games: schedule, pastDatesCountAsPlayed: true)
-                == (wins: 0, losses: 1)
+                == (wins: 0, losses: 1, draws: 0)
         )
 
         let inProgress = game(
@@ -141,7 +203,7 @@ struct ScheduleParsingTests {
         )
         #expect(
             seasonRecord(games: [inProgress], pastDatesCountAsPlayed: true)
-                == (wins: 0, losses: 0)
+                == (wins: 0, losses: 0, draws: 0)
         )
     }
 
@@ -234,21 +296,171 @@ struct ScheduleParsingTests {
         #expect(!shouldPollLiveScore(game: anonymous, now: now))
     }
 
+    /// Two events: one carrying ESPN's event id, one with neither an event
+    /// nor a competition id, which falls back to its date and opponent.
+    static let scheduleFeed = """
+    {"events": [
+      {"id": "401700001", "date": "2026-11-04T01:00Z", "name": "Howard at Kansas",
+       "competitions": [{"id": "401700001",
+         "status": {"type": {"completed": false}},
+         "competitors": [
+           {"homeAway": "home", "team": {"id": "2305", "nickname": "Kansas"}},
+           {"homeAway": "away", "team": {"id": "47", "nickname": "Howard"}}
+         ]}]},
+      {"date": "2026-11-08T01:00Z", "name": "Kansas at Duke",
+       "competitions": [{
+         "status": {"type": {"completed": false}},
+         "competitors": [
+           {"homeAway": "away", "team": {"id": "2305", "nickname": "Kansas"}},
+           {"homeAway": "home", "team": {"id": "150", "nickname": "Duke"}}
+         ]}]}
+    ]}
+    """
+
+    @Test("Game ids are identical across two parses of the same feed")
+    func deterministicGameIDs() {
+        let first = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), team: .jayhawks)
+        let second = parseSchedule(from: JSON(data: Data(Self.scheduleFeed.utf8)), team: .jayhawks)
+
+        #expect(first.count == 2)
+        #expect(first.map(\.id) == second.map(\.id))
+        // Stable ids also make an unchanged refresh compare equal, so SwiftUI
+        // sees nothing to redraw.
+        #expect(first == second)
+
+        #expect(first.first?.id == "401700001")
+        #expect(first.last?.id == "2026-11-08T01:00Z|Duke|1")
+        #expect(Set(first.map(\.id)).count == first.count)
+    }
+
     private func game(
         pointer: Int,
         completed: Bool,
         win: Bool = false,
         cancelled: Bool = false,
         postponed: Bool = false,
+        score: String = "",
+        opponentScore: String = "",
         date: Date = .now
     ) -> Game {
         Game(
-            team: "Jayhawks", opponent: "Bears", score: "", opponentScore: "",
+            team: "Jayhawks", opponent: "Bears", score: score, opponentScore: opponentScore,
             time: "", date: "", dateAsDate: date, opponentLogo: "", channel: "TBD",
             location: "", gameHome: true, gameID: "\(pointer)", pointer: pointer,
             gameWin: win, completed: completed, competitionName: "",
             cancelled: cancelled, postponed: postponed, gameClock: "",
             gamePeriod: "", gameHalftime: false
         )
+    }
+}
+
+// MARK: - Competitions
+
+/// A schedule made of a league and its cups (`mergeSchedules`), and games
+/// read from the competition their team plays in.
+@Suite("Schedule competitions")
+struct ScheduleCompetitionTests {
+    private let arsenal = TeamRef(
+        league: .premierLeague, espnID: "359",
+        displayName: "Arsenal", shortName: "Arsenal", abbreviation: "ARS", location: "London",
+        colorHex: "", alternateColorHex: "",
+        logoURL: nil, logoDarkURL: nil, logoAsset: nil
+    )
+
+    @Test("Soccer leagues name their cups; other leagues have none")
+    func registryCups() {
+        #expect(LeagueID.premierLeague.descriptor.cupCompetitions
+            == [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")])
+        #expect(LeagueID.laLiga.descriptor.cupCompetitions == [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")])
+        #expect(LeagueID.ligaMX.descriptor.cupCompetitions == [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")])
+        #expect(LeagueID.mls.descriptor.cupCompetitions.contains(.soccer("usa.open")))
+        #expect(LeagueID.nwsl.descriptor.cupCompetitions.isEmpty)
+        for league in [LeagueID.nfl, .nba, .nhl, .mlb, .collegeFootball, .mensCollegeBasketball] {
+            #expect(league.descriptor.cupCompetitions.isEmpty, "\(league)")
+        }
+        // A cup's team schedule is the league's endpoint under the cup's path.
+        #expect(LeagueID.soccer("eng.fa").scheduleURL(teamID: "359")
+            == "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.fa/teams/359/schedule")
+    }
+
+    @Test("Soccer events carry their competition; other feeds name none")
+    func eventCompetition() throws {
+        // epl_schedule: every event's league.slug is "eng.1".
+        let games = parseSchedule(from: try Fixture.json("epl_schedule"), team: arsenal)
+        #expect(games.allSatisfy { $0.competition == .premierLeague })
+        #expect(games.allSatisfy { $0.isLeagueGame(of: .premierLeague) })
+
+        // chiefs_schedule events have no `league`: unnamed, unless the
+        // caller says which feed they came from.
+        let (event, pointer) = try Fixture.event("401872931", in: try Fixture.json("chiefs_schedule"))
+        #expect(parseGame(from: event, team: .chiefs, pointer: pointer).competition == nil)
+        #expect(parseGame(from: event, team: .chiefs, pointer: pointer, competition: .nfl).competition == .nfl)
+    }
+
+    @Test("An event with several competitions is read from the followed team's")
+    func severalCompetitions() throws {
+        // chiefs_schedule 401872931: Arrowhead Stadium. A decoy competition
+        // without the Chiefs goes after it (where the old loop's last one
+        // won), then before it.
+        let (event, pointer) = try Fixture.event("401872931", in: try Fixture.json("chiefs_schedule"))
+        let real = event["competitions", 0]
+        let decoy = real
+            .setting(["venue", "fullName"], to: .string("Decoy Stadium"))
+            .setting(["competitors"], to: .array([]))
+
+        for competitions in [[real, decoy], [decoy, real]] {
+            let variant = event.setting(["competitions"], to: .array(competitions))
+            let game = parseGame(from: variant, team: .chiefs, pointer: pointer)
+            #expect(game.location == "Arrowhead Stadium")
+            #expect(game.gameID == "401872931")
+            #expect(!game.opponent.isEmpty)
+        }
+    }
+
+    @Test("Cup ties merge into the league schedule in kick-off order, this season only, once each")
+    func mergesCups() throws {
+        // epl_schedule lists five league games newest first:
+        // 401879274 (Sep 19), 401878779 (Sep 12), 401879292 (Sep 6),
+        // 401879295 (Aug 31), 401879301 (Aug 21).
+        let league = try Fixture.json("epl_schedule")
+        let base = league["events", 0]
+
+        // A Carabao Cup tie on Sep 24, made from a real event.
+        let cupTie = base
+            .setting(["id"], to: .string("401900001"))
+            .setting(["date"], to: .string("2026-09-24T18:45Z"))
+            .setting(["league", "slug"], to: .string("eng.league_cup"))
+        // Last season's run, which a cup feed answers with when it has
+        // nothing current (the FA Cup in September).
+        let lastSeason = base
+            .setting(["id"], to: .string("401800001"))
+            .setting(["date"], to: .string("2026-01-10T15:00Z"))
+            .setting(["season", "year"], to: .number(2025))
+        // And a fixture the league feed already lists.
+        let cupFeed = JSON.object(["events": .array([cupTie, lastSeason, base])])
+
+        let games = mergeSchedules(
+            league: league,
+            cups: [(competition: .soccer("eng.league_cup"), json: cupFeed)],
+            team: arsenal
+        )
+        #expect(games.map(\.eventID) == ["401879301", "401879295", "401879292", "401878779", "401879274", "401900001"])
+        #expect(games.map(\.pointer) == Array(0..<6))
+        #expect(games.last?.competition == .soccer("eng.league_cup"))
+        #expect(games.dropLast().allSatisfy { $0.competition == .premierLeague })
+
+        // The cup tie is a copy of the Brighton loss; the league record
+        // leaves it out.
+        #expect(scheduleRecord(games: games, league: .premierLeague).summary == "4-1-0")
+    }
+
+    @Test("With no cup fixtures the league's games are kept, in kick-off order")
+    func mergesNothing() throws {
+        let league = try Fixture.json("epl_schedule")
+        let empty = JSON.object(["events": .array([])])
+        let games = mergeSchedules(league: league, cups: [(competition: .soccer("eng.fa"), json: empty)], team: arsenal)
+        #expect(games.map(\.eventID) == ["401879301", "401879295", "401879292", "401878779", "401879274"])
+        #expect(games.map(\.pointer) == Array(0..<5))
+        #expect(mergeSchedules(league: league, cups: [], team: arsenal).map(\.eventID) == games.map(\.eventID))
     }
 }

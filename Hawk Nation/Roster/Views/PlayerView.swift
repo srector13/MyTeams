@@ -61,8 +61,3 @@ struct LoadingPlayerView: View {
         }
     }
 }
-
-typealias PlayerView = PlayerCard<BasketballPlayer>
-typealias FootballPlayerView = PlayerCard<FootBallPlayer>
-typealias BaseballPlayerView = PlayerCard<BaseballPlayer>
-typealias SoccerPlayerView = PlayerCard<SoccerPlayer>

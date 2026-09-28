@@ -1,0 +1,56 @@
+{
+  "teams": [
+    {
+      "league": "basketball/mens-college-basketball",
+      "espnID": "2305",
+      "displayName": "Kansas Jayhawks",
+      "shortName": "Jayhawks",
+      "abbreviation": "KU",
+      "location": "Kansas",
+      "colorHex": "0051BA",
+      "alternateColorHex": "E8000D",
+      "logoURL": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png",
+      "logoDarkURL": "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/2305.png",
+      "logoAsset": "jayhawk"
+    },
+    {
+      "league": "football/nfl",
+      "espnID": "12",
+      "displayName": "Kansas City Chiefs",
+      "shortName": "Chiefs",
+      "abbreviation": "KC",
+      "location": "Kansas City",
+      "colorHex": "E31837",
+      "alternateColorHex": "FFB612",
+      "logoURL": "https://a.espncdn.com/i/teamlogos/nfl/500/kc.png",
+      "logoDarkURL": "https://a.espncdn.com/i/teamlogos/nfl/500-dark/kc.png",
+      "logoAsset": "chiefs"
+    },
+    {
+      "league": "baseball/mlb",
+      "espnID": "7",
+      "displayName": "Kansas City Royals",
+      "shortName": "Royals",
+      "abbreviation": "KC",
+      "location": "Kansas City",
+      "colorHex": "004687",
+      "alternateColorHex": "7AB2DD",
+      "logoURL": "https://a.espncdn.com/i/teamlogos/mlb/500/kc.png",
+      "logoDarkURL": "https://a.espncdn.com/i/teamlogos/mlb/500-dark/kc.png",
+      "logoAsset": "royals"
+    },
+    {
+      "league": "soccer/usa.1",
+      "espnID": "186",
+      "displayName": "Sporting Kansas City",
+      "shortName": "Sporting",
+      "abbreviation": "SKC",
+      "location": "Sporting Kansas City",
+      "colorHex": "002A5C",
+      "alternateColorHex": "A7C6ED",
+      "logoURL": "https://a.espncdn.com/i/teamlogos/soccer/500/186.png",
+      "logoDarkURL": "https://a.espncdn.com/i/teamlogos/soccer/500-dark/186.png",
+      "logoAsset": "sporting"
+    }
+  ]
+}

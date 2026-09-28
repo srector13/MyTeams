@@ -9,7 +9,6 @@
 import Foundation
 
 struct BasketballPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var number: String
@@ -25,7 +24,6 @@ struct BasketballPlayer: Identifiable, Hashable, Sendable {
 }
 
 struct FootBallPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var numberInt: Int
@@ -43,7 +41,6 @@ struct FootBallPlayer: Identifiable, Hashable, Sendable {
 }
 
 struct SoccerPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var name: String
     var number: String
     var numberInt: Int
@@ -71,10 +68,13 @@ struct SoccerPlayer: Identifiable, Hashable, Sendable {
     var shotsFaced: Int
     var goalsConceded: Int
     var lastName: String
+    /// Whether the roster feed listed season totals for the player. Some it
+    /// lists with none (5 of Arsenal's 27 on 2026-09-28); their sheet reads
+    /// the athlete document instead (`downloadSoccerPlayerStats`).
+    var hasSeasonStats = true
 }
 
 struct BaseballPlayer: Identifiable, Hashable, Sendable {
-    var id = UUID()
     var playerID: String
     var name: String
     var number: String
@@ -90,6 +90,46 @@ struct BaseballPlayer: Identifiable, Hashable, Sendable {
     var throwHand: String
     var age: String
     var lastName: String
+}
+
+struct HockeyPlayer: Identifiable, Hashable, Sendable {
+    var playerID: String
+    var name: String
+    var number: String
+    var numberInt: Int
+    var height: String
+    var weight: String
+    var position: String
+    var hometown: String
+    var photo: String
+    var age: String
+    /// The hand the player shoots (or, for a goalie, catches) with.
+    var shoots: String
+    var lastName: String
+}
+
+// Roster players are identified by their ESPN athlete id, so a refetched
+// roster matches the cards already on screen instead of replacing them all.
+// A player the feed gives no id falls back to name and number.
+
+extension BasketballPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension FootBallPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension SoccerPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension BaseballPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
+}
+
+extension HockeyPlayer {
+    var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
 }
 
 /// Shown in place of a headshot the feed has no image for.
@@ -112,11 +152,13 @@ private extension JSON {
     }
 }
 
-/// Loads the Kansas men's basketball roster, sorted by surname.
-func downloadBasketballRoster() async -> [BasketballPlayer] {
-    let json = await HTTPClient.json(
-        from: "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/teams/2305/roster"
-    )
+/// Loads a basketball team's roster, sorted by surname.
+func downloadBasketballRoster(team: TeamRef) async -> Result<[BasketballPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseBasketballRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadBasketballRoster`.
+func parseBasketballRoster(from json: JSON) -> [BasketballPlayer] {
 
     let roster = json["athletes"].map { _, athlete in
         // College athletes list a state; international ones list a country
@@ -145,14 +187,16 @@ func downloadBasketballRoster() async -> [BasketballPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Chiefs roster, sorted by surname.
+/// Loads a football team's roster, sorted by surname.
 ///
 /// The NFL feed groups athletes by unit — offense, defense, special teams —
 /// so each group's `items` are flattened into a single roster.
-func downloadFootballRoster() async -> [FootBallPlayer] {
-    let json = await HTTPClient.json(
-        from: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/roster"
-    )
+func downloadFootballRoster(team: TeamRef) async -> Result<[FootBallPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseFootballRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadFootballRoster`.
+func parseFootballRoster(from json: JSON) -> [FootBallPlayer] {
 
     var roster: [FootBallPlayer] = []
 
@@ -161,8 +205,8 @@ func downloadFootballRoster() async -> [FootBallPlayer] {
         // the unit ("offense", "defense", "specialTeam"). Unlike the athlete
         // `position` below, it is not an object. If the feed ever changes it
         // to one, `stringValue` yields "" and every player is filed under ""
-        // — ChiefsHome's unit filters would then match nobody and all three
-        // roster sections render empty. See JSONTests for the coercion rule.
+        // — the NFL unit filters (`LeagueDescriptor.rosterFilters`) would
+        // then match nobody and all three render empty. See JSONTests for the coercion rule.
         let unit = group["position"].stringValue
 
         for (_, athlete): (String, JSON) in group["items"] {
@@ -193,13 +237,15 @@ func downloadFootballRoster() async -> [FootBallPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Royals roster, sorted by surname.
+/// Loads a baseball team's roster, sorted by surname.
 ///
 /// Like the NFL feed, athletes arrive grouped by unit and are flattened.
-func downloadBaseballRoster() async -> [BaseballPlayer] {
-    let json = await HTTPClient.json(
-        from: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/7/roster"
-    )
+func downloadBaseballRoster(team: TeamRef) async -> Result<[BaseballPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseBaseballRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadBaseballRoster`.
+func parseBaseballRoster(from json: JSON) -> [BaseballPlayer] {
 
     var roster: [BaseballPlayer] = []
 
@@ -233,25 +279,39 @@ func downloadBaseballRoster() async -> [BaseballPlayer] {
     return roster.sorted { $0.lastName < $1.lastName }
 }
 
-/// Loads the Sporting Kansas City roster, sorted by surname.
+/// Loads a soccer team's roster, sorted by surname.
 ///
-/// Season totals come embedded in the roster feed, in two categories for
-/// outfield players (discipline, then attacking) and a third for keepers.
-/// They are addressed by position, as the feed gives them no stable keys.
-func downloadSoccerRoster() async -> [SoccerPlayer] {
-    let json = await HTTPClient.json(
-        from: "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/186/roster"
-    )
+/// Season totals come embedded in the roster feed, in three categories —
+/// `general` (discipline and appearances), `offensive` and `goalKeeping`,
+/// the last for outfield players too. Each stat is read by its `name`,
+/// which is unique across the three. See `parseSoccerRoster`.
+func downloadSoccerRoster(team: TeamRef) async -> Result<[SoccerPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseSoccerRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadSoccerRoster`.
+///
+/// `appearances` is every appearance, off the bench included: Sporting's
+/// Calvin Harris has 25 with 2 `subIns`, and his athlete document says
+/// 23 starts (2 as a substitute). Every soccer roster captured (MLS,
+/// Premier League, LALIGA, Liga MX, NWSL) names the same 15 stats.
+func parseSoccerRoster(from json: JSON) -> [SoccerPlayer] {
 
     let roster = json["athletes"].map { _, athlete in
-        let categories = athlete["statistics"]["splits"]["categories"]
+        let categories = athlete["statistics"]["splits"]["categories"].arrayValue
 
-        func stat(_ category: Int, _ index: Int) -> Int {
-            categories[category]["stats"][index]["value"].intValue
+        var values: [String: Int] = [:]
+        for category in categories {
+            for stat in category["stats"].arrayValue {
+                let name = stat["name"].stringValue
+                if values[name] == nil { values[name] = stat["value"].intValue }
+            }
         }
 
-        let saves = stat(2, 0)
-        let goalsConceded = stat(2, 2)
+        func stat(_ name: String) -> Int { values[name] ?? 0 }
+
+        let saves = stat("saves")
+        let goalsConceded = stat("goalsConceded")
 
         let country = athlete["birthPlace"]["country"].stringValue
         // Shape pin (M6): the soccer feed has shipped `citizenship` both as a
@@ -273,21 +333,67 @@ func downloadSoccerRoster() async -> [SoccerPlayer] {
             playerID: athlete["id"].stringValue,
             birthPlace: country.isEmpty ? "N/A" : country,
             citizenshipCountry: citizenship.isEmpty ? "N/A" : citizenship,
-            fouls: stat(0, 0),
-            foulsSuffered: stat(0, 1),
-            redCards: stat(0, 2),
-            yellowCards: stat(0, 3),
-            ownGoals: stat(0, 4),
-            appearances: stat(0, 5),
-            subAppearances: stat(0, 6),
-            goalAssists: stat(1, 0),
-            offsides: stat(1, 1),
-            shotsOnTarget: stat(1, 2),
-            totalShots: stat(1, 3),
-            totalGoals: stat(1, 4),
+            fouls: stat("foulsCommitted"),
+            foulsSuffered: stat("foulsSuffered"),
+            redCards: stat("redCards"),
+            yellowCards: stat("yellowCards"),
+            ownGoals: stat("ownGoals"),
+            appearances: stat("appearances"),
+            subAppearances: stat("subIns"),
+            goalAssists: stat("goalAssists"),
+            offsides: stat("offsides"),
+            shotsOnTarget: stat("shotsOnTarget"),
+            totalShots: stat("totalShots"),
+            totalGoals: stat("totalGoals"),
             saves: saves,
+            // The feed's own `shotsFaced` is 0 for every keeper captured.
             shotsFaced: saves + goalsConceded,
             goalsConceded: goalsConceded,
+            lastName: athlete["lastName"].stringValue,
+            hasSeasonStats: !values.isEmpty
+        )
+    }
+
+    return roster.sorted { $0.lastName < $1.lastName }
+}
+
+/// Loads a hockey team's roster, sorted by surname.
+///
+/// The NHL feed groups athletes by position ("Centers", "Defense",
+/// "Goalies" …); each group's `items` are flattened into a single roster.
+func downloadHockeyRoster(team: TeamRef) async -> Result<[HockeyPlayer], NetworkError> {
+    await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseHockeyRoster(from:))
+}
+
+/// Builds the roster from the feed's document. See `downloadHockeyRoster`.
+func parseHockeyRoster(from json: JSON) -> [HockeyPlayer] {
+    // A hockey league outside the registry is assumed flat
+    // (`LeagueDescriptor.descriptor(for:)`), so an entry with no `items`
+    // is read as an athlete itself.
+    let athletes = json["athletes"].arrayValue.flatMap { (entry: JSON) -> [JSON] in
+        entry["items"].array ?? [entry]
+    }
+
+    let roster = athletes.map { (athlete: JSON) -> HockeyPlayer in
+        // North American players list a state or province; others only a
+        // country.
+        let city = athlete["birthPlace"]["city"].stringValue
+        let region = athlete["birthPlace"]["state"].stringValue.isEmpty
+            ? athlete["birthPlace"]["country"].stringValue
+            : athlete["birthPlace"]["state"].stringValue
+
+        return HockeyPlayer(
+            playerID: athlete["id"].stringValue,
+            name: athlete["fullName"].stringValue,
+            number: athlete["jersey"].stringValue,
+            numberInt: athlete.jerseyNumber,
+            height: athlete["displayHeight"].stringValue,
+            weight: athlete["displayWeight"].stringValue,
+            position: athlete["position"]["displayName"].stringValue,
+            hometown: city.isEmpty ? "N/A" : "\(city), \(region)",
+            photo: athlete.headshotURL,
+            age: athlete["age"].stringValue,
+            shoots: athlete["hand"]["displayValue"].stringValue,
             lastName: athlete["lastName"].stringValue
         )
     }

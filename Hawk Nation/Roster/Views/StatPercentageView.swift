@@ -28,7 +28,7 @@ struct StatPercentageView: View {
                                       fontColor : Color.primary,
                                       borderColor1: Color(color.darker()!),
                                       borderColor2: LinearGradient(gradient: Gradient(colors: [Color(color), Color(color.lighter()!)]),startPoint: .top, endPoint: .bottom)
-                          ).frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                          ).frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
                     //.offset(y: 10)
                     //.padding(.bottom, 10)
                 } else {
@@ -38,7 +38,7 @@ struct StatPercentageView: View {
                         .minimumScaleFactor(0.5)
                         //.lineLimit(2)
                         .multilineTextAlignment(.center)
-                        .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
                 }
                 
                 Text(title)
@@ -48,7 +48,7 @@ struct StatPercentageView: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color(uiColor: .systemGray))
-                    .frame(minWidth: /*@START_MENU_TOKEN@*/0/*@END_MENU_TOKEN@*/, maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 0, maxHeight: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, alignment: /*@START_MENU_TOKEN@*/.center/*@END_MENU_TOKEN@*/)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
                 
             }.frame(width: (containerSize.width/4), height: (containerSize.width/3))
         }
@@ -83,7 +83,7 @@ extension UIColor {
 #Preview {
     StatPercentageView(
         progress: 0.6,
-        color: UIColor(red: 0 / 255, green: 81 / 255, blue: 186 / 255, alpha: 1),
+        color: UIColor(TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305").color),
         title: "Test"
     )
 }

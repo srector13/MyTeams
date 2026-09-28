@@ -17,12 +17,23 @@ protocol RosterPlayer: Identifiable, Hashable, Sendable {
     var numberInt: Int { get }
     var position: String { get }
     var photo: String { get }
+    /// The unit a grouped roster feed files the player under (the NFL's
+    /// `"offense"`, `"defense"`, `"specialTeam"`), or empty when the feed
+    /// has none. `RosterFilter.unit` matches on it.
+    var unit: String { get }
+}
+
+extension RosterPlayer {
+    var unit: String { "" }
 }
 
 extension BasketballPlayer: RosterPlayer {}
-extension FootBallPlayer: RosterPlayer {}
+extension FootBallPlayer: RosterPlayer {
+    var unit: String { team }
+}
 extension BaseballPlayer: RosterPlayer {}
 extension SoccerPlayer: RosterPlayer {}
+extension HockeyPlayer: RosterPlayer {}
 
 /// How the roster carousel is ordered. The choice also decides which detail —
 /// number, or position — each player card shows beneath the name.
@@ -32,10 +43,22 @@ enum PlayerSort: String, Sendable {
     case position
 }
 
+/// Where a section's feed stands, for a section with nothing to show yet.
+///
+/// A section with content always shows it; this decides what an empty one
+/// says instead — skeletons while loading, an empty-state message once the
+/// feed has answered with nothing, or an error with a retry when it could
+/// not be reached.
+enum SectionLoadState: Sendable, Equatable {
+    case loading
+    case loaded
+    case failed
+}
+
 /// Everything one team tab displays, and the loading that fills it.
 ///
-/// The four tabs differ only in which roster they fetch and which feeds they read,
-/// so they share this model rather than each repeating the same state,
+/// Team pages differ only in which roster they fetch and which feeds they
+/// read, so they share this model rather than each repeating the same state,
 /// filtering, sorting and refresh logic.
 @MainActor
 @Observable
@@ -48,11 +71,29 @@ final class TeamModel<Player: RosterPlayer> {
 
     private(set) var games: [Game] = []
     private(set) var articles: [News] = []
+    /// The league's standings, or `nil` until they load.
+    private(set) var standings: Standings?
 
-    /// Live scores for the games the model is currently polling summaries for,
-    /// keyed by `Game.gameID`. Schedule cards render from this instead of each
-    /// card fetching its own summary document.
-    private(set) var liveScores: [String: LiveGameScore] = [:]
+    private(set) var rosterState: SectionLoadState = .loading
+    private(set) var scheduleState: SectionLoadState = .loading
+    private(set) var newsState: SectionLoadState = .loading
+    private(set) var standingsState: SectionLoadState = .loading
+
+    /// Live scores for the games in the live window, keyed by `Game.gameID`,
+    /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
+    /// Schedule cards render from this instead of each card fetching its own
+    /// summary document. A game that left the window (finished, postponed,
+    /// or too old) drops out; its score comes from the schedule feed itself.
+    var liveScores: [String: LiveGameScore] {
+        let now = Date()
+        var scores: [String: LiveGameScore] = [:]
+        for game in games where shouldPollLiveScore(game: game, now: now) {
+            if let score = scoreboards.liveScore(for: game, team: team) {
+                scores[game.gameID] = score
+            }
+        }
+        return scores
+    }
 
     /// The index in `games` of the next game still to be played. The schedule
     /// carousel opens scrolled to it.
@@ -64,69 +105,106 @@ final class TeamModel<Player: RosterPlayer> {
     /// changes so the two do not clobber each other.
     private var activeFilter: (@Sendable (Player) -> Bool)?
 
-    private let team: Team
+    let team: TeamRef
     private let newsURL: String
-    private let loadRoster: @Sendable () async -> [Player]
+    private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
+    private let loadStandings: @Sendable (LeagueID) async -> Result<Standings, NetworkError>
+    private let scoreboards: LeagueScoreboardCenter
 
-    /// Whether a past kick-off also counts as played when locating the next
-    /// game. The soccer feed's completion flags are unreliable, so that tab
-    /// gets the date fallback in `getNextGame`; the record shares the flag via
-    /// `seasonRecord(pastDatesCountAsPlayed:)`.
-    private let usesDateForNextGame: Bool
+    /// The page's standing requests for its league's scoreboard and each
+    /// of its cups', held while the schedule refresh runs (see
+    /// `refreshSchedulePeriodically`).
+    @ObservationIgnored private var scoreboardSubscriptions: [LeagueScoreboardCenter.Subscription] = []
+
+    /// How the league turns the schedule into a record and a next game: MLS
+    /// completion flags are unreliable, so there a past kick-off also counts
+    /// as played (`getNextGame`, `seasonRecord(pastDatesCountAsPlayed:)`),
+    /// and MLB counts abandoned fixtures as losses.
+    private var recordRule: RecordRule { team.league.descriptor.recordRule }
 
     init(
-        team: Team,
+        team: TeamRef,
         newsURL: String,
-        usesDateForNextGame: Bool = false,
-        loadRoster: @escaping @Sendable () async -> [Player]
+        loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>,
+        loadStandings: @escaping @Sendable (LeagueID) async -> Result<Standings, NetworkError> = { await downloadStandings(league: $0) },
+        scoreboards: LeagueScoreboardCenter = .shared
     ) {
         self.team = team
         self.newsURL = newsURL
-        self.usesDateForNextGame = usesDateForNextGame
         self.loadRoster = loadRoster
+        self.loadStandings = loadStandings
+        self.scoreboards = scoreboards
     }
 
-    /// The team's record so far this season, as wins and losses.
-    ///
-    /// `countingAbandonedAsLosses` selects the baseball tab's rule; see
-    /// `RoyalsHome` and `seasonRecord`.
-    func displayRecord(countingAbandonedAsLosses: Bool = false) -> (wins: Int, losses: Int) {
-        seasonRecord(
-            games: games,
-            countingAbandonedAsLosses: countingAbandonedAsLosses,
-            pastDatesCountAsPlayed: usesDateForNextGame
-        )
+    /// The team's league record so far this season, in its sport's shape,
+    /// counted from the schedule under the league's `RecordRule`. Cup ties
+    /// are on the schedule but not in the record. See `scheduleRecord`.
+    func displayRecord() -> Record {
+        scheduleRecord(games: games, league: team.league)
     }
 
     // MARK: - Loading
 
-    /// Loads the roster, schedule and news feeds together, then keeps the
-    /// schedule fresh for as long as the tab is on screen.
+    /// Loads the roster, schedule, news and standings feeds together, then
+    /// keeps the schedule fresh for as long as the page is on screen.
     ///
     /// Scores and clocks move during a game, so the schedule is refetched every
-    /// minute; rosters and news do not, so they are fetched once.
+    /// minute; rosters, news and standings do not, so they are fetched once.
+    /// The model outlives its page (`TeamPages`), so a page coming back
+    /// refetches only the schedule, and whichever other feed has not loaded
+    /// yet.
     func load() async {
-        async let roster = loadRoster()
+        // A page that failed last time it appeared shows its skeletons again
+        // while it retries.
+        if rosterState == .failed { rosterState = .loading }
+        if scheduleState == .failed { scheduleState = .loading }
+        if newsState == .failed { newsState = .loading }
+        if standingsState == .failed { standingsState = .loading }
+
+        async let roster = fetchRosterUnlessLoaded()
         async let schedule = fetchSchedule()
-        async let news = downloadNewsData(queryURL: newsURL)
+        async let news = fetchNewsUnlessLoaded()
+        async let leagueStandings = fetchStandingsUnlessLoaded()
 
-        let (loadedRoster, loadedSchedule, loadedNews) = await (roster, schedule, news)
+        let (loadedRoster, loadedSchedule, loadedNews, loadedStandings) = await (roster, schedule, news, leagueStandings)
 
-        allPlayers = loadedRoster
-        applyFilterAndSort()
+        if let loadedRoster { apply(roster: loadedRoster) }
         apply(schedule: loadedSchedule)
-        articles = loadedNews
+        if let loadedNews { apply(news: loadedNews) }
+        if let loadedStandings { apply(standings: loadedStandings) }
 
-        await refreshLiveScores()
         await refreshSchedulePeriodically()
     }
 
     /// Refetches the schedule once a minute until the surrounding task is
-    /// cancelled, which SwiftUI does when the view goes away.
+    /// cancelled, which SwiftUI does when the page goes away.
     ///
-    /// Live scores ride along in the same loop: only games inside the live
-    /// window get a summary request, so a quiet Home screen makes zero.
+    /// For as long as it runs, the page is subscribed to its league's
+    /// scoreboard for the days of its games in the live window, and the
+    /// scoreboard supplies `liveScores`. A quiet day wants no days, so a
+    /// quiet page makes no score requests; and leaving the page cancels the
+    /// loop and withdraws the subscription, stopping the league's poller
+    /// unless another page shares it.
     private func refreshSchedulePeriodically() async {
+        // The page went away during the first load.
+        guard !Task.isCancelled else { return }
+
+        // A cup tie is only on its cup's scoreboard, so each competition
+        // the team plays in gets its own subscription; one with no game in
+        // the live window polls nothing.
+        let subscriptions = ([team.league] + team.league.descriptor.cupCompetitions).map { competition in
+            scoreboards.subscribe(team, competition: competition, days: liveScoreboardDays(in: competition))
+        }
+        scoreboardSubscriptions = subscriptions
+        defer {
+            for subscription in subscriptions {
+                scoreboards.unsubscribe(subscription)
+            }
+            if scoreboardSubscriptions == subscriptions {
+                scoreboardSubscriptions = []
+            }
+        }
+
         while !Task.isCancelled {
             do {
                 try await Task.sleep(for: .seconds(60))
@@ -134,63 +212,138 @@ final class TeamModel<Player: RosterPlayer> {
                 return
             }
             apply(schedule: await fetchSchedule())
-            await refreshLiveScores()
+            // The live window moves with the clock, not only with the feed.
+            updateScoreboardSubscription()
         }
     }
 
-    /// Fetches summaries for the games that qualify under
-    /// `shouldPollLiveScore` and publishes them through `liveScores`.
-    ///
-    /// Fetch failures keep the last known score rather than dropping the
-    /// entry, so an ESPN rate-limit window cannot paint a live game 0–0.
-    private func refreshLiveScores(now: Date = Date()) async {
-        let pollable = games.filter { shouldPollLiveScore(game: $0, now: now) }
+    /// The scoreboard days (`scoreboardDay(for:)`) of the games in
+    /// `competition` that qualify under `shouldPollLiveScore`: the ones its
+    /// scoreboard is polled for.
+    private func liveScoreboardDays(in competition: LeagueID, now: Date = Date()) -> Set<String> {
+        Set(games
+            .filter { ($0.competition ?? team.league) == competition && shouldPollLiveScore(game: $0, now: now) }
+            .map { scoreboardDay(for: $0.dateAsDate) })
+    }
 
-        // A game that left the window (finished, postponed, or too old) stops
-        // being live; its score now comes from the schedule feed itself.
-        let liveIDs = Set(pollable.map(\.gameID))
-        liveScores = liveScores.filter { liveIDs.contains($0.key) }
-        guard !pollable.isEmpty else { return }
-
-        let results = await withTaskGroup(of: (String, LiveGameScore?).self) { group in
-            let team = self.team
-            for game in pollable {
-                group.addTask {
-                    (game.gameID, await downloadLiveGameScore(gameID: game.gameID, team: team, isHome: game.gameHome))
-                }
-            }
-            var collected: [(String, LiveGameScore?)] = []
-            for await result in group {
-                collected.append(result)
-            }
-            return collected
-        }
-
-        for (gameID, score) in results {
-            if let score {
-                liveScores[gameID] = score
-            }
+    private func updateScoreboardSubscription() {
+        for subscription in scoreboardSubscriptions {
+            scoreboards.update(subscription, days: liveScoreboardDays(in: subscription.league))
         }
     }
 
-    private func fetchSchedule() async -> [Game] {
-        await downloadScheduleData(
-            queryURL: team.scheduleURL,
-            teamName: team.scheduleTeamName,
-            teamNameField: team.scheduleNameField
-        )
+    // MARK: - Retrying
+
+    /// Refetches the roster after a failed load.
+    func reloadRoster() async {
+        rosterState = .loading
+        apply(roster: await loadRoster(team))
     }
 
-    private func apply(schedule: [Game]) {
-        // A failed refresh returns nothing; keep what is already on screen
-        // rather than blanking the carousel.
-        guard !schedule.isEmpty else { return }
+    /// Refetches the schedule after a failed load, without waiting for the
+    /// next scheduled refresh.
+    func reloadSchedule() async {
+        scheduleState = .loading
+        apply(schedule: await fetchSchedule())
+        updateScoreboardSubscription()
+    }
 
-        games = schedule
-        nextGame = getNextGame(
-            schedule: schedule,
-            pastDatesCountAsPlayed: usesDateForNextGame
-        )
+    /// Refetches the news after a failed load.
+    func reloadNews() async {
+        newsState = .loading
+        apply(news: await downloadNewsData(queryURL: newsURL))
+    }
+
+    /// Refetches the standings after a failed load.
+    func reloadStandings() async {
+        standingsState = .loading
+        apply(standings: await loadStandings(team.league))
+    }
+
+    // MARK: - Applying results
+
+    private func fetchSchedule() async -> Result<[Game], NetworkError> {
+        await downloadScheduleData(team: team)
+    }
+
+    /// The roster, or `nil` when it is already on screen.
+    private func fetchRosterUnlessLoaded() async -> Result<[Player], NetworkError>? {
+        guard rosterState != .loaded else { return nil }
+        return await loadRoster(team)
+    }
+
+    /// The news, or `nil` when it is already on screen.
+    private func fetchNewsUnlessLoaded() async -> Result<[News], NetworkError>? {
+        guard newsState != .loaded else { return nil }
+        return await downloadNewsData(queryURL: newsURL)
+    }
+
+    /// The standings, or `nil` when they are already on screen.
+    private func fetchStandingsUnlessLoaded() async -> Result<Standings, NetworkError>? {
+        guard standingsState != .loaded else { return nil }
+        return await loadStandings(team.league)
+    }
+
+    /// Publishes a schedule fetch. A failure keeps what is already on screen
+    /// rather than blanking the carousel; it only shows as an error when
+    /// there is nothing else to show.
+    private func apply(schedule result: Result<[Game], NetworkError>) {
+        switch result {
+        case .success(let schedule):
+            scheduleState = .loaded
+            // A feed that suddenly lists nothing mid-season is far likelier a
+            // hiccup than a cleared schedule, so games on screen stay put.
+            guard !schedule.isEmpty else { return }
+
+            games = schedule
+            nextGame = getNextGame(
+                schedule: schedule,
+                pastDatesCountAsPlayed: recordRule.usesDateForNextGame
+            )
+        case .failure(let error):
+            fail(&scheduleState, with: error, hasContent: !games.isEmpty)
+        }
+    }
+
+    private func apply(roster result: Result<[Player], NetworkError>) {
+        switch result {
+        case .success(let roster):
+            rosterState = .loaded
+            allPlayers = roster
+            applyFilterAndSort()
+        case .failure(let error):
+            fail(&rosterState, with: error, hasContent: !allPlayers.isEmpty)
+        }
+    }
+
+    private func apply(standings result: Result<Standings, NetworkError>) {
+        switch result {
+        case .success(let loaded):
+            standingsState = .loaded
+            standings = loaded
+        case .failure(let error):
+            fail(&standingsState, with: error, hasContent: standings.map { !$0.isEmpty } ?? false)
+        }
+    }
+
+    private func apply(news result: Result<[News], NetworkError>) {
+        switch result {
+        case .success(let loaded):
+            newsState = .loaded
+            articles = loaded
+        case .failure(let error):
+            fail(&newsState, with: error, hasContent: !articles.isEmpty)
+        }
+    }
+
+    /// Marks a section failed, unless it already has content to keep showing
+    /// or the fetch was merely cancelled (the view went away mid-load, and
+    /// the next appearance loads again).
+    private func fail(_ state: inout SectionLoadState, with error: NetworkError, hasContent: Bool) {
+        if case .cancelled = error { return }
+        if !hasContent {
+            state = .failed
+        }
     }
 
     // MARK: - Filtering and sorting
@@ -218,16 +371,20 @@ final class TeamModel<Player: RosterPlayer> {
     }
 }
 
-/// Wins and losses from a schedule, counted from each game's own state.
+/// Wins, losses and draws from a schedule, counted from each game's own state.
 ///
 /// Deliberately independent of `nextGame`: that carousel pointer clamps to the
 /// last slot once the season ends, which silently dropped a finale that is not
 /// a win (a loss, or a fixture whose feed never set a winner) from the record.
 ///
+/// A played game that is neither won nor level is a loss; a level one (an MLS
+/// draw, an NFL tie — see `Game.isDraw`) counts in the draws column instead.
+///
 /// - Parameters:
-///   - countingAbandonedAsLosses: the baseball tab's rule — cancelled and
-///     postponed fixtures count in the losses column. Every other tab treats
-///     an abandoned fixture as neither win nor loss. See `RoyalsHome`.
+///   - countingAbandonedAsLosses: MLB's rule — cancelled and postponed
+///     fixtures count in the losses column. Every other league treats an
+///     abandoned fixture as neither win nor loss. See
+///     `RecordRule.countsAbandonedGamesAsLosses`.
 ///   - pastDatesCountAsPlayed: the soccer feed's completion flags are
 ///     unreliable, so there a past start time stands in for "played". Games
 ///     are given a four-hour grace window past kickoff so a live match is not
@@ -238,28 +395,38 @@ func seasonRecord(
     countingAbandonedAsLosses: Bool = false,
     pastDatesCountAsPlayed: Bool = false,
     now: Date = Date()
-) -> (wins: Int, losses: Int) {
-    let wins = games.count { $0.gameWin }
-    let losses = games.count { game in
-        if game.gameWin { return false }
-        if game.cancelled || game.postponed {
-            // The baseball tab's rule: an abandoned fixture goes in the
-            // losses column. Everywhere else it is neither win nor loss.
-            return countingAbandonedAsLosses
-        }
+) -> (wins: Int, losses: Int, draws: Int) {
+    /// Whether a fixture that was not won has been played out.
+    func played(_ game: Game) -> Bool {
         if game.completed { return true }
         return pastDatesCountAsPlayed
             && game.dateAsDate.addingTimeInterval(4 * 3600) < now
     }
-    return (wins, losses)
+
+    let wins = games.count { $0.gameWin }
+    let draws = games.count { game in
+        !game.gameWin && !game.cancelled && !game.postponed
+            && game.isDraw && played(game)
+    }
+    let losses = games.count { game in
+        if game.gameWin { return false }
+        if game.cancelled || game.postponed {
+            // MLB's rule: an abandoned fixture goes in the losses column.
+            // Everywhere else it is neither win nor loss.
+            return countingAbandonedAsLosses
+        }
+        return !game.isDraw && played(game)
+    }
+    return (wins, losses, draws)
 }
 
-/// Whether a game's summary should be polled for a live score right now.
+/// Whether a game should show a live score right now, which is also whether
+/// its day's league scoreboard is polled for one (`LeagueScoreboardCenter`).
 ///
 /// The old per-card poll asked for every fixture on the carousel, every
 /// minute, forever. A season is overwhelmingly games that already finished or
 /// start days from now — none of which change while you watch. This confines
-/// the requests to the one or two fixtures actually in progress: unplayed or
+/// the polling to the one or two fixtures actually in progress: unplayed or
 /// live games whose start is near the current moment.
 ///
 /// The window is deliberately asymmetric. A game starts up to eight hours
@@ -270,7 +437,8 @@ func seasonRecord(
 ///
 /// - Parameters:
 ///   - game: the fixture to judge. One whose feed gave no game id cannot be
-///     addressed at the summary endpoint, so it never qualifies.
+///     matched on a scoreboard or addressed at the summary endpoint, so it
+///     never qualifies.
 ///   - now: the current instant.
 func shouldPollLiveScore(game: Game, now: Date = Date()) -> Bool {
     guard !game.gameID.isEmpty else { return false }

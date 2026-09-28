@@ -38,6 +38,29 @@ extension SectionHeader where Accessory == EmptyView {
     }
 }
 
+/// Stands in for a section's cards when it has none to show: either the feed
+/// answered with nothing, or it could not be reached and `retry` is offered.
+struct SectionStatusView: View {
+    let message: String
+    var retry: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(message)
+                .font(.system(size: 15))
+                .fontWeight(.bold)
+                .foregroundStyle(Color(uiColor: .systemGray))
+                .multilineTextAlignment(.center)
+
+            if let retry {
+                Button("Retry", action: retry)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding()
+    }
+}
+
 /// The roster carousel, with the filter and sort menus that drive it.
 ///
 /// `card` draws one player; `detail` is the sheet a tap opens. `filterMenu`
@@ -47,6 +70,8 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     @ViewBuilder let card: (Player) -> Card
     @ViewBuilder let detail: (Player) -> Detail
     @ViewBuilder let filterMenu: FilterMenu
+
+    @Environment(\.containerSize) private var containerSize
 
     @State private var selectedPlayer: Player?
 
@@ -80,12 +105,25 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                 // unrealized card can never start work of its own.
                 LazyHStack {
                     if model.players.isEmpty {
-                        // Five placeholder cards, so the carousel occupies its
-                        // final height while the roster loads.
-                        ForEach(0..<5, id: \.self) { _ in
-                            LoadingPlayerView()
-                                .padding(.leading, 10)
-                                .padding(.bottom, 15)
+                        switch model.rosterState {
+                        case .loading:
+                            // Five placeholder cards, so the carousel occupies
+                            // its final height while the roster loads.
+                            ForEach(0..<5, id: \.self) { _ in
+                                LoadingPlayerView()
+                                    .padding(.leading, 10)
+                                    .padding(.bottom, 15)
+                            }
+                        case .loaded:
+                            // Either the feed listed nobody, or the filter
+                            // matches nobody.
+                            SectionStatusView(message: "No players to show")
+                                .frame(width: max(containerSize.width - 20, 200))
+                        case .failed:
+                            SectionStatusView(message: "Couldn't load the roster") {
+                                Task { await model.reloadRoster() }
+                            }
+                            .frame(width: max(containerSize.width - 20, 200))
                         }
                     } else {
                         ForEach(model.players) { player in
@@ -114,20 +152,18 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
 struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     let model: TeamModel<Player>
 
-    /// Whether cancelled and postponed fixtures are excluded from the losses
-    /// half of the record. Only the baseball tab counts them in.
-    var countsAbandonedGamesAsLosses = false
-
     @ViewBuilder let card: (Game) -> Card
     @ViewBuilder let detail: (Game) -> Detail
 
     @State private var selectedGame: Game?
 
+    @Environment(\.containerSize) private var containerSize
+
     private var record: String {
-        let (wins, losses) = model.displayRecord(
-            countingAbandonedAsLosses: countsAbandonedGamesAsLosses
-        )
-        return "\(wins)-\(losses)"
+        // The league's record rule decides how abandoned and unflagged
+        // fixtures count (`RecordRule`); its sport decides the columns —
+        // "10-6", soccer's "4-1-0", hockey's "40-30-12". See `Record.Format`.
+        model.displayRecord().summary
     }
 
     var body: some View {
@@ -146,9 +182,20 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                     // of requests a minute.
                     LazyHStack {
                         if model.games.isEmpty {
-                            ForEach(0..<5, id: \.self) { _ in
-                                LoadingGameView()
-                                    .padding(.leading, 10)
+                            switch model.scheduleState {
+                            case .loading:
+                                ForEach(0..<5, id: \.self) { _ in
+                                    LoadingGameView()
+                                        .padding(.leading, 10)
+                                }
+                            case .loaded:
+                                SectionStatusView(message: "Nothing scheduled")
+                                    .frame(width: max(containerSize.width - 30, 200))
+                            case .failed:
+                                SectionStatusView(message: "Couldn't load the schedule") {
+                                    Task { await model.reloadSchedule() }
+                                }
+                                .frame(width: max(containerSize.width - 30, 200))
                             }
                         } else {
                             ForEach(model.games) { game in
@@ -179,6 +226,187 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     }
 }
 
+/// The league standings: the table the followed team plays in, its row
+/// picked out in the team's colour.
+///
+/// The columns follow the standings' kind: a soccer table's wins, draws,
+/// losses, goal difference and points; hockey's wins, losses, overtime
+/// losses and points; everyone else's wins and losses and games behind; a
+/// poll's rank and record. A league of several tables (conferences, college
+/// divisions) offers the others from the header's menu.
+struct StandingsSection<Player: RosterPlayer>: View {
+    let model: TeamModel<Player>
+    let team: TeamRef
+
+    /// The table on show, when the reader has picked one other than the
+    /// team's own.
+    @State private var selectedGroupID: StandingsGroup.ID?
+
+    var body: some View {
+        VStack(alignment: .leading) {
+            SectionHeader(systemImage: "list.number", title: "Standings") {
+                if let standings = model.standings, standings.groups.count > 1 {
+                    Menu {
+                        ForEach(standings.groups) { group in
+                            Button(group.name) { selectedGroupID = group.id }
+                        }
+                    } label: {
+                        Image(systemName: "rectangle.stack")
+                            .foregroundStyle(Color(uiColor: .systemGray))
+                            .font(.system(size: 20))
+                    }
+                    .padding(.horizontal, 5)
+                }
+            }
+            .padding([.leading, .top, .trailing])
+
+            if let standings = model.standings, let group = shownGroup(in: standings) {
+                StandingsTable(
+                    kind: standings.kind,
+                    group: group,
+                    league: team.league,
+                    followedID: team.espnID,
+                    teamColor: team.color
+                )
+                .padding([.horizontal, .bottom])
+            } else {
+                switch model.standingsState {
+                case .loading:
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                case .loaded:
+                    SectionStatusView(message: "No standings yet")
+                        .frame(maxWidth: .infinity)
+                case .failed:
+                    SectionStatusView(message: "Couldn't load the standings") {
+                        Task { await model.reloadStandings() }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .background(Color(uiColor: .systemBackground))
+    }
+
+    /// The reader's pick, else the team's own table, else the first — a
+    /// poll the team is not ranked in, say.
+    private func shownGroup(in standings: Standings) -> StandingsGroup? {
+        if let selectedGroupID, let picked = standings.groups.first(where: { $0.id == selectedGroupID }) {
+            return picked
+        }
+        return standings.group(containing: team.espnID) ?? standings.groups.first { !$0.entries.isEmpty }
+    }
+}
+
+/// One standings table, drawn in the columns its kind keeps.
+private struct StandingsTable: View {
+    let kind: StandingsKind
+    let group: StandingsGroup
+    let league: LeagueID
+    let followedID: String
+    let teamColor: Color
+
+    /// A numeric column: its heading, and each row's value.
+    private struct Column {
+        let title: String
+        let value: (StandingsEntry) -> String
+    }
+
+    private var columns: [Column] {
+        let wins = Column(title: "W") { "\($0.record.wins)" }
+        let losses = Column(title: "L") { "\($0.record.losses)" }
+        let points = Column(title: "Pts") { $0.record.points.map(String.init) ?? "" }
+
+        switch kind {
+        case .pointsTable:
+            return [
+                wins,
+                Column(title: "D") { "\($0.record.ties)" },
+                losses,
+                Column(title: "GD") { $0.goalDifference },
+                points,
+            ]
+        case .records where group.entries.first?.record.format == .winLossOvertimeLoss:
+            return [wins, losses, Column(title: "OTL") { "\($0.record.overtimeLosses)" }, points]
+        case .records:
+            var columns = [wins, losses]
+            // Ties only where someone has one (an NFL or college season).
+            if group.entries.contains(where: { $0.record.ties > 0 }) {
+                columns.append(Column(title: "T") { "\($0.record.ties)" })
+            }
+            columns.append(Column(title: "GB") { $0.gamesBehind })
+            return columns
+        case .rankings:
+            return [Column(title: "Record") { $0.record.summary }]
+        }
+    }
+
+    var body: some View {
+        let columns = columns
+        VStack(alignment: .leading, spacing: 6) {
+            Text(group.name)
+                .font(.system(size: 15))
+                .fontWeight(.bold)
+                .foregroundStyle(Color(uiColor: .systemGray))
+
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                GridRow {
+                    Text("#")
+                    Text("Team")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ForEach(columns.indices, id: \.self) { index in
+                        Text(columns[index].title)
+                            .gridColumnAlignment(.trailing)
+                    }
+                }
+                .font(.system(size: 12))
+                .fontWeight(.semibold)
+                .foregroundStyle(Color(uiColor: .systemGray))
+
+                ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
+                    let followed = entry.teamID == followedID
+                    GridRow {
+                        Text("\(entry.rank ?? position + 1)")
+                            .foregroundStyle(Color(uiColor: .systemGray))
+                        HStack(spacing: 6) {
+                            TeamLogo(team: crestTeam(for: entry), size: 20)
+                            Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
+                                .lineLimit(1)
+                            if !entry.clincher.isEmpty {
+                                Text(entry.clincher)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Color(uiColor: .systemGray))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        ForEach(columns.indices, id: \.self) { index in
+                            Text(columns[index].value(entry))
+                                .monospacedDigit()
+                        }
+                    }
+                    .font(.system(size: 14))
+                    .fontWeight(followed ? .bold : .regular)
+                    .padding(.vertical, 2)
+                    .background(followed ? teamColor.opacity(0.15) : Color.clear)
+                }
+            }
+        }
+    }
+
+    /// A stand-in `TeamRef` for drawing a row's crest through `TeamLogo`,
+    /// which falls back to a monogram when the feed gives no crest.
+    private func crestTeam(for entry: StandingsEntry) -> TeamRef {
+        TeamRef(
+            league: league, espnID: entry.teamID,
+            displayName: entry.name, shortName: entry.shortName,
+            abbreviation: entry.abbreviation, location: "",
+            colorHex: "", alternateColorHex: "",
+            logoURL: entry.logoURL, logoDarkURL: nil, logoAsset: nil
+        )
+    }
+}
+
 /// The news feed at the foot of a team page.
 struct NewsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
@@ -195,8 +423,17 @@ struct NewsSection<Player: RosterPlayer>: View {
 
             VStack(alignment: .center, spacing: 10) {
                 if model.articles.isEmpty {
-                    ForEach(0..<5, id: \.self) { _ in
-                        LoadingNewsView()
+                    switch model.newsState {
+                    case .loading:
+                        ForEach(0..<5, id: \.self) { _ in
+                            LoadingNewsView()
+                        }
+                    case .loaded:
+                        SectionStatusView(message: "No news right now")
+                    case .failed:
+                        SectionStatusView(message: "Couldn't load the news") {
+                            Task { await model.reloadNews() }
+                        }
                     }
                 } else {
                     ForEach(model.articles) { article in
@@ -223,7 +460,7 @@ struct NewsSection<Player: RosterPlayer>: View {
     }
 }
 
-/// The scrolling body shared by all four team pages.
+/// The scrolling body of every team page.
 struct TeamHomeLayout<Content: View>: View {
     @ViewBuilder var content: Content
 
