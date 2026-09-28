@@ -128,6 +128,8 @@ struct WidgetEntryView: View {
                 AccessoryEntryView(entry: entry, family: family)
             #endif
             default:
+                // Medium too: the column is sized by the height, which the
+                // two share, and centred in the wider tile.
                 systemSmall
             }
         }
@@ -235,9 +237,9 @@ private struct AccessoryEntryView: View {
 struct TeamScheduleWidget: Widget {
     private var families: [WidgetFamily] {
         #if os(iOS)
-        return [.systemSmall, .accessoryRectangular, .accessoryCircular]
+        return [.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular]
         #else
-        return [.systemSmall]
+        return [.systemSmall, .systemMedium]
         #endif
     }
 
@@ -266,6 +268,12 @@ struct ScheduleWidgets: WidgetBundle {
 }
 
 #Preview(as: .systemSmall) {
+    TeamScheduleWidget()
+} timeline: {
+    WidgetTimelines.placeholder(for: WidgetTeams.fallback)
+}
+
+#Preview(as: .systemMedium) {
     TeamScheduleWidget()
 } timeline: {
     WidgetTimelines.placeholder(for: WidgetTeams.fallback)
