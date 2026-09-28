@@ -144,6 +144,181 @@ Monday's board has one event and is as captured.
 Scoreboard competitors carry `score` as a bare string (`"23"`), like the
 summary header, not the schedule's `{"displayValue": …}`.
 
+## New leagues (P3-a)
+
+`LeagueRegistryTests.swift` reads 63 documents for the nine leagues P3-a
+registered, captured on **2026-09-28 between 04:45:24Z and 04:46:20Z** from
+this host by the checked-in script:
+
+```sh
+python3 scripts/capture_fixtures_p3a.py            # every league
+python3 scripts/capture_fixtures_p3a.py nba epl    # just these
+```
+
+The script uses plain `curl` (ESPN's Akamai front answers browser
+User-Agents with 403), spaces requests 0.5 s apart, retries a 403/429 once
+after 5 s, and checks every file it writes parses and is non-trivial (teams
+> 0; an `events` key; standings `children` ≥ 1; a summary with `header` and
+`boxscore`). It prints the table below.
+
+Per league: `{lg}_teams`, `{lg}_schedule`, `{lg}_roster`, `{lg}_news`,
+`{lg}_scoreboard_{YYYYMMDD}`, `{lg}_standings` and
+`{lg}_summary_{phase}_{eventID}` — 7 files × 9 leagues. Sample teams: NBA
+Hawks (1), WNBA Dream (20), NHL Ducks (25), NCAAF and NCAAW Kansas (2305),
+EPL Arsenal (359), LALIGA 83, Liga MX 227, NWSL 21422. Every sport kind has a
+summary: basketball (nba, wnba, ncaaw), hockey (nhl), football (ncaaf),
+soccer (epl, laliga, ligamx, nwsl).
+
+### Trimming
+
+Trimmed files keep feed order and every other key, and each kept element is
+unchanged; they are re-serialised compactly (`separators=(',', ':')`,
+`ensure_ascii=False`). Every other file is byte-for-byte what ESPN returned.
+
+- **teams**: 15 teams (`sports[0].leagues[0].teams`), the first 14 plus the
+  sample team if it was not among them (or the first 15 if it was).
+- **scoreboard**: 3 events, always keeping the summary's event. Trimmed boards
+  also drop the copy of the events under `leagues[0].events` (the app reads
+  the top-level `events`); untrimmed boards keep it.
+- **schedule**: 12 events, keeping the summary's event if listed.
+- **standings**: only the two college trees, by conference abbreviation —
+  `ncaaf` keeps Big 12 (`big12`) and Sun Belt (`belt`, the one FBS
+  conference split into divisions); `ncaaw` keeps America East (`aeast`) and
+  Big 12. (Uncut, they are 2.6 MB and 6.2 MB: each entry carries ~20 stats.)
+
+### What was captured
+
+| File | URL | Captured | Contents |
+|---|---|---|---|
+| `nba_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams?limit=1000` | 2026-09-28T04:45:24Z | teams=15; trimmed 30 → 15 teams |
+| `nba_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/1/schedule` | 2026-09-28T04:45:26Z | events=5 |
+| `nba_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/1/roster` | 2026-09-28T04:45:26Z | athletes=18 shape=flat |
+| `nba_news.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/news?team=1&limit=25` | 2026-09-28T04:45:31Z | articles=25 |
+| `nba_scoreboard_20261003.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20261003` | 2026-09-28T04:45:32Z | events=1 |
+| `nba_standings.json` | `https://site.api.espn.com/apis/v2/sports/basketball/nba/standings` | 2026-09-28T04:45:37Z | children=2 entries=30 |
+| `nba_summary_pregame_401902644.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=401902644` | 2026-09-28T04:45:37Z | phase=pregame |
+| `wnba_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/teams?limit=1000` | 2026-09-28T04:45:40Z | teams=15 |
+| `wnba_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/teams/20/schedule` | 2026-09-28T04:45:40Z | events=12; trimmed 49 → 12 events |
+| `wnba_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/teams/20/roster` | 2026-09-28T04:45:40Z | athletes=14 shape=flat |
+| `wnba_news.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/news?team=20&limit=25` | 2026-09-28T04:45:41Z | articles=25 |
+| `wnba_scoreboard_20260814.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard?dates=20260814` | 2026-09-28T04:45:42Z | events=2 |
+| `wnba_standings.json` | `https://site.api.espn.com/apis/v2/sports/basketball/wnba/standings` | 2026-09-28T04:45:42Z | children=2 entries=15 |
+| `wnba_summary_final_401857143.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/summary?event=401857143` | 2026-09-28T04:45:43Z | phase=final |
+| `nhl_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams?limit=1000` | 2026-09-28T04:45:43Z | teams=15; trimmed 32 → 15 teams |
+| `nhl_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/25/schedule` | 2026-09-28T04:45:44Z | events=4 |
+| `nhl_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/teams/25/roster` | 2026-09-28T04:45:44Z | athletes=56 shape=grouped |
+| `nhl_news.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/news?team=25&limit=25` | 2026-09-28T04:45:45Z | articles=25 |
+| `nhl_scoreboard_20260919.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20260919` | 2026-09-28T04:45:45Z | events=3; trimmed 7 → 3 events |
+| `nhl_standings.json` | `https://site.api.espn.com/apis/v2/sports/hockey/nhl/standings` | 2026-09-28T04:45:51Z | children=2 entries=32 |
+| `nhl_summary_final_401881922.json` | `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=401881922` | 2026-09-28T04:45:51Z | phase=final |
+| `ncaaf_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=1000&groups=50` | 2026-09-28T04:45:52Z | teams=15; trimmed 762 → 15 teams |
+| `ncaaf_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/2305/schedule` | 2026-09-28T04:45:52Z | events=12 |
+| `ncaaf_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams/2305/roster` | 2026-09-28T04:45:53Z | athletes=100 shape=grouped |
+| `ncaaf_news.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/news?team=2305&limit=25` | 2026-09-28T04:45:53Z | articles=25 |
+| `ncaaf_scoreboard_20260829.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20260829` | 2026-09-28T04:45:53Z | events=3; trimmed 8 → 3 events |
+| `ncaaf_standings.json` | `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80` | 2026-09-28T04:45:54Z | children=2 entries=30; trimmed 11 → 2 children |
+| `ncaaf_summary_final_401864494.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401864494` | 2026-09-28T04:45:55Z | phase=final |
+| `ncaaw_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams?limit=1000&groups=50` | 2026-09-28T04:45:55Z | teams=15; trimmed 362 → 15 teams |
+| `ncaaw_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/2305/schedule` | 2026-09-28T04:45:56Z | events=12; trimmed 31 → 12 events |
+| `ncaaw_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/2305/roster` | 2026-09-28T04:45:56Z | athletes=12 shape=flat |
+| `ncaaw_news.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/news?team=2305&limit=25` | 2026-09-28T04:45:57Z | articles=25 |
+| `ncaaw_scoreboard_20261102.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?dates=20261102&groups=50&limit=1000` | 2026-09-28T04:45:57Z | events=3; trimmed 118 → 3 events |
+| `ncaaw_standings.json` | `https://site.api.espn.com/apis/v2/sports/basketball/womens-college-basketball/standings?group=50` | 2026-09-28T04:45:58Z | children=2 entries=25; trimmed 31 → 2 children |
+| `ncaaw_summary_pregame_401926040.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/summary?event=401926040` | 2026-09-28T04:45:58Z | phase=pregame |
+| `epl_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams?limit=1000` | 2026-09-28T04:45:59Z | teams=15; trimmed 20 → 15 teams |
+| `epl_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams/359/schedule` | 2026-09-28T04:45:59Z | events=5 |
+| `epl_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams/359/roster` | 2026-09-28T04:46:00Z | athletes=27 shape=flat |
+| `epl_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/news?team=359&limit=25` | 2026-09-28T04:46:00Z | articles=25 |
+| `epl_scoreboard_20260821.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260821` | 2026-09-28T04:46:01Z | events=1 |
+| `epl_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/eng.1/standings` | 2026-09-28T04:46:01Z | children=1 entries=20 |
+| `epl_summary_final_401879301.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/summary?event=401879301` | 2026-09-28T04:46:02Z | phase=final |
+| `laliga_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/teams?limit=1000` | 2026-09-28T04:46:02Z | teams=15; trimmed 20 → 15 teams |
+| `laliga_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/teams/83/schedule` | 2026-09-28T04:46:03Z | events=7 |
+| `laliga_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/teams/83/roster` | 2026-09-28T04:46:03Z | athletes=30 shape=flat |
+| `laliga_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/news?team=83&limit=25` | 2026-09-28T04:46:04Z | articles=25 |
+| `laliga_scoreboard_20260815.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard?dates=20260815` | 2026-09-28T04:46:04Z | events=2 |
+| `laliga_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/esp.1/standings` | 2026-09-28T04:46:05Z | children=1 entries=20 |
+| `laliga_summary_final_401882926.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/summary?event=401882926` | 2026-09-28T04:46:06Z | phase=final |
+| `ligamx_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/teams?limit=1000` | 2026-09-28T04:46:06Z | teams=15; trimmed 18 → 15 teams |
+| `ligamx_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/teams/227/schedule` | 2026-09-28T04:46:08Z | events=8 |
+| `ligamx_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/teams/227/roster` | 2026-09-28T04:46:09Z | athletes=35 shape=flat |
+| `ligamx_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/news?team=227&limit=25` | 2026-09-28T04:46:09Z | articles=25 |
+| `ligamx_scoreboard_20260815.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/scoreboard?dates=20260815` | 2026-09-28T04:46:10Z | events=3 |
+| `ligamx_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/mex.1/standings` | 2026-09-28T04:46:11Z | children=1 entries=18 |
+| `ligamx_summary_final_401877018.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/summary?event=401877018` | 2026-09-28T04:46:11Z | phase=final |
+| `nwsl_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/teams?limit=1000` | 2026-09-28T04:46:16Z | teams=15; trimmed 16 → 15 teams |
+| `nwsl_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/teams/21422/schedule` | 2026-09-28T04:46:17Z | events=12; trimmed 26 → 12 events |
+| `nwsl_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/teams/21422/roster` | 2026-09-28T04:46:18Z | athletes=25 shape=flat |
+| `nwsl_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/news?team=21422&limit=25` | 2026-09-28T04:46:18Z | articles=25 |
+| `nwsl_scoreboard_20260814.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/scoreboard?dates=20260814` | 2026-09-28T04:46:18Z | events=3; trimmed 4 → 3 events |
+| `nwsl_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/usa.nwsl/standings` | 2026-09-28T04:46:19Z | children=1 entries=16 |
+| `nwsl_summary_final_401853969.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/usa.nwsl/summary?event=401853969` | 2026-09-28T04:46:20Z | phase=final |
+
+"Captured" is the script's clock at each response. The schedule and roster
+`timestamp` fields are ESPN's cache time and run up to 80 s earlier (e.g.
+`ncaaf_schedule` 04:44:32Z) — not a capture time.
+
+### Seasons the feeds returned
+
+No request named a season. The `season` block of each schedule (the roster's
+matches it):
+
+| League | `season.year` | `displayName` | `name` |
+|---|---|---|---|
+| nba, nhl | 2027 | 2026-27 | Preseason |
+| ncaaw | 2027 | 2026-27 | Preseason |
+| wnba | 2026 | 2026 | Postseason |
+| ncaaf | 2026 | 2026 | Regular Season |
+| epl, laliga, ligamx | 2026 | 2026-27 … | the league's season name |
+| nwsl | 2026 | 2026 NWSL | Regular Season |
+
+So ESPN numbers NBA, NHL and college basketball seasons by their **ending**
+year and football and soccer by their **starting** year. The college
+basketball standings are the exception to "current season": `ncaaw_standings`
+has a root `season` of 2027, but both conference tables are `2025-26`
+(`children[i].standings.seasonDisplayName`) — last season's final table,
+since 2026-27 has not tipped off.
+
+### Standings tree shape
+
+`https://site.api.espn.com/apis/v2/sports/{league}/standings` (no `/site`;
+the `/apis/site/v2/…/standings` path is an empty stub). The root is the
+league (or the college division) and has **no `standings` of its own**; the
+tables are in `children`:
+
+```
+root {name, season, seasons, children: [
+  child {name, abbreviation, standings: {seasonDisplayName, entries: [
+    {team: {id, displayName, …}, note?, stats: [{name, displayName, abbreviation, value, displayValue, …}]}
+  ]}}
+  | child {name, abbreviation, children: [ …grandchildren with standings… ]}
+]}
+```
+
+- NBA, WNBA, NHL: 2 children (Eastern / Western Conference), 30 / 15 / 32
+  entries.
+- Soccer (EPL, LALIGA, Liga MX, NWSL): **exactly one child**, named for the
+  season (`2026-27 English Premier League`), holding the whole table. Soccer
+  entries carry a `note` (qualification / relegation colour and text).
+- NCAAF `group=80` (FBS): 11 conference children; **Sun Belt has no
+  `standings`, only `children`** (Sun Belt - East / West), so a parser has
+  to walk one level deeper. Without `group` the feed also returns FBS;
+  `group=50` would be one FCS conference.
+- NCAAW / NCAAM `group=50` (Division I): 31 conference children. Without
+  `group` the feed returns the same Division I tree today; the registry
+  names it anyway.
+- Stats are found by `name` (`wins`, `losses`, `gamesBehind`, `points`, …);
+  their order differs by league.
+
+### Roster shapes
+
+As the recon expected: basketball (nba, wnba, ncaaw) and soccer feeds are
+flat. NHL is grouped **by position** (`position`: Centers, Left Wings, Right
+Wings, Defense, Goalies), not by unit; NCAAF is grouped by unit
+(`offense`/`defense`/`specialTeam`) like the NFL, with the line as one
+`Offensive Lineman` position, plus three status groups the NFL-style menu
+does not filter on: `injuredReserveOrOut`, `suspended`, `practiceSquad`.
+
 ## Refreshing
 
 1. Re-run the requests above, for example:
