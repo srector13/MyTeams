@@ -58,9 +58,12 @@ struct FootballGameTeamStats: Identifiable, Hashable, Sendable {
     var score: Int
     var interceptions: Int
     var possesionTime: String
+    /// The completions: the leading figure of the feed's `"18/29"`.
     var completionAttempts: Int
     var opponentScore: Int
     var gameClock: String
+    /// Completions and attempts as the feed writes them, `"18/29"`.
+    var completionAttemptsDisplay = ""
 
     /// See `BasketballGameTeamStats.id`.
     var id: String { name }
@@ -347,7 +350,8 @@ func parseFootballGameTeamStats(from json: JSON, team followed: TeamRef) -> [Foo
             possesionTime: stat("possessionTime").stringValue,
             completionAttempts: stat("completionAttempts").intValue,
             opponentScore: opponentScore,
-            gameClock: gameClock
+            gameClock: gameClock,
+            completionAttemptsDisplay: stat("completionAttempts").stringValue
         )
     }
 }
@@ -487,8 +491,12 @@ struct BoxScore: Hashable, Sendable {
             row("Drives") { "\($0.drives)" },
             row("Interceptions") { "\($0.interceptions)" },
             row("Possession Time") { "\($0.possesionTime)" },
-            row("Completion Attempts") { "\($0.completionAttempts)" },
+            row("Completion Attempts") { $0.completionAttemptsDisplay.isEmpty ? "\($0.completionAttempts)" : $0.completionAttemptsDisplay },
         ]
+        // College feeds carry no `totalDrives`: a row of zeros is no row.
+        if home.drives == 0 && away.drives == 0 {
+            rows.removeAll { $0.title == "Drives" }
+        }
     }
 
     /// Reads a baseball box score, whose lines carry their own side.

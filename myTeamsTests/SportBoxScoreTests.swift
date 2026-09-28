@@ -512,4 +512,30 @@ struct NewLeagueBoxScoreTests {
         #expect(trojans.score == 42)
         #expect(trojans.opponentScore == 26)
     }
+
+    @Test("Bug: a college football sheet drew a Drives row of zeros, and Comp/Att showed completions alone")
+    func collegeFootballRows() throws {
+        // ncaaf_summary_final_401864494.json: no `totalDrives` in either
+        // side's statistics; completionAttempts "21/32" (SJSU, away),
+        // "30/36" (USC, home).
+        let lines = parseFootballGameTeamStats(
+            from: try Fixture.json("ncaaf_summary_final_401864494"), team: followed(.collegeFootball, "30")
+        )
+        #expect(lines.map(\.completionAttemptsDisplay) == ["21/32", "30/36"])
+        #expect(lines.map(\.drives) == [0, 0])
+        #expect(lines[0].completionAttempts == 21)  // still the leading figure
+
+        let boxScore = try #require(BoxScore(football: lines, followedIsHome: true))
+        #expect(boxScore.rows.map(\.title) == [
+            "Total Yards", "Passing Yards", "Rushing Yards", "First Downs",
+            "Interceptions", "Possession Time", "Completion Attempts",
+        ])
+        #expect(boxScore.rows.last == BoxScore.Row(title: "Completion Attempts", home: "30/36", away: "21/32"))
+
+        // The NFL lists drives, so its sheet keeps the row.
+        let nfl = parseFootballGameTeamStats(from: try Fixture.json("chiefs_summary_final_401872945"), team: .chiefs)
+        let nflBox = try #require(BoxScore(football: nfl, followedIsHome: true))
+        #expect(nflBox.rows.first { $0.title == "Drives" } == BoxScore.Row(title: "Drives", home: "11", away: "10"))
+        #expect(nflBox.rows.last == BoxScore.Row(title: "Completion Attempts", home: "32/47", away: "22/31"))
+    }
 }
