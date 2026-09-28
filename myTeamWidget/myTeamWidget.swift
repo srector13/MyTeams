@@ -332,6 +332,9 @@ struct ScheduleWidgets: WidgetBundle {
         ChiefsScheduleWidget()
         RoyalsScheduleWidget()
         SportingScheduleWidget()
+        #if canImport(ActivityKit) && os(iOS)
+        GameLiveActivity()
+        #endif
     }
 }
 
