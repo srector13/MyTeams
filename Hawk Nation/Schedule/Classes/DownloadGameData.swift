@@ -162,13 +162,21 @@ func parseLiveGameScore(from json: JSON, team: TeamRef, isHome: Bool) -> LiveGam
 enum GamePhase: Sendable, Hashable {
     /// Not started yet.
     case pre
-    /// In progress, including halftime and delays.
+    /// In progress, the clock running.
     case live
+    /// In progress but stopped: halftime, a weather delay, a suspension.
+    case paused
     /// Over — played out, or called off.
     case final
     /// The document carried no status, e.g. a partial response.
     case unknown
 }
+
+/// The in-progress statuses (`status.type.name`) whose clock is stopped for
+/// minutes at a time, so a sheet has nothing to refresh every ten seconds.
+private let pausedStatusNames: Set<String> = [
+    "STATUS_HALFTIME", "STATUS_DELAYED", "STATUS_RAIN_DELAY", "STATUS_SUSPENDED",
+]
 
 /// Reads the game's phase from the header of its summary document.
 func parseGamePhase(from json: JSON) -> GamePhase {
@@ -177,7 +185,7 @@ func parseGamePhase(from json: JSON) -> GamePhase {
 
     switch type["state"].stringValue {
     case "pre": return .pre
-    case "in": return .live
+    case "in": return pausedStatusNames.contains(type["name"].stringValue) ? .paused : .live
     case "post": return .final
     default: return .unknown
     }
@@ -187,12 +195,8 @@ func parseGamePhase(from json: JSON) -> GamePhase {
 ///
 /// The sheets used to fetch the same summary twice per refresh — once for the
 /// box score, once for the venue — and never stopped, even for a game long
-/// finished. One fetch now fills both, and the phase decides when to ask
-/// again (see `refreshInterval`).
-///
-/// The `download…GameDetail` loaders return `nil` when the fetch produced no
-/// document, so a sheet keeps its last good box score through a transient
-/// failure instead of flickering to "No game statistics".
+/// finished. One fetch now fills both (`LeagueDescriptor.gameSheet`), and the
+/// phase decides when to ask again (see `refreshInterval`).
 struct GameDetail<Stats: Sendable>: Sendable {
     var stats: [Stats]
     var info: GameInfo
@@ -205,18 +209,21 @@ struct GameDetail<Stats: Sendable>: Sendable {
     }
 
     /// How long a detail sheet waits after a fetch that produced no document.
-    /// Longer than the live rate, so a rate-limited sheet backs off.
+    /// Longer than the live rate; a throttled sheet doubles it from here (see
+    /// `PollBackoff`).
     static var retryInterval: Duration { .seconds(30) }
 
     /// How long a detail sheet waits before refetching, or `nil` to stop.
     ///
-    /// A live game refreshes every ten seconds. One not yet started only needs
-    /// to notice kickoff, so it checks once a minute; a finished game will not
-    /// change again. A document with no status is retried at the live rate.
+    /// Only a game in progress with its clock running (`state` `"in"`)
+    /// refreshes every ten seconds. One not yet started only needs to notice
+    /// kickoff, and one at halftime or in a delay to notice the restart, so
+    /// those check once a minute, as does a document with no status. A
+    /// finished game will not change again.
     var refreshInterval: Duration? {
         switch phase {
-        case .live, .unknown: return .seconds(10)
-        case .pre: return .seconds(60)
+        case .live: return .seconds(10)
+        case .pre, .paused, .unknown: return .seconds(60)
         case .final: return nil
         }
     }
@@ -249,14 +256,6 @@ func parseGameInfo(from json: JSON, team: TeamRef) -> GameInfo {
         attendance: json["gameInfo"]["attendance"].stringValue,
         gameColor: color
     )
-}
-
-/// Loads a basketball game's detail sheet: box score, venue and phase.
-func downloadBasketballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<BasketballGameTeamStats>? {
-    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-        return nil
-    }
-    return GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json, team: team))
 }
 
 /// Extracts both teams' box score lines from a basketball game's summary
@@ -311,14 +310,6 @@ func parseBasketballGameTeamStats(from json: JSON, team followed: TeamRef) -> [B
             gameClock: gameClock
         )
     }
-}
-
-/// Loads a football game's detail sheet: box score, venue and phase.
-func downloadFootballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<FootballGameTeamStats>? {
-    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-        return nil
-    }
-    return GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json, team: team))
 }
 
 /// Extracts both teams' box score lines from a football game's summary
@@ -387,14 +378,6 @@ func parseBaseballGameTeamStats(from json: JSON) -> [BaseballGameTeamStats] {
     }
 }
 
-/// Loads a baseball game's detail sheet: box score, venue and phase.
-func downloadBaseballGameDetail(gameID: String, team: TeamRef) async -> GameDetail<BaseballGameTeamStats>? {
-    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-        return nil
-    }
-    return GameDetail(json: json, team: team, stats: parseBaseballGameTeamStats(from: json))
-}
-
 /// Extracts both teams' box-score lines from a soccer game's summary
 /// document.
 ///
@@ -424,14 +407,6 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
             corners: boxscoreStatistic(statistics, named: "wonCorners")["displayValue"].intValue
         )
     }
-}
-
-/// Loads a soccer game's detail sheet: box score, venue and phase.
-func downloadSoccerGameDetail(gameID: String, team: TeamRef) async -> GameDetail<SoccerGameTeamStats>? {
-    guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-        return nil
-    }
-    return GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
 }
 
 // MARK: - The detail sheet's box score
@@ -552,12 +527,14 @@ struct GameSheet: Sendable {
     /// `nil` when the summary carries no box score for both sides yet.
     var boxScore: BoxScore?
     var info: GameInfo
+    var phase: GamePhase
     /// How long to wait before refetching, or `nil` to stop.
     var refreshInterval: Duration?
 
     init<Stats: Sendable>(_ detail: GameDetail<Stats>, boxScore: ([Stats]) -> BoxScore?) {
         self.boxScore = boxScore(detail.stats)
         self.info = detail.info
+        self.phase = detail.phase
         self.refreshInterval = detail.refreshInterval
     }
 
@@ -565,32 +542,53 @@ struct GameSheet: Sendable {
     static var retryInterval: Duration { GameDetail<BoxScore>.retryInterval }
 }
 
+/// One refresh of a detail sheet: the sheet, or `nil` when the fetch
+/// produced no document, and the response it came from, which paces the
+/// next refresh.
+struct GameSheetLoad: Sendable {
+    var sheet: GameSheet?
+    var response: FetchResponse
+}
+
 extension LeagueDescriptor {
-    /// Loads a game's detail sheet in this league, reading the box score with
-    /// the league's sport's parser. `nil` when the fetch produced no document.
+    /// Reads a game's detail sheet from its summary document with the
+    /// league's sport's parser: the box score, the venue and the phase all
+    /// come from this one document.
     ///
     /// - Parameter followedIsHome: the schedule's `gameHome` for the game;
     ///   basketball and football lines carry the followed team's score first.
-    func downloadGameSheet(gameID: String, team: TeamRef, followedIsHome: Bool) async -> GameSheet? {
+    func gameSheet(from json: JSON, team: TeamRef, followedIsHome: Bool) -> GameSheet {
         switch kind {
         case .basketball:
-            guard let detail = await downloadBasketballGameDetail(gameID: gameID, team: team) else { return nil }
+            let detail = GameDetail(json: json, team: team, stats: parseBasketballGameTeamStats(from: json, team: team))
             return GameSheet(detail) { BoxScore(basketball: $0, followedIsHome: followedIsHome) }
         case .football:
-            guard let detail = await downloadFootballGameDetail(gameID: gameID, team: team) else { return nil }
+            let detail = GameDetail(json: json, team: team, stats: parseFootballGameTeamStats(from: json, team: team))
             return GameSheet(detail) { BoxScore(football: $0, followedIsHome: followedIsHome) }
         case .baseball:
-            guard let detail = await downloadBaseballGameDetail(gameID: gameID, team: team) else { return nil }
+            let detail = GameDetail(json: json, team: team, stats: parseBaseballGameTeamStats(from: json))
             return GameSheet(detail) { BoxScore(baseball: $0) }
         case .soccer:
-            guard let detail = await downloadSoccerGameDetail(gameID: gameID, team: team) else { return nil }
+            let detail = GameDetail(json: json, team: team, stats: parseSoccerGameTeamStats(from: json))
             return GameSheet(detail) { BoxScore(soccer: $0) }
         case .hockey, .other:
             // No box-score parser for this sport: the venue and phase only.
-            guard let json = await HTTPClient.shared.fetch(team.summaryURL(gameID: gameID)).document else {
-                return nil
-            }
             return GameSheet(GameDetail<BoxScore>(json: json, team: team, stats: [])) { _ in nil }
         }
+    }
+
+    /// Loads a game's detail sheet in this league: one summary request per
+    /// call, whatever the sport. See `gameSheet(from:team:followedIsHome:)`.
+    func downloadGameSheet(
+        gameID: String,
+        team: TeamRef,
+        followedIsHome: Bool,
+        client: HTTPClient = .shared
+    ) async -> GameSheetLoad {
+        let response = await client.fetchResponse(team.summaryURL(gameID: gameID))
+        let sheet = response.result.document.map {
+            gameSheet(from: $0, team: team, followedIsHome: followedIsHome)
+        }
+        return GameSheetLoad(sheet: sheet, response: response)
     }
 }

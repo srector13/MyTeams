@@ -12,7 +12,9 @@ import SwiftUI
 /// score, refreshed while the game is live.
 ///
 /// The box score comes through `LeagueDescriptor.downloadGameSheet`, which
-/// reduces each sport's statistics to the same `BoxScore` rows.
+/// reduces each sport's statistics to the same `BoxScore` rows. Each refresh
+/// is one summary request, whose document fills the box score and the venue
+/// alike; only a game with its clock running refreshes every ten seconds.
 struct GameDetailView: View {
     @Environment(\.containerSize) private var containerSize
 
@@ -22,6 +24,10 @@ struct GameDetailView: View {
     @State private var boxScore: BoxScore?
     @State private var gameInfo = GameInfo.empty
     @State private var loading = true
+
+    /// Paces refreshes that produced no sheet: 30 seconds, doubling while
+    /// ESPN throttles. See `PollBackoff`.
+    @State private var backoff = PollBackoff(base: GameSheet.retryInterval)
 
     private var league: LeagueDescriptor { team.league.descriptor }
 
@@ -83,11 +89,14 @@ struct GameDetailView: View {
         .background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
         .ignoresSafeArea(.all)
         .pollingTask {
-            guard let sheet = await league.downloadGameSheet(
+            let load = await league.downloadGameSheet(
                 gameID: game.gameID,
                 team: team,
                 followedIsHome: game.gameHome
-            ) else {
+            )
+            guard let sheet = load.sheet else {
+                // A cancelled request means the sheet closed: stop quietly.
+                if case .failure(.cancelled) = load.response.result { return nil }
                 // Keep the last good box score through a failed refresh.
                 // With nothing loaded yet, show the "no statistics" message
                 // rather than a blank sheet while retrying.
@@ -95,13 +104,16 @@ struct GameDetailView: View {
                     boxScore = nil
                     loading = false
                 }
-                return GameSheet.retryInterval
+                return backoff.delay(after: load.response)
             }
 
             boxScore = sheet.boxScore
             gameInfo = sheet.info
             loading = false
-            return sheet.refreshInterval
+            backoff.reset()
+            // A summary that stays fresh longer than the phase's interval is
+            // not asked for again before it goes stale.
+            return sheet.refreshInterval.map { max($0, load.response.maxAge ?? .zero) }
         }
     }
 

@@ -399,7 +399,26 @@ struct BoxScoreParsingTests {
         #expect(interval(summary(state: "in", completed: false)) == .seconds(10))
         #expect(interval(summary(state: "pre", completed: false)) == .seconds(60))
         #expect(interval(summary(state: "post", completed: true)) == nil)
-        #expect(interval(JSON(data: Data())) == .seconds(10))
+        // No status is not "in progress": it is not polled at the live rate.
+        #expect(interval(JSON(data: Data())) == .seconds(60))
+    }
+
+    @Test("Halftime, delays and suspensions pause the ten-second refresh")
+    func pausedGames() {
+        func summary(name: String) -> JSON {
+            JSON(data: Data("""
+            {"header": {"competitions": [{"status": {"type": {
+              "name": "\(name)", "state": "in", "completed": false
+            }}}]}}
+            """.utf8))
+        }
+        for name in ["STATUS_HALFTIME", "STATUS_DELAYED", "STATUS_RAIN_DELAY", "STATUS_SUSPENDED"] {
+            let paused = summary(name: name)
+            #expect(parseGamePhase(from: paused) == .paused)
+            #expect(GameDetail<SoccerGameTeamStats>(json: paused, team: .sporting, stats: []).refreshInterval == .seconds(60))
+        }
+        #expect(parseGamePhase(from: summary(name: "STATUS_IN_PROGRESS")) == .live)
+        #expect(parseGamePhase(from: summary(name: "STATUS_END_PERIOD")) == .live)
     }
 }
 
@@ -473,5 +492,49 @@ struct DetailSheetBoxScoreTests {
             BoxScore.Row(title: "Possession", home: "44%", away: "56%"),
             BoxScore.Row(title: "Corner Kicks", home: "15", away: "3"),
         ])
+    }
+
+    // MARK: One fetch per refresh
+
+    @Test("One summary request fills the box score, the venue and the phase")
+    func oneFetchPerRefresh() async throws {
+        let transport = RecordingTransport(always: try .fixture("chiefs_summary_live_401872952"))
+        let load = await LeagueDescriptor.nfl.downloadGameSheet(
+            gameID: "401872952",
+            team: .chiefs,
+            followedIsHome: false,
+            client: HTTPClient(transport: transport)
+        )
+
+        #expect(transport.requestCount == 1)
+        #expect(transport.urls.first?.absoluteString
+            == "https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=401872952")
+
+        let sheet = try #require(load.sheet)
+        // The box score (boxscore.teams, header scores)…
+        let boxScore = try #require(sheet.boxScore)
+        #expect(boxScore.homeScore == 7)  // Dolphins
+        #expect(boxScore.awayScore == 7)  // Chiefs
+        #expect(row(boxScore, "Total Yards") == BoxScore.Row(title: "Total Yards", home: "101", away: "123"))
+        // …and the venue (gameInfo.venue.address) come from the same document.
+        #expect(sheet.info.city == "Miami Gardens")
+        #expect(sheet.info.state == "FL")
+        #expect(sheet.phase == .live)
+        #expect(sheet.refreshInterval == .seconds(10))
+    }
+
+    @Test("A throttled refresh keeps no sheet and carries the response for pacing")
+    func throttledRefresh() async {
+        let transport = RecordingTransport(always: .status(429, headers: ["Retry-After": "90"]))
+        let load = await LeagueDescriptor.nfl.downloadGameSheet(
+            gameID: "401872952", team: .chiefs, followedIsHome: false,
+            client: HTTPClient(transport: transport)
+        )
+        #expect(load.sheet == nil)
+        #expect(load.response.isThrottled)
+
+        var backoff = PollBackoff(base: GameSheet.retryInterval)
+        #expect(backoff.delay(after: load.response) == .seconds(90))
+        #expect(backoff.delay(after: FetchResponse(result: .failure(.httpError(status: 429)))) == .seconds(120))
     }
 }

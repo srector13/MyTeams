@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */; };
 		A859F30DBC1A5231139E8E2E /* CircularProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851DE50795B6FCEE85CD4E68 /* CircularProgress.swift */; };
 		27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7DFED7B341798C35C5671F /* ConvertColor.swift */; };
 		43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3336602F15AB9F42EE41A789 /* LoadingView.swift */; };
@@ -115,6 +116,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingTransport.swift"; sourceTree = "<group>"; };
 		851DE50795B6FCEE85CD4E68 /* CircularProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CircularProgress.swift"; sourceTree = "<group>"; };
 		8F7DFED7B341798C35C5671F /* ConvertColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConvertColor.swift"; sourceTree = "<group>"; };
 		3336602F15AB9F42EE41A789 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoadingView.swift"; sourceTree = "<group>"; };
@@ -422,6 +424,7 @@
 		FE5F5EA714353F16ED8FB48C /* myTeamsTests */ = {
 			isa = PBXGroup;
 			children = (
+				E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */,
 				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
 				71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */,
 				C215F1D687B2267DDC42D736 /* JSONTests.swift */,
@@ -673,6 +676,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */,
 				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,
 				F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */,
 				3BBFED87D728D7319D475FEB /* JSONTests.swift in Sources */,
