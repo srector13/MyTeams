@@ -302,18 +302,32 @@ extension SoccerPlayer: PlayerSheetDescribing {
         ])
     }
 
-    /// The season totals arrive with the roster, so there is nothing to wait
-    /// for.
-    var placeholderStatistics: PlayerSheetGrid { seasonTotals }
+    /// The season totals usually arrive with the roster, so there is nothing
+    /// to wait for.
+    var placeholderStatistics: PlayerSheetGrid {
+        hasSeasonStats ? seasonTotals : PlayerSheetGrid(layout: .titledSections, sections: [])
+    }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid { seasonTotals }
+    /// A player the roster listed without totals gets the athlete
+    /// document's headline figures instead.
+    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+        guard !hasSeasonStats else { return seasonTotals }
+        let stats = await downloadSoccerPlayerStats(playerID: playerID, playerPosition: position, league: league)
+        return Self.headline(stats, keeper: position.contains("Goalkeeper"))
+    }
+
+    /// The roster's `appearances` counts substitute appearances too, so
+    /// starts are the difference. (They used to be shown as `appearances`,
+    /// and games played as `appearances + subAppearances`, counting every
+    /// substitute appearance twice.)
+    private var starts: Int { max(appearances - subAppearances, 0) }
 
     /// Keepers get the goalkeeping line; everyone else the outfield line.
     private var seasonTotals: PlayerSheetGrid {
         if position.contains("Goalkeeper") {
             return PlayerSheetGrid(rows: [
                 [
-                    .stat(title: "Starts", info: "\(appearances)"),
+                    .stat(title: "Starts", info: "\(starts)"),
                     .stat(title: "Shots Faced", info: "\(shotsFaced)"),
                     .stat(title: "Goals Saved", info: "\(saves)"),
                 ],
@@ -332,8 +346,8 @@ extension SoccerPlayer: PlayerSheetDescribing {
 
         return PlayerSheetGrid(rows: [
             [
-                .stat(title: "Games Started", info: "\(appearances)"),
-                .stat(title: "Games Played", info: "\(subAppearances + appearances)"),
+                .stat(title: "Games Started", info: "\(starts)"),
+                .stat(title: "Games Played", info: "\(appearances)"),
                 .stat(title: "Goal Assists", info: "\(goalAssists)"),
             ],
             [
@@ -358,6 +372,37 @@ extension SoccerPlayer: PlayerSheetDescribing {
             ],
         ])
     }
+
+    /// The athlete document's headline figures. See `SoccerPlayerStats`.
+    private static func headline(_ stats: SoccerPlayerStats, keeper: Bool) -> PlayerSheetGrid {
+        let rows: [[PlayerSheetCell]] = keeper
+            ? [[
+                .stat(title: "Starts", info: stats.starts),
+                .stat(title: "Saves", info: stats.saves),
+                .stat(title: "Clean Sheets", info: stats.cleanSheets),
+            ], [
+                .stat(title: "Goals Conceded", info: stats.goalsConceded),
+                .blankStat,
+                .blankStat,
+            ]]
+            : [[
+                .stat(title: "Games Started", info: stats.starts),
+                .stat(title: "Sub Appearances", info: stats.substituteAppearances),
+                .stat(title: "Total Goals", info: stats.goals),
+            ], [
+                .stat(title: "Goal Assists", info: stats.assists),
+                .stat(title: "Total Shots", info: stats.shots),
+                .blankStat,
+            ]]
+        guard stats.hasFigures else {
+            return PlayerSheetGrid(
+                layout: .titledSections,
+                sections: [],
+                message: "No season statistics are available for this player yet."
+            )
+        }
+        return PlayerSheetGrid(rows: rows)
+    }
 }
 
 extension HockeyPlayer: PlayerSheetDescribing {
@@ -376,17 +421,30 @@ extension HockeyPlayer: PlayerSheetDescribing {
         ])
     }
 
-    /// No season statistics are read for hockey players yet; the tab says
-    /// so rather than drawing a grid of zeros.
-    var placeholderStatistics: PlayerSheetGrid {
-        PlayerSheetGrid(
-            layout: .titledSections,
-            sections: [],
-            message: "Season statistics for hockey players are not available yet."
-        )
+    var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
+
+    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+        Self.grid(await downloadHockeyPlayerStats(playerID: playerID, league: league))
     }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid { placeholderStatistics }
+    /// The season line under its title, three stats a row, each labelled
+    /// with the feed's own name for it. A skater and a goalie get different
+    /// stats; see `hockeySheetStats(from:)`.
+    private static func grid(_ line: SplitsSeasonLine) -> PlayerSheetGrid {
+        let stats = hockeySheetStats(from: line)
+        let rows = stride(from: 0, to: stats.count, by: 3).map { start in
+            stats[start ..< min(start + 3, stats.count)].map {
+                PlayerSheetCell.stat(title: $0.label, info: $0.display)
+            }
+        }
+        return PlayerSheetGrid(
+            layout: .titledSections,
+            sections: stats.isEmpty ? [] : [PlayerSheetGrid.Section(title: line.title.isEmpty ? nil : line.title, rows: rows)],
+            message: line.loaded && stats.isEmpty
+                ? "No season statistics are available for this player yet."
+                : nil
+        )
+    }
 }
 
 // MARK: - Sheet

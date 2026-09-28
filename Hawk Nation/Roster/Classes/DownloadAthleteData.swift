@@ -269,15 +269,31 @@ func parseFootballPlayerStats(from json: JSON) -> FootballPlayerStats {
     return FootballPlayerStats(groups: groups, loaded: true)
 }
 
+/// A soccer player's headline season statistics, from the athlete
+/// document's `statsSummary`. A figure the summary does not list reads
+/// "N/A": keepers get the goalkeeping line, everyone else the outfield one.
 struct SoccerPlayerStats: Hashable, Sendable {
     var starts: String
     var saves: String
     var cleanSheets: String
     var goalsConceded: String
+    /// Appearances off the bench: the bracketed half of `starts-subIns`
+    /// (`"15 (4)"`).
+    var substituteAppearances = "N/A"
+    var goals = "N/A"
+    var assists = "N/A"
+    var shots = "N/A"
 
     static let empty = SoccerPlayerStats(
-        starts: "", saves: "", cleanSheets: "", goalsConceded: ""
+        starts: "", saves: "", cleanSheets: "", goalsConceded: "",
+        substituteAppearances: "", goals: "", assists: "", shots: ""
     )
+
+    /// Whether the summary gave anything but "N/A".
+    var hasFigures: Bool {
+        [starts, saves, cleanSheets, goalsConceded, substituteAppearances, goals, assists, shots]
+            .contains { $0 != "N/A" && !$0.isEmpty }
+    }
 }
 
 struct BaseballPlayerStats: Hashable, Sendable {
@@ -331,10 +347,10 @@ struct BaseballPlayerStats: Hashable, Sendable {
 
 /// Loads a basketball player's season averages in `league`.
 ///
-/// The splits feed reports home and away separately, so a rate stat is the
-/// mean of the two weighted by games played, and games played is their sum.
-/// Values are addressed by position because the feed lists them in a fixed
-/// order with no keys.
+/// The college splits feeds report only home and away, so there a rate stat
+/// is the mean of the two weighted by games played, and games played is
+/// their sum. The NBA and WNBA feeds lead with an "All Splits" row, which
+/// is read alone. See `parseBasketballPlayerStats`.
 func downloadBasketballPlayerStats(playerID: String, league: LeagueID) async -> BasketballPlayerStats {
     let json = await HTTPClient.shared.fetch(
         league.athleteSplitsURL(athleteID: playerID)
@@ -342,40 +358,164 @@ func downloadBasketballPlayerStats(playerID: String, league: LeagueID) async -> 
     return parseBasketballPlayerStats(from: json)
 }
 
+/// The splits row that is a player's whole season, by the name each feed
+/// gives it: basketball's and hockey's `"All Splits"`, college football's
+/// `"Season"`.
+private let seasonSplitNames: Set<String> = ["All Splits", "Season"]
+
 /// Extracts a basketball player's season averages from a splits document.
 /// See `downloadBasketballPlayerStats`.
+///
+/// Values are found by the document's `names` (`"avgPoints"`); a document
+/// without them is read at the positions every captured feed lists them in.
+///
+/// Every row used to be read as `[0]` home and `[1]` away. The NBA's rows
+/// are All Splits, Home, Road, …, which made a 76-game NBA season 113 games
+/// and blended its averages with the home split's.
 func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
-    let splits = json["splitCategories"][0]["splits"]
-    let homeGames = splits[0]["stats"][0].floatValue
-    let awayGames = splits[1]["stats"][0].floatValue
+    let names = json["names"].arrayValue.map(\.stringValue)
+    let rows = json["splitCategories"][0]["splits"].arrayValue
+    let parts: [JSON] = rows.first { seasonSplitNames.contains($0["displayName"].stringValue) }
+        .map { [$0] } ?? Array(rows.prefix(2))
 
-    /// The home and away values at `index`, weighted by the games each split
-    /// covers. A player with no games in either split falls back to the
-    /// plain mean rather than dividing by zero.
-    func average(_ index: Int) -> Float {
-        let home = splits[0]["stats"][index].floatValue
-        let away = splits[1]["stats"][index].floatValue
-        let games = homeGames + awayGames
-        guard games > 0 else { return (home + away) / 2 }
-        return (home * homeGames + away * awayGames) / games
+    func value(_ row: JSON, _ name: String, _ position: Int) -> JSON {
+        row["stats"][names.firstIndex(of: name) ?? position]
+    }
+
+    let games = parts.map { value($0, "gamesPlayed", 0).floatValue }
+    let totalGames = games.reduce(0, +)
+
+    /// The parts' values for `name`, weighted by the games each covers. A
+    /// player with no games falls back to the plain mean rather than
+    /// dividing by zero.
+    func average(_ name: String, _ position: Int) -> Float {
+        let values = parts.map { value($0, name, position).floatValue }
+        guard !values.isEmpty else { return 0 }
+        guard totalGames > 0 else { return values.reduce(0, +) / Float(values.count) }
+        return zip(values, games).reduce(Float(0)) { $0 + $1.0 * $1.1 } / totalGames
     }
 
     return BasketballPlayerStats(
-        gamesPlayed: splits[0]["stats"][0].intValue + splits[1]["stats"][0].intValue,
-        avgMinutes: average(1),
-        fieldGoalPct: average(3),
-        threePointFieldGoalPct: average(5),
-        freeThrowPct: average(7),
-        avgOffensiveRebounds: average(8),
-        avgDefensiveRebounds: average(9),
-        avgRebounds: average(10),
-        avgAssists: average(11),
-        avgBlocks: average(12),
-        avgSteals: average(13),
-        avgFouls: average(14),
-        avgTurnovers: average(15),
-        avgPoints: average(16)
+        gamesPlayed: parts.reduce(0) { $0 + value($1, "gamesPlayed", 0).intValue },
+        avgMinutes: average("avgMinutes", 1),
+        fieldGoalPct: average("fieldGoalPct", 3),
+        threePointFieldGoalPct: average("threePointFieldGoalPct", 5),
+        freeThrowPct: average("freeThrowPct", 7),
+        avgOffensiveRebounds: average("avgOffensiveRebounds", 8),
+        avgDefensiveRebounds: average("avgDefensiveRebounds", 9),
+        avgRebounds: average("avgRebounds", 10),
+        avgAssists: average("avgAssists", 11),
+        avgBlocks: average("avgBlocks", 12),
+        avgSteals: average("avgSteals", 13),
+        avgFouls: average("avgFouls", 14),
+        avgTurnovers: average("avgTurnovers", 15),
+        avgPoints: average("avgPoints", 16)
     )
+}
+
+// MARK: - Season lines by name
+
+/// One statistic in a player's season line.
+struct PlayerSeasonStat: Identifiable, Hashable, Sendable {
+    /// The feed's name for it, e.g. `"goals"`.
+    var id: String
+    /// The feed's display name, e.g. `"Goals"`.
+    var label: String
+    /// The feed's abbreviation, e.g. `"G"`.
+    var abbreviation: String
+    /// As the feed shows it: `"41"`, `".888"`, `"17:15"`.
+    var display: String
+}
+
+/// A player's whole-season row from a splits document, each figure keyed
+/// by the document's `names`.
+///
+/// The splits documents carry parallel `names`, `labels` and
+/// `displayNames`, and each row a bare `stats` array in the same order.
+/// They are zipped here, as `BoxscorePlayerGroup` does for box scores, so
+/// a reader asks for `"savePct"` rather than a position that differs
+/// between a skater's line and a goalie's.
+struct SplitsSeasonLine: Hashable, Sendable {
+    /// The document's `displayName`, e.g. `"2025-26 Splits"`.
+    var title: String
+    /// Feed order.
+    var stats: [PlayerSeasonStat]
+    /// Whether the fetch has finished; lets a view tell "loading" from
+    /// "nothing to show".
+    var loaded: Bool
+
+    static let empty = SplitsSeasonLine(title: "", stats: [], loaded: false)
+
+    /// The stat the feed names `name`, if the line has it.
+    func stat(_ name: String) -> PlayerSeasonStat? {
+        stats.first { $0.id == name }
+    }
+}
+
+/// Reads the season row of a splits document: the row named "All Splits"
+/// or "Season", or a lone row. A document with neither (college
+/// basketball's Home and Away only) reads as loaded and empty, as does a
+/// failed fetch.
+func parseSplitsSeasonLine(from json: JSON) -> SplitsSeasonLine {
+    let names = json["names"].arrayValue.map(\.stringValue)
+    let labels = json["displayNames"].arrayValue.map(\.stringValue)
+    let abbreviations = json["labels"].arrayValue.map(\.stringValue)
+    let rows = json["splitCategories"][0]["splits"].arrayValue
+    let season = rows.first { seasonSplitNames.contains($0["displayName"].stringValue) }
+        ?? (rows.count == 1 ? rows.first : nil)
+    let values = season?["stats"].arrayValue.map(\.stringValue) ?? []
+
+    guard !names.isEmpty, names.count == values.count else {
+        return SplitsSeasonLine(title: json["displayName"].stringValue, stats: [], loaded: true)
+    }
+
+    var seen: Set<String> = []
+    var stats: [PlayerSeasonStat] = []
+    for (index, name) in names.enumerated() where seen.insert(name).inserted {
+        stats.append(PlayerSeasonStat(
+            id: name,
+            label: index < labels.count ? labels[index] : name,
+            abbreviation: index < abbreviations.count ? abbreviations[index] : "",
+            display: values[index]
+        ))
+    }
+    return SplitsSeasonLine(title: json["displayName"].stringValue, stats: stats, loaded: true)
+}
+
+// MARK: - Hockey
+
+/// The skater stats a hockey player sheet shows, in order, by the NHL
+/// splits feed's names.
+let hockeySkaterStatNames = [
+    "games", "goals", "assists", "points", "plusMinus", "penaltyMinutes",
+    "shotsTotal", "powerPlayGoals", "powerPlayAssists", "shortHandedGoals",
+    "gameWinningGoals", "faceoffPercent", "timeOnIcePerGame",
+]
+
+/// The goaltender stats a hockey player sheet shows, in order.
+let hockeyGoalieStatNames = [
+    "gameStarted", "wins", "losses", "overtimeLosses", "goalsAgainst",
+    "avgGoalsAgainst", "shotsAgainst", "saves", "savePct", "shutouts",
+    "timeOnIcePerGame",
+]
+
+/// Loads a hockey player's season line in `league`, from the athlete
+/// splits. See `hockeySheetStats(from:)`.
+func downloadHockeyPlayerStats(playerID: String, league: LeagueID) async -> SplitsSeasonLine {
+    let json = await HTTPClient.shared.fetch(
+        league.athleteSplitsURL(athleteID: playerID)
+    ).document ?? .null
+    return parseSplitsSeasonLine(from: json)
+}
+
+/// The stats a hockey player sheet shows from `line`: a goalie's line (one
+/// with a `savePct`) in `hockeyGoalieStatNames` order, a skater's in
+/// `hockeySkaterStatNames` order. A line with none of those names shows
+/// every stat it has, so a new feed shape still renders.
+func hockeySheetStats(from line: SplitsSeasonLine) -> [PlayerSeasonStat] {
+    let order = line.stat("savePct") != nil ? hockeyGoalieStatNames : hockeySkaterStatNames
+    let picked = order.compactMap(line.stat)
+    return picked.isEmpty ? line.stats : picked
 }
 
 /// Loads a baseball player's season totals in `league`.
@@ -441,8 +581,9 @@ func parseBaseballPlayerStats(from json: JSON, playerPosition: String) -> Baseba
 
 /// Loads a soccer player's headline statistics in `league`.
 ///
-/// Only the keeper line is filled in; outfield players show "N/A", as they
-/// always have.
+/// The roster feed carries fuller season totals (`parseSoccerRoster`); the
+/// player sheet reads these only for a player the roster listed without
+/// any. See `parseSoccerPlayerStats`.
 func downloadSoccerPlayerStats(
     playerID: String,
     playerPosition: String,
@@ -456,19 +597,53 @@ func downloadSoccerPlayerStats(
 
 /// Extracts a soccer player's headline statistics from an athlete document.
 /// See `downloadSoccerPlayerStats`.
+///
+/// The summary's statistics are read by `name`. A keeper's are
+/// `starts-subIns`, `saves`, `cleanSheet`, `goalsConceded`; an outfield
+/// player's `starts-subIns`, `totalGoals`, `goalAssists`, `totalShots` —
+/// the same four in every soccer league captured. No soccer feed carries
+/// minutes played. Outfield players used to read "N/A" throughout.
 func parseSoccerPlayerStats(from json: JSON, playerPosition: String) -> SoccerPlayerStats {
-    guard playerPosition.contains("Goalkeeper") else {
+    var summary: [String: JSON] = [:]
+    for stat in json["athlete"]["statsSummary"]["statistics"].arrayValue {
+        let name = stat["name"].stringValue
+        if summary[name] == nil { summary[name] = stat }
+    }
+
+    func value(_ name: String) -> String {
+        summary[name].map { $0["value"].stringValue } ?? "N/A"
+    }
+
+    let starts = value("starts-subIns")
+
+    guard !playerPosition.contains("Goalkeeper") else {
         return SoccerPlayerStats(
-            starts: "N/A", saves: "N/A", cleanSheets: "N/A", goalsConceded: "N/A"
+            starts: starts,
+            saves: value("saves"),
+            cleanSheets: value("cleanSheet"),
+            goalsConceded: value("goalsConceded")
         )
     }
 
-    let summary = json["athlete"]["statsSummary"]["statistics"]
+    // `value` is the starts alone; the substitute appearances are only in
+    // the `displayValue`, bracketed: "15 (4)".
+    let appearances = summary["starts-subIns"]?["displayValue"].stringValue ?? ""
+    var substitutes = "N/A"
+    if let open = appearances.firstIndex(of: "("),
+       let close = appearances.lastIndex(of: ")"),
+       open < close {
+        substitutes = appearances[appearances.index(after: open) ..< close]
+            .trimmingCharacters(in: .whitespaces)
+    }
 
     return SoccerPlayerStats(
-        starts: summary[0]["value"].stringValue,
-        saves: summary[1]["value"].stringValue,
-        cleanSheets: summary[2]["value"].stringValue,
-        goalsConceded: summary[3]["value"].stringValue
+        starts: starts,
+        saves: "N/A",
+        cleanSheets: "N/A",
+        goalsConceded: "N/A",
+        substituteAppearances: substitutes,
+        goals: value("totalGoals"),
+        assists: value("goalAssists"),
+        shots: value("totalShots")
     )
 }

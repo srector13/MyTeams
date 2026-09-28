@@ -68,6 +68,10 @@ struct SoccerPlayer: Identifiable, Hashable, Sendable {
     var shotsFaced: Int
     var goalsConceded: Int
     var lastName: String
+    /// Whether the roster feed listed season totals for the player. Some it
+    /// lists with none (5 of Arsenal's 27 on 2026-09-28); their sheet reads
+    /// the athlete document instead (`downloadSoccerPlayerStats`).
+    var hasSeasonStats = true
 }
 
 struct BaseballPlayer: Identifiable, Hashable, Sendable {
@@ -277,25 +281,37 @@ func parseBaseballRoster(from json: JSON) -> [BaseballPlayer] {
 
 /// Loads a soccer team's roster, sorted by surname.
 ///
-/// Season totals come embedded in the roster feed, in two categories for
-/// outfield players (discipline, then attacking) and a third for keepers.
-/// They are addressed by position, as the feed gives them no stable keys.
+/// Season totals come embedded in the roster feed, in three categories —
+/// `general` (discipline and appearances), `offensive` and `goalKeeping`,
+/// the last for outfield players too. Each stat is read by its `name`,
+/// which is unique across the three. See `parseSoccerRoster`.
 func downloadSoccerRoster(team: TeamRef) async -> Result<[SoccerPlayer], NetworkError> {
     await HTTPClient.shared.fetch(team.rosterURL).map(empty: [], parseSoccerRoster(from:))
 }
 
 /// Builds the roster from the feed's document. See `downloadSoccerRoster`.
+///
+/// `appearances` is every appearance, off the bench included: Sporting's
+/// Calvin Harris has 25 with 2 `subIns`, and his athlete document says
+/// 23 starts (2 as a substitute). Every soccer roster captured (MLS,
+/// Premier League, LALIGA, Liga MX, NWSL) names the same 15 stats.
 func parseSoccerRoster(from json: JSON) -> [SoccerPlayer] {
 
     let roster = json["athletes"].map { _, athlete in
-        let categories = athlete["statistics"]["splits"]["categories"]
+        let categories = athlete["statistics"]["splits"]["categories"].arrayValue
 
-        func stat(_ category: Int, _ index: Int) -> Int {
-            categories[category]["stats"][index]["value"].intValue
+        var values: [String: Int] = [:]
+        for category in categories {
+            for stat in category["stats"].arrayValue {
+                let name = stat["name"].stringValue
+                if values[name] == nil { values[name] = stat["value"].intValue }
+            }
         }
 
-        let saves = stat(2, 0)
-        let goalsConceded = stat(2, 2)
+        func stat(_ name: String) -> Int { values[name] ?? 0 }
+
+        let saves = stat("saves")
+        let goalsConceded = stat("goalsConceded")
 
         let country = athlete["birthPlace"]["country"].stringValue
         // Shape pin (M6): the soccer feed has shipped `citizenship` both as a
@@ -317,22 +333,24 @@ func parseSoccerRoster(from json: JSON) -> [SoccerPlayer] {
             playerID: athlete["id"].stringValue,
             birthPlace: country.isEmpty ? "N/A" : country,
             citizenshipCountry: citizenship.isEmpty ? "N/A" : citizenship,
-            fouls: stat(0, 0),
-            foulsSuffered: stat(0, 1),
-            redCards: stat(0, 2),
-            yellowCards: stat(0, 3),
-            ownGoals: stat(0, 4),
-            appearances: stat(0, 5),
-            subAppearances: stat(0, 6),
-            goalAssists: stat(1, 0),
-            offsides: stat(1, 1),
-            shotsOnTarget: stat(1, 2),
-            totalShots: stat(1, 3),
-            totalGoals: stat(1, 4),
+            fouls: stat("foulsCommitted"),
+            foulsSuffered: stat("foulsSuffered"),
+            redCards: stat("redCards"),
+            yellowCards: stat("yellowCards"),
+            ownGoals: stat("ownGoals"),
+            appearances: stat("appearances"),
+            subAppearances: stat("subIns"),
+            goalAssists: stat("goalAssists"),
+            offsides: stat("offsides"),
+            shotsOnTarget: stat("shotsOnTarget"),
+            totalShots: stat("totalShots"),
+            totalGoals: stat("totalGoals"),
             saves: saves,
+            // The feed's own `shotsFaced` is 0 for every keeper captured.
             shotsFaced: saves + goalsConceded,
             goalsConceded: goalsConceded,
-            lastName: athlete["lastName"].stringValue
+            lastName: athlete["lastName"].stringValue,
+            hasSeasonStats: !values.isEmpty
         )
     }
 
