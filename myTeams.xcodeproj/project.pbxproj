@@ -99,6 +99,12 @@
 		2C7DFA31B60B1565FB9D03D2 /* ScoreAlertEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */; };
 		4018B7D252391342C25956F8 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 940348FF9580BF614B9B5506 /* AppDelegate.swift */; };
 		5C80F187EEED1E73DD283D0C /* ScoreDiffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */; };
+		1780F10A8B0F5EEFC490536F /* GameActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8585BFFB4C809ADEA284CD9C /* GameActivityAttributes.swift */; };
+		0A4AA99692227A8E12A7FB45 /* GameActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8585BFFB4C809ADEA284CD9C /* GameActivityAttributes.swift */; };
+		5BCCFEC612D3E9A0BDBD5315 /* LiveActivityStateMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB561517D21DC51898A319C /* LiveActivityStateMapper.swift */; };
+		CBA4C0FC0601B87C8D95D08A /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */; };
+		1E8316B9F16A72268EABA039 /* GameLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */; };
+		B752BCC33E66B82F3AF1BF38 /* LiveActivityMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6F496BCF446A9B66DCCE468 /* LiveActivityMapperTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -232,6 +238,11 @@
 		73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertEngine.swift"; sourceTree = "<group>"; };
 		940348FF9580BF614B9B5506 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate.swift"; sourceTree = "<group>"; };
 		DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiffTests.swift"; sourceTree = "<group>"; };
+		8585BFFB4C809ADEA284CD9C /* GameActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GameActivityAttributes.swift"; sourceTree = "<group>"; };
+		9CB561517D21DC51898A319C /* LiveActivityStateMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityStateMapper.swift"; sourceTree = "<group>"; };
+		EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityManager.swift"; sourceTree = "<group>"; };
+		F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GameLiveActivity.swift"; sourceTree = "<group>"; };
+		F6F496BCF446A9B66DCCE468 /* LiveActivityMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityMapperTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -307,6 +318,9 @@
 				A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */,
 				73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */,
 				77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */,
+				8585BFFB4C809ADEA284CD9C /* GameActivityAttributes.swift */,
+				9CB561517D21DC51898A319C /* LiveActivityStateMapper.swift */,
+				EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */,
 				0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */,
 				346F15839B839382E7E93D52 /* Standings.swift */,
 				0D2A095EAB5992522D7B70CC /* Record.swift */,
@@ -486,6 +500,7 @@
 				95813F172EB4B27F0B0B1BC5 /* Info.plist */,
 				2D7E42B65C657DF94CC0AE71 /* WidgetScheduleLoader.swift */,
 				CC25799C101CA0E983D6E0BA /* myTeamWidget.swift */,
+				F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */,
 				66D254FAC09DB6A6C8499C7E /* myTeamWidget.entitlements */,
 			);
 			path = "myTeamWidget";
@@ -500,6 +515,7 @@
 				F5ADB50A6E20B6AAE211BD37 /* StandingsTests.swift */,
 				371481114143CD723EB69303 /* LeagueScoreboardTests.swift */,
 				DD02C6C6B9A59B8F11DE2BB3 /* ScoreDiffTests.swift */,
+				F6F496BCF446A9B66DCCE468 /* LiveActivityMapperTests.swift */,
 				E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */,
 				B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */,
 				71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */,
@@ -702,6 +718,9 @@
 				4018B7D252391342C25956F8 /* AppDelegate.swift in Sources */,
 				2C7DFA31B60B1565FB9D03D2 /* ScoreAlertEngine.swift in Sources */,
 				7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */,
+				1780F10A8B0F5EEFC490536F /* GameActivityAttributes.swift in Sources */,
+				5BCCFEC612D3E9A0BDBD5315 /* LiveActivityStateMapper.swift in Sources */,
+				CBA4C0FC0601B87C8D95D08A /* LiveActivityManager.swift in Sources */,
 				A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */,
 				749E671F2916273F3E45E498 /* Standings.swift in Sources */,
 				65D076717FCEAD9E6C2663EB /* Record.swift in Sources */,
@@ -755,6 +774,8 @@
 				806F811BCA02858268F722FC /* TeamEntity.swift in Sources */,
 				477887CC8A151717D679F0BE /* WidgetScheduleLoader.swift in Sources */,
 				BC4F15C17EBC1A2178883B7D /* myTeamWidget.swift in Sources */,
+				1E8316B9F16A72268EABA039 /* GameLiveActivity.swift in Sources */,
+				0A4AA99692227A8E12A7FB45 /* GameActivityAttributes.swift in Sources */,
 				021E035614A3AA570735F9A7 /* HTTPClient.swift in Sources */,
 				718FAF95DE8AE3A64D948680 /* JSON.swift in Sources */,
 				4D7FF57D679FF80CBAC28F6D /* Sport.swift in Sources */,
@@ -779,6 +800,7 @@
 				0EC2AAE3B1D9B65339F03196 /* StandingsTests.swift in Sources */,
 				4F108876A45CFE6959601590 /* LeagueScoreboardTests.swift in Sources */,
 				5C80F187EEED1E73DD283D0C /* ScoreDiffTests.swift in Sources */,
+				B752BCC33E66B82F3AF1BF38 /* LiveActivityMapperTests.swift in Sources */,
 				4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */,
 				9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */,
 				F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */,
