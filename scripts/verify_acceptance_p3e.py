@@ -550,7 +550,14 @@ def hockey_box(summary):
                 homeScore=sides["home"]["score"], awayScore=sides["away"]["score"])
 
 
-def linescore(summary, regulation_fallback):
+def extra_label(extra, extra_count, style):
+    """Linescore.swift: overtimeLabel, or extraTimeLabel for soccer."""
+    if style == "extraTime":
+        return ("ET" if extra_count == 1 else "ET1") if extra == 1 else ("ET2" if extra == 2 else "PEN")
+    return "OT" if extra <= 1 else f"{extra}OT"
+
+
+def linescore(summary, regulation_fallback, style="overtime"):
     comps = header_competitors(summary)
     home = next(c for c in comps if c.get("homeAway") == "home")
     away = next(c for c in comps if c.get("homeAway") == "away")
@@ -560,7 +567,7 @@ def linescore(summary, regulation_fallback):
     regulation = get(summary, "format", "regulation", "periods") or regulation_fallback
     hs, as_ = scores(home), scores(away)
     count = max(regulation or 0, len(hs), len(as_))
-    labels = [str(p) if p <= regulation else ("OT" if p - regulation <= 1 else f"{p - regulation}OT")
+    labels = [str(p) if p <= regulation else extra_label(p - regulation, count - regulation, style)
               for p in range(1, count + 1)]
 
     def line(c, s):
@@ -683,7 +690,7 @@ def walkthrough():
     arsenal["news"] = dict(count=len(news), first=news[0]["title"], firstPublished=news[0]["published"])
     arsenal["standings"] = standings_row(load("epl_standings"), "359")
     summary = load("epl_summary_final_401879301")
-    arsenal["box"] = dict(soccer_box(summary), phase=game_phase(summary), linescore=linescore(summary, 2),
+    arsenal["box"] = dict(soccer_box(summary), phase=game_phase(summary), linescore=linescore(summary, 2, "extraTime"),
                           home=soccer_lineup(summary, "home"), away=soccer_lineup(summary, "away"),
                           info=game_info(summary))
     out["epl"] = arsenal

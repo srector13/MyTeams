@@ -32,9 +32,22 @@ struct Linescore: Hashable, Sendable {
         var id: String { homeAway.isEmpty ? abbreviation : homeAway }
     }
 
-    /// The column headings: "1", "2", "3" … through regulation, then "OT",
-    /// "2OT" … (or, for sports whose periods go unnamed, the next number:
-    /// baseball's tenth inning is "10").
+    /// What the columns past regulation are called, which depends on the
+    /// sport (`LeagueDescriptor.extraPeriodStyle`).
+    enum ExtraPeriodStyle: Hashable, Sendable {
+        /// "OT", "2OT" …: basketball, football, hockey.
+        case overtime
+        /// The next number, as baseball's tenth inning is "10".
+        case numbered
+        /// Soccer's extra time: "ET" for a single extra-time column, or
+        /// "ET1" and "ET2" for its two halves; anything past those (a
+        /// shootout the feed scored as a period) is "PEN". A shootout is
+        /// normally shown apart from the linescore, not as a column.
+        case extraTime
+    }
+
+    /// The column headings: "1", "2", "3" … through regulation, then the
+    /// periods past it as the sport names them (`ExtraPeriodStyle`).
     var periodLabels: [String]
     var home: Line
     var away: Line
@@ -49,6 +62,26 @@ func overtimeLabel(_ overtime: Int) -> String {
     overtime <= 1 ? "OT" : "\(overtime)OT"
 }
 
+/// What the `extra`th of `extraCount` columns past regulation is called in
+/// a soccer linescore: "ET" when extra time is one column, "ET1" and "ET2"
+/// when the feed splits it into its two halves, then "PEN".
+func extraTimeLabel(_ extra: Int, of extraCount: Int) -> String {
+    switch extra {
+    case 1: extraCount == 1 ? "ET" : "ET1"
+    case 2: "ET2"
+    default: "PEN"
+    }
+}
+
+extension LeagueDescriptor {
+    /// How the linescore names the periods past regulation: soccer's extra
+    /// time, baseball's numbered extra innings, everyone else's overtimes.
+    var extraPeriodStyle: Linescore.ExtraPeriodStyle {
+        if periodStyle == .unnamed { return .numbered }
+        return kind == .soccer ? .extraTime : .overtime
+    }
+}
+
 extension Linescore {
     /// Reads the linescore from a game's summary document.
     ///
@@ -61,7 +94,7 @@ extension Linescore {
         self.init(
             competitors: json["header", "competitions", 0, "competitors"],
             regulationPeriods: json["format", "regulation", "periods"].int ?? league.regulationPeriods,
-            numbersExtraPeriods: league.periodStyle == .unnamed
+            extraPeriods: league.extraPeriodStyle
         )
     }
 
@@ -72,9 +105,10 @@ extension Linescore {
     /// - Parameters:
     ///   - regulationPeriods: how many periods a game runs before
     ///     overtime; `nil` shows only the periods played.
-    ///   - numbersExtraPeriods: numbers the periods past regulation, as
-    ///     baseball does its extra innings, rather than calling them "OT".
-    init?(competitors: JSON, regulationPeriods: Int?, numbersExtraPeriods: Bool = false) {
+    ///   - extraPeriods: what the periods past regulation are called:
+    ///     "OT" by default, numbered for baseball's extra innings, "ET" for
+    ///     soccer's extra time.
+    init?(competitors: JSON, regulationPeriods: Int?, extraPeriods: ExtraPeriodStyle = .overtime) {
         var homeCompetitor: JSON?
         var awayCompetitor: JSON?
         for (_, competitor) in competitors {
@@ -101,10 +135,14 @@ extension Linescore {
         guard columnCount > 0 else { return nil }
 
         periodLabels = (1 ... columnCount).map { (period: Int) -> String in
-            guard let regulation = regulationPeriods, period > regulation, !numbersExtraPeriods else {
+            guard let regulation = regulationPeriods, period > regulation else {
                 return "\(period)"
             }
-            return overtimeLabel(period - regulation)
+            switch extraPeriods {
+            case .overtime: return overtimeLabel(period - regulation)
+            case .numbered: return "\(period)"
+            case .extraTime: return extraTimeLabel(period - regulation, of: columnCount - regulation)
+            }
         }
 
         func line(_ competitor: JSON, scores: [String]) -> Line {

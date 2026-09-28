@@ -302,9 +302,46 @@ struct LinescoreTests {
         let extras = try #require(Linescore(
             competitors: Fixture.json("royals_summary_final_401817094")["header", "competitions", 0, "competitors"],
             regulationPeriods: 8,
-            numbersExtraPeriods: true
+            extraPeriods: .numbered
         ))
         #expect(extras.periodLabels.last == "9")
+    }
+
+    @Test("Soccer's extra time is ET, not OT; hockey's overtime stays OT")
+    func extraTime() throws {
+        // epl_summary_extratime_composed (hand-built, see FIXTURES.md):
+        // Arsenal 3–2 Coventry after extra time, two halves then extra
+        // time's two halves.
+        let summary = try Fixture.json("epl_summary_extratime_composed")
+        let epl = try #require(Linescore(summary: summary, league: .premierLeague))
+        #expect(epl.periodLabels == ["1", "2", "ET1", "ET2"])
+        #expect(epl.home == Linescore.Line(homeAway: "home", abbreviation: "ARS", periods: ["1", "1", "1", "0"], total: "3"))
+        #expect(epl.away == Linescore.Line(homeAway: "away", abbreviation: "COV", periods: ["0", "2", "0", "0"], total: "2"))
+
+        // Every soccer league names it the same way, cups' leagues included.
+        for league in [LeagueDescriptor.mls, .laLiga, .ligaMX, .nwsl] {
+            #expect(Linescore(summary: summary, league: league)?.periodLabels == ["1", "2", "ET1", "ET2"])
+        }
+
+        // Extra time reported as one column is plain "ET".
+        let single = JSON(data: Data("""
+        [{"homeAway": "home", "score": "3", "linescores": [{"displayValue": "1"}, {"displayValue": "1"}, {"displayValue": "1"}]},
+         {"homeAway": "away", "score": "2", "linescores": [{"displayValue": "0"}, {"displayValue": "2"}, {"displayValue": "0"}]}]
+        """.utf8))
+        let oneColumn = try #require(Linescore(competitors: single, regulationPeriods: 2, extraPeriods: .extraTime))
+        #expect(oneColumn.periodLabels == ["1", "2", "ET"])
+
+        // The same document read with hockey's labels keeps OT, 2OT; so do
+        // basketball and football.
+        #expect(Linescore(summary: summary, league: .nhl)?.periodLabels == ["1", "2", "OT", "2OT"])
+        #expect(Linescore(summary: summary, league: .nba)?.periodLabels == ["1", "2", "OT", "2OT"])
+        #expect(Linescore(summary: summary, league: .nfl)?.periodLabels == ["1", "2", "OT", "2OT"])
+
+        #expect(LeagueDescriptor.premierLeague.extraPeriodStyle == .extraTime)
+        #expect(LeagueDescriptor.nhl.extraPeriodStyle == .overtime)
+        #expect(LeagueDescriptor.nba.extraPeriodStyle == .overtime)
+        #expect(LeagueDescriptor.collegeFootball.extraPeriodStyle == .overtime)
+        #expect(LeagueDescriptor.mlb.extraPeriodStyle == .numbered)
     }
 
     @Test("A pre-game scoreboard with no linescores still sizes from regulation")

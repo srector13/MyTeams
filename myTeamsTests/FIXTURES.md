@@ -588,6 +588,28 @@ cd myTeamsTests/Fixtures
 for f in *.json; do grep -q "${f%.json}" ../FIXTURES.md || echo "undocumented: $f"; done
 ```
 
+## Composed fixtures
+
+Not captured: built by hand where no live game of the needed shape was
+available. Each is marked **composed** here and in its file name, and
+none is refreshed by the capture scripts.
+
+| File | League | URL of the shape it models | Origin | What it exercises |
+|---|---|---|---|---|
+| `epl_summary_extratime_composed.json` | EPL team (Arsenal, 359) in the FA Cup (`eng.fa`) | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.fa/summary?event=<id>` | **composed (hand-built, models ESPN soccer summary with extra time)**; team objects and `gameInfo` copied from `epl_summary_final_401879301` | Arsenal 3–2 Coventry (388) **AET**: `format.regulation.periods` 2 plus `format.overtime` (2 × 900 s), four `linescores` per competitor (two halves, then the two halves of extra time: home 1,1,1,0; away 0,2,0,0), status `STATUS_FINAL_AET` / `"AET"`, period 4. The soccer linescore labels the columns `1, 2, ET1, ET2`; the same document read as hockey labels them `OT, 2OT` |
+
+Quirks:
+
+- The event and competition ids are the string `"composed-extratime"`, not
+  a number, so nothing can mistake it for a real ESPN event. The document
+  is trimmed to `format`, `gameInfo` and `header`; no `boxscore`, `rosters`
+  or `keyEvents`.
+- The four-entry `linescores` (extra time split into its halves) is an
+  assumption about the feed's shape. A feed that reports extra time as a
+  single third column would read `1, 2, ET`; a shootout is not
+  modelled (it would carry `shootoutScore`, shown apart from the
+  linescore).
+
 ## Refreshing
 
 1. Re-run the requests above, for example:
