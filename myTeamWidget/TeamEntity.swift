@@ -93,10 +93,6 @@ struct SelectTeamIntent: WidgetConfigurationIntent {
     var team: TeamEntity?
 
     init() {}
-
-    init(team: TeamEntity?) {
-        self.team = team
-    }
 }
 
 // MARK: - Resolving teams

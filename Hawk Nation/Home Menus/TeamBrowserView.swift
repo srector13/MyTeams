@@ -141,7 +141,7 @@ struct TeamBrowserView: View {
                                         }
                                     }
                             }
-                            .onMove(perform: moveMyTeams)
+                            .onMove { moveMyTeams(from: $0, to: $1) }
                         }
                     }
 

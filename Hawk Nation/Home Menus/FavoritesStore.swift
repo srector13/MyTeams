@@ -33,9 +33,9 @@ final class FavoritesStore {
     /// restored from iCloud, or that a previous build already ran on, skip it.
     var needsOnboarding: Bool
 
-    @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private let cloud: (any FavoritesCloudStore)?
-    @ObservationIgnored private let reloadWidgets: @MainActor () -> Void
+    private let defaults: UserDefaults
+    private let cloud: (any FavoritesCloudStore)?
+    private let reloadWidgets: @MainActor () -> Void
 
     init(
         defaults: UserDefaults = SharedPaths.defaults,
@@ -79,7 +79,7 @@ final class FavoritesStore {
             }
             return teams
         }
-        return ids.indices.compactMap { resolved[$0] ?? nil }
+        return ids.indices.compactMap { resolved[$0] }
     }
 
     /// One team from the catalog, or `nil` after `deadline`. The seed teams
