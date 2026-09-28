@@ -298,3 +298,91 @@ struct LeaderBoardTests {
         #expect(boards[0].rows.map(\.value) == ["33.5"])
     }
 }
+
+// MARK: - Team page cache
+
+/// Counts the leaders requests a `TeamModel` makes, answering each from a
+/// fixture — or with a failure while `failing` is set.
+private actor LeadersFeed {
+    private(set) var requests = 0
+    var failing = false
+    let leaders: StatLeaders
+
+    init(_ leaders: StatLeaders) {
+        self.leaders = leaders
+    }
+
+    func setFailing(_ failing: Bool) {
+        self.failing = failing
+    }
+
+    func fetch() -> Result<StatLeaders, NetworkError> {
+        requests += 1
+        return failing ? .failure(.httpError(status: 503)) : .success(leaders)
+    }
+}
+
+@Suite("Stat leaders: the team page's cache")
+@MainActor
+struct TeamLeadersCacheTests {
+    /// The model's `loadLeaders` closure is the seam, as `loadStandings` is
+    /// for the standings: `downloadStatLeaders` reads `HTTPClient.shared`,
+    /// which the model cannot be handed.
+    private func makeModel(_ feed: LeadersFeed) -> TeamModel<BasketballPlayer> {
+        TeamModel(
+            team: .jayhawks,
+            newsURL: "",
+            loadRoster: { _ in .success([]) },
+            loadLeaders: { _ in await feed.fetch() }
+        )
+    }
+
+    @Test("Leaders load once; a page coming back reads them from the model")
+    func loadsOnce() async throws {
+        let fixture = try leaders("ncaam_leaders")
+        let feed = LeadersFeed(fixture)
+        let model = makeModel(feed)
+        #expect(model.leadersState == .loading)
+        #expect(model.leaders.isEmpty)
+
+        await model.loadLeadersIfNeeded()
+        #expect(await feed.requests == 1)
+        #expect(model.leadersState == .loaded)
+        #expect(model.leaders == leaderBoards(from: fixture, kind: .basketball, depth: 1))
+        #expect(!model.leaders.isEmpty)
+        #expect(model.leaders.allSatisfy { $0.rows.count <= 1 })
+
+        // The page reappears: no second request.
+        await model.loadLeadersIfNeeded()
+        #expect(await feed.requests == 1)
+
+        // An explicit refresh does ask again.
+        await model.reloadLeaders()
+        #expect(await feed.requests == 2)
+        #expect(model.leadersState == .loaded)
+    }
+
+    @Test("A failed load retries on the next appearance, and keeps what it had on a failed refresh")
+    func failureRetries() async throws {
+        let feed = LeadersFeed(try leaders("ncaam_leaders"))
+        await feed.setFailing(true)
+        let model = makeModel(feed)
+
+        await model.loadLeadersIfNeeded()
+        #expect(model.leadersState == .failed)
+        #expect(await feed.requests == 1)
+
+        await feed.setFailing(false)
+        await model.loadLeadersIfNeeded()
+        #expect(await feed.requests == 2)
+        #expect(model.leadersState == .loaded)
+        let shown = model.leaders.count
+        #expect(shown > 0)
+
+        // A refresh that fails leaves the boards on screen.
+        await feed.setFailing(true)
+        await model.reloadLeaders()
+        #expect(await feed.requests == 3)
+        #expect(model.leaders.count == shown)
+    }
+}

@@ -73,11 +73,15 @@ final class TeamModel<Player: RosterPlayer> {
     private(set) var articles: [News] = []
     /// The league's standings, or `nil` until they load.
     private(set) var standings: Standings?
+    /// The team's leader on each of its sport's boards (`leaderBoards`,
+    /// one deep), for the Leaders section.
+    private(set) var leaders: [LeaderBoard] = []
 
     private(set) var rosterState: SectionLoadState = .loading
     private(set) var scheduleState: SectionLoadState = .loading
     private(set) var newsState: SectionLoadState = .loading
     private(set) var standingsState: SectionLoadState = .loading
+    private(set) var leadersState: SectionLoadState = .loading
 
     /// Live scores for the games in the live window, keyed by `Game.gameID`,
     /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
@@ -109,6 +113,7 @@ final class TeamModel<Player: RosterPlayer> {
     private let newsURL: String
     private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
     private let loadStandings: @Sendable (LeagueID) async -> Result<Standings, NetworkError>
+    private let loadLeaders: @Sendable (TeamRef) async -> Result<StatLeaders, NetworkError>
     private let scoreboards: LeagueScoreboardCenter
 
     /// The page's standing requests for its league's scoreboard and each
@@ -127,12 +132,16 @@ final class TeamModel<Player: RosterPlayer> {
         newsURL: String,
         loadRoster: @escaping @Sendable (TeamRef) async -> Result<[Player], NetworkError>,
         loadStandings: @escaping @Sendable (LeagueID) async -> Result<Standings, NetworkError> = { await downloadStandings(league: $0) },
+        loadLeaders: @escaping @Sendable (TeamRef) async -> Result<StatLeaders, NetworkError> = {
+            await downloadStatLeaders(league: $0.league, teamID: $0.espnID, depth: 1)
+        },
         scoreboards: LeagueScoreboardCenter = .shared
     ) {
         self.team = team
         self.newsURL = newsURL
         self.loadRoster = loadRoster
         self.loadStandings = loadStandings
+        self.loadLeaders = loadLeaders
         self.scoreboards = scoreboards
     }
 
@@ -145,11 +154,13 @@ final class TeamModel<Player: RosterPlayer> {
 
     // MARK: - Loading
 
-    /// Loads the roster, schedule, news and standings feeds together, then
-    /// keeps the schedule fresh for as long as the page is on screen.
+    /// Loads the roster, schedule, news, standings and leaders feeds
+    /// together, then keeps the schedule fresh for as long as the page is on
+    /// screen.
     ///
     /// Scores and clocks move during a game, so the schedule is refetched every
-    /// minute; rosters, news and standings do not, so they are fetched once.
+    /// minute; rosters, news, standings and leaders do not, so they are
+    /// fetched once.
     /// The model outlives its page (`TeamPages`), so a page coming back
     /// refetches only the schedule, and whichever other feed has not loaded
     /// yet.
@@ -165,8 +176,10 @@ final class TeamModel<Player: RosterPlayer> {
         async let schedule = fetchSchedule()
         async let news = fetchNewsUnlessLoaded()
         async let leagueStandings = fetchStandingsUnlessLoaded()
+        async let teamLeaders: Void = loadLeadersIfNeeded()
 
         let (loadedRoster, loadedSchedule, loadedNews, loadedStandings) = await (roster, schedule, news, leagueStandings)
+        await teamLeaders
 
         if let loadedRoster { apply(roster: loadedRoster) }
         apply(schedule: loadedSchedule)
@@ -232,6 +245,16 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
+    /// Loads the team's leaders unless they are already on screen, so a
+    /// page coming back does not ask the leaders feed again. One that
+    /// failed last time retries; `reloadLeaders` refetches regardless.
+    func loadLeadersIfNeeded() async {
+        if leadersState == .failed { leadersState = .loading }
+        if let loaded = await fetchLeadersUnlessLoaded() {
+            apply(leaders: loaded)
+        }
+    }
+
     // MARK: - Retrying
 
     /// Refetches the roster after a failed load.
@@ -260,6 +283,12 @@ final class TeamModel<Player: RosterPlayer> {
         apply(standings: await loadStandings(team.league))
     }
 
+    /// Refetches the leaders, after a failed load or on request.
+    func reloadLeaders() async {
+        leadersState = .loading
+        apply(leaders: await loadLeaders(team))
+    }
+
     // MARK: - Applying results
 
     private func fetchSchedule() async -> Result<[Game], NetworkError> {
@@ -282,6 +311,12 @@ final class TeamModel<Player: RosterPlayer> {
     private func fetchStandingsUnlessLoaded() async -> Result<Standings, NetworkError>? {
         guard standingsState != .loaded else { return nil }
         return await loadStandings(team.league)
+    }
+
+    /// The leaders, or `nil` when they are already on screen.
+    private func fetchLeadersUnlessLoaded() async -> Result<StatLeaders, NetworkError>? {
+        guard leadersState != .loaded else { return nil }
+        return await loadLeaders(team)
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen
@@ -323,6 +358,16 @@ final class TeamModel<Player: RosterPlayer> {
             standings = loaded
         case .failure(let error):
             fail(&standingsState, with: error, hasContent: standings.map { !$0.isEmpty } ?? false)
+        }
+    }
+
+    private func apply(leaders result: Result<StatLeaders, NetworkError>) {
+        switch result {
+        case .success(let loaded):
+            leadersState = .loaded
+            leaders = leaderBoards(from: loaded, kind: team.league.descriptor.kind, depth: 1)
+        case .failure(let error):
+            fail(&leadersState, with: error, hasContent: !leaders.isEmpty)
         }
     }
 

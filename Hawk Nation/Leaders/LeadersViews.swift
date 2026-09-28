@@ -11,13 +11,12 @@ import SwiftUI
 /// The team page's leaders: the team's best player on each of its sport's
 /// boards, and the button into the whole league's (`LeagueLeadersView`).
 ///
-/// Loads for itself rather than through `TeamModel`: one small request, made
-/// each time the page is mounted.
-struct LeadersSection: View {
+/// Reads the leaders from `TeamModel`, which loads them with the rest of
+/// the page and keeps them, so a page coming back does not refetch them.
+struct LeadersSection<Player: RosterPlayer>: View {
+    let model: TeamModel<Player>
     let team: TeamRef
 
-    @State private var boards: [LeaderBoard] = []
-    @State private var state: SectionLoadState = .loading
     @State private var showingLeague = false
 
     var body: some View {
@@ -33,8 +32,8 @@ struct LeadersSection: View {
             }
             .padding([.leading, .top, .trailing])
 
-            if boards.isEmpty {
-                switch state {
+            if model.leaders.isEmpty {
+                switch model.leadersState {
                 case .loading:
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -44,14 +43,14 @@ struct LeadersSection: View {
                         .frame(maxWidth: .infinity)
                 case .failed:
                     SectionStatusView(message: "Couldn't load the team leaders") {
-                        Task { await load() }
+                        Task { await model.reloadLeaders() }
                     }
                     .frame(maxWidth: .infinity)
                 }
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 10) {
-                        ForEach(boards) { board in
+                        ForEach(model.leaders) { board in
                             if let row = board.rows.first {
                                 TeamLeaderCard(board: board, row: row, teamColor: team.color)
                             }
@@ -63,22 +62,8 @@ struct LeadersSection: View {
             }
         }
         .background(Color(uiColor: .systemBackground))
-        .task(id: team.id) { await load() }
         .sheet(isPresented: $showingLeague) {
             LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: team.color)
-        }
-    }
-
-    private func load() async {
-        if state == .failed { state = .loading }
-        switch await downloadStatLeaders(league: team.league, teamID: team.espnID, depth: 1) {
-        case .success(let leaders):
-            boards = leaderBoards(from: leaders, kind: team.league.descriptor.kind, depth: 1)
-            state = .loaded
-        case .failure(.cancelled):
-            break
-        case .failure:
-            if boards.isEmpty { state = .failed }
         }
     }
 }

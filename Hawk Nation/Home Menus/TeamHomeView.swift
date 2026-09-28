@@ -106,7 +106,7 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
             StandingsSection(model: model, team: team)
 
             // The team's stat leaders, and the way into the league's.
-            LeadersSection(team: team)
+            LeadersSection(model: model, team: team)
 
             NewsSection(model: model, teamColor: team.color)
         }
