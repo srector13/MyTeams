@@ -48,6 +48,23 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     static let nfl = LeagueID(sport: "football", league: "nfl")
     static let mlb = LeagueID(sport: "baseball", league: "mlb")
     static let mls = LeagueID(sport: "soccer", league: "usa.1")
+    static let nba = LeagueID(sport: "basketball", league: "nba")
+    static let wnba = LeagueID(sport: "basketball", league: "wnba")
+    static let womensCollegeBasketball = LeagueID(sport: "basketball", league: "womens-college-basketball")
+    static let nhl = LeagueID(sport: "hockey", league: "nhl")
+    static let collegeFootball = LeagueID(sport: "football", league: "college-football")
+    static let premierLeague = LeagueID(sport: "soccer", league: "eng.1")
+    static let laLiga = LeagueID(sport: "soccer", league: "esp.1")
+    static let ligaMX = LeagueID(sport: "soccer", league: "mex.1")
+    static let nwsl = LeagueID(sport: "soccer", league: "usa.nwsl")
+
+    /// Every league with its own `LeagueDescriptor`, in registry order. Any
+    /// other league still works, with a descriptor derived from its path.
+    static let knownLeagues: [LeagueID] = [
+        .mensCollegeBasketball, .nfl, .mlb, .mls,
+        .nba, .wnba, .womensCollegeBasketball, .nhl, .collegeFootball,
+        .premierLeague, .laLiga, .ligaMX, .nwsl,
+    ]
 
     /// Whether the league is a college one. Unknown leagues are judged by
     /// their path (`college-football`, `womens-college-basketball`).
@@ -56,6 +73,9 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     // MARK: URLs
 
     private static let siteAPI = "https://site.api.espn.com/apis/site/v2/sports"
+    /// Standings are served without the `/site` segment; the site-API
+    /// standings path answers with an empty stub.
+    private static let standingsAPI = "https://site.api.espn.com/apis/v2/sports"
     private static let commonAPI = "https://site.web.api.espn.com/apis/common/v3/sports"
 
     /// Every team in the league. The default page is short, so ask for more
@@ -95,6 +115,22 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     func scoreboardURL(day: String) -> String {
         let divisionI = isCollege && sport == "basketball" ? "&groups=50&limit=1000" : ""
         return "\(Self.siteAPI)/\(path)/scoreboard?dates=\(day)" + divisionI
+    }
+
+    /// The league's standings: a tree whose root is the league, with the
+    /// tables in its `children` (conferences, divisions, or one child holding
+    /// a soccer league's whole table). See FIXTURES.md, "Standings".
+    ///
+    /// College leagues name their division (`standingsGroup`). `season` is
+    /// the year ESPN files the season under — the ending year for the NBA,
+    /// NHL and college basketball (2027 is 2026-27), the starting year for
+    /// football and soccer; `nil` asks for the current season.
+    func standingsURL(season: Int? = nil) -> String {
+        var query: [String] = []
+        if let group = descriptor.standingsGroup { query.append("group=\(group)") }
+        if let season { query.append("season=\(season)") }
+        let url = "\(Self.standingsAPI)/\(path)/standings"
+        return query.isEmpty ? url : url + "?" + query.joined(separator: "&")
     }
 
     /// An athlete's profile, including the headline stats summary.
@@ -220,15 +256,15 @@ extension LeagueID {
     /// The leagues the picker lists, in chip order.
     static let browsable: [BrowsableLeague] = [
         BrowsableLeague(label: "NFL", league: .nfl),
-        BrowsableLeague(label: "NBA", league: LeagueID(sport: "basketball", league: "nba")),
+        BrowsableLeague(label: "NBA", league: .nba),
         BrowsableLeague(label: "MLB", league: .mlb),
-        BrowsableLeague(label: "NHL", league: LeagueID(sport: "hockey", league: "nhl")),
+        BrowsableLeague(label: "NHL", league: .nhl),
         BrowsableLeague(label: "MLS", league: .mls),
-        BrowsableLeague(label: "WNBA", league: LeagueID(sport: "basketball", league: "wnba")),
-        BrowsableLeague(label: "NCAAF", league: LeagueID(sport: "football", league: "college-football")),
+        BrowsableLeague(label: "WNBA", league: .wnba),
+        BrowsableLeague(label: "NCAAF", league: .collegeFootball),
         BrowsableLeague(label: "NCAAM", league: .mensCollegeBasketball),
-        BrowsableLeague(label: "NCAAW", league: LeagueID(sport: "basketball", league: "womens-college-basketball")),
-        BrowsableLeague(label: "EPL", league: LeagueID(sport: "soccer", league: "eng.1")),
+        BrowsableLeague(label: "NCAAW", league: .womensCollegeBasketball),
+        BrowsableLeague(label: "EPL", league: .premierLeague),
     ]
 
     /// The short label a team row's badge shows, e.g. `"NFL"`. Leagues the

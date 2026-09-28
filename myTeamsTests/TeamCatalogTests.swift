@@ -149,11 +149,14 @@ struct TeamCatalogTests {
         #expect(TeamRef.royals.periodName("1") == "")
 
         // An unknown league still gets a descriptor, keyed on its sport.
-        let nhl = LeagueID(sport: "hockey", league: "nhl")
-        #expect(nhl.descriptor.kind == .hockey)
+        let ahl = LeagueID(sport: "hockey", league: "ahl")
+        #expect(ahl.descriptor.kind == .hockey)
         #expect(LeagueID(sport: "lacrosse", league: "nll").descriptor.kind == .other)
-        #expect(LeagueID(sport: "basketball", league: "nba").descriptor.kind == .basketball)
-        #expect(nhl.descriptor.periodName("1") == "")
+        #expect(LeagueID(sport: "basketball", league: "nbl").descriptor.kind == .basketball)
+        #expect(ahl.descriptor.periodName("1") == "")
+        // The NHL is known (P3-a), and names its periods.
+        #expect(LeagueID(sport: "hockey", league: "nhl") == .nhl)
+        #expect(LeagueID.nhl.descriptor.periodName("1") == "1st Period")
     }
 
     // The literals below are what the per-team home views and schedule cards

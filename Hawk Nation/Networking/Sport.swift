@@ -102,6 +102,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
     enum PeriodStyle: Sendable {
         case halves
         case quarters
+        /// Hockey's three periods.
+        case periods
         /// No period label (baseball innings are not named).
         case unnamed
     }
@@ -135,6 +137,14 @@ struct LeagueDescriptor: Sendable, Identifiable {
     /// fold the state into the city.
     var venueBackdropAsset: String?
 
+    // MARK: Endpoint configuration
+
+    /// The `group` a standings request names, or `nil` for the league's
+    /// whole table. College standings are a tree of conferences under one
+    /// division: `"80"` is FBS football (`"50"` there would be a single FCS
+    /// conference), `"50"` Division I basketball. See `LeagueID.standingsURL`.
+    var standingsGroup: String?
+
     /// The label for a game period as the feeds number it (`status.period`).
     ///
     /// Only regulation periods are named; overtime and innings read as blank.
@@ -142,6 +152,7 @@ struct LeagueDescriptor: Sendable, Identifiable {
         let names: [String: String] = switch periodStyle {
         case .halves: ["1": "1st Half", "2": "2nd Half"]
         case .quarters: ["1": "1st Quarter", "2": "2nd Quarter", "3": "3rd Quarter", "4": "4th Quarter"]
+        case .periods: ["1": "1st Period", "2": "2nd Period", "3": "3rd Period"]
         case .unnamed: [:]
         }
         return names[period] ?? ""
@@ -161,7 +172,8 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: [
             .filter(RosterFilter(label: "Forwards", position: "Forward")),
             .filter(RosterFilter(label: "Guards", position: "Guard")),
-        ]
+        ],
+        standingsGroup: "50"
     )
 
     static let nfl = LeagueDescriptor(
@@ -225,16 +237,168 @@ struct LeagueDescriptor: Sendable, Identifiable {
         recordRule: RecordRule(usesDateForNextGame: true),
         competitorNameField: .shortDisplayName,
         periodStyle: .halves,
-        // The menu's own names for the playing positions.
-        rosterFilters: RosterFilter.positions(
-            ["Goalkeeper", "Defender", "Midfielder", "Forward"],
-            labels: ["Defender": "Defense", "Midfielder": "Midfield", "Forward": "Attacker"]
-        ).map(RosterFilterEntry.filter),
+        rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField"
     )
 
+    /// The positions a basketball roster feed names every player by.
+    private static let basketballRosterFilters: [RosterFilterEntry] = RosterFilter.positions(
+        ["Center", "Forward", "Guard"],
+        labels: ["Center": "Centers", "Forward": "Forwards", "Guard": "Guards"]
+    ).map(RosterFilterEntry.filter)
+
+    /// The soccer menu MLS has always had, under the menu's own names for the
+    /// playing positions. Every soccer feed captured names the same four.
+    private static let soccerRosterFilters: [RosterFilterEntry] = RosterFilter.positions(
+        ["Goalkeeper", "Defender", "Midfielder", "Forward"],
+        labels: ["Defender": "Defense", "Midfielder": "Midfield", "Forward": "Attacker"]
+    ).map(RosterFilterEntry.filter)
+
+    static let nba = LeagueDescriptor(
+        id: .nba,
+        kind: .basketball,
+        displayName: "NBA",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .quarters,
+        rosterFilters: basketballRosterFilters
+    )
+
+    static let wnba = LeagueDescriptor(
+        id: .wnba,
+        kind: .basketball,
+        displayName: "WNBA",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .quarters,
+        rosterFilters: basketballRosterFilters
+    )
+
+    static let womensCollegeBasketball = LeagueDescriptor(
+        id: .womensCollegeBasketball,
+        kind: .basketball,
+        displayName: "NCAA Women's Basketball",
+        isCollege: true,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .nickname,
+        // Women's college basketball plays four quarters, not two halves.
+        periodStyle: .quarters,
+        rosterFilters: basketballRosterFilters,
+        standingsGroup: "50"
+    )
+
+    static let nhl = LeagueDescriptor(
+        id: .nhl,
+        kind: .hockey,
+        displayName: "NHL",
+        isCollege: false,
+        // Grouped by position ("Centers", "Defense", "Goalies"), not by unit.
+        rosterShape: .grouped,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .periods,
+        rosterFilters: RosterFilter.positions(
+            ["Center", "Left Wing", "Right Wing", "Defense", "Goaltender"],
+            labels: ["Center": "Centers", "Left Wing": "Left Wings", "Right Wing": "Right Wings", "Goaltender": "Goalies"]
+        ).map(RosterFilterEntry.filter)
+    )
+
+    static let collegeFootball = LeagueDescriptor(
+        id: .collegeFootball,
+        kind: .football,
+        displayName: "NCAA Football",
+        isCollege: true,
+        rosterShape: .grouped,
+        recordRule: RecordRule(),
+        competitorNameField: .nickname,
+        periodStyle: .quarters,
+        drawLabel: "Tie",
+        liveCardStyle: .scoreFirst,
+        // Units as in the NFL feed, but the line is one "Offensive Lineman".
+        rosterFilters: [
+            .menu(title: "Defense", filters: RosterFilter.unit(
+                "defense",
+                positions: ["Cornerback", "Defensive End", "Defensive Tackle", "Linebacker", "Safety"]
+            )),
+            .menu(title: "Offense", filters: RosterFilter.unit(
+                "offense",
+                positions: ["Offensive Lineman", "Quarterback", "Running Back", "Tight End", "Wide Receiver"],
+                labels: ["Offensive Lineman": "Lineman"]
+            )),
+            .menu(title: "Special Teams", filters: RosterFilter.unit(
+                "specialTeam",
+                positions: ["Long Snapper", "Place Kicker", "Punter"]
+            )),
+        ],
+        standingsGroup: "80"
+    )
+
+    static let premierLeague = LeagueDescriptor(
+        id: .premierLeague,
+        kind: .soccer,
+        displayName: "Premier League",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField"
+    )
+
+    static let laLiga = LeagueDescriptor(
+        id: .laLiga,
+        kind: .soccer,
+        displayName: "LALIGA",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField"
+    )
+
+    static let ligaMX = LeagueDescriptor(
+        id: .ligaMX,
+        kind: .soccer,
+        displayName: "Liga MX",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField"
+    )
+
+    static let nwsl = LeagueDescriptor(
+        id: .nwsl,
+        kind: .soccer,
+        displayName: "NWSL",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        // Like MLS, the summaries fold the state into the city.
+        venueBackdropAsset: "soccerField"
+    )
+
+    /// Every known league's descriptor, keyed by id. `LeagueID.knownLeagues`
+    /// lists the same leagues in order.
     static let known: [LeagueID: LeagueDescriptor] = Dictionary(
-        uniqueKeysWithValues: [mensCollegeBasketball, nfl, mlb, mls].map { ($0.id, $0) }
+        uniqueKeysWithValues: [
+            mensCollegeBasketball, nfl, mlb, mls,
+            nba, wnba, womensCollegeBasketball, nhl, collegeFootball,
+            premierLeague, laLiga, ligaMX, nwsl,
+        ].map { ($0.id, $0) }
     )
 
     /// The descriptor for `id`: a known league's own, or a plain one derived
