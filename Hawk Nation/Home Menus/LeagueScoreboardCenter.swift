@@ -84,11 +84,16 @@ final class LeagueScoreboardCenter {
     /// Asks for `team`'s league scoreboard on `days` (`scoreboardDay(for:)`),
     /// starting the league's poller if it is not running. With no days, the
     /// subscription polls nothing until `update(_:days:)` adds some.
-    func subscribe(_ team: TeamRef, days: Set<String>) -> Subscription {
+    ///
+    /// - Parameter competition: one of the league's cups
+    ///   (`LeagueDescriptor.cupCompetitions`) to poll instead, for the days
+    ///   of the team's cup ties: the league's own board does not list them.
+    func subscribe(_ team: TeamRef, competition: LeagueID? = nil, days: Set<String>) -> Subscription {
+        let league = competition ?? team.league
         lastSubscriptionID += 1
-        let subscription = Subscription(id: lastSubscriptionID, league: team.league)
-        subscriptions[subscription.id] = Entry(teamID: team.id, league: team.league, days: days)
-        reconcilePoller(for: team.league)
+        let subscription = Subscription(id: lastSubscriptionID, league: league)
+        subscriptions[subscription.id] = Entry(teamID: team.id, league: league, days: days)
+        reconcilePoller(for: league)
         return subscription
     }
 
@@ -184,11 +189,15 @@ final class LeagueScoreboardCenter {
         return delay
     }
 
-    /// The teams a league's scoreboards fan out to: the favorites in it, in
-    /// favorites order, plus any subscribed team that is not a favorite (a
-    /// preview, or a page mid-removal).
+    /// The teams a league's scoreboards fan out to: the favorites in it (or,
+    /// for a cup, in a league that plays it), in favorites order, plus any
+    /// subscribed team that is not a favorite (a preview, or a page
+    /// mid-removal).
     func registry(for league: LeagueID) -> [TeamRef.ID] {
-        var ids = favoriteIDs().filter { TeamRef.parse(id: $0)?.league == league }
+        var ids = favoriteIDs().filter { id in
+            guard let parsed = TeamRef.parse(id: id) else { return false }
+            return parsed.league == league || parsed.league.descriptor.cupCompetitions.contains(league)
+        }
         for entry in subscriptions.values where entry.league == league && !ids.contains(entry.teamID) {
             ids.append(entry.teamID)
         }
@@ -196,12 +205,18 @@ final class LeagueScoreboardCenter {
     }
 
     /// Gives every team in `league`'s registry its games from the league's
-    /// kept scoreboards — one document read for all of them.
+    /// kept scoreboards — one document read for all of them. A team's lines
+    /// are its league's games and its cups' together, so one competition's
+    /// refresh never drops another's scores.
     private func fanOut(_ league: LeagueID) {
-        let boards = (scoreboards[league] ?? [:]).sorted { $0.key < $1.key }.map(\.value)
         for teamID in registry(for: league) {
-            guard let espnID = TeamRef.parse(id: teamID)?.espnID else { continue }
-            let teamLines = boards.flatMap { $0.lines(for: espnID) }
+            guard let team = TeamRef.parse(id: teamID) else { continue }
+            let competitions = [team.league] + team.league.descriptor.cupCompetitions
+            let teamLines = competitions.flatMap { competition in
+                (scoreboards[competition] ?? [:])
+                    .sorted { $0.key < $1.key }
+                    .flatMap { $0.value.lines(for: team.espnID) }
+            }
             // Only a change is written, so an unchanged minute does not
             // redraw the page.
             if lines[teamID] != teamLines {

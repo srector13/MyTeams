@@ -397,3 +397,227 @@ struct LeagueScoreboardCenterTests {
         #expect(center.registry(for: .nfl) == nflFavorites.dropFirst().map(\.id))
     }
 }
+
+// MARK: - The new leagues
+
+/// The P3 scoreboards by the exact URL the registry builds for each, so a
+/// request the registry did not build is a 404 the test sees. See
+/// FIXTURES.md, "New leagues (P3-a)" and "Cross-league acceptance (P3-e)".
+private let newLeagueBoards: [String: String] = [
+    LeagueID.nba.scoreboardURL(day: "20261003"): "nba_scoreboard_20261003",
+    LeagueID.nhl.scoreboardURL(day: "20260919"): "nhl_scoreboard_20260919",
+    LeagueID.premierLeague.scoreboardURL(day: "20260821"): "epl_scoreboard_20260821",
+    LeagueID.premierLeague.scoreboardURL(day: "20260909"): "epl_scoreboard_20260909",
+    LeagueID.soccer("uefa.champions").scoreboardURL(day: "20260909"): "ucl_scoreboard_20260909",
+    LeagueID.collegeFootball.scoreboardURL(day: "20260829"): "ncaaf_scoreboard_20260829",
+]
+
+private func newLeagueTransport() -> RecordingTransport {
+    RecordingTransport { url, _ in
+        guard let name = newLeagueBoards[url.absoluteString] else { return .status(404) }
+        return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
+    }
+}
+
+@Suite("League scoreboards: favorites in the new leagues", .timeLimit(.minutes(1)))
+struct NewLeagueScoreboardCenterTests {
+    private let heat = team(.nba, "14")
+    private let raptors = team(.nba, "28")
+    private let leafs = team(.nhl, "21")
+    private let canadiens = team(.nhl, "10")
+    private let arsenal = team(.premierLeague, "359")
+    private let coventry = team(.premierLeague, "388")
+    private let usc = team(.collegeFootball, "30")
+    private let sanJose = team(.collegeFootball, "23")
+    /// Plays the Champions League too (`LeagueDescriptor.laLiga.cupCompetitions`).
+    private let barcelona = team(.laLiga, "83")
+    private let championsLeague = LeagueID.soccer("uefa.champions")
+
+    @MainActor
+    private func makeCenter(
+        _ transport: RecordingTransport,
+        _ sleeper: ScriptedSleeper,
+        favorites: [TeamRef]
+    ) -> LeagueScoreboardCenter {
+        let ids = favorites.map(\.id)
+        return LeagueScoreboardCenter(
+            client: HTTPClient(transport: transport),
+            favoriteIDs: { ids },
+            sleep: { try await sleeper.sleep($0) }
+        )
+    }
+
+    @Test("NBA, NHL, EPL and NCAAF favorites poll one scoreboard each, by the registry's URL")
+    @MainActor
+    func fourLeagues() async {
+        let transport = newLeagueTransport()
+        let sleeper = ScriptedSleeper()
+        var waits = sleeper.waits.makeAsyncIterator()
+        let favorites = [heat, raptors, leafs, canadiens, arsenal, coventry, usc, sanJose]
+        let center = makeCenter(transport, sleeper, favorites: favorites)
+
+        // One page per league on screen, each on its game's day.
+        let subscriptions = [
+            center.subscribe(heat, days: ["20261003"]),
+            center.subscribe(leafs, days: ["20260919"]),
+            center.subscribe(arsenal, days: ["20260821"]),
+            center.subscribe(usc, days: ["20260829"]),
+        ]
+        #expect(center.pollingLeagues == [.nba, .nhl, .premierLeague, .collegeFootball])
+
+        _ = await nextWaits(4, from: &waits)
+        #expect(transport.requestCount == 4)
+        #expect(Set(transport.urls.map(\.absoluteString)) == [
+            "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=20261003",
+            "https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?dates=20260919",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260821",
+            "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20260829",
+        ])
+
+        // nba_scoreboard_20261003: Heat at Raptors before tip-off, "0"–"0"
+        // on the board, so no score for either.
+        #expect(center.lines[heat.id] == [])
+        #expect(center.lines[raptors.id] == [])
+
+        // nhl_scoreboard_20260919: split squads, two games each on one board.
+        #expect(center.lines[leafs.id] == [
+            ScoreboardLine(gameID: "401881922", opponentID: "10", score: LiveGameScore(score: 1, opponentScore: 4)),
+            ScoreboardLine(gameID: "401881923", opponentID: "10", score: LiveGameScore(score: 3, opponentScore: 4)),
+        ])
+        #expect(center.lines[canadiens.id]?.map(\.score) == [
+            LiveGameScore(score: 4, opponentScore: 1),
+            LiveGameScore(score: 4, opponentScore: 3),
+        ])
+
+        // epl_scoreboard_20260821: Arsenal 3–0 Coventry, "FT".
+        #expect(center.lines[arsenal.id] == [
+            ScoreboardLine(gameID: "401879301", opponentID: "388", score: LiveGameScore(score: 3, opponentScore: 0)),
+        ])
+        #expect(center.lines[coventry.id]?.first?.score == LiveGameScore(score: 0, opponentScore: 3))
+
+        // ncaaf_scoreboard_20260829: USC 42–26 San José State.
+        #expect(center.lines[usc.id]?.first?.score == LiveGameScore(score: 42, opponentScore: 26))
+        #expect(center.lines[sanJose.id]?.first?.score == LiveGameScore(score: 26, opponentScore: 42))
+
+        for subscription in subscriptions {
+            center.unsubscribe(subscription)
+        }
+        #expect(center.pollingLeagues.isEmpty)
+    }
+
+    @Test("Live cards name the period by sport; soccer shows its match status")
+    func liveCardLabels() throws {
+        // The NHL board's overtime game (401881923): status.period 4.
+        let board = try Fixture.json("nhl_scoreboard_20260919")
+        let overtime = board["events", 1, "competitions", 0, "status", "period"].stringValue
+        #expect(overtime == "4")
+        #expect(LeagueDescriptor.nhl.liveCardPeriodLabel(overtime) == "OT")
+        #expect(LeagueDescriptor.nhl.liveCardPeriodLabel("2") == "2nd Period")
+        #expect(LeagueDescriptor.nba.liveCardPeriodLabel("4") == "4th Quarter")
+        #expect(LeagueDescriptor.collegeFootball.liveCardPeriodLabel("5") == "OT")
+
+        // Soccer: epl_schedule's Coventry match (401879301) rewound to the
+        // interval and then the 67th minute. At the break the card shows
+        // the status ("Halftime"), not a period; in play, the half and the
+        // match clock.
+        let schedule = try Fixture.json("epl_schedule")
+        let (event, pointer) = try Fixture.event("401879301", in: schedule)
+        let status: [JSON.Index] = ["competitions", 0, "status"]
+        let inPlay = event
+            .setting(status + ["type", "completed"], to: .bool(false))
+            .setting(status + ["type", "state"], to: .string("in"))
+
+        let interval = parseGame(
+            from: inPlay
+                .setting(status + ["period"], to: .number(1))
+                .setting(status + ["type", "description"], to: .string("Halftime")),
+            team: arsenal, pointer: pointer
+        )
+        #expect(interval.gameHalftime)
+        #expect(!interval.completed)
+
+        let secondHalf = parseGame(
+            from: inPlay
+                .setting(status + ["period"], to: .number(2))
+                .setting(status + ["displayClock"], to: .string("67'"))
+                .setting(status + ["type", "description"], to: .string("Second Half")),
+            team: arsenal, pointer: pointer
+        )
+        #expect(!secondHalf.gameHalftime)
+        #expect(secondHalf.gameClock == "67'")
+        #expect(LeagueDescriptor.premierLeague.liveCardPeriodLabel(secondHalf.gamePeriod) == "2nd Half")
+    }
+
+    @Test("Bug: soccer extra time read as OT, 2OT and penalties as 3OT")
+    func soccerExtraTime() {
+        // A cup tie level after 90 minutes plays periods 3 and 4 (extra
+        // time), then a shoot-out.
+        for league in [LeagueDescriptor.premierLeague, .laLiga, .ligaMX, .nwsl, .mls] {
+            #expect(league.liveCardPeriodLabel("2") == "2nd Half")
+            #expect(league.liveCardPeriodLabel("3") == "Extra Time")
+            #expect(league.liveCardPeriodLabel("4") == "Extra Time")
+            #expect(league.liveCardPeriodLabel("5") == "Penalties")
+        }
+        // Halves elsewhere still go to overtime.
+        #expect(LeagueDescriptor.mensCollegeBasketball.liveCardPeriodLabel("3") == "OT")
+        #expect(LeagueDescriptor.mensCollegeBasketball.liveCardPeriodLabel("4") == "2OT")
+    }
+
+    @Test("Bug: cup ties got no live score — the poller watched the league's scoreboard only")
+    @MainActor
+    func cupTies() async throws {
+        let transport = newLeagueTransport()
+        let sleeper = ScriptedSleeper()
+        var waits = sleeper.waits.makeAsyncIterator()
+        let center = makeCenter(transport, sleeper, favorites: [arsenal, barcelona, heat])
+
+        // Arsenal won 1–0 at Napoli (114) in the Champions League on
+        // September 9 (ucl_schedule_359, ucl_scoreboard_20260909). The
+        // Premier League's board that day is empty (epl_scoreboard_20260909):
+        // the league poller alone finds nothing.
+        let league = center.subscribe(arsenal, days: ["20260909"])
+        _ = await nextWaits(1, from: &waits)
+        #expect(transport.urls.last?.absoluteString
+            == "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard?dates=20260909")
+        #expect(center.lines[arsenal.id] == [])
+
+        // The page subscribes the cup's days under the cup.
+        let cup = center.subscribe(arsenal, competition: championsLeague, days: ["20260909"])
+        #expect(cup.league == championsLeague)
+        #expect(center.pollingLeagues == [.premierLeague, championsLeague])
+        _ = await nextWaits(1, from: &waits)
+        #expect(transport.requestCount == 2)
+        #expect(transport.urls.last?.absoluteString
+            == "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20260909")
+
+        let napoli = ScoreboardLine(gameID: "401915423", opponentID: "114", score: LiveGameScore(score: 1, opponentScore: 0))
+        #expect(center.lines[arsenal.id] == [napoli])
+
+        // The cup's registry is every favorite whose league plays it:
+        // Barcelona's 5–1 over Feyenoord (142) came in the same document.
+        #expect(center.registry(for: championsLeague) == [arsenal.id, barcelona.id])
+        #expect(center.lines[barcelona.id] == [
+            ScoreboardLine(gameID: "401915424", opponentID: "142", score: LiveGameScore(score: 5, opponentScore: 1)),
+        ])
+        #expect(center.lines[heat.id] == nil)
+
+        // A later league refresh keeps the cup's line.
+        await center.refresh(.premierLeague)
+        #expect(center.lines[arsenal.id] == [napoli])
+
+        // The schedule card finds it: the merged schedule files the tie
+        // under the cup, by the event's league.slug.
+        let leagueSchedule = try Fixture.json("epl_schedule")
+        let cupSchedule = try Fixture.json("ucl_schedule_359")
+        let games = mergeSchedules(
+            league: leagueSchedule, cups: [(competition: championsLeague, json: cupSchedule)], team: arsenal
+        )
+        let tie = try #require(games.first { $0.gameID == "401915423" })
+        #expect(tie.competition == championsLeague)
+        #expect(center.liveScore(for: tie, team: arsenal) == LiveGameScore(score: 1, opponentScore: 0))
+
+        center.unsubscribe(league)
+        center.unsubscribe(cup)
+        #expect(center.pollingLeagues.isEmpty)
+    }
+}

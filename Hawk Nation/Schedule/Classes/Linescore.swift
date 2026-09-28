@@ -125,8 +125,10 @@ extension Linescore {
 extension LeagueDescriptor {
     /// The period line a schedule card draws for a game in progress: the
     /// regulation period's name (`periodName`: "3rd Period", "2nd Half"),
-    /// or, past regulation, "OT", "2OT" …. Blank where periods go unnamed
-    /// (baseball) or the feed gave no period.
+    /// or, past regulation, "OT", "2OT" …. Soccer has no overtimes: a cup
+    /// tie goes to two halves of "Extra Time" (periods 3 and 4), then
+    /// "Penalties". Blank where periods go unnamed (baseball) or the feed
+    /// gave no period.
     ///
     /// `periodName` itself still names regulation only; the golden tests
     /// pin that. This is the card's label, which needs overtime too.
@@ -137,6 +139,9 @@ extension LeagueDescriptor {
               let regulation = regulationPeriods,
               number > regulation
         else { return name }
+        if kind == .soccer {
+            return number - regulation <= 2 ? "Extra Time" : "Penalties"
+        }
         return overtimeLabel(number - regulation)
     }
 }

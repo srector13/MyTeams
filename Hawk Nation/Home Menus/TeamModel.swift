@@ -111,9 +111,10 @@ final class TeamModel<Player: RosterPlayer> {
     private let loadStandings: @Sendable (LeagueID) async -> Result<Standings, NetworkError>
     private let scoreboards: LeagueScoreboardCenter
 
-    /// The page's standing request for its league's scoreboard, held while
-    /// the schedule refresh runs (see `refreshSchedulePeriodically`).
-    @ObservationIgnored private var scoreboardSubscription: LeagueScoreboardCenter.Subscription?
+    /// The page's standing requests for its league's scoreboard and each
+    /// of its cups', held while the schedule refresh runs (see
+    /// `refreshSchedulePeriodically`).
+    @ObservationIgnored private var scoreboardSubscriptions: [LeagueScoreboardCenter.Subscription] = []
 
     /// How the league turns the schedule into a record and a next game: MLS
     /// completion flags are unreliable, so there a past kick-off also counts
@@ -188,12 +189,19 @@ final class TeamModel<Player: RosterPlayer> {
         // The page went away during the first load.
         guard !Task.isCancelled else { return }
 
-        let subscription = scoreboards.subscribe(team, days: liveScoreboardDays())
-        scoreboardSubscription = subscription
+        // A cup tie is only on its cup's scoreboard, so each competition
+        // the team plays in gets its own subscription; one with no game in
+        // the live window polls nothing.
+        let subscriptions = ([team.league] + team.league.descriptor.cupCompetitions).map { competition in
+            scoreboards.subscribe(team, competition: competition, days: liveScoreboardDays(in: competition))
+        }
+        scoreboardSubscriptions = subscriptions
         defer {
-            scoreboards.unsubscribe(subscription)
-            if scoreboardSubscription == subscription {
-                scoreboardSubscription = nil
+            for subscription in subscriptions {
+                scoreboards.unsubscribe(subscription)
+            }
+            if scoreboardSubscriptions == subscriptions {
+                scoreboardSubscriptions = []
             }
         }
 
@@ -209,16 +217,19 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
-    /// The scoreboard days (`scoreboardDay(for:)`) of the games that qualify
-    /// under `shouldPollLiveScore`: the ones the league's scoreboard is
-    /// polled for.
-    private func liveScoreboardDays(now: Date = Date()) -> Set<String> {
-        Set(games.filter { shouldPollLiveScore(game: $0, now: now) }.map { scoreboardDay(for: $0.dateAsDate) })
+    /// The scoreboard days (`scoreboardDay(for:)`) of the games in
+    /// `competition` that qualify under `shouldPollLiveScore`: the ones its
+    /// scoreboard is polled for.
+    private func liveScoreboardDays(in competition: LeagueID, now: Date = Date()) -> Set<String> {
+        Set(games
+            .filter { ($0.competition ?? team.league) == competition && shouldPollLiveScore(game: $0, now: now) }
+            .map { scoreboardDay(for: $0.dateAsDate) })
     }
 
     private func updateScoreboardSubscription() {
-        guard let scoreboardSubscription else { return }
-        scoreboards.update(scoreboardSubscription, days: liveScoreboardDays())
+        for subscription in scoreboardSubscriptions {
+            scoreboards.update(subscription, days: liveScoreboardDays(in: subscription.league))
+        }
     }
 
     // MARK: - Retrying
