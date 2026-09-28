@@ -110,7 +110,7 @@ final class ScoreAlertEngine {
 
     /// A two-team game as the diff sees it. A game called off (`"post"`
     /// without `completed`) reads as not started, so it never goes final.
-    static func snapshot(of game: ScoreboardGame) -> ScoreSnapshot? {
+    nonisolated static func snapshot(of game: ScoreboardGame) -> ScoreSnapshot? {
         guard game.competitors.count == 2,
               let home = game.competitors.first(where: { $0.homeAway == "home" }),
               let away = game.competitors.first(where: { $0.homeAway == "away" })
