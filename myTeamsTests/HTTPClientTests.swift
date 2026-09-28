@@ -19,10 +19,10 @@ private struct StubTransport: HTTPTransport {
         try respond(url)
     }
 
-    /// Answers with `status` and `body`.
-    static func status(_ status: Int, body: String = "") -> StubTransport {
+    /// Answers with `status`, `body` and `headers`.
+    static func status(_ status: Int, body: String = "", headers: [String: String]? = nil) -> StubTransport {
         StubTransport { url in
-            guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil) else {
+            guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers) else {
                 throw URLError(.badServerResponse)
             }
             return (Data(body.utf8), response as URLResponse)
@@ -157,5 +157,120 @@ struct HTTPClientTests {
             return
         }
         #expect(status == 503)
+    }
+}
+
+/// Covers the headers a poller paces itself by, and the schedule
+/// `PollBackoff` builds from them.
+@Suite("Poll backoff")
+struct PollBackoffTests {
+    private let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=20260927")!
+
+    private func response(_ status: Int, retryAfter: Duration? = nil, maxAge: Duration? = nil) -> FetchResponse {
+        let result: FetchResult = (200..<300).contains(status)
+            ? .success(.object([:]))
+            : .failure(.httpError(status: status))
+        return FetchResponse(result: result, retryAfter: retryAfter, maxAge: maxAge)
+    }
+
+    // MARK: Headers
+
+    @Test("Retry-After reads as delay-seconds or an HTTP-date")
+    func retryAfterHeader() {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)  // 2026-09-21T14:13:20Z
+        #expect(HTTPClient.retryAfter("120", now: now) == .seconds(120))
+        #expect(HTTPClient.retryAfter(" 30 ", now: now) == .seconds(30))
+        #expect(HTTPClient.retryAfter("Mon, 21 Sep 2026 14:15:20 GMT", now: now) == .seconds(120))
+        // Absent, unreadable, zero and past values ask for nothing.
+        #expect(HTTPClient.retryAfter(nil, now: now) == nil)
+        #expect(HTTPClient.retryAfter("soon", now: now) == nil)
+        #expect(HTTPClient.retryAfter("0", now: now) == nil)
+        #expect(HTTPClient.retryAfter("Mon, 21 Sep 2026 14:00:00 GMT", now: now) == nil)
+    }
+
+    @Test("Cache-Control's max-age is read among other directives")
+    func maxAgeHeader() {
+        // ESPN's scoreboards answer "max-age=4" and the like.
+        #expect(HTTPClient.maxAge("max-age=4") == .seconds(4))
+        #expect(HTTPClient.maxAge("public, max-age=60, must-revalidate") == .seconds(60))
+        #expect(HTTPClient.maxAge("Max-Age=\"90\"") == .seconds(90))
+        #expect(HTTPClient.maxAge("no-cache") == nil)
+        #expect(HTTPClient.maxAge(nil) == nil)
+    }
+
+    @Test("The client passes the pacing headers through with the result")
+    func headersPassThrough() async {
+        let client = HTTPClient(transport: StubTransport.status(
+            429, headers: ["Retry-After": "300", "Cache-Control": "max-age=10"]
+        ))
+        let response = await client.fetchResponse(url)
+        #expect(response.isThrottled)
+        #expect(response.retryAfter == .seconds(300))
+        #expect(response.maxAge == .seconds(10))
+        guard case .failure(.httpError(429)) = response.result else {
+            Issue.record("Expected the 429 to pass through, got \(response.result)")
+            return
+        }
+    }
+
+    // MARK: Schedule
+
+    @Test("403, 429 and 5xx throttle; 404 and offline do not")
+    func throttleStatuses() {
+        #expect(response(403).isThrottled)
+        #expect(response(429).isThrottled)
+        #expect(response(500).isThrottled)
+        #expect(response(503).isThrottled)
+        #expect(!response(404).isThrottled)
+        #expect(!response(200).isThrottled)
+        #expect(!FetchResponse(result: .failure(.offline(URLError(.notConnectedToInternet)))).isThrottled)
+    }
+
+    @Test("Each 429 in a row doubles the wait, up to the cap; success resets it")
+    func doublesOnThrottle() {
+        var backoff = PollBackoff(base: .seconds(60), cap: .seconds(600))
+        #expect(backoff.delay(after: response(200)) == .seconds(60))
+        #expect(backoff.delay(after: response(429)) == .seconds(120))
+        #expect(backoff.delay(after: response(429)) == .seconds(240))
+        #expect(backoff.delay(after: response(503)) == .seconds(480))
+        #expect(backoff.delay(after: response(429)) == .seconds(600))
+        #expect(backoff.delay(after: response(429)) == .seconds(600))
+        #expect(backoff.delay(after: response(200)) == .seconds(60))
+        #expect(backoff.delay(after: response(429)) == .seconds(120))
+    }
+
+    @Test("Retry-After is honoured when it asks for longer than the doubled wait")
+    func honoursRetryAfter() {
+        var backoff = PollBackoff(base: .seconds(60), cap: .seconds(600))
+        #expect(backoff.delay(after: response(429, retryAfter: .seconds(300))) == .seconds(300))
+        // Beyond the cap too: the server said when to come back.
+        #expect(backoff.delay(after: response(429, retryAfter: .seconds(900))) == .seconds(900))
+        // …but not for days.
+        #expect(backoff.delay(after: response(429, retryAfter: .seconds(86_400))) == PollBackoff.retryAfterLimit)
+        // A shorter Retry-After does not undercut the doubled wait.
+        var fresh = PollBackoff(base: .seconds(60))
+        #expect(fresh.delay(after: response(429, retryAfter: .seconds(5))) == .seconds(120))
+    }
+
+    @Test("A fresh response is not asked for again before its max-age runs out")
+    func honoursMaxAge() {
+        var backoff = PollBackoff(base: .seconds(60), cap: .seconds(600))
+        // ESPN's usual few seconds leave the base interval alone.
+        #expect(backoff.delay(after: response(200, maxAge: .seconds(4))) == .seconds(60))
+        #expect(backoff.delay(after: response(200, maxAge: .seconds(180))) == .seconds(180))
+        // An hour-long max-age is held to the cap, so live scores still move.
+        #expect(backoff.delay(after: response(200, maxAge: .seconds(3600))) == .seconds(600))
+    }
+
+    @Test("Other failures keep the current wait")
+    func otherFailuresHold() {
+        var backoff = PollBackoff(base: .seconds(60), cap: .seconds(600))
+        let offline = FetchResponse(result: .failure(.offline(URLError(.timedOut))))
+        #expect(backoff.delay(after: offline) == .seconds(60))
+        #expect(backoff.delay(after: response(429)) == .seconds(120))
+        #expect(backoff.delay(after: offline) == .seconds(120))
+        #expect(backoff.delay(after: response(404)) == .seconds(120))
+        backoff.reset()
+        #expect(backoff.current == .seconds(60))
     }
 }

@@ -57,6 +57,79 @@ enum FetchResult: Sendable {
     }
 }
 
+/// A `FetchResult` with the response headers a poller paces itself by.
+struct FetchResponse: Sendable {
+    var result: FetchResult
+    /// The server's `Retry-After`, when it sent one.
+    var retryAfter: Duration?
+    /// The response's `Cache-Control: max-age`: how long it stays fresh.
+    var maxAge: Duration?
+
+    init(result: FetchResult, retryAfter: Duration? = nil, maxAge: Duration? = nil) {
+        self.result = result
+        self.retryAfter = retryAfter
+        self.maxAge = maxAge
+    }
+
+    /// Whether the server is asking the client to slow down: 403 or 429,
+    /// which ESPN answers a too-eager client with, or any 5xx.
+    var isThrottled: Bool {
+        guard case .failure(.httpError(let status)) = result else { return false }
+        return status == 403 || status == 429 || (500..<600).contains(status)
+    }
+}
+
+/// How long a polling loop waits before its next request.
+///
+/// A good response brings the wait back to `base`, or longer when the
+/// response says it stays fresh longer (`max-age`). Each throttled response
+/// in a row (403, 429, 5xx — see `FetchResponse.isThrottled`) doubles the
+/// wait, up to `cap`; a `Retry-After` longer than that is waited out in full,
+/// up to `retryAfterLimit`. Any other failure — offline, a 404, a body that
+/// is not JSON — keeps the current wait, neither escalating nor resetting.
+///
+/// A value type with no clock of its own: the caller sleeps for whatever
+/// `delay(after:)` returns, so tests read the schedule directly.
+struct PollBackoff: Sendable, Equatable {
+    /// The wait after a good response.
+    let base: Duration
+    /// The longest a throttled loop waits, unless `Retry-After` asks for more.
+    let cap: Duration
+    /// The longest `Retry-After` honoured, against a header that asks for days.
+    static let retryAfterLimit: Duration = .seconds(60 * 60)
+
+    /// The wait the last response called for.
+    private(set) var current: Duration
+
+    init(base: Duration, cap: Duration = .seconds(10 * 60)) {
+        self.base = base
+        self.cap = max(cap, base)
+        self.current = base
+    }
+
+    /// Records `response` and returns how long to wait before asking again.
+    mutating func delay(after response: FetchResponse) -> Duration {
+        if response.isThrottled {
+            current = min(current * 2, cap)
+            guard let retryAfter = response.retryAfter else { return current }
+            return max(current, min(retryAfter, Self.retryAfterLimit))
+        }
+        switch response.result {
+        case .success, .empty:
+            current = base
+            return max(base, min(response.maxAge ?? .zero, cap))
+        case .failure:
+            return current
+        }
+    }
+
+    /// Starts the next throttle from `base` again, for a caller that paces
+    /// its good responses itself.
+    mutating func reset() {
+        current = base
+    }
+}
+
 /// Performs the actual request, so tests can stand in for the network.
 protocol HTTPTransport: Sendable {
     func load(_ url: URL) async throws -> (Data, URLResponse)
@@ -101,45 +174,106 @@ struct HTTPClient: Sendable {
 
     /// Fetches `url` and parses the response body.
     func fetch(_ url: URL) async -> FetchResult {
-        do {
-            let (data, response) = try await transport.load(url)
-
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                logger.error("\(url.host() ?? "request") returned HTTP \(http.statusCode)")
-                return .failure(.httpError(status: http.statusCode))
-            }
-            if data.isEmpty {
-                return .empty
-            }
-            guard let raw = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
-                logger.error("\(url.host() ?? "request") returned a body that is not JSON")
-                return .failure(.decodeError)
-            }
-            return .success(JSON(raw))
-        } catch is CancellationError {
-            return .failure(.cancelled)
-        } catch let error as URLError where error.code == .cancelled {
-            return .failure(.cancelled)
-        } catch let error as URLError {
-            logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
-            return .failure(.offline(error))
-        } catch {
-            // Anything a transport throws that is not a URLError still means
-            // no response arrived.
-            logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
-            return .failure(.offline(URLError(.unknown)))
-        }
+        await fetchResponse(url).result
     }
 
     /// Fetches a URL written as a string. A string that is not a valid URL
     /// fails with `.invalidURL`.
     func fetch(_ urlString: String) async -> FetchResult {
+        await fetchResponse(urlString).result
+    }
+
+    /// Fetches `url` and parses the response body, keeping the headers a
+    /// poller paces itself by: `Retry-After` and `Cache-Control: max-age`.
+    /// See `PollBackoff`.
+    ///
+    /// - Parameter now: the instant an HTTP-date `Retry-After` counts from.
+    func fetchResponse(_ url: URL, now: Date = Date()) async -> FetchResponse {
+        do {
+            let (data, response) = try await transport.load(url)
+            let http = response as? HTTPURLResponse
+            let retryAfter = Self.retryAfter(http?.value(forHTTPHeaderField: "Retry-After"), now: now)
+            let maxAge = Self.maxAge(http?.value(forHTTPHeaderField: "Cache-Control"))
+            func respond(_ result: FetchResult) -> FetchResponse {
+                FetchResponse(result: result, retryAfter: retryAfter, maxAge: maxAge)
+            }
+
+            if let http, !(200..<300).contains(http.statusCode) {
+                logger.error("\(url.host() ?? "request") returned HTTP \(http.statusCode)")
+                return respond(.failure(.httpError(status: http.statusCode)))
+            }
+            if data.isEmpty {
+                return respond(.empty)
+            }
+            guard let raw = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+                logger.error("\(url.host() ?? "request") returned a body that is not JSON")
+                return respond(.failure(.decodeError))
+            }
+            return respond(.success(JSON(raw)))
+        } catch is CancellationError {
+            return FetchResponse(result: .failure(.cancelled))
+        } catch let error as URLError where error.code == .cancelled {
+            return FetchResponse(result: .failure(.cancelled))
+        } catch let error as URLError {
+            logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
+            return FetchResponse(result: .failure(.offline(error)))
+        } catch {
+            // Anything a transport throws that is not a URLError still means
+            // no response arrived.
+            logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
+            return FetchResponse(result: .failure(.offline(URLError(.unknown))))
+        }
+    }
+
+    /// Fetches a URL written as a string, keeping its pacing headers. A
+    /// string that is not a valid URL fails with `.invalidURL`.
+    func fetchResponse(_ urlString: String, now: Date = Date()) async -> FetchResponse {
         guard let url = URL(string: urlString) else {
             // Log the host only, matching the other failure paths above.
             let host = URLComponents(string: urlString)?.host ?? "unknown host"
             logger.error("Malformed URL for host \(host)")
-            return .failure(.invalidURL)
+            return FetchResponse(result: .failure(.invalidURL))
         }
-        return await fetch(url)
+        return await fetchResponse(url, now: now)
     }
+
+    // MARK: Pacing headers
+
+    /// Reads `Retry-After`: delay-seconds (`"120"`) or an HTTP-date
+    /// (`"Wed, 21 Oct 2026 07:28:00 GMT"`) measured from `now`. `nil` when
+    /// absent, unreadable, or already past.
+    static func retryAfter(_ value: String?, now: Date) -> Duration? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if let seconds = Int(value) {
+            return seconds > 0 ? .seconds(seconds) : nil
+        }
+        guard let date = httpDateParser.date(from: value) else { return nil }
+        let seconds = date.timeIntervalSince(now).rounded(.up)
+        return seconds > 0 ? .seconds(Int(seconds)) : nil
+    }
+
+    /// Reads the `max-age` directive of a `Cache-Control` header, e.g.
+    /// `"max-age=60, public"`. `nil` when absent or unreadable.
+    static func maxAge(_ value: String?) -> Duration? {
+        guard let value else { return nil }
+        for directive in value.split(separator: ",") {
+            let parts = directive.split(separator: "=", maxSplits: 1)
+            guard parts.count == 2,
+                  parts[0].trimmingCharacters(in: .whitespaces).lowercased() == "max-age",
+                  let seconds = Int(parts[1].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"")))
+            else { continue }
+            return seconds >= 0 ? .seconds(seconds) : nil
+        }
+        return nil
+    }
+
+    /// Reads the IMF-fixdate form of an HTTP-date, the only one servers may
+    /// send today (RFC 9110 §5.6.7).
+    private static let httpDateParser: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter
+    }()
 }
