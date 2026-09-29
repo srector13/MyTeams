@@ -264,6 +264,9 @@ struct TeamScheduleWidget: Widget {
 struct ScheduleWidgets: WidgetBundle {
     var body: some Widget {
         TeamScheduleWidget()
+        #if canImport(ActivityKit) && os(iOS)
+        GameLiveActivity()
+        #endif
     }
 }
 

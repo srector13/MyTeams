@@ -46,6 +46,17 @@ struct ScoreboardGame: Sendable, Hashable {
     /// called off.
     var completed: Bool
     var competitors: [ScoreboardCompetitor]
+    /// `status.period`: the quarter, half, period or inning; 0 before the
+    /// start. For score alerts (`ScoreAlertEngine`).
+    var period: Int = 0
+    /// Each competitor's `team.shortDisplayName`, by ESPN team id. For score
+    /// alerts.
+    var teamNames: [String: String] = [:]
+    /// `status.displayClock`: `"12:34"`, `"67'"`, `"90'+5'"`; `"0:00"` where
+    /// the sport keeps no clock. For Live Activities (`LiveActivityManager`).
+    var clock: String = ""
+    /// The competition's `date`, its scheduled start. For Live Activities.
+    var startDate: Date? = nil
 
     /// The score as `teamID` sees it, or `nil` when the game does not list
     /// that team against one opponent, or has no score worth showing yet.
@@ -115,6 +126,19 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
             // same object on every board seen so far.
             var status = competition["status", "type"]
             if status.dictionary == nil { status = event["status", "type"] }
+            var period = competition["status", "period"]
+            if period.int == nil { period = event["status", "period"] }
+            var clock = competition["status", "displayClock"]
+            if clock.string == nil { clock = event["status", "displayClock"] }
+            var date = competition["date"]
+            if date.string == nil { date = event["date"] }
+
+            var teamNames: [String: String] = [:]
+            for (_, competitor) in competition["competitors"] {
+                let teamID = competitor["team", "id"].stringValue
+                guard !teamID.isEmpty else { continue }
+                teamNames[teamID] = competitor["team", "shortDisplayName"].stringValue
+            }
 
             let competitors: [ScoreboardCompetitor] = competition["competitors"].compactMap { _, competitor in
                 let teamID = competitor["team", "id"].stringValue
@@ -130,7 +154,11 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
                 gameID: gameID,
                 state: status["state"].stringValue,
                 completed: status["completed"].boolValue,
-                competitors: competitors
+                competitors: competitors,
+                period: period.intValue,
+                teamNames: teamNames,
+                clock: clock.stringValue,
+                startDate: parseGameDate(date.stringValue)
             ))
         }
     }

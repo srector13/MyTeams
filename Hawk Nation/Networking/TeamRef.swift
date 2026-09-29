@@ -498,7 +498,7 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     /// When the team was unfollowed. `nil`, or earlier than `addedAt`, while
     /// it is followed.
     var removedAt: Date?
-    /// Whether game alerts are wanted for the team. Nothing reads it yet.
+    /// Whether game alerts are wanted for the team (`ScoreAlertEngine`).
     var notify: Bool
 
     var id: String { teamID }

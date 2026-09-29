@@ -1,0 +1,97 @@
+//
+//  GameActivityAttributes.swift
+//  myTeams
+//
+//  Created by Stephen Rector on 9/28/26.
+//  Copyright © 2026 Stephen Rector. All rights reserved.
+//
+
+import Foundation
+#if canImport(ActivityKit)
+import ActivityKit
+#endif
+
+// A game's Live Activity, shared by the app (which starts, updates and ends
+// it: `LiveActivityManager`) and the widget extension (which draws it:
+// `GameLiveActivity`). Compiled into both targets.
+//
+// The two halves are plain Foundation values so the app's mapping from a
+// scoreboard (`LiveActivityStateMapper`) builds and tests without
+// ActivityKit; `GameActivityAttributes` only wraps them for the system.
+
+/// What a game's Live Activity knows from its start: the matchup.
+struct GameActivityInfo: Codable, Hashable, Sendable {
+    /// The competition id, `ScoreboardGame.gameID`. One activity per game.
+    var gameID: String
+    /// The followed team's ESPN id.
+    var teamID: String
+    /// The path of the league or cup whose scoreboard lists the game,
+    /// `LeagueID.path`, e.g. `"football/nfl"`.
+    var league: String
+    var homeName: String
+    var awayName: String
+    /// "Rams at Broncos".
+    var matchup: String
+    /// The scheduled start, when the scoreboard gives one.
+    var kickoff: Date?
+}
+
+/// What a game's Live Activity shows now. Mapped from a scoreboard game by
+/// `LiveActivityStateMapper`.
+struct GameActivityState: Codable, Hashable, Sendable {
+    enum Phase: String, Codable, Hashable, Sendable {
+        /// Not started.
+        case pending
+        case live
+        /// Played out.
+        case ended
+        /// Over without being played out: postponed, suspended, cancelled.
+        case calledOff
+    }
+
+    var homeScore: Int
+    var awayScore: Int
+    /// The quarter, half, period or inning; 0 before the start.
+    var period: Int
+    /// The game clock while live, e.g. `"12:34"` or `"67'"`; empty where the
+    /// sport keeps none or it has run out.
+    var clock: String
+    var phase: Phase
+
+    /// "4th · 0:48", "2nd", "Final".
+    var stage: String {
+        switch phase {
+        case .pending: return "Pregame"
+        case .ended: return "Final"
+        case .calledOff: return "Called off"
+        case .live:
+            let period = self.period > 0 ? Self.ordinal(self.period) : "Live"
+            return clock.isEmpty ? period : "\(period) · \(clock)"
+        }
+    }
+
+    /// "1st", "2nd", "3rd", "4th", … "11th", "21st". The widget cannot see
+    /// the app's `ScoreSnapshot.ordinal`, so the Live Activity keeps its own.
+    static func ordinal(_ number: Int) -> String {
+        let suffix: String
+        switch (number % 10, number % 100) {
+        case (_, 11...13): suffix = "th"
+        case (1, _): suffix = "st"
+        case (2, _): suffix = "nd"
+        case (3, _): suffix = "rd"
+        default: suffix = "th"
+        }
+        return "\(number)\(suffix)"
+    }
+}
+
+#if canImport(ActivityKit)
+/// A followed game's Live Activity: the Lock Screen banner and the Dynamic
+/// Island.
+@available(iOS 16.2, *)
+struct GameActivityAttributes: ActivityAttributes {
+    typealias ContentState = GameActivityState
+
+    var game: GameActivityInfo
+}
+#endif
