@@ -487,18 +487,32 @@ enum FavoriteTeams {
 /// Holds only the id: names, colours and crests are resolved through
 /// `RemoteTeamCatalog.team(id:)`, whose disk cache and bundled seed keep that
 /// working offline.
+///
+/// An unfollowed team stays stored as a tombstone (`isRemoved`), so the
+/// removal reaches the reader's other devices instead of the team coming
+/// back from their copies.
 struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     /// A `TeamRef.id`, `"<leaguePath>:<espnID>"`.
     let teamID: String
     var addedAt: Date
+    /// When the team was unfollowed. `nil`, or earlier than `addedAt`, while
+    /// it is followed.
+    var removedAt: Date?
     /// Whether game alerts are wanted for the team. Nothing reads it yet.
     var notify: Bool
 
     var id: String { teamID }
 
-    init(teamID: String, addedAt: Date = Date(), notify: Bool = true) {
+    /// Whether the entry is a tombstone: removed no earlier than it was added.
+    var isRemoved: Bool {
+        guard let removedAt else { return false }
+        return removedAt >= addedAt
+    }
+
+    init(teamID: String, addedAt: Date = Date(), removedAt: Date? = nil, notify: Bool = true) {
         self.teamID = teamID
         self.addedAt = addedAt
+        self.removedAt = removedAt
         self.notify = notify
     }
 }
@@ -508,21 +522,31 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
 protocol FavoritesCloudStore: AnyObject {
     func data(forKey key: String) -> Data?
     func set(_ value: Any?, forKey key: String)
+    /// Exchanges pending changes with iCloud, as
+    /// `NSUbiquitousKeyValueStore.synchronize()` does.
+    @discardableResult func synchronize() -> Bool
 }
 
 extension NSUbiquitousKeyValueStore: FavoritesCloudStore {}
 
-/// Reads and writes the favorites list, with no UI or WidgetKit in the way.
+/// Reads, writes and merges the favorites list, with no UI or WidgetKit in
+/// the way.
 ///
-/// The list is JSON `[FavoriteTeam]` under `key` in the App Group's
-/// `UserDefaults`, which the widget reads directly, and the same bytes are
-/// mirrored to iCloud key-value storage for other devices.
+/// The list is JSON `{"favorites": [FavoriteTeam]}` under `key` in the App
+/// Group's `UserDefaults`, which the widget reads directly, and the same
+/// bytes are mirrored to iCloud key-value storage for other devices. The
+/// entries include tombstones; `decode` leaves them out. Version 1 stored a
+/// bare `[FavoriteTeam]` array, which still decodes.
 enum FavoritesCodec {
-    /// The favorites JSON, in the shared defaults and in iCloud.
+    /// The favorites JSON, in the shared defaults and in iCloud. The key
+    /// predates the v2 shape and is kept so stored lists carry over.
     static let key = "favorites.v1"
     /// Set once the favorites have been seeded or restored, so the seed never
     /// runs twice.
     static let seededKey = "favorites.v1.seeded"
+    /// The seed teams' `addedAt`: older than any edit, so a device's seed
+    /// never outweighs a removal synced from another device.
+    static let seedDate = Date(timeIntervalSince1970: 0)
 
     /// Where the favorites a load returned came from.
     enum Source: Equatable, Sendable {
@@ -536,14 +560,30 @@ enum FavoritesCodec {
         case empty
     }
 
-    static func encode(_ favorites: [FavoriteTeam]) -> Data? {
-        try? encoder.encode(favorites)
+    /// The v2 shape.
+    private struct Stored: Codable {
+        var favorites: [FavoriteTeam]
     }
 
+    /// Encodes the entries, tombstones included, in the v2 shape.
+    static func encode(_ entries: [FavoriteTeam]) -> Data? {
+        try? encoder.encode(Stored(favorites: entries))
+    }
+
+    /// Every stored entry, tombstones included, from a v2 or v1 list. `nil`
+    /// for missing or unreadable data.
+    static func decodeEntries(_ data: Data?) -> [FavoriteTeam]? {
+        guard let data else { return nil }
+        if let stored = try? decoder.decode(Stored.self, from: data) {
+            return stored.favorites
+        }
+        return try? decoder.decode([FavoriteTeam].self, from: data)
+    }
+
+    /// The followed teams, in order: the stored entries less tombstones.
     /// `nil` for missing or unreadable data.
     static func decode(_ data: Data?) -> [FavoriteTeam]? {
-        guard let data else { return nil }
-        return try? decoder.decode([FavoriteTeam].self, from: data)
+        decodeEntries(data)?.filter { !$0.isRemoved }
     }
 
     /// The stored favorites' ids, in order, or `nil` when none are stored.
@@ -560,8 +600,7 @@ enum FavoritesCodec {
     static func loadOrSeed(
         defaults: UserDefaults,
         cloud: (any FavoritesCloudStore)?,
-        seedIDs: [TeamRef.ID],
-        now: Date = Date()
+        seedIDs: [TeamRef.ID]
     ) -> (favorites: [FavoriteTeam], source: Source) {
         if let local = decode(defaults.data(forKey: key)) {
             return (local, .local)
@@ -574,17 +613,70 @@ enum FavoritesCodec {
         guard !defaults.bool(forKey: seededKey) else {
             return ([], .empty)
         }
-        let seeded = seedIDs.map { FavoriteTeam(teamID: $0, addedAt: now) }
+        let seeded = seedIDs.map { FavoriteTeam(teamID: $0, addedAt: seedDate) }
         save(seeded, defaults: defaults, cloud: cloud)
         defaults.set(true, forKey: seededKey)
         return (seeded, .seeded)
     }
 
-    /// Writes the list to `defaults` and mirrors the same JSON to `cloud`.
-    static func save(_ favorites: [FavoriteTeam], defaults: UserDefaults, cloud: (any FavoritesCloudStore)?) {
-        guard let data = encode(favorites) else { return }
+    /// Writes the entries to `defaults` and mirrors the same JSON to `cloud`.
+    static func save(_ entries: [FavoriteTeam], defaults: UserDefaults, cloud: (any FavoritesCloudStore)?) {
+        guard let data = encode(entries) else { return }
         defaults.set(data, forKey: key)
         cloud?.set(data, forKey: key)
+    }
+
+    // MARK: Merging
+
+    /// Merges two devices' entries into one list both can adopt.
+    ///
+    /// Each team keeps whichever copy was edited last (`newer(_:_:)`), so an
+    /// add and a remove made apart resolve to the later one. The result is
+    /// the followed teams — first those `local` shows, in its order, then the
+    /// rest oldest-added first — followed by the tombstones. Apart from that
+    /// order, `merge(a, b)` and `merge(b, a)` hold the same entries.
+    static func merge(_ local: [FavoriteTeam], _ remote: [FavoriteTeam]) -> [FavoriteTeam] {
+        var winners: [TeamRef.ID: FavoriteTeam] = [:]
+        for entry in local + remote {
+            winners[entry.teamID] = winners[entry.teamID].map { newer($0, entry) } ?? entry
+        }
+        let localOrder = Dictionary(
+            local.filter { !$0.isRemoved }.enumerated().map { ($1.teamID, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let sorted = winners.values.sorted { a, b in
+            switch (localOrder[a.teamID], localOrder[b.teamID]) {
+            case let (x?, y?): return x < y
+            case (.some, nil): return true
+            case (nil, .some): return false
+            case (nil, nil): return (a.addedAt, a.teamID) < (b.addedAt, b.teamID)
+            }
+        }
+        return sorted.filter { !$0.isRemoved } + sorted.filter(\.isRemoved)
+    }
+
+    /// Whether two lists hold the same entries, whatever their order.
+    static func sameEntries(_ a: [FavoriteTeam], _ b: [FavoriteTeam]) -> Bool {
+        func byID(_ entries: [FavoriteTeam]) -> [TeamRef.ID: FavoriteTeam] {
+            Dictionary(entries.map { ($0.teamID, $0) }, uniquingKeysWith: { $1 })
+        }
+        return a.count == b.count && byID(a) == byID(b)
+    }
+
+    /// The later-edited of two entries for one team. Ties go to the removal,
+    /// then fall through the other fields, so every device picks the same one.
+    private static func newer(_ a: FavoriteTeam, _ b: FavoriteTeam) -> FavoriteTeam {
+        func rank(_ entry: FavoriteTeam) -> (Date, Int, Date, Date, Int) {
+            let removedAt = entry.removedAt ?? .distantPast
+            return (
+                max(entry.addedAt, removedAt),
+                entry.isRemoved ? 1 : 0,
+                entry.addedAt,
+                removedAt,
+                entry.notify ? 1 : 0
+            )
+        }
+        return rank(b) > rank(a) ? b : a
     }
 
     private static var encoder: JSONEncoder {
