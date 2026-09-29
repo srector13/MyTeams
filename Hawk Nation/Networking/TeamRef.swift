@@ -276,6 +276,38 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+// MARK: - Deep links
+
+/// The URL a widget opens the app with: `myteams://team/<TeamRef.id>`, e.g.
+/// `myteams://team/football/nfl:12`. Built by the widget, read by the app.
+enum WidgetDeepLink {
+    static let scheme = "myteams"
+    static let teamHost = "team"
+
+    /// The link that opens `teamID`'s page. `nil` for anything
+    /// `TeamRef.parse(id:)` rejects.
+    static func url(forTeamID teamID: TeamRef.ID) -> URL? {
+        guard TeamRef.parse(id: teamID) != nil,
+              let path = teamID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else { return nil }
+        return URL(string: "\(scheme)://\(teamHost)/\(path)")
+    }
+
+    /// The `TeamRef.id` a link names, or `nil` unless it is a `myteams://team/`
+    /// link to a well-formed id. Scheme and host match case-insensitively.
+    static func teamID(from url: URL) -> TeamRef.ID? {
+        guard url.scheme?.lowercased() == scheme,
+              url.host()?.lowercased() == teamHost
+        else { return nil }
+        let path = url.path(percentEncoded: false)
+        guard path.hasPrefix("/") else { return nil }
+        let id = String(path.dropFirst())
+        // `parse` would take "football/nfl:12/extra" as ESPN id "12/extra".
+        guard let parsed = TeamRef.parse(id: id), !parsed.espnID.contains("/") else { return nil }
+        return id
+    }
+}
+
 // MARK: - Leagues
 
 /// A league offered in the picker's chip row.

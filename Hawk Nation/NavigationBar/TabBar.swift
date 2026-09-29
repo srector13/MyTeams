@@ -14,6 +14,10 @@ import SwiftUI
 /// The app's root screen: one scrolling team page at a time, with a crest
 /// picker pinned to the bottom.
 struct Home: View {
+    /// A team to switch to, set when a widget link opens the app. Cleared
+    /// once handled; a team that is not a favorite is ignored.
+    @Binding var deepLinkedTeamID: TeamRef.ID?
+
     /// The favorites as teams. Starts with those the bundled catalog knows,
     /// so the first frame has the seed teams, then fills in from the catalog.
     @State private var teams: [TeamRef] = FavoritesStore.shared.teamIDs.compactMap(TeamCatalog.team(id:))
@@ -77,6 +81,23 @@ struct Home: View {
             if !teams.contains(where: { $0.id == selection }) {
                 selection = teams.first?.id ?? ""
             }
+            // A link that arrived while the favorites were loading.
+            if let id = deepLinkedTeamID {
+                deepLinkedTeamID = nil
+                if teams.contains(where: { $0.id == id }) {
+                    selection = id
+                }
+            }
+        }
+        .onChange(of: deepLinkedTeamID, initial: true) { _, id in
+            guard let id else { return }
+            if teams.contains(where: { $0.id == id }) {
+                selection = id
+                deepLinkedTeamID = nil
+            } else if !store.teamIDs.contains(id) {
+                deepLinkedTeamID = nil
+            }
+            // Otherwise a favorite still resolving: the task above picks it up.
         }
         .sheet(isPresented: $showsBrowser) {
             TeamBrowserView()
@@ -284,5 +305,5 @@ struct TopView: View {
 }
 
 #Preview {
-    Home()
+    Home(deepLinkedTeamID: .constant(nil))
 }
