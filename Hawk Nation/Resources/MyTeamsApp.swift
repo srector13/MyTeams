@@ -56,6 +56,28 @@ struct MyTeamsApp: App {
                         FavoritesStore.shared.synchronize()
                     }
                 }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    // Poll every favorite's live games, not only the page
+                    // on screen's, while the app is in the foreground.
+                    LeagueScoreboardCenter.shared.sceneDidChange(to: phase)
+                }
+        }
+    }
+}
+
+extension LeagueScoreboardCenter {
+    /// Follows the favorites (`startFollowingFavorites()`) from the moment
+    /// the app is active until it goes to the background. A passing
+    /// `.inactive` — the app switcher, a system sheet — changes nothing, and
+    /// nothing polls in the background.
+    func sceneDidChange(to phase: ScenePhase) {
+        switch phase {
+        case .active:
+            startFollowingFavorites()
+        case .background:
+            stopFollowingFavorites()
+        default:
+            break
         }
     }
 }
