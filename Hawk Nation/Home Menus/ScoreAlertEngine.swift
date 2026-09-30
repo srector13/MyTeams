@@ -37,6 +37,10 @@ final class ScoreAlertEngine {
     private let center: LeagueScoreboardCenter
     private let favorites: @MainActor () -> [FavoriteTeam]
     private let now: @MainActor () -> Date
+    /// Whether alerts may be posted now. Checked before each batch.
+    private let isAuthorized: @Sendable () async -> Bool
+    /// Posts one alert. Tests stand in a recorder for the system's center.
+    private let deliver: @Sendable (ScoreEvent) async -> Void
 
     /// The last look at every followed game seen so far, by game id. Games
     /// that drop off a board keep their entry, so one that comes back is not
@@ -51,11 +55,15 @@ final class ScoreAlertEngine {
     init(
         center: LeagueScoreboardCenter = .shared,
         favorites: @escaping @MainActor () -> [FavoriteTeam] = { FavoritesStore.shared.favorites },
-        now: @escaping @MainActor () -> Date = { Date() }
+        now: @escaping @MainActor () -> Date = { Date() },
+        isAuthorized: @escaping @Sendable () async -> Bool = { await ScoreAlertEngine.systemIsAuthorized() },
+        deliver: @escaping @Sendable (ScoreEvent) async -> Void = { await ScoreAlertEngine.systemDeliver($0) }
     ) {
         self.center = center
         self.favorites = favorites
         self.now = now
+        self.isAuthorized = isAuthorized
+        self.deliver = deliver
     }
 
     /// Begins watching the scoreboards. Calling it again does nothing.
@@ -139,34 +147,51 @@ final class ScoreAlertEngine {
 
     private func post(_ events: [ScoreEvent]) {
         guard !events.isEmpty else { return }
-        #if canImport(UserNotifications)
+        let isAuthorized = self.isAuthorized
+        let deliver = self.deliver
         Task {
             // Denied or never asked: alerts stay off, silently.
-            guard await ScoreAlertsPermissions.isAuthorized() else { return }
+            guard await isAuthorized() else { return }
             for event in events {
-                await Self.deliver(event)
+                await deliver(event)
             }
+        }
+    }
+
+    /// The system's answer: `ScoreAlertsPermissions.isAuthorized()`.
+    nonisolated static func systemIsAuthorized() async -> Bool {
+        #if canImport(UserNotifications)
+        return await ScoreAlertsPermissions.isAuthorized()
+        #else
+        return false
+        #endif
+    }
+
+    /// Posts `event` through `UNUserNotificationCenter`.
+    nonisolated static func systemDeliver(_ event: ScoreEvent) async {
+        #if canImport(UserNotifications)
+        do {
+            try await UNUserNotificationCenter.current().add(request(for: event))
+        } catch {
+            logger.error("Could not post a score alert: \(error.localizedDescription)")
         }
         #endif
     }
 
     #if canImport(UserNotifications)
-    nonisolated private static func deliver(_ event: ScoreEvent) async {
+    /// The alert for `event`, threaded by game so one game's alerts group
+    /// together.
+    nonisolated static func request(for event: ScoreEvent) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = event.title
         content.body = event.snapshot.summary
         content.sound = .default
         content.threadIdentifier = event.gameID
-        let request = UNNotificationRequest(
+        return UNNotificationRequest(
             identifier: "\(event.gameID).\(UUID().uuidString)",
             content: content,
             trigger: nil
         )
-        do {
-            try await UNUserNotificationCenter.current().add(request)
-        } catch {
-            logger.error("Could not post a score alert: \(error.localizedDescription)")
-        }
     }
     #endif
 }

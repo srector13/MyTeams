@@ -98,3 +98,22 @@ extension JSON {
         }
     }
 }
+
+extension JSON {
+    /// The document as bytes again, so a `RecordingTransport` can serve a
+    /// variant built with `setting(_:to:)`.
+    func serialized() throws -> Data {
+        try JSONSerialization.data(withJSONObject: foundationValue)
+    }
+
+    private var foundationValue: Any {
+        switch self {
+        case .string(let string): return string
+        case .number(let number): return number
+        case .bool(let bool): return bool
+        case .array(let array): return array.map(\.foundationValue)
+        case .object(let object): return object.mapValues(\.foundationValue)
+        case .null: return NSNull()
+        }
+    }
+}

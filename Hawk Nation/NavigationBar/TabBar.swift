@@ -36,6 +36,19 @@ struct Home: View {
         teams.first { $0.id == selection }
     }
 
+    private var routing: HomeRouting.State {
+        HomeRouting.State(selection: selection, pendingLink: deepLinkedTeamID)
+    }
+
+    private func apply(_ routed: HomeRouting.State) {
+        if selection != routed.selection {
+            selection = routed.selection
+        }
+        if deepLinkedTeamID != routed.pendingLink {
+            deepLinkedTeamID = routed.pendingLink
+        }
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -78,26 +91,10 @@ struct Home: View {
         .task(id: store.teamIDs) {
             pages.retain(store.teamIDs)
             teams = await store.teamRefs()
-            if !teams.contains(where: { $0.id == selection }) {
-                selection = teams.first?.id ?? ""
-            }
-            // A link that arrived while the favorites were loading.
-            if let id = deepLinkedTeamID {
-                deepLinkedTeamID = nil
-                if teams.contains(where: { $0.id == id }) {
-                    selection = id
-                }
-            }
+            apply(HomeRouting.favoritesResolved(routing, teams: teams.map(\.id)))
         }
-        .onChange(of: deepLinkedTeamID, initial: true) { _, id in
-            guard let id else { return }
-            if teams.contains(where: { $0.id == id }) {
-                selection = id
-                deepLinkedTeamID = nil
-            } else if !store.teamIDs.contains(id) {
-                deepLinkedTeamID = nil
-            }
-            // Otherwise a favorite still resolving: the task above picks it up.
+        .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
+            apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
         }
         .sheet(isPresented: $showsBrowser) {
             TeamBrowserView()
@@ -107,6 +104,51 @@ struct Home: View {
         .sheet(isPresented: $store.needsOnboarding, onDismiss: { store.completeOnboarding() }) {
             TeamBrowserView(title: "Pick Your Teams")
         }
+    }
+}
+
+/// Which team `Home` shows, and what becomes of a widget link, as plain
+/// values: the view feeds it its state and applies the answer.
+enum HomeRouting {
+    struct State: Equatable, Sendable {
+        /// The selected team's id; `""` with no teams.
+        var selection: TeamRef.ID
+        /// A widget link not yet handled (`Home.deepLinkedTeamID`).
+        var pendingLink: TeamRef.ID?
+    }
+
+    /// The favorites have been resolved to `teams`, in order. A selection
+    /// no longer among them falls back to the first; a link that arrived
+    /// while the favorites were loading is handled now, selecting its team
+    /// if it resolved and dropped either way.
+    static func favoritesResolved(_ state: State, teams: [TeamRef.ID]) -> State {
+        var next = state
+        if !teams.contains(next.selection) {
+            next.selection = teams.first ?? ""
+        }
+        if let id = next.pendingLink {
+            next.pendingLink = nil
+            if teams.contains(id) {
+                next.selection = id
+            }
+        }
+        return next
+    }
+
+    /// A widget link arrived (or `Home` appeared with one). A resolved
+    /// team is selected at once and a team that is not a favorite is
+    /// dropped; a favorite still resolving stays pending for
+    /// `favoritesResolved`.
+    static func linkChanged(_ state: State, teams: [TeamRef.ID], favoriteIDs: [TeamRef.ID]) -> State {
+        guard let id = state.pendingLink else { return state }
+        var next = state
+        if teams.contains(id) {
+            next.selection = id
+            next.pendingLink = nil
+        } else if !favoriteIDs.contains(id) {
+            next.pendingLink = nil
+        }
+        return next
     }
 }
 
