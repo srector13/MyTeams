@@ -125,6 +125,8 @@ private final class AlertRecorder: @unchecked Sendable {
     private let continuation: AsyncStream<Step>.Continuation
     private let lock = NSLock()
     private var granted: Bool
+    /// The favorite each game's latest alert was posted for, by game id.
+    private var teams: [String: TeamRef.ID?] = [:]
 
     init(granted: Bool = true) {
         (steps, continuation) = AsyncStream.makeStream(of: Step.self)
@@ -145,8 +147,15 @@ private final class AlertRecorder: @unchecked Sendable {
         return granted
     }
 
-    func deliver(_ event: ScoreEvent) async {
+    func deliver(_ event: ScoreEvent, teamID: TeamRef.ID?) async {
+        lock.withLock { teams[event.gameID] = .some(teamID) }
         continuation.yield(.delivered(event))
+    }
+
+    /// The favorite game `gameID`'s latest alert was posted for: `nil`
+    /// before any, `.some(nil)` for one posted without a team.
+    func team(for gameID: String) -> TeamRef.ID?? {
+        lock.withLock { teams[gameID] }
     }
 }
 
@@ -214,7 +223,7 @@ struct ScoreAlertEngineTests {
             },
             now: { inputs.now },
             isAuthorized: { await recorder.isAuthorized() },
-            deliver: { await recorder.deliver($0) }
+            deliver: { await recorder.deliver($0, teamID: $1) }
         )
     }
 
@@ -258,6 +267,8 @@ struct ScoreAlertEngineTests {
             .authorizationChecked(granted: true),
             .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())),
         ])
+        // Posted for the Broncos favorite: a tap opens their page.
+        #expect(recorder.team(for: broncosGame) == .some(broncos.id))
 
         // Five minutes on, the Broncos score.
         inputs.advance(300)
@@ -517,6 +528,9 @@ struct ScoreAlertEngineTests {
                 snapshot: ScoreSnapshot(homeName: "Napoli", awayName: "Arsenal", homeScore: 0, awayScore: 1, period: 2, state: .inProgress)
             )),
         ])
+        // The cup tie's alert opens Arsenal's page, in the Premier League.
+        #expect(recorder.team(for: arsenalGame) == .some(arsenal.id))
+        #expect(arsenal.id == "soccer/eng.1:359")
 
         // Barcelona's alerts on: La Liga plays the Champions League too. Its
         // tie, first followed under way, seeds quietly; its next goal alerts.

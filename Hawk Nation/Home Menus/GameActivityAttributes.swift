@@ -34,6 +34,17 @@ struct GameActivityInfo: Codable, Hashable, Sendable {
     var matchup: String
     /// The scheduled start, when the scoreboard gives one.
     var kickoff: Date?
+    /// The followed team's `TeamRef.id`, in its home league: what a tap on
+    /// the activity opens (`deepLink`). Kept apart from `league`, which for a
+    /// cup tie is the cup — Arsenal on the Champions League board is
+    /// `"soccer/eng.1:359"`, not `"soccer/uefa.champions:359"`. `nil` for an
+    /// activity started before it was kept, which opens the app as it is.
+    var favoriteID: String? = nil
+
+    /// The `myteams://team/` link to the followed team's page, if known.
+    var deepLink: URL? {
+        favoriteID.flatMap(WidgetDeepLink.url(forTeamID:))
+    }
 }
 
 /// What a game's Live Activity shows now. Mapped from a scoreboard game by

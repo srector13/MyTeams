@@ -12,7 +12,8 @@ import UIKit
 private let logger = Logger(subsystem: "com.myTeams", category: "push")
 
 /// The UIKit callbacks SwiftUI has no scene API for: remote-notification
-/// registration.
+/// registration, and the notification center's delegate, which must be in
+/// place before launch ends for a tapped alert that launched the app.
 ///
 /// This is the seam for P4-e's server-sent score alerts. Registration is off
 /// (`pushRegistrationEnabled`) until the server and the push entitlement
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         willFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        ScoreAlertEngine.presentAlerts()
         if Self.pushRegistrationEnabled {
             application.registerForRemoteNotifications()
         }

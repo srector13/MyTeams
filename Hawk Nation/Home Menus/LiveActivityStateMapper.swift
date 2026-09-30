@@ -44,7 +44,13 @@ enum LiveActivityStateMapper {
 
     /// The matchup of `game` as `teamID` (an ESPN id) follows it; `nil` for
     /// a game that is not two teams, home and away.
-    static func info(of game: ScoreboardGame, teamID: String, league: LeagueID) -> GameActivityInfo? {
+    ///
+    /// - Parameters:
+    ///   - homeLeague: the followed team's own league, which its page and
+    ///     the activity's link (`GameActivityInfo.favoriteID`) are filed
+    ///     under.
+    ///   - league: the league or cup whose scoreboard lists the game.
+    static func info(of game: ScoreboardGame, teamID: String, homeLeague: LeagueID, league: LeagueID) -> GameActivityInfo? {
         guard let snapshot = ScoreAlertEngine.snapshot(of: game) else { return nil }
         return GameActivityInfo(
             gameID: game.gameID,
@@ -53,7 +59,8 @@ enum LiveActivityStateMapper {
             homeName: snapshot.homeName,
             awayName: snapshot.awayName,
             matchup: "\(snapshot.awayName) at \(snapshot.homeName)",
-            kickoff: game.startDate
+            kickoff: game.startDate,
+            favoriteID: TeamRef.id(league: homeLeague, espnID: teamID)
         )
     }
 
@@ -67,8 +74,13 @@ enum LiveActivityStateMapper {
 
     /// The Live Activity for a followed game, or `nil` for one it cannot
     /// show.
-    static func candidate(for game: ScoreboardGame, teamID: String, league: LeagueID) -> LiveActivityCandidate? {
-        guard let info = info(of: game, teamID: teamID, league: league),
+    static func candidate(
+        for game: ScoreboardGame,
+        teamID: String,
+        homeLeague: LeagueID,
+        league: LeagueID
+    ) -> LiveActivityCandidate? {
+        guard let info = info(of: game, teamID: teamID, homeLeague: homeLeague, league: league),
               let state = state(of: game, league: league)
         else { return nil }
         return LiveActivityCandidate(info: info, state: state)

@@ -120,20 +120,21 @@ struct LiveActivityMapperTests {
         var game = board("in", period: 1)
         game.competitors[1].homeAway = "home"
         #expect(LiveActivityStateMapper.state(of: game, league: .nfl) == nil)
-        #expect(LiveActivityStateMapper.info(of: game, teamID: "2305", league: .nfl) == nil)
+        #expect(LiveActivityStateMapper.info(of: game, teamID: "2305", homeLeague: .nfl, league: .nfl) == nil)
 
         game.competitors.removeLast()
-        #expect(LiveActivityStateMapper.candidate(for: game, teamID: "2305", league: .nfl) == nil)
+        #expect(LiveActivityStateMapper.candidate(for: game, teamID: "2305", homeLeague: .nfl, league: .nfl) == nil)
     }
 
     @Test("The matchup: away at home, the followed team, the board's league, the kickoff")
     func info() {
         let game = board("in", period: 1, id: "401")
-        let info = LiveActivityStateMapper.info(of: game, teamID: "2306", league: .collegeFootball)
+        let info = LiveActivityStateMapper.info(of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball)
         #expect(info == GameActivityInfo(
             gameID: "401", teamID: "2306", league: "football/college-football",
             homeName: "Kansas", awayName: "K-State", matchup: "K-State at Kansas",
-            kickoff: Date(timeIntervalSince1970: 1_790_000_000)
+            kickoff: Date(timeIntervalSince1970: 1_790_000_000),
+            favoriteID: "football/college-football:2306"
         ))
     }
 
@@ -156,9 +157,11 @@ struct LiveActivityMapperTests {
         #expect(game.clock == "0:48")
         #expect(game.startDate == parseGameDate("2026-09-28T00:20Z"))
 
-        let candidate = try #require(LiveActivityStateMapper.candidate(for: game, teamID: "7", league: .nfl))
+        let candidate = try #require(LiveActivityStateMapper.candidate(for: game, teamID: "7", homeLeague: .nfl, league: .nfl))
         #expect(candidate.info.matchup == "Rams at Broncos")
         #expect(candidate.info.league == "football/nfl")
+        #expect(candidate.info.favoriteID == "football/nfl:7")
+        #expect(candidate.info.deepLink == WidgetDeepLink.url(forTeamID: "football/nfl:7"))
         #expect(candidate.state == state(.live, home: 23, away: 26, period: 4, clock: "0:48"))
         #expect(candidate.state.stage == "4th · 0:48")
     }

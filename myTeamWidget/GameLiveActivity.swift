@@ -18,9 +18,11 @@ import WidgetKit
 struct GameLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GameActivityAttributes.self) { context in
+            // A tap opens the followed team's page, as the widget's does.
             GameActivityBanner(game: context.attributes.game, state: context.state, isStale: context.isStale)
                 .activityBackgroundTint(Color.black.opacity(0.75))
                 .activitySystemActionForegroundColor(.white)
+                .widgetURL(context.attributes.game.deepLink)
         } dynamicIsland: { context in
             let game = context.attributes.game
             let state = context.state
@@ -66,6 +68,7 @@ struct GameLiveActivity: Widget {
                     .minimumScaleFactor(0.5)
                     .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             }
+            .widgetURL(game.deepLink)
         }
     }
 }
@@ -170,7 +173,7 @@ extension GameActivityAttributes {
     fileprivate static let preview = GameActivityAttributes(game: GameActivityInfo(
         gameID: "401872962", teamID: "7", league: "football/nfl",
         homeName: "Broncos", awayName: "Rams", matchup: "Rams at Broncos",
-        kickoff: nil
+        kickoff: nil, favoriteID: "football/nfl:7"
     ))
 }
 

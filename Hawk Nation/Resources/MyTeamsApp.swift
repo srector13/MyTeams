@@ -20,8 +20,12 @@ struct MyTeamsApp: App {
         _ = FavoritesStore.shared
     }
 
-    /// The team a widget tap asked for, until `Home` shows it.
+    /// The team a widget, Live Activity or score alert tap asked for,
+    /// until `Home` shows it.
     @State private var deepLinkedTeamID: TeamRef.ID?
+    /// Taps on score alerts, which arrive through the notification center
+    /// rather than as a URL.
+    @State private var alertTaps = ScoreAlertTaps.shared
 
     var body: some Scene {
         WindowGroup {
@@ -30,6 +34,12 @@ struct MyTeamsApp: App {
                     if let teamID = WidgetDeepLink.teamID(from: url) {
                         deepLinkedTeamID = teamID
                     }
+                }
+                .onChange(of: alertTaps.teamID, initial: true) { _, teamID in
+                    // Initially too: the tap may have launched the app.
+                    guard let teamID else { return }
+                    deepLinkedTeamID = teamID
+                    alertTaps.teamID = nil
                 }
                 .task {
                     // Watch the live scoreboards for favorites' alerts. Asks

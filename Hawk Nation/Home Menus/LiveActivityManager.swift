@@ -165,8 +165,11 @@ final class LiveActivityManager {
             for competition in competitions {
                 for game in games[competition] ?? [] {
                     guard game.competitors.contains(where: { $0.teamID == team.espnID }),
+                          // The link is built from the favorite's own league
+                          // here, where it is known; the competition may be
+                          // a cup.
                           let candidate = LiveActivityStateMapper.candidate(
-                            for: game, teamID: team.espnID, league: competition
+                            for: game, teamID: team.espnID, homeLeague: team.league, league: competition
                           )
                     else { continue }
                     result.append(candidate)
