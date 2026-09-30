@@ -89,6 +89,10 @@ enum LiveActivityAction: Equatable, Sendable {
     case update(gameID: String, state: GameActivityState)
     /// `state` is the last one to show while the activity lingers.
     case end(gameID: String, state: GameActivityState)
+    /// The game has been off every board for `LiveActivityPlanner.
+    /// offBoardTimeout`: end the activity showing `state`, its last content,
+    /// and take it down soon after, not at the system's cap hours later.
+    case expire(gameID: String, state: GameActivityState)
 }
 
 enum LiveActivityPlanner {
@@ -96,11 +100,38 @@ enum LiveActivityPlanner {
     /// past this many, no new one is asked for.
     static let maxActivities = 6
 
+    /// How long a running activity's game may be missing from every
+    /// scoreboard before its activity is ended (`expire`). The center polls
+    /// each favorite's board every minute while the app is open, so ten
+    /// minutes without the game means it has left the boards (a finished
+    /// game past the day's window, a favorite removed), not a slow poll.
+    static let offBoardTimeout: TimeInterval = 10 * 60
+
+    /// When each running activity's game was first found missing from
+    /// `candidates`, carried from one look to the next: a game still missing
+    /// keeps its date from `previous`, one newly missing is dated `now`, and
+    /// one back on the boards, or no longer running, is dropped.
+    static func offBoard(
+        since previous: [String: Date],
+        candidates: [LiveActivityCandidate],
+        running: [String: GameActivityState],
+        now: Date
+    ) -> [String: Date] {
+        let listed = Set(candidates.map(\.gameID))
+        var result: [String: Date] = [:]
+        for gameID in running.keys where !listed.contains(gameID) {
+            result[gameID] = previous[gameID] ?? now
+        }
+        return result
+    }
+
     /// What to do on one look at the scoreboards.
     ///
     /// - A running activity is updated when its game changed and ended once
     ///   the game is over (played out or called off). One whose game is not
-    ///   on the boards is left alone; the game may come back.
+    ///   on the boards is left alone, as the game may come back, until it
+    ///   has been missing `offBoardTimeout` (`offBoardSince`); then it
+    ///   expires.
     /// - A live game with no activity starts one if `canStart`, it was not
     ///   `retired`, and fewer than `limit` would then be running. Ends in
     ///   the same look free their places first; starts go in `candidates`
@@ -112,12 +143,17 @@ enum LiveActivityPlanner {
     ///   - running: the state each running activity last showed, by game id.
     ///   - retired: games whose activity ended or was dismissed; never
     ///     started again.
+    ///   - offBoardSince: when each running game missing from `candidates`
+    ///     was first missed (`offBoard(since:candidates:running:now:)`).
+    ///   - now: the current instant, against `offBoardSince`.
     ///   - canStart: whether a new activity may be asked for now (the app is
     ///     in the foreground and Live Activities are allowed).
     static func plan(
         candidates: [LiveActivityCandidate],
         running: [String: GameActivityState],
         retired: Set<String> = [],
+        offBoardSince: [String: Date] = [:],
+        now: Date = .distantPast,
         canStart: Bool,
         limit: Int = maxActivities
     ) -> [LiveActivityAction] {
@@ -137,6 +173,14 @@ enum LiveActivityPlanner {
                     actions.append(.update(gameID: game.gameID, state: game.state))
                 }
             }
+        }
+
+        for (gameID, shown) in running.sorted(by: { $0.key < $1.key }) where !seen.contains(gameID) {
+            guard let since = offBoardSince[gameID],
+                  now.timeIntervalSince(since) >= offBoardTimeout
+            else { continue }
+            actions.append(.expire(gameID: gameID, state: shown))
+            runningCount -= 1
         }
 
         guard canStart else { return actions }

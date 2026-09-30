@@ -222,6 +222,97 @@ struct LiveActivityPlannerTests {
         ).isEmpty)
     }
 
+    @Test("Off-board dates: kept while missing, set when newly missed, dropped once back or ended")
+    func offBoardDates() {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let later = start.addingTimeInterval(60)
+        let live = state(.live, period: 1)
+        let running = ["1": live, "2": live, "3": live]
+
+        // "1" missing since the start, "2" newly missing, "3" still listed.
+        let first = LiveActivityPlanner.offBoard(
+            since: [:], candidates: [candidate("3", live)], running: running, now: start
+        )
+        #expect(first == ["1": start, "2": start])
+        let second = LiveActivityPlanner.offBoard(
+            since: ["1": start], candidates: [candidate("3", live)], running: running, now: later
+        )
+        #expect(second == ["1": start, "2": later])
+
+        // "1" back on the boards; "2" no longer running.
+        let third = LiveActivityPlanner.offBoard(
+            since: second, candidates: [candidate("1", live)], running: ["1": live, "3": live], now: later
+        )
+        #expect(third == ["3": later])
+    }
+
+    @Test("Off the boards for ten minutes, the activity expires with its last content")
+    func offBoardExpiry() {
+        let since = Date(timeIntervalSince1970: 1_790_000_000)
+        let shown = state(.live, home: 7, period: 3, clock: "4:00")
+        #expect(LiveActivityPlanner.offBoardTimeout == 10 * 60)
+
+        // Nine minutes and change: left alone.
+        #expect(LiveActivityPlanner.plan(
+            candidates: [], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(9 * 60 + 59),
+            canStart: true
+        ).isEmpty)
+
+        // Ten: expired, in the background too.
+        let expired = LiveActivityPlanner.plan(
+            candidates: [], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(10 * 60),
+            canStart: false
+        )
+        #expect(expired == [.expire(gameID: "1", state: shown)])
+
+        // A listed game is never expired, whatever date it carries.
+        #expect(LiveActivityPlanner.plan(
+            candidates: [candidate("1", shown)], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(60 * 60),
+            canStart: true
+        ).isEmpty)
+    }
+
+    @Test("An expiry in the same look frees its place")
+    func expiryFreesPlace() {
+        let since = Date(timeIntervalSince1970: 1_790_000_000)
+        let live = state(.live, period: 2)
+        let running = Dictionary(uniqueKeysWithValues: (1...6).map { ("r\($0)", live) })
+        let fresh = candidate("new", state(.live, period: 1))
+        let candidates = [fresh] + (2...6).map { candidate("r\($0)", live) }
+        let actions = LiveActivityPlanner.plan(
+            candidates: candidates, running: running,
+            offBoardSince: ["r1": since], now: since.addingTimeInterval(LiveActivityPlanner.offBoardTimeout),
+            canStart: true
+        )
+        #expect(actions == [.expire(gameID: "r1", state: live), .start(fresh.info, fresh.state)])
+    }
+
+    @Test("Tracked from look to look, a game that stays off the boards expires once, ten minutes after it was first missed")
+    func offBoardAcrossLooks() {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let shown = state(.live, home: 3, period: 2)
+        let running = ["1": shown]
+        var since: [String: Date] = [:]
+        var expiredAt: [Int] = []
+        // One look a minute, as the center polls, the game gone throughout.
+        for minute in 0...12 {
+            let now = start.addingTimeInterval(TimeInterval(minute * 60))
+            since = LiveActivityPlanner.offBoard(since: since, candidates: [], running: running, now: now)
+            let actions = LiveActivityPlanner.plan(
+                candidates: [], running: running, offBoardSince: since, now: now, canStart: true
+            )
+            if actions == [.expire(gameID: "1", state: shown)] {
+                expiredAt.append(minute)
+                break
+            }
+            #expect(actions.isEmpty)
+        }
+        #expect(expiredAt == [10])
+    }
+
     @Test("In the background: updates and ends, but no starts")
     func background() {
         let changed = state(.live, home: 3, period: 2)

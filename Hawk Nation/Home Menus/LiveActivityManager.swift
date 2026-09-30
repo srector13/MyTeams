@@ -28,7 +28,9 @@ private let logger = Logger(subsystem: "com.myTeams", category: "liveActivities"
 ///   `LiveActivityPlanner.maxActivities` are running;
 /// - a running one is updated as the score, period or clock moves;
 /// - the final (or a game called off) ends it, left on the Lock Screen for
-///   `dismissalGrace` with the last score.
+///   `dismissalGrace` with the last score;
+/// - a game gone from every board for `LiveActivityPlanner.offBoardTimeout`
+///   ends it too, taken down after `offBoardDismissalGrace`.
 ///
 /// Every favorite counts, those with alerts on (`FavoriteTeam.notify`)
 /// first, so they win the places when more games are live than fit.
@@ -42,6 +44,10 @@ final class LiveActivityManager {
 
     /// How long a finished game's activity stays on the Lock Screen.
     static let dismissalGrace: TimeInterval = 10 * 60
+    /// How long an activity whose game left the boards
+    /// (`LiveActivityAction.expire`) stays on the Lock Screen: briefly, as
+    /// its last score is no longer current.
+    static let offBoardDismissalGrace: TimeInterval = 60
     /// How long content stays good without an update. The center polls
     /// every minute while it runs; past this, the app has stopped.
     static let staleAfter: TimeInterval = 10 * 60
@@ -58,6 +64,9 @@ final class LiveActivityManager {
     /// Games whose activity ended, or that the reader dismissed; none is
     /// started again this launch.
     private var retired: Set<String> = []
+    /// When each running activity's game was first missing from the boards,
+    /// by game id (`LiveActivityPlanner.offBoard`).
+    private var offBoardSince: [String: Date] = [:]
     private var isStarted = false
 
     init(
@@ -114,10 +123,17 @@ final class LiveActivityManager {
     private func update(_ games: [LeagueID: [ScoreboardGame]]) {
         forgetFinished()
         let canStart = isForeground() && ActivityAuthorizationInfo().areActivitiesEnabled
+        let candidates = self.candidates(in: games)
+        let now = self.now()
+        offBoardSince = LiveActivityPlanner.offBoard(
+            since: offBoardSince, candidates: candidates, running: shown, now: now
+        )
         let actions = LiveActivityPlanner.plan(
-            candidates: candidates(in: games),
+            candidates: candidates,
             running: shown,
             retired: retired,
+            offBoardSince: offBoardSince,
+            now: now,
             canStart: canStart
         )
         for action in actions {
@@ -183,14 +199,24 @@ final class LiveActivityManager {
             }
 
         case .end(let gameID, let state):
-            guard let activity = activities.removeValue(forKey: gameID) else { return }
-            shown[gameID] = nil
-            retired.insert(gameID)
-            let activityID = activity.id
-            let dismissAt = now().addingTimeInterval(Self.dismissalGrace)
-            Task {
-                await Self.end(activityID, with: state, dismissAt: dismissAt)
-            }
+            end(gameID, showing: state, grace: Self.dismissalGrace)
+
+        case .expire(let gameID, let state):
+            end(gameID, showing: state, grace: Self.offBoardDismissalGrace)
+        }
+    }
+
+    /// Ends `gameID`'s activity, lingering `grace` with `state`, and never
+    /// starts it again.
+    private func end(_ gameID: String, showing state: GameActivityState, grace: TimeInterval) {
+        guard let activity = activities.removeValue(forKey: gameID) else { return }
+        shown[gameID] = nil
+        offBoardSince[gameID] = nil
+        retired.insert(gameID)
+        let activityID = activity.id
+        let dismissAt = now().addingTimeInterval(grace)
+        Task {
+            await Self.end(activityID, with: state, dismissAt: dismissAt)
         }
     }
 
