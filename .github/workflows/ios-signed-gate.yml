@@ -1,0 +1,474 @@
+# iOS Signed Gate (manual)
+#
+# What this proves: the app (myTeams) and widget (myTeamWidgetExtension) targets
+# sign coherently on CI with real Apple Development credentials. It checks that
+# the signed binaries carry the App Group (group.PolarReailty.Hawk-Nation) and
+# iCloud KVS (68L4YU8U89.*) entitlements, that both signatures verify, and that
+# PrivacyInfo.xcprivacy ships in both bundles. The regular gate (ios-gate.yml)
+# builds with CODE_SIGNING_ALLOWED=NO and never exercises any of this.
+#
+# What this does NOT prove: runtime behavior. Whether the app and widget can
+# actually share data through the App Group still needs the device smoke test
+# (favorite a team in the app -> the widget shows it).
+#
+# NOTE: the "Reailty" spelling in the identifiers is intentional. It matches what
+# is registered on the developer portal. Do not "fix" it.
+#
+# Required repository Actions secrets (the guard step fails early, naming
+# whichever ones are missing):
+#   APPLE_CERT_P12_BASE64    Apple Development certificate + private key (.p12), base64.
+#                            Export from Keychain Access (My Certificates -> the
+#                            "Apple Development" identity -> Export). If you build the
+#                            .p12 with OpenSSL 3, pass -legacy or `security import`
+#                            may reject it.
+#                            gh secret set APPLE_CERT_P12_BASE64 < <(base64 -i cert.p12)
+#   APPLE_CERT_P12_PASSWORD  Password used when exporting the .p12.
+#   PROVISION_APP_BASE64     iOS App Development profile for PolarReailty.Hawk-Nation, base64.
+#                            It must grant App Groups (group.PolarReailty.Hawk-Nation)
+#                            and iCloud (key-value storage).
+#   PROVISION_WIDGET_BASE64  iOS App Development profile for
+#                            PolarReailty.Hawk-Nation.myTeamWidget, base64. It must
+#                            grant App Groups (group.PolarReailty.Hawk-Nation).
+#
+# How to produce the profiles: developer portal -> Certificates, Identifiers &
+# Profiles -> Identifiers. Check that both App IDs have the capabilities listed
+# above, with the App Group assigned. Then go to Profiles -> "+" -> iOS App
+# Development, pick the App ID, the Apple Development certificate that is in the
+# .p12, and any device, and download the profile. Do this once for each App ID.
+# Profiles must be regenerated after any capability change. Then run:
+#   gh secret set PROVISION_APP_BASE64    < <(base64 -i HawkNation_Dev.mobileprovision)
+#   gh secret set PROVISION_WIDGET_BASE64 < <(base64 -i HawkNationWidget_Dev.mobileprovision)
+#
+# Per-target provisioning: xcodebuild applies command-line build settings to
+# every target and has no TARGET:SETTING=VALUE form. So the build passes
+#   PROVISIONING_PROFILE_SPECIFIER='$(SIGNED_GATE_PROFILE_$(TARGET_NAME:c99extidentifier))'
+# plus SIGNED_GATE_PROFILE_myTeams / SIGNED_GATE_PROFILE_myTeamWidgetExtension.
+# Each target resolves that to its own profile name. A -showBuildSettings
+# pre-check asserts the resolution before the real build runs. The pbxproj is
+# never modified.
+
+name: iOS Signed Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TEAM_ID: 68L4YU8U89
+  APP_BUNDLE_ID: PolarReailty.Hawk-Nation
+  WIDGET_BUNDLE_ID: PolarReailty.Hawk-Nation.myTeamWidget
+  APP_GROUP: group.PolarReailty.Hawk-Nation
+  APP_TARGET: myTeams
+  WIDGET_TARGET: myTeamWidgetExtension
+
+jobs:
+  ios-signed-gate:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard - required signing secrets
+        shell: bash
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+          PROVISION_APP_BASE64: ${{ secrets.PROVISION_APP_BASE64 }}
+          PROVISION_WIDGET_BASE64: ${{ secrets.PROVISION_WIDGET_BASE64 }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "$APPLE_CERT_P12_BASE64" ] && missing+=("APPLE_CERT_P12_BASE64")
+          [ -z "$APPLE_CERT_P12_PASSWORD" ] && missing+=("APPLE_CERT_P12_PASSWORD")
+          [ -z "$PROVISION_APP_BASE64" ] && missing+=("PROVISION_APP_BASE64")
+          [ -z "$PROVISION_WIDGET_BASE64" ] && missing+=("PROVISION_WIDGET_BASE64")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Signed gate cannot run. Missing or empty repository secrets: ${missing[*]}"
+            echo "FAIL: missing or empty secrets: ${missing[*]}"
+            echo "This workflow requires all four of these repository Actions secrets:"
+            echo "  APPLE_CERT_P12_BASE64    - Apple Development cert+key .p12, base64"
+            echo "  APPLE_CERT_P12_PASSWORD  - .p12 export password"
+            echo "  PROVISION_APP_BASE64     - dev profile for ${APP_BUNDLE_ID} (App Groups ${APP_GROUP} + iCloud KVS), base64"
+            echo "  PROVISION_WIDGET_BASE64  - dev profile for ${WIDGET_BUNDLE_ID} (App Groups ${APP_GROUP}), base64"
+            echo "See the header comment in .github/workflows/ios-signed-gate.yml for how to produce them."
+            exit 1
+          fi
+          echo "PASS: all four signing secrets are present"
+
+      - name: Diagnostics
+        continue-on-error: true
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Keychain setup
+        shell: bash
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          SIGN_DIR="$(mktemp -d "${RUNNER_TEMP}/signing.XXXXXX")"
+          KEYCHAIN_PATH="${SIGN_DIR}/signed-gate.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::${KEYCHAIN_PASSWORD}"
+          P12_PATH="${SIGN_DIR}/cert.p12"
+
+          printf '%s' "$APPLE_CERT_P12_BASE64" | tr -d '\r\n ' | base64 --decode > "$P12_PATH"
+          if [ ! -s "$P12_PATH" ]; then
+            echo "FAIL: APPLE_CERT_P12_BASE64 decoded to an empty file (is it valid base64?)"
+            exit 1
+          fi
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          if ! security import "$P12_PATH" -P "$APPLE_CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"; then
+            echo "FAIL: security import rejected the .p12. Check APPLE_CERT_P12_PASSWORD. If the .p12 was made with OpenSSL 3, re-export it with -legacy."
+            exit 1
+          fi
+          rm -f "$P12_PATH"
+
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+
+          # Temp keychain first. Keep login.keychain-db in the search list.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+          echo "Keychain search list:"
+          security list-keychains -d user
+
+          echo "Codesigning identities in the temp keychain:"
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH")"
+          echo "$IDENTITIES"
+          if ! grep -q '"Apple Development' <<< "$IDENTITIES"; then
+            echo "::error::No valid 'Apple Development' codesigning identity after importing the .p12"
+            echo "FAIL: no valid 'Apple Development' codesigning identity. The .p12 must contain both the certificate and its private key, and the certificate must not be expired or revoked."
+            exit 1
+          fi
+          echo "PASS: 'Apple Development' codesigning identity is usable"
+
+          {
+            echo "SIGN_DIR=${SIGN_DIR}"
+            echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install and check provisioning profiles
+        shell: bash
+        env:
+          PROVISION_APP_BASE64: ${{ secrets.PROVISION_APP_BASE64 }}
+          PROVISION_WIDGET_BASE64: ${{ secrets.PROVISION_WIDGET_BASE64 }}
+        run: |
+          set -euo pipefail
+          PB=/usr/libexec/PlistBuddy
+          # Xcode 16+ reads UserData; older tooling reads MobileDevice. Install to both.
+          PROFILE_DIRS=(
+            "$HOME/Library/MobileDevice/Provisioning Profiles"
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          )
+          mkdir -p "${PROFILE_DIRS[@]}"
+          : > profile-checks.txt
+          fail=0
+          pass() { echo "PASS: $*" | tee -a profile-checks.txt; }
+          failf() { echo "FAIL: $*" | tee -a profile-checks.txt; fail=1; }
+
+          profile_name() {
+            plutil -extract Name raw -o - "$1" 2>/dev/null \
+              || python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["Name"])' "$1"
+          }
+
+          # usage: install_profile <label> <base64> <bundle id> <ENV var for name>
+          install_profile() {
+            local label="$1" b64="$2" bundle_id="$3" env_var="$4"
+            local raw="${SIGN_DIR}/${label}.mobileprovision"
+            local plist="${SIGN_DIR}/${label}-profile.plist"
+
+            printf '%s' "$b64" | tr -d '\r\n ' | base64 --decode > "$raw"
+            if ! security cms -D -i "$raw" > "$plist" 2>/dev/null || [ ! -s "$plist" ]; then
+              failf "[$label] could not decode the profile (security cms -D failed). Is the secret a base64 .mobileprovision?"
+              return
+            fi
+
+            local name uuid
+            name="$(profile_name "$plist")"
+            uuid="$($PB -c 'Print :UUID' "$plist")"
+            echo "[$label] Name='${name}' UUID=${uuid}"
+            echo "[$label] ExpirationDate=$($PB -c 'Print :ExpirationDate' "$plist")"
+            $PB -c 'Print :Entitlements' "$plist" | sed "s/^/[$label]   /" | tee -a profile-checks.txt
+
+            local dir
+            for dir in "${PROFILE_DIRS[@]}"; do
+              cp "$raw" "${dir}/${name//\//_}.mobileprovision"
+            done
+            echo "${env_var}=${name}" >> "$GITHUB_ENV"
+
+            local appid
+            appid="$($PB -c 'Print :Entitlements:application-identifier' "$plist" 2>/dev/null || true)"
+            if [ "$appid" = "${TEAM_ID}.${bundle_id}" ]; then
+              pass "[$label] application-identifier = ${appid}"
+            else
+              failf "[$label] application-identifier is '${appid}', expected '${TEAM_ID}.${bundle_id}'. Generate an explicit (non-wildcard) dev profile for ${bundle_id}."
+            fi
+
+            local teams
+            teams="$($PB -c 'Print :TeamIdentifier' "$plist" 2>/dev/null || true)"
+            if grep -qE "^[[:space:]]*${TEAM_ID}$" <<< "$teams"; then
+              pass "[$label] TeamIdentifier contains ${TEAM_ID}"
+            else
+              failf "[$label] TeamIdentifier does not contain ${TEAM_ID}"
+            fi
+
+            local groups
+            if ! groups="$($PB -c 'Print :Entitlements:com.apple.security.application-groups' "$plist" 2>/dev/null)"; then
+              failf "[$label] profile Entitlements has no com.apple.security.application-groups. The portal profile must include the App Groups capability (${APP_GROUP}). Enable it on the App ID, then regenerate the profile."
+            elif grep -qE "^[[:space:]]*${APP_GROUP//./\\.}$" <<< "$groups"; then
+              pass "[$label] profile grants App Group ${APP_GROUP}"
+            else
+              failf "[$label] profile App Groups do not include ${APP_GROUP}. Assign the group to ${bundle_id} on the portal, then regenerate the profile."
+            fi
+          }
+
+          install_profile app "$PROVISION_APP_BASE64" "$APP_BUNDLE_ID" APP_PROFILE_NAME
+          install_profile widget "$PROVISION_WIDGET_BASE64" "$WIDGET_BUNDLE_ID" WIDGET_PROFILE_NAME
+
+          # iCloud KVS applies to the app only.
+          if [ -s "${SIGN_DIR}/app-profile.plist" ]; then
+            if kvs="$($PB -c 'Print :Entitlements:com.apple.developer.ubiquity-kvstore-identifier' "${SIGN_DIR}/app-profile.plist" 2>/dev/null)"; then
+              pass "[app] profile grants iCloud KVS (ubiquity-kvstore-identifier = ${kvs})"
+            else
+              failf "[app] profile Entitlements has no com.apple.developer.ubiquity-kvstore-identifier. The portal profile must include the iCloud (key-value storage) capability."
+            fi
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Provisioning profile content check failed (see FAIL lines above)"
+            exit 1
+          fi
+
+      - name: Pre-check per-target signing settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -showBuildSettings -json \
+            -project myTeams.xcodeproj -scheme myTeams -destination 'generic/platform=iOS' \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Development' DEVELOPMENT_TEAM=68L4YU8U89 \
+            'PROVISIONING_PROFILE_SPECIFIER=$(SIGNED_GATE_PROFILE_$(TARGET_NAME:c99extidentifier))' \
+            "SIGNED_GATE_PROFILE_myTeams=${APP_PROFILE_NAME}" \
+            "SIGNED_GATE_PROFILE_myTeamWidgetExtension=${WIDGET_PROFILE_NAME}" \
+            > build-settings.json 2> build-settings.stderr.log
+          python3 - build-settings.json <<'PY'
+          import json, os, sys
+          entries = json.load(open(sys.argv[1]))
+          expected = {
+              os.environ["APP_TARGET"]: os.environ["APP_PROFILE_NAME"],
+              os.environ["WIDGET_TARGET"]: os.environ["WIDGET_PROFILE_NAME"],
+          }
+          seen = {}
+          for e in entries:
+              s = e.get("buildSettings", {})
+              seen[e.get("target")] = (s.get("PROVISIONING_PROFILE_SPECIFIER", ""), s.get("CODE_SIGN_STYLE", ""))
+          fail = False
+          for target, profile in expected.items():
+              if target not in seen:
+                  # -showBuildSettings may omit implicit dependencies. The post-build
+                  # codesign assertions still cover this target.
+                  print(f"WARN: target {target} is not in -showBuildSettings output (implicit dependency?)")
+                  continue
+              spec, style = seen[target]
+              if spec == profile and style == "Manual":
+                  print(f"PASS: {target} resolves PROVISIONING_PROFILE_SPECIFIER='{spec}', CODE_SIGN_STYLE={style}")
+              else:
+                  print(f"FAIL: {target} resolves PROVISIONING_PROFILE_SPECIFIER='{spec}' CODE_SIGN_STYLE={style}; expected '{profile}' / Manual")
+                  fail = True
+          if os.environ["APP_TARGET"] not in seen:
+              print(f"FAIL: app target {os.environ['APP_TARGET']} is missing from -showBuildSettings output")
+              fail = True
+          sys.exit(1 if fail else 0)
+          PY
+
+      - name: Signed build
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project myTeams.xcodeproj -scheme myTeams -destination 'generic/platform=iOS' \
+            -derivedDataPath ./dd \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY='Apple Development' DEVELOPMENT_TEAM=68L4YU8U89 \
+            'PROVISIONING_PROFILE_SPECIFIER=$(SIGNED_GATE_PROFILE_$(TARGET_NAME:c99extidentifier))' \
+            "SIGNED_GATE_PROFILE_myTeams=${APP_PROFILE_NAME}" \
+            "SIGNED_GATE_PROFILE_myTeamWidgetExtension=${WIDGET_PROFILE_NAME}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}" \
+            2>&1 | tee signed-build.log
+
+      - name: Coherence assertions
+        shell: bash
+        run: |
+          set -uo pipefail
+          PB=/usr/libexec/PlistBuddy
+          fail=0
+          pass() { echo "PASS: $*"; }
+          failf() { echo "FAIL: $*"; fail=1; }
+
+          # 1. Locate the built products.
+          APP="$(find ./dd/Build/Products -maxdepth 2 -type d -path '*-iphoneos/myTeams.app' | head -n 1)"
+          if [ -z "$APP" ]; then
+            echo "FAIL: myTeams.app not found under ./dd/Build/Products/*-iphoneos/"
+            find ./dd/Build/Products -maxdepth 2 || true
+            exit 1
+          fi
+          APPEX="${APP}/PlugIns/myTeamWidgetExtension.appex"
+          echo "APP_PATH=${APP}" >> "$GITHUB_ENV"
+          pass "found app: ${APP}"
+          if [ -d "$APPEX" ]; then pass "found appex: ${APPEX}"; else failf "widget appex missing: ${APPEX}"; fi
+
+          # 2. Signed entitlements.
+          codesign --display --entitlements - --xml "$APP" > app-entitlements.plist 2>/dev/null \
+            || failf "codesign could not read app entitlements"
+          plutil -p app-entitlements.plist > app-entitlements.txt 2>&1 || true
+          if [ -d "$APPEX" ]; then
+            codesign --display --entitlements - --xml "$APPEX" > appex-entitlements.plist 2>/dev/null \
+              || failf "codesign could not read appex entitlements"
+            plutil -p appex-entitlements.plist > appex-entitlements.txt 2>&1 || true
+          fi
+
+          has_group() {
+            local groups
+            groups="$($PB -c 'Print :com.apple.security.application-groups' "$1" 2>/dev/null)" || return 1
+            grep -qE "^[[:space:]]*${APP_GROUP//./\\.}$" <<< "$groups"
+          }
+
+          if has_group app-entitlements.plist; then
+            pass "app com.apple.security.application-groups contains ${APP_GROUP}"
+          else
+            failf "app com.apple.security.application-groups does not contain ${APP_GROUP}"
+          fi
+
+          KVS="$($PB -c 'Print :com.apple.developer.ubiquity-kvstore-identifier' app-entitlements.plist 2>/dev/null || true)"
+          if [[ "$KVS" == "${TEAM_ID}."* ]]; then
+            pass "app com.apple.developer.ubiquity-kvstore-identifier = ${KVS} (starts with ${TEAM_ID}.)"
+          else
+            failf "app com.apple.developer.ubiquity-kvstore-identifier is '${KVS}', expected to start with ${TEAM_ID}."
+          fi
+
+          if [ -d "$APPEX" ]; then
+            if has_group appex-entitlements.plist; then
+              pass "appex com.apple.security.application-groups contains ${APP_GROUP}"
+            else
+              failf "appex com.apple.security.application-groups does not contain ${APP_GROUP}"
+            fi
+          fi
+
+          for bundle in "$APP" "$APPEX"; do
+            [ -d "$bundle" ] || continue
+            label="$(basename "$bundle")"
+            if codesign --verify --deep --strict --verbose=2 "$bundle" > "codesign-verify-${label}.log" 2>&1; then
+              pass "codesign --verify --deep --strict: ${label}"
+            else
+              failf "codesign --verify --deep --strict: ${label}"
+            fi
+            cat "codesign-verify-${label}.log"
+            sig_info="$(codesign -dv "$bundle" 2>&1 || true)"
+            if grep -q "^TeamIdentifier=${TEAM_ID}$" <<< "$sig_info"; then
+              pass "${label} TeamIdentifier=${TEAM_ID}"
+            else
+              failf "${label} is not signed with TeamIdentifier=${TEAM_ID}"
+            fi
+            if [ -f "${bundle}/embedded.mobileprovision" ]; then
+              pass "${label} has embedded.mobileprovision"
+            else
+              failf "${label} has no embedded.mobileprovision"
+            fi
+          done
+
+          # 3. Privacy manifests.
+          for bundle in "$APP" "$APPEX"; do
+            label="$(basename "$bundle")"
+            if [ -f "${bundle}/PrivacyInfo.xcprivacy" ]; then
+              pass "PrivacyInfo.xcprivacy present in ${label}"
+            else
+              failf "PrivacyInfo.xcprivacy missing from ${label}"
+            fi
+          done
+
+          # 4. Zero appicon warnings. The raw log always names AppIcon in actool
+          #    command lines (--app-icon AppIcon) and output file lists, so only
+          #    diagnostic lines count here.
+          APPICON_DIAGS="$(grep -iE '(warning|error):' signed-build.log | grep -i 'appicon' | sort -u || true)"
+          if [ -z "$APPICON_DIAGS" ]; then
+            pass "signed-build.log has zero appicon warnings/errors"
+          else
+            failf "signed-build.log has appicon diagnostics:"
+            echo "$APPICON_DIAGS"
+          fi
+          echo "(info) total 'appicon' mentions in the raw log, command lines included: $(grep -ic 'appicon' signed-build.log || true)"
+
+          # 5. Full entitlements dumps, for the record.
+          echo "===== app entitlements (${APP}) ====="
+          cat app-entitlements.txt 2>/dev/null || true
+          if [ -d "$APPEX" ]; then
+            echo "===== appex entitlements (${APPEX}) ====="
+            cat appex-entitlements.txt 2>/dev/null || true
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Signed gate coherence assertions failed (see FAIL lines above)"
+            exit 1
+          fi
+          echo "All signed-gate coherence assertions passed."
+
+      - name: Upload signed gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-signed-gate-logs
+          path: |
+            signed-build.log
+            profile-checks.txt
+            build-settings.json
+            build-settings.stderr.log
+            app-entitlements.plist
+            app-entitlements.txt
+            appex-entitlements.plist
+            appex-entitlements.txt
+            codesign-verify-*.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Zip signed app
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -n "${APP_PATH:-}" ] && [ -d "$APP_PATH" ] || { echo "no .app to zip"; exit 0; }
+          ditto -c -k --keepParent "$APP_PATH" myTeams-signed.app.zip
+
+      - name: Upload signed app
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-signed-gate-app
+          path: myTeams-signed.app.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean up keychain and profiles
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+            security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" || true
+          fi
+          for name in "${APP_PROFILE_NAME:-}" "${WIDGET_PROFILE_NAME:-}"; do
+            [ -n "$name" ] || continue
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${name//\//_}.mobileprovision" \
+                  "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/${name//\//_}.mobileprovision"
+          done
+          [ -n "${SIGN_DIR:-}" ] && rm -rf "$SIGN_DIR" || true
