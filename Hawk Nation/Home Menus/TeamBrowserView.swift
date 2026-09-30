@@ -171,6 +171,7 @@ struct TeamBrowserView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                        .accessibilityIdentifier("teamBrowser.done")
                 }
             }
             .task(id: league) {

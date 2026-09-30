@@ -106,6 +106,8 @@
 		CBA4C0FC0601B87C8D95D08A /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */; };
 		1E8316B9F16A72268EABA039 /* GameLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */; };
 		B752BCC33E66B82F3AF1BF38 /* LiveActivityMapperTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6F496BCF446A9B66DCCE468 /* LiveActivityMapperTests.swift */; };
+		8473A281ED2BC0EEADCA463D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 48894AFDF913DDA8138E5B0C /* PrivacyInfo.xcprivacy */; };
+		D2B55DBA017E0C6714ADB3BF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B58AC2186F276DF2B919173C /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -245,6 +247,8 @@
 		EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityManager.swift"; sourceTree = "<group>"; };
 		F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GameLiveActivity.swift"; sourceTree = "<group>"; };
 		F6F496BCF446A9B66DCCE468 /* LiveActivityMapperTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveActivityMapperTests.swift"; sourceTree = "<group>"; };
+		48894AFDF913DDA8138E5B0C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
+		B58AC2186F276DF2B919173C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -490,6 +494,7 @@
 				6E97A3DC94FFD380AB2E9C40 /* Roster */,
 				07B15EF8FF1BF9739823AB17 /* Schedule */,
 				79C7A63F34A9A6D50AA82504 /* Info.plist */,
+				48894AFDF913DDA8138E5B0C /* PrivacyInfo.xcprivacy */,
 			);
 			path = "Hawk Nation";
 			sourceTree = "<group>";
@@ -500,6 +505,7 @@
 				293381D72B47893F6410908F /* TeamEntity.swift */,
 				51CD6BF2A976D0F89BED3A66 /* Assets.xcassets */,
 				95813F172EB4B27F0B0B1BC5 /* Info.plist */,
+				B58AC2186F276DF2B919173C /* PrivacyInfo.xcprivacy */,
 				2D7E42B65C657DF94CC0AE71 /* WidgetScheduleLoader.swift */,
 				CC25799C101CA0E983D6E0BA /* myTeamWidget.swift */,
 				F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */,
@@ -681,6 +687,7 @@
 				8D8E93636BC6B36B3996894D /* Assets.xcassets in Resources */,
 				0A667909A8CE510E3039704F /* Preview Assets.xcassets in Resources */,
 				B164D08F27E8F38FB52D4B71 /* teams.json in Resources */,
+				8473A281ED2BC0EEADCA463D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -690,6 +697,7 @@
 			files = (
 				BDC0E6591D047E7947B879FB /* Assets.xcassets in Resources */,
 				5F2CD2D1EF105F6347FFD6D0 /* teams.json in Resources */,
+				D2B55DBA017E0C6714ADB3BF /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
