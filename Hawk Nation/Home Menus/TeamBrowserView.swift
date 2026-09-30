@@ -91,7 +91,8 @@ extension TeamSearch {
 /// own teams pinned at the top for reordering and removal.
 ///
 /// Opened from the crest bar's "+" button and, on a fresh install, as the
-/// "Pick your teams" onboarding sheet.
+/// "Pick your teams" onboarding sheet. Leads to the Alerts settings
+/// (`AlertsSettingsView`).
 struct TeamBrowserView: View {
     var title = "Teams"
 
@@ -131,6 +132,17 @@ struct TeamBrowserView: View {
                 if isSearching {
                     searchResults
                 } else {
+                    Section {
+                        NavigationLink {
+                            AlertsSettingsView()
+                        } label: {
+                            Label("Alerts", systemImage: "bell.badge")
+                        }
+                        .accessibilityLabel("Alerts")
+                        .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
+                        .accessibilityIdentifier("teamBrowser.alerts")
+                    }
+
                     if !myTeams.isEmpty {
                         Section("My Teams") {
                             ForEach(myTeams) { team in
