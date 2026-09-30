@@ -49,8 +49,8 @@ struct ScoreboardGame: Sendable, Hashable {
     /// `status.period`: the quarter, half, period or inning; 0 before the
     /// start. For score alerts (`ScoreAlertEngine`).
     var period: Int = 0
-    /// Each competitor's `team.shortDisplayName`, by ESPN team id. For score
-    /// alerts.
+    /// Each competitor's `team.shortDisplayName`, by ESPN team id; a team
+    /// the board gives no name for has no entry. For score alerts.
     var teamNames: [String: String] = [:]
     /// `status.displayClock`: `"12:34"`, `"67'"`, `"90'+5'"`; `"0:00"` where
     /// the sport keeps no clock. For Live Activities (`LiveActivityManager`).
@@ -136,8 +136,12 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
             var teamNames: [String: String] = [:]
             for (_, competitor) in competition["competitors"] {
                 let teamID = competitor["team", "id"].stringValue
-                guard !teamID.isEmpty else { continue }
-                teamNames[teamID] = competitor["team", "shortDisplayName"].stringValue
+                // No name rather than an empty one, so readers fall back
+                // ("Home", "Away") instead of showing a blank.
+                let name = competitor["team", "shortDisplayName"].stringValue
+                    .trimmingCharacters(in: .whitespaces)
+                guard !teamID.isEmpty, !name.isEmpty else { continue }
+                teamNames[teamID] = name
             }
 
             let competitors: [ScoreboardCompetitor] = competition["competitors"].compactMap { _, competitor in

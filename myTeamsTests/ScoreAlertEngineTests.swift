@@ -655,6 +655,28 @@ struct ScoreAlertContentTests {
         #expect(ScoreAlertEngine.snapshot(of: oneSided) == nil)
     }
 
+    @Test("A team the board names blank, or not at all, reads as Home or Away")
+    func unnamedTeams() throws {
+        // The Broncos game with its home side's shortDisplayName gone and
+        // its away side's left empty.
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let match = board["events"].enumerated().first { $0.element.1["competitions", 0, "id"].stringValue == broncosGame }
+        let eventIndex = try #require(match?.offset)
+        let competitors: [JSON.Index] = ["events", .index(eventIndex), "competitions", 0, "competitors"]
+        var unnamed = board
+        for (offset, competitor) in board[competitors].enumerated() {
+            let name: JSON = competitor.1["homeAway"].stringValue == "home" ? .null : .string(" ")
+            unnamed = unnamed.setting(competitors + [JSON.Index.index(offset), "team", "shortDisplayName"], to: name)
+        }
+
+        let game = try #require(parseScoreboard(from: unnamed).games.first { $0.gameID == broncosGame })
+        #expect(game.teamNames.isEmpty)
+        let snapshot = try #require(ScoreAlertEngine.snapshot(of: game))
+        #expect(snapshot.homeName == "Home")
+        #expect(snapshot.awayName == "Away")
+        #expect(snapshot.summary == "Away 26 – Home 23 (4th)")
+    }
+
     #if canImport(UserNotifications)
     @Test("An alert's title, body and sound come from the event; its thread is the game")
     func notificationContent() throws {
