@@ -44,7 +44,9 @@ final class ScoreAlertEngine {
 
     /// The last look at every followed game seen so far, by game id. Games
     /// that drop off a board keep their entry, so one that comes back is not
-    /// taken for a new game.
+    /// taken for a new game. Memory only: a game's first look each launch
+    /// seeds its entry without an alert (`ScoreDiff`), so a relaunch
+    /// mid-game does not announce a start.
     private var snapshots: [String: ScoreSnapshot] = [:]
     private var debounce = ScoreAlertDebounce()
     private var isStarted = false

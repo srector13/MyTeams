@@ -82,6 +82,11 @@ private func moving(
     return moved
 }
 
+/// `board` with game `gameID` not yet started: 0–0, before the 1st.
+private func pregame(_ gameID: String, in board: JSON) throws -> JSON {
+    try moving(gameID, in: board, to: "pre", period: 0, home: 0, away: 0)
+}
+
 /// `board` without game `gameID`, as a board that has dropped it.
 private func removing(_ gameID: String, from board: JSON) -> JSON {
     guard case .array(let events) = board["events"] else { return board }
@@ -223,7 +228,7 @@ struct ScoreAlertEngineTests {
     func startScoreFinal() async throws {
         let board = try Fixture.json("nfl_scoreboard_20260927")
         let boards = ScriptedBoards()
-        try boards.serve(board, at: LeagueID.nfl.scoreboardURL(day: nflDay))
+        try boards.serve(pregame(broncosGame, in: board), at: LeagueID.nfl.scoreboardURL(day: nflDay))
         let recorder = AlertRecorder()
         var steps = recorder.steps.makeAsyncIterator()
         let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
@@ -238,8 +243,15 @@ struct ScoreAlertEngineTests {
         engine.start()
 
         // The Broncos page mounts; the poller's first refresh lists the game
-        // under way, which is news to the engine.
+        // before its start, which seeds the engine without an alert.
         let subscription = center.subscribe(broncos, days: [nflDay])
+        let pregameLook = await nextSteps(1, from: &steps)
+        #expect(pregameLook == [.looked])
+
+        // Kickoff: the game under way is news.
+        inputs.advance(300)
+        try boards.serve(board, at: LeagueID.nfl.scoreboardURL(day: nflDay))
+        await center.refresh(.nfl)
         let kickoff = await nextSteps(3, from: &steps)
         #expect(kickoff == [
             .looked,
@@ -288,7 +300,7 @@ struct ScoreAlertEngineTests {
         let board = try Fixture.json("nfl_scoreboard_20260927")
         let url = LeagueID.nfl.scoreboardURL(day: nflDay)
         let boards = ScriptedBoards()
-        try boards.serve(board, at: url)
+        try boards.serve(pregame(broncosGame, in: board), at: url)
         let recorder = AlertRecorder()
         var steps = recorder.steps.makeAsyncIterator()
         let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
@@ -297,7 +309,12 @@ struct ScoreAlertEngineTests {
         engine.start()
         _ = await nextSteps(1, from: &steps)
 
+        // Seen before its start, then under way.
         let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
         let kickoff = await nextSteps(3, from: &steps)
         #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
 
@@ -333,7 +350,7 @@ struct ScoreAlertEngineTests {
         let board = try Fixture.json("nfl_scoreboard_20260927")
         let url = LeagueID.nfl.scoreboardURL(day: nflDay)
         let boards = ScriptedBoards()
-        try boards.serve(board, at: url)
+        try boards.serve(pregame(broncosGame, in: board), at: url)
         let recorder = AlertRecorder()
         var steps = recorder.steps.makeAsyncIterator()
         let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
@@ -342,7 +359,12 @@ struct ScoreAlertEngineTests {
         engine.start()
         _ = await nextSteps(1, from: &steps)
 
+        // Seen before its start, then under way.
         let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
         let kickoff = await nextSteps(3, from: &steps)
         #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
 
@@ -381,9 +403,9 @@ struct ScoreAlertEngineTests {
     @Test("Only favorites that want alerts, and only in their own league: an ESPN id shared across leagues is not a match")
     @MainActor
     func followedFavoritesOnly() async throws {
-        // Make the Chiefs' game live too, so the board holds two games under
-        // way: the Broncos' and the Chiefs'.
-        let board = try moving(chiefsGame, in: Fixture.json("nfl_scoreboard_20260927"), to: "in", period: 3, home: 10, away: 17)
+        // The Broncos' and the Chiefs' games both before their start.
+        let fixture = try Fixture.json("nfl_scoreboard_20260927")
+        var board = try pregame(chiefsGame, in: pregame(broncosGame, in: fixture))
         let url = LeagueID.nfl.scoreboardURL(day: nflDay)
         let boards = ScriptedBoards()
         try boards.serve(board, at: url)
@@ -402,6 +424,15 @@ struct ScoreAlertEngineTests {
         _ = await nextSteps(1, from: &steps)
 
         let subscription = center.subscribe(chiefs, days: [nflDay])
+        let seeded = await nextSteps(1, from: &steps)
+        #expect(seeded == [.looked])
+
+        // Both games kick off; only the Chiefs' is news.
+        inputs.advance(300)
+        board = try moving(chiefsGame, in: board, to: "in", period: 3, home: 10, away: 17)
+        board = try moving(broncosGame, in: board, to: "in", period: 4, home: 23, away: 26)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
         let chiefsLive = ScoreSnapshot(homeName: "Dolphins", awayName: "Chiefs", homeScore: 10, awayScore: 17, period: 3, state: .inProgress)
         let first = await nextSteps(3, from: &steps)
         #expect(first == [
@@ -411,18 +442,31 @@ struct ScoreAlertEngineTests {
         ])
 
         // Favorites are read afresh at each look: with the Broncos' alerts
-        // turned on, their game is news the next time the board changes —
-        // and the step after the first batch is this look, so the Broncos'
-        // game was not posted before.
+        // turned on, their game is followed from the next change. Its first
+        // look seeds quietly — it was under way before it was followed — and
+        // the step after the first batch is this look, so the Broncos' game
+        // was not posted before.
         inputs.setNotify(true, for: broncos.id)
         inputs.advance(300)
-        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 23, away: 29), at: url)
+        board = try moving(broncosGame, in: board, to: "in", period: 4, home: 23, away: 29)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let followed = await nextSteps(1, from: &steps)
+        #expect(followed == [.looked])
+
+        // From then on its changes are news.
+        inputs.advance(300)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 23, away: 33), at: url)
         await center.refresh(.nfl)
         let second = await nextSteps(3, from: &steps)
         #expect(second == [
             .looked,
             .authorizationChecked(granted: true),
-            .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot(away: 29))),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(away: 29),
+                snapshot: broncosSnapshot(away: 33)
+            )),
         ])
 
         center.unsubscribe(subscription)
@@ -431,11 +475,11 @@ struct ScoreAlertEngineTests {
     @Test("A cup tie alerts for a favorite whose league plays the cup, and for no one else on the cup's board")
     @MainActor
     func cupCompetitions() async throws {
-        // ucl_scoreboard_20260909 with three ties rewound to the second half.
+        // ucl_scoreboard_20260909 with three ties rewound to before kickoff.
         var board = try Fixture.json("ucl_scoreboard_20260909")
-        board = try moving(arsenalGame, in: board, to: "in", period: 2, home: 0, away: 1)
-        board = try moving(barcelonaGame, in: board, to: "in", period: 2, home: 3, away: 1)
-        board = try moving(stuttgartGame, in: board, to: "in", period: 2, home: 2, away: 1)
+        for game in [arsenalGame, barcelonaGame, stuttgartGame] {
+            board = try pregame(game, in: board)
+        }
         let url = championsLeague.scoreboardURL(day: uclDay)
         let boards = ScriptedBoards()
         try boards.serve(board, at: url)
@@ -452,6 +496,18 @@ struct ScoreAlertEngineTests {
         _ = await nextSteps(1, from: &steps)
 
         let subscription = center.subscribe(arsenal, competition: championsLeague, days: [uclDay])
+        let seeded = await nextSteps(1, from: &steps)
+        #expect(seeded == [.looked])
+
+        // All three under way, into the second half. Stuttgart's tie stays
+        // quiet — the MLS favorite sharing its id is in a league that does
+        // not play the Champions League — and Barcelona's alerts are off.
+        inputs.advance(300)
+        board = try moving(arsenalGame, in: board, to: "in", period: 2, home: 0, away: 1)
+        board = try moving(barcelonaGame, in: board, to: "in", period: 2, home: 3, away: 1)
+        board = try moving(stuttgartGame, in: board, to: "in", period: 2, home: 2, away: 1)
+        try boards.serve(board, at: url)
+        await center.refresh(championsLeague)
         let first = await nextSteps(3, from: &steps)
         #expect(first == [
             .looked,
@@ -462,22 +518,69 @@ struct ScoreAlertEngineTests {
             )),
         ])
 
-        // Barcelona's alerts on: La Liga plays the Champions League too.
-        // Stuttgart's tie stays quiet — the MLS favorite sharing its id is
-        // in a league that does not.
+        // Barcelona's alerts on: La Liga plays the Champions League too. Its
+        // tie, first followed under way, seeds quietly; its next goal alerts.
         inputs.setNotify(true, for: barcelona.id)
         inputs.advance(300)
         board = try moving(barcelonaGame, in: board, to: "in", period: 2, home: 4, away: 1)
         board = try moving(stuttgartGame, in: board, to: "in", period: 2, home: 3, away: 1)
         try boards.serve(board, at: url)
         await center.refresh(championsLeague)
+        let followed = await nextSteps(1, from: &steps)
+        #expect(followed == [.looked])
+
+        inputs.advance(300)
+        board = try moving(barcelonaGame, in: board, to: "in", period: 2, home: 5, away: 1)
+        try boards.serve(board, at: url)
+        await center.refresh(championsLeague)
         let second = await nextSteps(3, from: &steps)
         #expect(second == [
             .looked,
             .authorizationChecked(granted: true),
-            .delivered(.gameStart(
+            .delivered(.scoreChange(
                 gameID: barcelonaGame,
-                snapshot: ScoreSnapshot(homeName: "Barcelona", awayName: "Feyenoord", homeScore: 4, awayScore: 1, period: 2, state: .inProgress)
+                previous: ScoreSnapshot(homeName: "Barcelona", awayName: "Feyenoord", homeScore: 4, awayScore: 1, period: 2, state: .inProgress),
+                snapshot: ScoreSnapshot(homeName: "Barcelona", awayName: "Feyenoord", homeScore: 5, awayScore: 1, period: 2, state: .inProgress)
+            )),
+        ])
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("Relaunched mid-game: the first look at a game under way posts nothing; its next score does")
+    @MainActor
+    func relaunchMidGame() async throws {
+        // A fresh engine, as after a relaunch, and the Broncos already in the
+        // 4th on the first board it sees.
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(board, at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        let seeded = await nextSteps(1, from: &steps)
+        #expect(seeded == [.looked])
+
+        // The step after the seed is the next look: no "Game started" went
+        // out, and the score reads against the seed.
+        inputs.advance(300)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
             )),
         ])
 
@@ -490,7 +593,7 @@ struct ScoreAlertEngineTests {
         let board = try Fixture.json("nfl_scoreboard_20260927")
         let url = LeagueID.nfl.scoreboardURL(day: nflDay)
         let boards = ScriptedBoards()
-        try boards.serve(board, at: url)
+        try boards.serve(pregame(broncosGame, in: board), at: url)
         let recorder = AlertRecorder(granted: false)
         var steps = recorder.steps.makeAsyncIterator()
         let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
@@ -499,7 +602,12 @@ struct ScoreAlertEngineTests {
         engine.start()
         _ = await nextSteps(1, from: &steps)
 
+        // Seen before its start, then under way.
         let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
         let denied = await nextSteps(2, from: &steps)
         #expect(denied == [.looked, .authorizationChecked(granted: false)])
 
