@@ -135,25 +135,33 @@ struct ScoreAlertDebounceTests {
     @Test("One alert per game per window")
     func window() {
         var debounce = ScoreAlertDebounce(window: 120)
-        #expect(debounce.admit(score("1"), at: start))
-        #expect(!debounce.admit(score("1"), at: start.addingTimeInterval(60)))
-        #expect(!debounce.admit(score("1"), at: start.addingTimeInterval(119)))
-        #expect(debounce.admit(score("1"), at: start.addingTimeInterval(120)))
+        let first = debounce.admit(score("1"), at: start)
+        #expect(first)
+        let early = debounce.admit(score("1"), at: start.addingTimeInterval(60))
+        #expect(!early)
+        let edge = debounce.admit(score("1"), at: start.addingTimeInterval(119))
+        #expect(!edge)
+        let reopened = debounce.admit(score("1"), at: start.addingTimeInterval(120))
+        #expect(reopened)
     }
 
     @Test("Games are debounced separately")
     func perGame() {
         var debounce = ScoreAlertDebounce()
-        #expect(debounce.admit(score("1"), at: start))
-        #expect(debounce.admit(score("2"), at: start))
+        let one = debounce.admit(score("1"), at: start)
+        #expect(one)
+        let two = debounce.admit(score("2"), at: start)
+        #expect(two)
     }
 
     @Test("A final always goes, and restarts the window")
     func finalOverridesDebounce() {
         var debounce = ScoreAlertDebounce()
         let over = ScoreEvent.final(gameID: "1", snapshot: game(.final, home: 7, period: 4))
-        #expect(debounce.admit(score("1"), at: start))
-        #expect(debounce.admit(over, at: start.addingTimeInterval(5)))
+        let scored = debounce.admit(score("1"), at: start)
+        #expect(scored)
+        let finalAdmitted = debounce.admit(over, at: start.addingTimeInterval(5))
+        #expect(finalAdmitted)
         #expect(debounce.lastPosted["1"] == start.addingTimeInterval(5))
     }
 
@@ -166,6 +174,7 @@ struct ScoreAlertDebounceTests {
             .periodEnd(gameID: "1", period: 1, snapshot: snapshot),
             .gameStart(gameID: "2", snapshot: snapshot),
         ]
-        #expect(debounce.admit(events, at: start).map(\.gameID) == ["1", "2"])
+        let admitted = debounce.admit(events, at: start)
+        #expect(admitted.map(\.gameID) == ["1", "2"])
     }
 }

@@ -19,7 +19,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
     var body: some View {
         VStack(spacing: 5) {
-            RemoteImage(url: player.photo) {
+            RemoteImage(url: URL(string: player.photo)) {
                 Image("blank")
                     .resizable()
             }
