@@ -399,7 +399,8 @@ struct FavoritesStoreTests {
         #expect(cloud.entries.first { $0.teamID == team }?.notify == false)
         // Order and the other teams are untouched.
         #expect(store.teamIDs == seedIDs)
-        #expect(store.favorites.filter { $0.teamID != team }.allSatisfy(\.notify))
+        let others = store.favorites.filter { $0.teamID != team }
+        #expect(others.allSatisfy { $0.notify })
 
         // Setting it the way it already is, or for a team not followed, is
         // not an edit.
