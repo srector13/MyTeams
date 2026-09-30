@@ -500,8 +500,14 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     var removedAt: Date?
     /// Whether game alerts are wanted for the team (`ScoreAlertEngine`).
     var notify: Bool
+    /// When the reader last set `notify`. `nil` until they do, which counts
+    /// as `addedAt`: following a team sets it to the default.
+    var notifyChangedAt: Date?
 
     var id: String { teamID }
+
+    /// When `notify` took its value, for merging.
+    var notifySetAt: Date { notifyChangedAt ?? addedAt }
 
     /// Whether the entry is a tombstone: removed no earlier than it was added.
     var isRemoved: Bool {
@@ -509,11 +515,12 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
         return removedAt >= addedAt
     }
 
-    init(teamID: String, addedAt: Date = Date(), removedAt: Date? = nil, notify: Bool = true) {
+    init(teamID: String, addedAt: Date = Date(), removedAt: Date? = nil, notify: Bool = true, notifyChangedAt: Date? = nil) {
         self.teamID = teamID
         self.addedAt = addedAt
         self.removedAt = removedAt
         self.notify = notify
+        self.notifyChangedAt = notifyChangedAt
     }
 }
 
@@ -631,14 +638,27 @@ enum FavoritesCodec {
     /// Merges two devices' entries into one list both can adopt.
     ///
     /// Each team keeps whichever copy was edited last (`newer(_:_:)`), so an
-    /// add and a remove made apart resolve to the later one. The result is
+    /// add and a remove made apart resolve to the later one. Its alerts
+    /// setting is merged on its own: the copy whose `notify` was set last
+    /// wins, so turning alerts off is not undone by a device that never saw
+    /// it, and a follow made after it resets it. The result is
     /// the followed teams — first those `local` shows, in its order, then the
     /// rest oldest-added first — followed by the tombstones. Apart from that
     /// order, `merge(a, b)` and `merge(b, a)` hold the same entries.
     static func merge(_ local: [FavoriteTeam], _ remote: [FavoriteTeam]) -> [FavoriteTeam] {
         var winners: [TeamRef.ID: FavoriteTeam] = [:]
         for entry in local + remote {
-            winners[entry.teamID] = winners[entry.teamID].map { newer($0, entry) } ?? entry
+            guard let current = winners[entry.teamID] else {
+                winners[entry.teamID] = entry
+                continue
+            }
+            var winner = newer(current, entry)
+            if current.notifySetAt != entry.notifySetAt {
+                let setting = current.notifySetAt > entry.notifySetAt ? current : entry
+                winner.notify = setting.notify
+                winner.notifyChangedAt = setting.notifyChangedAt
+            }
+            winners[entry.teamID] = winner
         }
         let localOrder = Dictionary(
             local.filter { !$0.isRemoved }.enumerated().map { ($1.teamID, $0) },
@@ -666,14 +686,15 @@ enum FavoritesCodec {
     /// The later-edited of two entries for one team. Ties go to the removal,
     /// then fall through the other fields, so every device picks the same one.
     private static func newer(_ a: FavoriteTeam, _ b: FavoriteTeam) -> FavoriteTeam {
-        func rank(_ entry: FavoriteTeam) -> (Date, Int, Date, Date, Int) {
+        func rank(_ entry: FavoriteTeam) -> (Date, Int, Date, Date, Int, Date) {
             let removedAt = entry.removedAt ?? .distantPast
             return (
                 max(entry.addedAt, removedAt),
                 entry.isRemoved ? 1 : 0,
                 entry.addedAt,
                 removedAt,
-                entry.notify ? 1 : 0
+                entry.notify ? 1 : 0,
+                entry.notifyChangedAt ?? .distantPast
             )
         }
         return rank(b) > rank(a) ? b : a
