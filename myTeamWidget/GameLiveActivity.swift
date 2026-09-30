@@ -31,6 +31,8 @@ struct GameLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     GameActivityTeamScore(name: game.homeName, score: state.homeScore, alignment: .trailing)
                 }
+                // The Dynamic Island's regions are sized by the system, so
+                // their fonts stay fixed; VoiceOver gets labels instead.
                 DynamicIslandExpandedRegion(.center) {
                     Text(state.stage)
                         .font(.system(size: 14, weight: .semibold))
@@ -54,11 +56,15 @@ struct GameLiveActivity: Widget {
                 Text("\(state.awayScore)–\(state.homeScore)")
                     .font(.system(size: 14, weight: .bold))
                     .monospacedDigit()
+                    .accessibilityLabel(state.spokenScore(game))
             } minimal: {
+                // The minimal presentation has no stage beside it, so its
+                // label carries the stage too.
                 Text("\(state.awayScore)–\(state.homeScore)")
                     .font(.system(size: 11, weight: .bold))
                     .monospacedDigit()
                     .minimumScaleFactor(0.5)
+                    .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             }
         }
     }
@@ -103,18 +109,28 @@ private struct GameActivityBanner: View {
         .padding(.vertical, 12)
     }
 
+    /// One side's name and score, in bold while it leads. The text styles
+    /// match the fixed 16 and 20 pt this used at the default size, and
+    /// scale with Dynamic Type.
     private func row(_ name: String, _ score: Int, leads: Bool) -> some View {
-        HStack(spacing: 8) {
+        // The lead is drawn only in bold, so VoiceOver says it: "Rams 26,
+        // leading", or "won" once the game is over.
+        let spoken: String = leads
+            ? "\(name) \(score), \(state.phase == .ended ? "won" : "leading")"
+            : "\(name) \(score)"
+        return HStack(spacing: 8) {
             Text(name)
-                .font(.system(size: 16, weight: leads ? .bold : .regular))
+                .font(.callout.weight(leads ? .bold : .regular))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 4)
             Text("\(score)")
-                .font(.system(size: 20, weight: leads ? .bold : .regular))
+                .font(.title3.weight(leads ? .bold : .regular))
                 .monospacedDigit()
         }
         .frame(maxWidth: 180)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spoken)
     }
 }
 
@@ -135,6 +151,17 @@ private struct GameActivityTeamScore: View {
                 .monospacedDigit()
         }
         .padding(.horizontal, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name + " " + String(score))
+    }
+}
+
+extension GameActivityState {
+    /// The scoreline as VoiceOver reads it, e.g. "Rams 26, Broncos 23":
+    /// each side's name with its score, away first, as the "26–23" it
+    /// stands for is drawn.
+    fileprivate func spokenScore(_ game: GameActivityInfo) -> String {
+        "\(game.awayName) \(awayScore), \(game.homeName) \(homeScore)"
     }
 }
 
