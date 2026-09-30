@@ -1,0 +1,49 @@
+name: iOS Gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  ios-gate:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Diagnostics
+        continue-on-error: true
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation -skipMacroValidation build CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
+
+      - name: Build for testing
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation -skipMacroValidation build-for-testing CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-for-testing.log
+
+      - name: Test
+        shell: bash
+        run: |
+          set -o pipefail
+          DEST=$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]+' | head -1 | sed 's/[[:space:]]*$//') || true
+          [ -z "$DEST" ] && DEST="iPhone 17"
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,name=$DEST,OS=latest" -skipPackagePluginValidation -skipMacroValidation test CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-gate-logs
+          path: ${{ github.workspace }}/*.log
+          retention-days: 7
