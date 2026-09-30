@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Observation
 
 /// Polls one scoreboard per league for the live scores of every favorite in
 /// it.
@@ -21,8 +22,16 @@ import Foundation
 /// Pages subscribe while they are on screen, naming the scoreboard days of
 /// their games in the live window (`TeamModel`); a league is polled only
 /// while some subscription wants a day there, by one poller however many
-/// pages or favorites share it. The cost is one request per visible league
+/// pages or favorites share it. The cost is one request per polled league
 /// per minute, and nothing on a quiet day.
+///
+/// While the app is in the foreground it also follows every favorite
+/// itself (`startFollowingFavorites()`), whichever page is showing, so score
+/// alerts and Live Activities hear of games in leagues nobody is looking
+/// at. It subscribes like a page — one subscription per favorite and
+/// competition, for the days of its games in the live window — so a league
+/// both it and a page want is still one poller and one request a minute,
+/// and a league with no favorite's game under way still costs nothing.
 ///
 /// The favorites the documents fan out to are `FavoritesStore`'s, read at
 /// each refresh, never a list of the center's own. A refresh that fails
@@ -52,6 +61,8 @@ final class LeagueScoreboardCenter {
     private let interval: Duration
     private let favoriteIDs: @MainActor () -> [TeamRef.ID]
     private let sleep: @Sendable (Duration) async throws -> Void
+    private let now: @MainActor () -> Date
+    private let loadSchedule: @Sendable (TeamRef.ID) async -> [Game]?
 
     private struct Entry {
         var teamID: TeamRef.ID
@@ -66,21 +77,69 @@ final class LeagueScoreboardCenter {
     /// The last good scoreboard of each league, by day.
     @ObservationIgnored private var scoreboards: [LeagueID: [String: LeagueScoreboard]] = [:]
 
+    /// A favorite's standing request for one of its competitions, while the
+    /// center follows the favorites.
+    private struct FollowKey: Hashable {
+        var teamID: TeamRef.ID
+        var competition: LeagueID
+    }
+
+    /// A favorite's season as last loaded: `nil` games when the load failed.
+    private struct FollowedSchedule {
+        var games: [Game]?
+        var loadedAt: Date
+    }
+
+    /// Whether the center follows every favorite, not only the pages on
+    /// screen. See `startFollowingFavorites()`.
+    @ObservationIgnored private(set) var isFollowingFavorites = false
+    /// Bumped at each start and stop, so an observation armed by an earlier
+    /// run of following does nothing.
+    @ObservationIgnored private var followGeneration = 0
+    @ObservationIgnored private var followLoop: Task<Void, Never>?
+    @ObservationIgnored private var followed: [FollowKey: Subscription] = [:]
+    /// Kept across stops, so coming back to the foreground reloads only the
+    /// stale ones.
+    @ObservationIgnored private var followedSchedules: [TeamRef.ID: FollowedSchedule] = [:]
+    @ObservationIgnored private var scheduleLoads: [TeamRef.ID: Task<[Game]?, Never>] = [:]
+    /// Games the scoreboards have shown over, for as long as a favorite's
+    /// schedule still has them in the live window: a board no subscription
+    /// wants any more is dropped, and the game with it.
+    @ObservationIgnored private var endedGames: Set<String> = []
+
+    /// How long a favorite's loaded season is trusted before it is fetched
+    /// again. The scoreboards say when a game ends; this picks up fixtures
+    /// added or moved.
+    static let followedScheduleLifetime: TimeInterval = 6 * 60 * 60
+    /// How long after a failed load a favorite's season is asked for again.
+    static let followedScheduleRetry: TimeInterval = 15 * 60
+
     /// - Parameters:
     ///   - interval: how often a league is polled while nothing is throttled.
     ///   - favoriteIDs: the registry the scoreboards fan out to, in
     ///     `TeamRef.ID`s. The app's favorites.
     ///   - sleep: waits between refreshes; tests stand in a scripted clock.
+    ///   - now: the current instant, for the live window of the favorites
+    ///     the center follows.
+    ///   - loadSchedule: a favorite's season, by `TeamRef.ID`, or `nil` when
+    ///     it cannot be loaded. Read while following the favorites.
     init(
         client: HTTPClient = .shared,
         interval: Duration = .seconds(60),
         favoriteIDs: @escaping @MainActor () -> [TeamRef.ID] = { FavoritesStore.shared.teamIDs },
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        now: @escaping @MainActor () -> Date = { Date() },
+        loadSchedule: @escaping @Sendable (TeamRef.ID) async -> [Game]? = { id in
+            guard let team = await FavoritesStore.resolve(id, within: .seconds(5)) else { return nil }
+            return try? await downloadScheduleData(team: team).get()
+        }
     ) {
         self.client = client
         self.interval = interval
         self.favoriteIDs = favoriteIDs
         self.sleep = sleep
+        self.now = now
+        self.loadSchedule = loadSchedule
     }
 
     // MARK: Subscribing
@@ -93,10 +152,13 @@ final class LeagueScoreboardCenter {
     ///   (`LeagueDescriptor.cupCompetitions`) to poll instead, for the days
     ///   of the team's cup ties: the league's own board does not list them.
     func subscribe(_ team: TeamRef, competition: LeagueID? = nil, days: Set<String>) -> Subscription {
-        let league = competition ?? team.league
+        subscribe(teamID: team.id, league: competition ?? team.league, days: days)
+    }
+
+    private func subscribe(teamID: TeamRef.ID, league: LeagueID, days: Set<String>) -> Subscription {
         lastSubscriptionID += 1
         let subscription = Subscription(id: lastSubscriptionID, league: league)
-        subscriptions[subscription.id] = Entry(teamID: team.id, league: league, days: days)
+        subscriptions[subscription.id] = Entry(teamID: teamID, league: league, days: days)
         reconcilePoller(for: league)
         return subscription
     }
@@ -178,6 +240,9 @@ final class LeagueScoreboardCenter {
             scoreboards[league] = scoreboards[league]?.filter { wanted.contains($0.key) }
         }
         fanOut(league)
+        // A favorite's game that just ended no longer keeps its league
+        // polled.
+        regateFollowedFavorites()
 
         // A cancelled request is the poller stopping, not the server
         // pushing back.
@@ -234,6 +299,169 @@ final class LeagueScoreboardCenter {
                 lines[teamID] = teamLines
             }
         }
+    }
+
+    // MARK: Following the favorites
+
+    /// Subscribes for every favorite, as its page would, whether or not the
+    /// page is on screen: each of its competitions (`[league] +
+    /// cupCompetitions`) for the days of its games in the live window
+    /// (`followedDays`). Its seasons are loaded here, and re-read once they
+    /// are `followedScheduleLifetime` old.
+    ///
+    /// Rechecked every `interval` as the window moves with the clock, at
+    /// every refresh as games end, and whenever the favorites change.
+    /// Called when the app comes to the foreground; calling it again does
+    /// nothing.
+    func startFollowingFavorites() {
+        guard !isFollowingFavorites else { return }
+        isFollowingFavorites = true
+        followGeneration += 1
+        observeFavorites(followGeneration)
+        followLoop = Task {
+            while !Task.isCancelled {
+                await self.refreshFollowedFavorites()
+                do {
+                    try await self.sleep(self.interval)
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    /// Withdraws the favorites' subscriptions, stopping every league no
+    /// page still wants. Called when the app goes to the background.
+    func stopFollowingFavorites() {
+        guard isFollowingFavorites else { return }
+        isFollowingFavorites = false
+        followGeneration += 1
+        followLoop?.cancel()
+        followLoop = nil
+        let withdrawn = followed.values
+        followed = [:]
+        for subscription in withdrawn {
+            unsubscribe(subscription)
+        }
+    }
+
+    /// Loads the seasons of favorites that have none or a stale one — each
+    /// at most once however many callers ask — then points the favorites'
+    /// subscriptions at their live days.
+    func refreshFollowedFavorites() async {
+        guard isFollowingFavorites else { return }
+        let ids = favoriteIDs()
+        followedSchedules = followedSchedules.filter { ids.contains($0.key) }
+
+        let current = now()
+        for id in ids where scheduleLoads[id] == nil && needsSchedule(id, at: current) {
+            let load = loadSchedule
+            scheduleLoads[id] = Task {
+                await load(id)
+            }
+        }
+        for id in ids {
+            guard let load = scheduleLoads[id] else { continue }
+            let games = await load.value
+            // Whoever was first back stores it.
+            if scheduleLoads.removeValue(forKey: id) != nil {
+                followedSchedules[id] = FollowedSchedule(games: games, loadedAt: now())
+            }
+        }
+        regateFollowedFavorites()
+    }
+
+    private func needsSchedule(_ id: TeamRef.ID, at date: Date) -> Bool {
+        guard let schedule = followedSchedules[id] else { return true }
+        let lifetime = schedule.games == nil ? Self.followedScheduleRetry : Self.followedScheduleLifetime
+        return date.timeIntervalSince(schedule.loadedAt) >= lifetime
+    }
+
+    /// Re-reads the favorites on each change, until following stops.
+    private func observeFavorites(_ generation: Int) {
+        guard followGeneration == generation else { return }
+        _ = withObservationTracking {
+            favoriteIDs()
+        } onChange: {
+            // Called before the change lands; read it on the next turn.
+            Task { @MainActor in
+                guard self.followGeneration == generation else { return }
+                self.observeFavorites(generation)
+                await self.refreshFollowedFavorites()
+            }
+        }
+    }
+
+    /// Subscribes each favorite's competitions with games in the live
+    /// window, updates the ones already subscribed, and withdraws the rest —
+    /// a team unfollowed, or its last live game over.
+    private func regateFollowedFavorites() {
+        guard isFollowingFavorites else { return }
+        let current = now()
+        for board in games.values {
+            for game in board where game.state == "post" {
+                endedGames.insert(game.gameID)
+            }
+        }
+
+        var wanted: [FollowKey: Set<String>] = [:]
+        var inWindow: Set<String> = []
+        for id in favoriteIDs() {
+            guard let team = TeamRef.parse(id: id),
+                  let schedule = followedSchedules[id]?.games
+            else { continue }
+            for game in schedule where shouldPollLiveScore(game: game, now: current) {
+                inWindow.insert(game.gameID)
+            }
+            for competition in [team.league] + team.league.descriptor.cupCompetitions {
+                let days = Self.followedDays(
+                    of: schedule, in: competition, league: team.league,
+                    ended: endedGames, now: current
+                )
+                if !days.isEmpty {
+                    wanted[FollowKey(teamID: id, competition: competition)] = days
+                }
+            }
+        }
+        endedGames.formIntersection(inWindow)
+
+        for (key, subscription) in followed where wanted[key] == nil {
+            followed[key] = nil
+            unsubscribe(subscription)
+        }
+        for (key, days) in wanted {
+            if let subscription = followed[key] {
+                update(subscription, days: days)
+            } else {
+                followed[key] = subscribe(teamID: key.teamID, league: key.competition, days: days)
+            }
+        }
+    }
+
+    /// The scoreboard days (`scoreboardDay(for:)`) of a favorite's games in
+    /// `competition` that its page would poll (`shouldPollLiveScore`),
+    /// less those a scoreboard has shown over: the schedule is loaded
+    /// rarely, the scoreboard every minute.
+    ///
+    /// - Parameters:
+    ///   - league: the team's own league, the competition of games whose
+    ///     feed names none.
+    ///   - ended: the ids of games a scoreboard listed as `"post"` —
+    ///     played out, or called off.
+    static func followedDays(
+        of schedule: [Game],
+        in competition: LeagueID,
+        league: LeagueID,
+        ended: Set<String>,
+        now: Date
+    ) -> Set<String> {
+        Set(schedule
+            .filter { game in
+                (game.competition ?? league) == competition
+                    && shouldPollLiveScore(game: game, now: now)
+                    && !ended.contains(game.gameID)
+            }
+            .map { scoreboardDay(for: $0.dateAsDate) })
     }
 
     // MARK: Reading
