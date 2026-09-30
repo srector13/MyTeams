@@ -95,7 +95,7 @@ struct GameDetailView: View {
                                 Spacer()
                             }.padding([.all], 20)
                         }
-                        .ignoresSafeArea(.top)
+                        .ignoresSafeArea(edges: .top)
                         Spacer()
                     }
                 }
@@ -367,7 +367,7 @@ private struct GameDetailSkeleton: View {
                         Spacer()
                     }.padding([.all], 20)
                 }
-                .ignoresSafeArea(.top)
+                .ignoresSafeArea(edges: .top)
                 Spacer()
             }
         }

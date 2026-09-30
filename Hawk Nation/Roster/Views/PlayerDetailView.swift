@@ -611,7 +611,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 Spacer()
             }.padding([.all], 20)
         }
-        .ignoresSafeArea(.top)
+        .ignoresSafeArea(edges: .top)
     }
 
     private func gridRow(_ row: [PlayerSheetCell], layout: PlayerSheetGrid.Layout) -> some View {
