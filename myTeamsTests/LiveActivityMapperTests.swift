@@ -365,3 +365,59 @@ struct LiveActivityPlannerTests {
         #expect(actions == [.start(live.info, live.state)])
     }
 }
+
+@Suite("Live Activity retired games")
+struct RetiredLiveActivitiesTests {
+    private let start = Date(timeIntervalSince1970: 1_790_000_000)
+
+    private func scratchDefaults() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "RetiredLiveActivitiesTests.\(UUID().uuidString)"))
+    }
+
+    @Test("A game retired in one launch is still retired in the next, and never restarted")
+    func persistsAcrossLaunches() throws {
+        let defaults = try scratchDefaults()
+        RetiredLiveActivities(defaults: defaults).retire("1", at: start)
+
+        // The next launch: a new store over the same defaults, the game
+        // still live on the boards.
+        let relaunched = RetiredLiveActivities(defaults: defaults)
+        let retired = relaunched.games(at: start.addingTimeInterval(60 * 60))
+        #expect(retired == ["1"])
+
+        let live = candidate("1", state(.live, home: 7, period: 2))
+        let other = candidate("2", state(.live, period: 1))
+        let actions = LiveActivityPlanner.plan(
+            candidates: [live, other], running: [:], retired: retired, canStart: true
+        )
+        #expect(actions == [.start(other.info, other.state)])
+    }
+
+    @Test("Retired games are forgotten a day later, and dropped from the store")
+    func horizon() throws {
+        let defaults = try scratchDefaults()
+        let store = RetiredLiveActivities(defaults: defaults)
+        #expect(RetiredLiveActivities.horizon == 24 * 60 * 60)
+        #expect(store.games(at: start).isEmpty)
+
+        store.retire("old", at: start)
+        store.retire("new", at: start.addingTimeInterval(12 * 60 * 60))
+        let justBefore = start.addingTimeInterval(RetiredLiveActivities.horizon - 1)
+        #expect(store.games(at: justBefore) == ["old", "new"])
+        let dayLater = start.addingTimeInterval(RetiredLiveActivities.horizon)
+        #expect(store.games(at: dayLater) == ["new"])
+
+        // The next write prunes what has aged out, so the store stays small.
+        store.retire("newer", at: dayLater)
+        let stored = defaults.dictionary(forKey: RetiredLiveActivities.defaultsKey) ?? [:]
+        #expect(Set(stored.keys) == ["new", "newer"])
+    }
+
+    @Test("Retiring again restarts the game's day")
+    func retireAgain() throws {
+        let store = RetiredLiveActivities(defaults: try scratchDefaults())
+        store.retire("1", at: start)
+        store.retire("1", at: start.addingTimeInterval(20 * 60 * 60))
+        #expect(store.games(at: start.addingTimeInterval(30 * 60 * 60)) == ["1"])
+    }
+}

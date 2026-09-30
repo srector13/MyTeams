@@ -62,8 +62,10 @@ final class LiveActivityManager {
     /// What each running activity was last given, by game id.
     private var shown: [String: GameActivityState] = [:]
     /// Games whose activity ended, or that the reader dismissed; none is
-    /// started again this launch.
+    /// started again. Loaded from, and written through to, `retiredStore`,
+    /// so a dismissed game stays dismissed across launches.
     private var retired: Set<String> = []
+    private let retiredStore: RetiredLiveActivities
     /// When each running activity's game was first missing from the boards,
     /// by game id (`LiveActivityPlanner.offBoard`).
     private var offBoardSince: [String: Date] = [:]
@@ -73,12 +75,14 @@ final class LiveActivityManager {
         center: LeagueScoreboardCenter = .shared,
         favorites: @escaping @MainActor () -> [FavoriteTeam] = { FavoritesStore.shared.favorites },
         isForeground: @escaping @MainActor () -> Bool = { UIApplication.shared.applicationState == .active },
-        now: @escaping @MainActor () -> Date = { Date() }
+        now: @escaping @MainActor () -> Date = { Date() },
+        retiredStore: RetiredLiveActivities = RetiredLiveActivities(defaults: SharedPaths.defaults)
     ) {
         self.center = center
         self.favorites = favorites
         self.isForeground = isForeground
         self.now = now
+        self.retiredStore = retiredStore
     }
 
     /// Takes over the activities still running from an earlier launch and
@@ -86,16 +90,24 @@ final class LiveActivityManager {
     func start() {
         guard !isStarted else { return }
         isStarted = true
+        retired = retiredStore.games(at: now())
         recover()
         observe()
     }
 
     /// Picks up the activities a previous launch left running, one per
-    /// game; any second one for a game is ended.
+    /// game; any second one for a game is ended, and so is one for a game
+    /// already retired (its end was asked for but never landed). Those that
+    /// finished while the app was away — dismissed, or timed out — retire
+    /// their games.
     private func recover() {
-        for activity in Activity<GameActivityAttributes>.activities where Self.isRunning(activity) {
+        for activity in Activity<GameActivityAttributes>.activities {
             let gameID = activity.attributes.game.gameID
-            if activities[gameID] == nil {
+            guard Self.isRunning(activity) else {
+                retire(gameID)
+                continue
+            }
+            if activities[gameID] == nil && !retired.contains(gameID) {
                 activities[gameID] = activity
                 shown[gameID] = activity.content.state
             } else {
@@ -170,8 +182,14 @@ final class LiveActivityManager {
         for (gameID, activity) in activities where !Self.isRunning(activity) {
             activities[gameID] = nil
             shown[gameID] = nil
-            retired.insert(gameID)
+            retire(gameID)
         }
+    }
+
+    /// Never starts `gameID`'s activity again, this launch or the next.
+    private func retire(_ gameID: String) {
+        retired.insert(gameID)
+        retiredStore.retire(gameID, at: now())
     }
 
     private func apply(_ action: LiveActivityAction) {
@@ -212,7 +230,7 @@ final class LiveActivityManager {
         guard let activity = activities.removeValue(forKey: gameID) else { return }
         shown[gameID] = nil
         offBoardSince[gameID] = nil
-        retired.insert(gameID)
+        retire(gameID)
         let activityID = activity.id
         let dismissAt = now().addingTimeInterval(grace)
         Task {

@@ -195,3 +195,56 @@ enum LiveActivityPlanner {
         return actions
     }
 }
+
+/// The games whose Live Activity ended or was dismissed, kept across
+/// launches so `LiveActivityPlanner` never offers them again.
+///
+/// Persisted retire, chosen over accepting a re-offer: a reader who swiped
+/// a game's activity away, or saw it end, would otherwise get it back on
+/// the next launch while the game is still on the boards — the app cannot
+/// tell "dismissed" from "never started" once the in-memory set is gone. The
+/// cost is that a game retired by mistake stays off the Lock Screen for the
+/// rest of the day; a game is only ever worth one activity, so that is the
+/// lesser surprise.
+///
+/// Each game is kept with the moment it was retired and dropped `horizon`
+/// later — a day, past which the game is off the boards anyway — so the
+/// store never outgrows a day's games.
+struct RetiredLiveActivities {
+    static let horizon: TimeInterval = 24 * 60 * 60
+    static let defaultsKey = "liveActivities.retired"
+
+    private let defaults: UserDefaults
+
+    /// Kept in `defaults`: the App Group's (`SharedPaths.defaults`) in the
+    /// app, a scratch suite in tests.
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    /// The games retired within `horizon` of `now`.
+    func games(at now: Date) -> Set<String> {
+        Set(entries(at: now).keys)
+    }
+
+    /// Records `gameID` as retired at `now`, and forgets the games retired
+    /// more than `horizon` before.
+    func retire(_ gameID: String, at now: Date) {
+        var entries = entries(at: now)
+        entries[gameID] = now
+        defaults.set(entries.mapValues(\.timeIntervalSince1970), forKey: Self.defaultsKey)
+    }
+
+    private func entries(at now: Date) -> [String: Date] {
+        let stored = defaults.dictionary(forKey: Self.defaultsKey) ?? [:]
+        var entries: [String: Date] = [:]
+        for (gameID, value) in stored {
+            guard let seconds = value as? Double else { continue }
+            let retiredAt = Date(timeIntervalSince1970: seconds)
+            if now.timeIntervalSince(retiredAt) < Self.horizon {
+                entries[gameID] = retiredAt
+            }
+        }
+        return entries
+    }
+}
