@@ -139,7 +139,7 @@ private let eventDateParser: DateFormatter = {
     // ESPN's `Z` suffix means UTC; parse in UTC explicitly so the result is
     // the same instant on every device instead of the wall-clock reading of
     // whatever timezone the device happens to be set to.
-    formatter.timeZone = .utc
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
     return formatter
 }()
 
