@@ -216,7 +216,8 @@ struct DucksAcceptanceTests {
     func schedule() throws {
         let games = parseSchedule(from: try Fixture.json("nhl_schedule"), team: ducks)
         #expect(games.map(\.gameID) == ["401879368", "401879369", "401879370", "401879371"])
-        #expect(games.allSatisfy(\.completed))
+        let allCompleted = games.allSatisfy(\.completed)
+        #expect(allCompleted)
         #expect(getNextGame(schedule: games) == 3)  // all played: the last
 
         let opener = games[0]
