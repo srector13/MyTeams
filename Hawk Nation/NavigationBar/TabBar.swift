@@ -249,6 +249,8 @@ private struct TeamPicker: View {
                             .clipShape(.capsule)
                         }
                         .accessibilityLabel(team.displayName)
+                        .accessibilityAddTraits(selection == team.id ? .isSelected : [])
+                        .accessibilityIdentifier("teamPicker.team.\(team.id)")
                         .id(team.id)
                     }
 
@@ -261,6 +263,7 @@ private struct TeamPicker: View {
                     }
                     .padding(.leading, 6)
                     .accessibilityLabel("Add or Edit Teams")
+                    .accessibilityIdentifier("teamPicker.edit")
                 }
                 .padding(.horizontal, 25)
             }
