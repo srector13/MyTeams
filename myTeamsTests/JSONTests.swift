@@ -198,5 +198,5 @@ struct JSONTests {
 
     // The two-competition (doubleheader) case used to be re-implemented
     // here as a copy of parseGame's loop. It now runs through the real
-    // parser: GoldenScheduleTests.doubleheaderLastCompetitionWins.
+    // parser: GoldenScheduleTests.doubleheaderFollowedTeamFirstCompetition.
 }

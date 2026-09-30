@@ -323,13 +323,14 @@ struct GoldenScheduleTests {
         #expect(parseGameDate("2026-09-27T19:10:00Z") == nil)  // KNOWN-BUG
     }
 
-    // KNOWN-BUG (M6): each competition overwrites the previous one's fields,
-    // so an event carrying two competitions reports only the last and the
-    // first game's result is lost. Correct: one Game per competition.
+    // M6 (fixed in 0280f16): parseGame reads the first competition the
+    // followed team plays in, falling back to the first competition, so a
+    // multi-competition event no longer mixes one game's venue with another's
+    // score. The Royals play in both here, so competition 1 wins.
     // The only synthetic document in this suite — no captured feed has one.
     // Team ids are ESPN's MLB ids (Royals 7, Tigers 6, Twins 9).
-    @Test("A two-competition event keeps only the last competition", .tags(.knownBug))
-    func doubleheaderLastCompetitionWins() {
+    @Test("A two-competition event reports the followed team's first competition")
+    func doubleheaderFollowedTeamFirstCompetition() {
         let event = JSON(data: Data(#"""
         {
           "name": "Doubleheader",
@@ -356,16 +357,17 @@ struct GoldenScheduleTests {
         """#.utf8))
 
         let game = parseGame(from: event, team: .royals, pointer: 0)
-        #expect(game.location == "Second Arena")
-        #expect(game.gameID == "2")
-        #expect(game.eventID == "2")  // no event id: the (last) competition id
-        #expect(game.opponent == "Twins")
-        #expect(game.score == "0")  // KNOWN-BUG: the 5–2 win is gone
-        #expect(!game.gameWin)
-        #expect(!game.gameHome)
-        #expect(!game.completed)
-        #expect(game.postponed)
-        #expect(game.gamePeriod == "1")
+        #expect(game.location == "First Arena")
+        #expect(game.gameID == "1")
+        #expect(game.eventID == "1")  // no event id: the chosen competition's id
+        #expect(game.opponent == "Tigers")
+        #expect(game.score == "5")
+        #expect(game.opponentScore == "2")
+        #expect(game.gameWin)
+        #expect(game.gameHome)
+        #expect(game.completed)
+        #expect(!game.postponed)
+        #expect(game.gamePeriod == "9")
     }
 
     @Test("An offseason feed with no events parses to no games")
