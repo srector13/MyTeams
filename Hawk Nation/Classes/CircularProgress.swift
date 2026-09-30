@@ -33,7 +33,10 @@ public struct PercentageIndicator: ViewModifier, Animatable {
     let borderColor1 : Color
     let borderColor2 : LinearGradient
     
-    public var animatableData: CGFloat {
+    // ViewModifier makes this type @MainActor; Animatable's requirement is
+    // nonisolated. `percentage` is a Sendable stored property of a value
+    // type, so reading and writing it here is safe off the main actor.
+    public nonisolated var animatableData: CGFloat {
         get { percentage }
         set { percentage = newValue }
     }
