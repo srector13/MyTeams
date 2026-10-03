@@ -12,7 +12,7 @@ import SwiftUI
 // resolved through `RemoteTeamCatalog` and shown in favorites order.
 
 /// The app's root screen: one scrolling team page at a time, with a crest
-/// picker pinned to the bottom.
+/// picker floating at the bottom.
 struct Home: View {
     /// A team to switch to, set when a widget link opens the app. Cleared
     /// once handled; a team that is not a favorite is ignored.
@@ -79,8 +79,8 @@ struct Home: View {
                 }
             }
             // Attaching the picker as a safe area inset lets SwiftUI sit it
-            // above the home indicator and extend its material behind it,
-            // which the original did by hand from the window's insets.
+            // above the home indicator and inset the page's content by its
+            // height, which the original did by hand from the window's insets.
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 TeamPicker(teams: teams, selection: $selection) {
                     showsBrowser = true
@@ -152,8 +152,9 @@ enum HomeRouting {
     }
 }
 
-/// One team's scrolling page: the crest scrolls away under a title bar that
-/// takes its place at the top.
+/// One team's scrolling page: the crest scrolls away under the system
+/// navigation bar, which carries the team's name and a small crest and
+/// floats over the page (H-3).
 ///
 /// The page is mounted only while its team is selected, so it reports its
 /// scroll offset as it moves (`saveOffset`) and opens where it was left
@@ -165,187 +166,182 @@ private struct TeamPage<Content: View>: View {
     let saveOffset: @MainActor (CGFloat) -> Void
     @ViewBuilder var content: Content
 
-    /// Whether the crest has scrolled far enough to hand off to the sticky bar.
-    @State private var showsStickyHeader = false
-
     @State private var position = ScrollPosition(edge: .top)
+
+    /// The bottom of the navigation bar, in global coordinates.
+    @State private var barBottom: CGFloat = 0
+
+    /// Whether the page's content, rather than the team colour, is behind
+    /// the navigation bar.
+    @State private var contentUnderBar = false
 
     @Environment(\.containerSize) private var containerSize
 
+    /// The bar's colour scheme over the team colour (H-6): dark, for a white
+    /// title and status bar, when white reads better on it than black.
+    private var heroBarScheme: ColorScheme {
+        TeamColors.inkHex(on: team.colorHex) == "FFFFFF" ? .dark : .light
+    }
+
     var body: some View {
-        ZStack(alignment: .top) {
-            Rectangle()
-                .foregroundStyle(team.color)
-                .frame(height: 500)
-                .ignoresSafeArea(edges: .top)
+        NavigationStack {
+            ZStack(alignment: .top) {
+                Rectangle()
+                    .foregroundStyle(team.color)
+                    .frame(height: 500)
+                    .ignoresSafeArea(edges: .top)
 
-            ScrollView(.vertical) {
-                VStack {
-                    // Drawn over the team colour, so a dark background takes
-                    // the dark crest where the feed has one.
-                    TeamLogo(
-                        team: team,
-                        size: max(containerSize.width - 50, 0),
-                        forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
-                    )
-                    .opacity(0.5)
-                    .offset(x: 50)
-                    // The crest deliberately overflows its slot: only the
-                    // top sliver shows until the page is scrolled.
-                    .frame(height: containerSize.height / 14)
-
+                // Not ignoring the top safe area: the scroll view starts its
+                // content below the navigation bar and scrolls it under.
+                ScrollView(.vertical) {
                     VStack {
-                        HStack(alignment: .bottom) {
-                            Text(team.displayName)
-                                .fontWeight(.bold)
-                                .font(.system(size: 35))
-                                .foregroundStyle(.white)
-                                .padding(.leading, 15)
-                            Spacer()
-                        }
-                        .ignoresSafeArea()
+                        // Drawn over the team colour, so a dark background takes
+                        // the dark crest where the feed has one.
+                        TeamLogo(
+                            team: team,
+                            size: max(containerSize.width - 50, 0),
+                            forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
+                        )
+                        .opacity(0.5)
+                        .offset(x: 50)
+                        // The crest deliberately overflows its slot: only the
+                        // top sliver shows until the page is scrolled.
+                        .frame(height: containerSize.height / 14)
 
                         content
-                    }
-                    .padding([.top, .horizontal])
-                }
-                .background {
-                    // Reports how far the page has scrolled, in place of the
-                    // 0.1-second timer the original polled the offset with.
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: ScrollOffsetKey.self,
-                            value: proxy.frame(in: .scrollView).minY
-                        )
+                            .padding([.top, .horizontal])
+                            .onGeometryChange(for: Bool.self) { proxy in
+                                proxy.frame(in: .global).minY < barBottom
+                            } action: { covered in
+                                contentUnderBar = covered
+                            }
                     }
                 }
-            }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            .ignoresSafeArea(edges: .top)
-            .scrollPosition($position)
-            .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top
-            } action: { _, offset in
-                saveOffset(max(offset, 0))
-            }
-            .onAppear {
-                // The team's model outlives the page, so its content is
-                // already laid out at full height here.
-                if savedOffset > 0 {
-                    position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
+                .scrollIndicators(.hidden)
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollPosition($position)
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top
+                } action: { _, offset in
+                    saveOffset(max(offset, 0))
+                }
+                .onAppear {
+                    // The team's model outlives the page, so its content is
+                    // already laid out at full height here.
+                    if savedOffset > 0 {
+                        position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
+                    }
                 }
             }
-            .onPreferenceChange(ScrollOffsetKey.self) { offset in
-                let scrolledPast = -offset > (containerSize.height / 4) - 50
-                guard scrolledPast != showsStickyHeader else { return }
-                withAnimation {
-                    showsStickyHeader = scrolledPast
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
+            } action: { bottom in
+                barBottom = bottom
+            }
+            .navigationTitle(team.displayName)
+            .toolbarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigation) {
+                    TeamLogo(team: team, size: 30)
                 }
+                // A crest, not a button: no glass behind it.
+                .sharedBackgroundVisibility(.hidden)
             }
-
-            if showsStickyHeader {
-                TopView(team: team)
-                    .transition(.opacity)
-            }
+            // Over the team colour the bar takes the scheme that reads on
+            // it; once the page's content is behind it, the system's.
+            .toolbarColorScheme(contentUnderBar ? nil : heroBarScheme, for: .navigationBar)
         }
     }
 }
 
-/// How far the team page has scrolled, in points from its resting position.
-private struct ScrollOffsetKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-/// The crest row pinned to the bottom of the screen. The selected team's crest
-/// grows a label and a coloured capsule. Scrolls sideways once the favorites
-/// outgrow the width, and ends in a button that opens the team picker.
+/// The crest row floating above the bottom of the screen. The selected team's
+/// crest grows a label in a glass pill tinted the team's colour. Scrolls
+/// sideways once the favorites outgrow the width, and ends in a button that
+/// opens the team picker.
+///
+/// The pill and the button are the row's only glass, in one container so
+/// they share a sampling pass and the pill morphs between crests (H-1, H-2).
 private struct TeamPicker: View {
     let teams: [TeamRef]
     @Binding var selection: TeamRef.ID
     let editTeams: () -> Void
 
+    @Namespace private var glass
+
     var body: some View {
         ScrollViewReader { reader in
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 4) {
-                    ForEach(teams) { team in
-                        Button {
-                            selection = team.id
-                        } label: {
-                            HStack(spacing: 6) {
-                                TeamLogo(team: team, size: 25)
-
-                                if selection == team.id {
-                                    Text(team.shortName)
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .padding(.vertical, 10)
-                            .padding(.horizontal)
-                            .background(selection == team.id ? team.color : .clear)
-                            .clipShape(.capsule)
+                GlassEffectContainer {
+                    HStack(spacing: Theme.Spacing.xs) {
+                        ForEach(teams) { team in
+                            crest(team)
                         }
-                        .accessibilityLabel(team.displayName)
-                        .accessibilityAddTraits(selection == team.id ? .isSelected : [])
-                        .accessibilityIdentifier("teamPicker.team.\(team.id)")
-                        .id(team.id)
-                    }
 
-                    Button(action: editTeams) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(width: 35, height: 35)
-                            .background(Color.secondary.opacity(0.15))
-                            .clipShape(.circle)
+                        Button(action: editTeams) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 15, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .contentShape(.circle)
+                        }
+                        .buttonStyle(.plain)
+                        .glassChrome(in: Circle(), interactive: true)
+                        .padding(.leading, 6)
+                        .accessibilityLabel("Add or Edit Teams")
+                        .accessibilityIdentifier("teamPicker.edit")
                     }
-                    .padding(.leading, 6)
-                    .accessibilityLabel("Add or Edit Teams")
-                    .accessibilityIdentifier("teamPicker.edit")
+                    // Room for the interactive glass to swell inside the
+                    // scroll view's clip.
+                    .padding(.vertical, Theme.Spacing.s)
+                    .padding(.horizontal, Theme.Spacing.l)
                 }
-                .padding(.horizontal, 25)
             }
             .onChange(of: selection) { _, selected in
-                withAnimation {
+                withAnimation(.bouncy) {
                     reader.scrollTo(selected)
                 }
             }
         }
-        .animation(.default, value: selection)
-        .padding(.top)
-        .padding(.bottom, 10)
-        .background(.bar)
+        .animation(.bouncy, value: selection)
+        .sensoryFeedback(.selection, trigger: selection)
+        .padding(.horizontal, Theme.Spacing.s)
+        .padding(.bottom, Theme.Spacing.xs)
     }
-}
 
-/// The title bar that slides in once a team's crest has scrolled away.
-struct TopView: View {
-    var team: TeamRef
+    private func crest(_ team: TeamRef) -> some View {
+        let selected = selection == team.id
+        let fillHex = TeamColors.fillHex(for: team)
+        return Button {
+            selection = team.id
+        } label: {
+            HStack(spacing: 6) {
+                TeamLogo(team: team, size: 25)
 
-    var body: some View {
-        HStack(alignment: .center) {
-            TeamLogo(team: team, size: 40)
-                .padding(.leading)
-
-            Text(team.displayName)
-                .font(.title)
-                .fontWeight(.bold)
-            Spacer(minLength: 0)
+                if selected {
+                    Text(team.shortName)
+                        .teamInk(onHex: fillHex)
+                }
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal)
+            .contentShape(.capsule)
+            .background {
+                // One pill, handed from crest to crest by its glass ID. Only
+                // a marker, so it takes no touches: interactive glass tracks
+                // touches itself, and in a label it competes with the
+                // crests' buttons for the tap that moves the selection.
+                if selected {
+                    Color.clear
+                        .glassChrome(tint: Color(hexString: fillHex))
+                        .glassEffectID("selection", in: glass)
+                        .allowsHitTesting(false)
+                }
+            }
         }
-        .padding(.top, 5)
-        .padding(.horizontal)
-        .padding(.bottom)
-        .background {
-            // The bar sits below the status bar but its material runs up
-            // behind it, so the crest scrolls away under frosted glass.
-            Rectangle()
-                .fill(.bar)
-                .ignoresSafeArea(edges: .top)
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(team.displayName)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("teamPicker.team.\(team.id)")
+        .id(team.id)
     }
 }
 
