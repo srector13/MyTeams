@@ -18,7 +18,11 @@ import SwiftUI
 /// is one summary request, whose document fills the box score and the venue
 /// alike; only a game with its clock running refreshes every ten seconds.
 struct GameDetailView: View {
-    @Environment(\.containerSize) private var containerSize
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The venue header's height at the default text size; it grows with
+    /// the text over it.
+    @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 200
 
     let game: Game
     let team: TeamRef
@@ -51,53 +55,42 @@ struct GameDetailView: View {
                 VStack {
                     header
 
-                    VStack(spacing: 0) {
-                        ZStack(alignment: .top) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: (containerSize.width - 25), height: 600)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
+                    // Sized to its content (D-3): long hockey and soccer
+                    // tables, and larger text, grow the card rather than
+                    // overflowing a fixed one.
+                    VStack(alignment: .center, spacing: 15) {
+                        if(game.cancelled) {
+                            message("This game has been canceled.")
+                        } else if (game.postponed) {
+                            message("This game has been postponed.")
+                        } else if game.dateAsDate <= Date(), let boxScore {
+                            scoreboard(boxScore)
 
-                            VStack(alignment: .center, spacing: 15) {
-                                if(game.cancelled) {
-                                    Spacer()
+                            if let linescore {
+                                LinescoreView(linescore: linescore)
+                            }
 
-                                    message("This game has been canceled.")
-                                } else if (game.postponed) {
-                                    Spacer()
+                            ForEach(boxScore.rows) { row in
+                                StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
+                            }
 
-                                    message("This game has been postponed.")
-                                } else if game.dateAsDate <= Date(), let boxScore {
-                                    scoreboard(boxScore)
-
-                                    if let linescore {
-                                        LinescoreView(linescore: linescore)
-                                    }
-
-                                    ForEach(boxScore.rows) { row in
-                                        StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
-                                    }
-
-                                    // The sport's own tables, beneath the
-                                    // comparison rows every sport shares.
-                                    if let hockey {
-                                        HockeyBoxScoreView(boxScore: hockey)
-                                    }
-                                    if let soccerLineups {
-                                        SoccerLineupsView(lineups: soccerLineups)
-                                    }
-                                } else {
-                                    Spacer()
-
-                                    message("No game statistics at this time. Please check back later.")
-                                        .offset(y: -50)
-                                }
-
-                                Spacer()
-                            }.padding([.all], 20)
+                            // The sport's own tables, beneath the
+                            // comparison rows every sport shares.
+                            if let hockey {
+                                HockeyBoxScoreView(boxScore: hockey)
+                            }
+                            if let soccerLineups {
+                                SoccerLineupsView(lineups: soccerLineups)
+                            }
+                        } else {
+                            message("No game statistics at this time. Please check back later.")
                         }
-                        .ignoresSafeArea(edges: .top)
-                        Spacer()
                     }
+                    .padding(Theme.Spacing.xl)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+                    .padding(.horizontal, Theme.Spacing.m)
+                    .ignoresSafeArea(edges: .top)
                 }
             }
 
@@ -145,55 +138,50 @@ struct GameDetailView: View {
     // MARK: - Header
 
     /// The venue behind the competition, kick-off, channel and location.
+    ///
+    /// At least `headerHeight` tall, and taller when the text needs it: the
+    /// venue and its wash sit behind the text rather than fixing its height.
     private var header: some View {
-        ZStack(alignment: .top) {
-            // Takes up the sheet's full width.
-            HStack() {
-                Spacer()
+        VStack(spacing: 0) {
+            GameDetailDismissHandle()
+
+            Text(game.competitionName)
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.white)
+                .padding(.top, 5)
+
+            Spacer(minLength: Theme.Spacing.m)
+
+            headerLine(game.time)
+            headerLine(game.date)
+            headerLine(game.channel)
+
+            Spacer(minLength: Theme.Spacing.m)
+
+            headerLine(venueLine)
+        }
+        .padding(.horizontal, 15)
+        // Takes up the sheet's full width.
+        .frame(maxWidth: .infinity, minHeight: headerHeight)
+        .background {
+            ZStack {
+                if let backdrop = league.venueBackdropAsset {
+                    Image(backdrop)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    RemoteImage(url: URL(string: gameInfo.venueImage))
+                        .id(gameInfo.venueImage)
+                }
+
+                Rectangle()
+                    .foregroundStyle(Color(hexString: gameInfo.gameColor))
+                    .background(Color(uiColor: .black))
+                    .opacity(0.6)
             }
-
-            if let backdrop = league.venueBackdropAsset {
-                Image(backdrop)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: containerSize.width, height: 200)
-                    .clipShape(.rect(cornerRadius: 10))
-            } else {
-                RemoteImage(url: URL(string: gameInfo.venueImage))
-                    .id(gameInfo.venueImage)
-                    .frame(width: containerSize.width, height: 200)
-                    .clipShape(.rect(cornerRadius: 10))
-            }
-
-            Rectangle()
-                .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                .background(Color(uiColor: .black))
-                .opacity(0.6)
-                .frame(width: containerSize.width, height: 200)
-                .clipShape(.rect(cornerRadius: 10))
-
-            VStack(spacing: 0) {
-                GameDetailDismissHandle()
-
-                Text(game.competitionName)
-                    .fontWeight(.bold)
-                    .font(.system(size: 25))
-                    .minimumScaleFactor(0.2)
-                    .lineLimit(1)
-                    .foregroundStyle(.white)
-                    .padding(.top, 5)
-
-                Spacer()
-
-                headerLine(game.time)
-                headerLine(game.date)
-                headerLine(game.channel)
-
-                Spacer()
-
-                headerLine(venueLine)
-            }.padding(.horizontal, 15)
-        }.frame(height: 200)
+        }
+        .clipShape(.rect(cornerRadius: 10))
     }
 
     /// The venue, then its city and state where the league's summaries give
@@ -206,32 +194,51 @@ struct GameDetailView: View {
 
     private func headerLine(_ text: String) -> some View {
         Text(text)
-            .fontWeight(.bold)
-            .font(.system(size: 15))
+            .font(.subheadline.bold())
+            .multilineTextAlignment(.center)
             .foregroundStyle(.white)
             .padding(.bottom, 10)
-            .minimumScaleFactor(0.2)
     }
 
     // MARK: - Scoreboard
 
-    /// Both crests and the scoreline, home team on the left.
+    /// Both crests and the scoreline, home team on the left. At
+    /// accessibility text sizes the scoreline sits above the two sides, so
+    /// none of the three is squeezed into a third of the width.
+    @ViewBuilder
     private func scoreboard(_ boxScore: BoxScore) -> some View {
-        HStack(alignment: .top) {
-            HStack() {
-                side(followed: game.gameHome, alignment: .leading)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: Theme.Spacing.m) {
+                scoreline(boxScore)
 
-                VStack(alignment: .center) {
-                    Text("\(boxScore.homeScore) - \(boxScore.awayScore)")
-                        .font(.system(size: 30))
-                        .fontWeight(.bold)
-
-                    status
-                }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
-
-                side(followed: !game.gameHome, alignment: .trailing)
+                HStack(alignment: .top) {
+                    side(followed: game.gameHome, alignment: .leading)
+                    side(followed: !game.gameHome, alignment: .trailing)
+                }
             }
-        }.ignoresSafeArea()
+        } else {
+            HStack(alignment: .top) {
+                HStack() {
+                    side(followed: game.gameHome, alignment: .leading)
+
+                    scoreline(boxScore)
+                        .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+
+                    side(followed: !game.gameHome, alignment: .trailing)
+                }
+            }.ignoresSafeArea()
+        }
+    }
+
+    private func scoreline(_ boxScore: BoxScore) -> some View {
+        VStack(alignment: .center) {
+            Text("\(boxScore.homeScore) - \(boxScore.awayScore)")
+                .font(.title.bold().monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            status
+        }
     }
 
     /// One team's crest over its name.
@@ -249,9 +256,9 @@ struct GameDetailView: View {
             }
 
             Text(followed ? teamLabel : game.opponent)
-                .font(.system(size: 15))
+                .font(.subheadline.bold())
                 .foregroundStyle(Color(uiColor: .systemGray))
-                .fontWeight(.bold)
+                .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
         }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
 
@@ -270,19 +277,17 @@ struct GameDetailView: View {
 
     private func statusLine(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 15))
-            .fontWeight(.bold)
-            .minimumScaleFactor(0.5)
+            .font(.subheadline.bold())
+            .multilineTextAlignment(.center)
     }
 
     private func message(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 15))
+            .font(.subheadline.bold())
             .foregroundStyle(Color(uiColor: .systemGray))
-            .fontWeight(.bold)
-            .minimumScaleFactor(0.5)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 30)
+            .padding(.vertical, 40)
     }
 }
 
@@ -343,33 +348,25 @@ private struct GameDetailSkeleton: View {
                 }.padding(.horizontal, 15)
             }.frame(height: 200)
 
-            VStack(spacing: 0) {
-                ZStack(alignment: .top) {
-                    RoundedRectangle(cornerRadius: 20)
-                        .frame(width: (containerSize.width - 25), height: 600)
-                        .foregroundStyle(Color(uiColor: .systemBackground))
+            // Sized to its content, like the card it stands in for (D-3).
+            HStack() {
+                crest(alignment: .leading)
 
-                    VStack(alignment: .center, spacing: 15) {
-                        HStack() {
-                            crest(alignment: .leading)
+                VStack(alignment: .center) {
+                    LoadingView()
+                        .frame(width: 200, height: 30)
 
-                            VStack(alignment: .center) {
-                                LoadingView()
-                                    .frame(width: 200, height: 30)
+                    LoadingView()
+                        .frame(width: 50, height: 15)
+                }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
 
-                                LoadingView()
-                                    .frame(width: 50, height: 15)
-                            }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
-
-                            crest(alignment: .trailing)
-                        }
-
-                        Spacer()
-                    }.padding([.all], 20)
-                }
-                .ignoresSafeArea(edges: .top)
-                Spacer()
+                crest(alignment: .trailing)
             }
+            .padding(Theme.Spacing.xl)
+            .frame(maxWidth: .infinity)
+            .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+            .padding(.horizontal, Theme.Spacing.m)
+            .ignoresSafeArea(edges: .top)
         }
     }
 

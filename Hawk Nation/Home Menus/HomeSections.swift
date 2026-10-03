@@ -98,6 +98,29 @@ struct StackedCarousel<Item: Identifiable, Row: View>: View {
     }
 }
 
+extension View {
+    /// Lets a table scroll sideways at accessibility text sizes, where it's
+    /// wider than the screen, rather than squeezing its cells (§5.3).
+    func scrollsSidewaysAtAccessibilitySizes() -> some View {
+        modifier(ScrollsSidewaysAtAccessibilitySizes())
+    }
+}
+
+private struct ScrollsSidewaysAtAccessibilitySizes: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            ScrollView(.horizontal) {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
 /// The roster carousel, with the filter and sort menus that drive it.
 ///
 /// `card` draws one player; `detail` is the sheet a tap opens. `filterMenu`
@@ -380,8 +403,6 @@ private struct StandingsTable: View {
     let followedID: String
     let teamColor: Color
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
     /// A numeric column: its heading, and each row's value.
     private struct Column {
         let title: String
@@ -424,15 +445,10 @@ private struct StandingsTable: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(Color(uiColor: .systemGray))
 
-            if dynamicTypeSize.isAccessibilitySize {
-                // Too wide for the screen at these sizes: scroll it sideways
-                // rather than squeeze the team names out.
-                ScrollView(.horizontal) {
-                    table(columns)
-                }
-            } else {
-                table(columns)
-            }
+            // Too wide for the screen at accessibility sizes: it scrolls
+            // sideways rather than squeezing the team names out.
+            table(columns)
+                .scrollsSidewaysAtAccessibilitySizes()
         }
     }
 
