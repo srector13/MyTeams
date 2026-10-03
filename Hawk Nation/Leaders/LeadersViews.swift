@@ -125,10 +125,9 @@ private struct TeamLeaderCard: View {
         .frame(width: fillsRow ? nil : cardWidth)
         .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color(uiColor: .systemGray6))
-        )
+        // Nested in the leaders section's card: the inner radius (X-4, T-6)
+        // on the nested surface rather than a fixed gray.
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
     }
 }
 

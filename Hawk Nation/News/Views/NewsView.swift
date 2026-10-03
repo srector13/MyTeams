@@ -16,7 +16,7 @@ struct LoadingNewsView: View {
         HStack(alignment: .top) {
             LoadingView()
                 .frame(width: thumbnailSize, height: thumbnailSize)
-                .clipShape(.rect(cornerRadius: 20))
+                .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
                 LoadingView()
@@ -84,7 +84,8 @@ struct NewsView: View {
                     )
                     .opacity(0.2)
                 }
-                .clipShape(.rect(cornerRadius: 20))
+                // Nested in the news section's card (X-4).
+                .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(article.source)

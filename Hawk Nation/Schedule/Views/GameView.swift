@@ -92,7 +92,8 @@ struct GameView : View {
         }.background(Color(uiColor: .systemBackground))
             .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight)
             .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
-            .clipShape(.rect(cornerRadius: 10))
+            // Nested in the schedule section's card (X-4).
+            .clipShape(Theme.Radius.innerShape)
     }
 
     /// The details, with the result, live state or cancellation over them.

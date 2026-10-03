@@ -14,7 +14,7 @@ public struct LoadingView: View {
         static let duration: Double = 2.0
         static let minOpacity: Double = 0.1
         static let maxOpacity: Double = 0.3
-        static let cornerRadius: CGFloat = 10.0
+        static let cornerRadius: CGFloat = Theme.Radius.inner
     }
     
     @State private var opacity: Double = Constants.minOpacity

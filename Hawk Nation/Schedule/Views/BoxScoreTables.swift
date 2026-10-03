@@ -228,6 +228,8 @@ private struct SoccerLineupRow: View {
         }
     }
 
+    /// A referee's card, drawn as a glyph: its corner is part of the
+    /// drawing at this size, not a surface radius, so not a `Theme.Radius`.
     private func card(_ color: Color) -> some View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(color)
