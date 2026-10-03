@@ -81,9 +81,13 @@ struct LeadersSection<Player: RosterPlayer>: View {
                             TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
                         }
                     }
+                    .scrollTargetLayout()
                     .padding(.bottom, Theme.Spacing.l)
                 }
                 .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+                // Comes to rest on a card's leading edge, as the roster and
+                // schedule carousels do (T-8).
+                .scrollTargetBehavior(.viewAligned)
                 .scrollIndicators(.hidden)
             }
         }
@@ -185,6 +189,9 @@ struct LeagueLeadersView: View {
         NavigationStack {
             content
                 .navigationTitle("\(league.descriptor.displayName) Leaders")
+                // The season under the title, rather than in a bare first
+                // row of the list (LL-3).
+                .navigationSubtitle(subtitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
@@ -195,6 +202,7 @@ struct LeagueLeadersView: View {
                         } label: {
                             Label("Close", systemImage: "xmark")
                         }
+                        .accessibilityIdentifier("leagueLeaders.close")
                     }
                 }
         }
@@ -222,12 +230,6 @@ struct LeagueLeadersView: View {
             }
         } else {
             List {
-                if let leaders, !leaders.seasonName.isEmpty {
-                    Text(Self.caption(leaders))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
                 ForEach(shown) { board in
                     Section {
                         ForEach(board.rows) { row in
@@ -245,6 +247,13 @@ struct LeagueLeadersView: View {
             }
             .listStyle(.insetGrouped)
         }
+    }
+
+    /// The season caption, once the leaders have loaded; empty until then,
+    /// which shows no subtitle.
+    private var subtitle: String {
+        guard let leaders, !leaders.seasonName.isEmpty else { return "" }
+        return Self.caption(leaders)
     }
 
     /// "2025-26 · Regular Season". A soccer feed names its season type

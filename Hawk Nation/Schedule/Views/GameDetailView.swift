@@ -78,7 +78,10 @@ struct GameDetailView: View {
                         } else if (game.postponed) {
                             message("This game has been postponed.")
                         } else if game.dateAsDate <= Date(), let boxScore {
-                            scoreboard(score: "\(boxScore.homeScore) - \(boxScore.awayScore)")
+                            scoreboard(
+                                score: "\(boxScore.homeScore) - \(boxScore.awayScore)",
+                                total: boxScore.homeScore + boxScore.awayScore
+                            )
 
                             if let linescore {
                                 LinescoreView(linescore: linescore)
@@ -267,12 +270,13 @@ struct GameDetailView: View {
     /// Both crests and the scoreline (`score`, home first), home team on
     /// the left. At accessibility text sizes the scoreline sits above the
     /// two sides, so none of the three is squeezed into a third of the
-    /// width.
+    /// width. `total`, both scores summed, rolls the scoreline's digits as
+    /// a live game refreshes (X-12).
     @ViewBuilder
-    private func scoreboard(score: String) -> some View {
+    private func scoreboard(score: String, total: Int = 0) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(spacing: Theme.Spacing.m) {
-                scoreline(score)
+                scoreline(score, total: total)
 
                 HStack(alignment: .top) {
                     side(followed: game.gameHome, alignment: .leading)
@@ -284,7 +288,7 @@ struct GameDetailView: View {
                 HStack() {
                     side(followed: game.gameHome, alignment: .leading)
 
-                    scoreline(score)
+                    scoreline(score, total: total)
                         .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
 
                     side(followed: !game.gameHome, alignment: .trailing)
@@ -293,12 +297,13 @@ struct GameDetailView: View {
         }
     }
 
-    private func scoreline(_ score: String) -> some View {
+    private func scoreline(_ score: String, total: Int) -> some View {
         VStack(alignment: .center) {
             Text(score)
                 .font(.title.bold().monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .scoreTransition(value: Double(total))
 
             status
         }

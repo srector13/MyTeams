@@ -181,6 +181,9 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
 
     @State private var selectedPlayer: Player?
 
+    /// Where a player's sheet zooms from: their card (X-13).
+    @Namespace private var cardZoom
+
     /// At accessibility text sizes the carousel becomes a vertical list.
     private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
@@ -224,7 +227,10 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             }
         }
         .contentCard()
-        .sheet(item: $selectedPlayer, content: detail)
+        .sheet(item: $selectedPlayer) { player in
+            detail(player)
+                .zoomTransition(sourceID: player.id, in: cardZoom)
+        }
     }
 
     private var rosterCarousel: some View {
@@ -259,11 +265,14 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                     }
                 }
             }
+            .scrollTargetLayout()
             .padding(.bottom, Theme.Spacing.l)
         }
         // The margins inset the first and last cards in line with the
         // header, and the cards still scroll out to the card's edges (T-4).
         .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+        // A flick comes to rest on a card's leading edge, not mid-card (T-8).
+        .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
     }
 
@@ -277,6 +286,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             label()
         }
         .buttonStyle(.plain)
+        .zoomSource(id: player.id, in: cardZoom)
         .accessibilityLabel(accessibilityLabel(for: player))
         .accessibilityIdentifier("roster.player.\(player.id)")
     }
@@ -303,6 +313,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     @ViewBuilder let detail: (Game) -> Detail
 
     @State private var selectedGame: Game?
+
+    /// Where a game's sheet zooms from: its card (X-13).
+    @Namespace private var cardZoom
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -338,7 +351,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             }
         }
         .contentCard()
-        .sheet(item: $selectedGame, content: detail)
+        .sheet(item: $selectedGame) { game in
+            detail(game)
+                .zoomTransition(sourceID: game.id, in: cardZoom)
+        }
     }
 
     private var scheduleCarousel: some View {
@@ -370,6 +386,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                         }
                     }
                 }
+                .scrollTargetLayout()
                 .frame(height: cardHeight)
                 .padding(.bottom, Theme.Spacing.l)
                 // Open on the last result rather than the next fixture, so
@@ -381,6 +398,8 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             }
         }
         .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+        // A flick comes to rest on a card's leading edge, not mid-card (T-8).
+        .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
     }
 
@@ -393,6 +412,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             card(game)
         }
         .buttonStyle(.plain)
+        .zoomSource(id: game.id, in: cardZoom)
         .accessibilityLabel(
             game.accessibilitySummary(
                 drawLabel: model.team.league.descriptor.drawLabel,
@@ -609,6 +629,9 @@ struct NewsSection<Player: RosterPlayer>: View {
 
     @State private var selectedArticle: News?
 
+    /// Where an article's sheet zooms from: its card (X-13).
+    @Namespace private var cardZoom
+
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "book", title: "News")
@@ -637,6 +660,7 @@ struct NewsSection<Player: RosterPlayer>: View {
                                 .padding(.top)
                         }
                         .buttonStyle(.plain)
+                        .zoomSource(id: article.id, in: cardZoom)
                         .accessibilityIdentifier("news.article")
                     }
                 }
@@ -649,6 +673,7 @@ struct NewsSection<Player: RosterPlayer>: View {
         .contentCard()
         .sheet(item: $selectedArticle) { article in
             NewsDetailView(article: article, color: teamColor)
+                .zoomTransition(sourceID: article.id, in: cardZoom)
         }
     }
 }

@@ -288,8 +288,18 @@ private struct TeamPicker: View {
 
     @Namespace private var glass
 
+    /// Reduce Motion, for the scroll to the selected crest (H-7).
+    private var settings = AdaptiveSettings()
+
     /// A crest, which scales with the selected team's name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 25
+
+    // Spelled out: the private `settings` makes the memberwise init private.
+    init(teams: [TeamRef], selection: Binding<TeamRef.ID>, editTeams: @escaping () -> Void) {
+        self.teams = teams
+        self._selection = selection
+        self.editTeams = editTeams
+    }
 
     var body: some View {
         ScrollViewReader { reader in
@@ -323,12 +333,14 @@ private struct TeamPicker: View {
                 }
             }
             .onChange(of: selection) { _, selected in
-                withAnimation(.bouncy) {
+                withAnimation(Theme.Motion.animation(Theme.Motion.selection, reduceMotion: settings.reduceMotion)) {
                     reader.scrollTo(selected)
                 }
             }
         }
-        .animation(.bouncy, value: selection)
+        // The pill morphs to the new crest, or moves at once under Reduce
+        // Motion; the haptic plays either way (H-7).
+        .motionAnimation(Theme.Motion.selection, value: selection)
         .sensoryFeedback(.selection, trigger: selection)
         .padding(.horizontal, Theme.Spacing.s)
         .padding(.bottom, Theme.Spacing.xs)

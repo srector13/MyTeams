@@ -231,8 +231,10 @@ struct GameView : View {
             .accessibilityLabel(leading ? "Leading" : "Trailing")
     }
 
+    /// The live score, its digits rolling as either side scores (G-5).
     private func liveScoreText(_ liveScore: LiveGameScore) -> some View {
         scoreText("\(liveScore.score) - \(liveScore.opponentScore)", font: .title2.weight(.heavy))
+            .scoreTransition(value: Double(liveScore.score + liveScore.opponentScore))
     }
 
     /// A score on one line. The card now grows with the text, so this only
