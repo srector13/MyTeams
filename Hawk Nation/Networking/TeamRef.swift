@@ -279,7 +279,12 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
 // MARK: - Deep links
 
 /// The URL a widget opens the app with: `myteams://team/<TeamRef.id>`, e.g.
-/// `myteams://team/football/nfl:12`. Built by the widget, read by the app.
+/// `myteams://team/football/nfl:12`. Built by the widget, the Live Activity
+/// (`GameActivityInfo.deepLink`) and the score alerts, read by the app.
+///
+/// Always built from the team's own `TeamRef.id`, in its home league: a cup
+/// tie is listed under the cup's board (`"soccer/uefa.champions"`), which is
+/// no league the team is filed under.
 enum WidgetDeepLink {
     static let scheme = "myteams"
     static let teamHost = "team"

@@ -88,15 +88,39 @@ struct ScoreDiffTests {
         #expect(ScoreDiff.diff(previous: ["1": over], current: ["1": over]).isEmpty)
     }
 
-    @Test("A game first seen under way starts; before its start or over, it does not")
+    @Test("A game first seen says nothing, under way, before its start or over")
     func newGameAppearing() {
         let live = game(.inProgress, home: 3, away: 0, period: 1)
         let events = ScoreDiff.diff(
             previous: [:],
             current: ["1": live, "2": game(.scheduled), "3": game(.final, home: 1, away: 2, period: 2)]
         )
-        #expect(events == [.gameStart(gameID: "1", snapshot: live)])
+        #expect(events.isEmpty)
         #expect(live.summary == "K-State 0 – Kansas 3 (1st)")
+    }
+
+    @Test("Relaunched mid-game: the first look seeds quietly, the next change alerts")
+    func relaunchMidGame() {
+        // The snapshots died with the last launch; the game is under way.
+        let seed = game(.inProgress, home: 7, away: 3, period: 2)
+        #expect(ScoreDiff.diff(previous: [:], current: ["1": seed]).isEmpty)
+
+        // What happens next reads against the seed, as before the relaunch.
+        let scored = game(.inProgress, home: 7, away: 10, period: 2)
+        #expect(ScoreDiff.diff(previous: ["1": seed], current: ["1": scored]) == [
+            .scoreChange(gameID: "1", previous: seed, snapshot: scored),
+        ])
+    }
+
+    @Test("A game first seen before its start still starts once under way")
+    func seededThenStarted() {
+        let pregame = game(.scheduled)
+        #expect(ScoreDiff.diff(previous: [:], current: ["1": pregame]).isEmpty)
+
+        let started = game(.inProgress, period: 1)
+        #expect(ScoreDiff.diff(previous: ["1": pregame], current: ["1": started]) == [
+            .gameStart(gameID: "1", snapshot: started),
+        ])
     }
 
     @Test("A game dropping off the board says nothing")
@@ -111,7 +135,8 @@ struct ScoreDiffTests {
     @Test("Events come in game id order")
     func ordering() {
         let a = game(.inProgress, period: 1)
-        let events = ScoreDiff.diff(previous: [:], current: ["b": a, "a": a])
+        let pregame = game(.scheduled)
+        let events = ScoreDiff.diff(previous: ["a": pregame, "b": pregame], current: ["b": a, "a": a])
         #expect(events.map(\.gameID) == ["a", "b"])
     }
 

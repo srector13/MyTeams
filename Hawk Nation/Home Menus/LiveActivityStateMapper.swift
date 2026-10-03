@@ -44,7 +44,13 @@ enum LiveActivityStateMapper {
 
     /// The matchup of `game` as `teamID` (an ESPN id) follows it; `nil` for
     /// a game that is not two teams, home and away.
-    static func info(of game: ScoreboardGame, teamID: String, league: LeagueID) -> GameActivityInfo? {
+    ///
+    /// - Parameters:
+    ///   - homeLeague: the followed team's own league, which its page and
+    ///     the activity's link (`GameActivityInfo.favoriteID`) are filed
+    ///     under.
+    ///   - league: the league or cup whose scoreboard lists the game.
+    static func info(of game: ScoreboardGame, teamID: String, homeLeague: LeagueID, league: LeagueID) -> GameActivityInfo? {
         guard let snapshot = ScoreAlertEngine.snapshot(of: game) else { return nil }
         return GameActivityInfo(
             gameID: game.gameID,
@@ -53,7 +59,8 @@ enum LiveActivityStateMapper {
             homeName: snapshot.homeName,
             awayName: snapshot.awayName,
             matchup: "\(snapshot.awayName) at \(snapshot.homeName)",
-            kickoff: game.startDate
+            kickoff: game.startDate,
+            favoriteID: TeamRef.id(league: homeLeague, espnID: teamID)
         )
     }
 
@@ -67,8 +74,13 @@ enum LiveActivityStateMapper {
 
     /// The Live Activity for a followed game, or `nil` for one it cannot
     /// show.
-    static func candidate(for game: ScoreboardGame, teamID: String, league: LeagueID) -> LiveActivityCandidate? {
-        guard let info = info(of: game, teamID: teamID, league: league),
+    static func candidate(
+        for game: ScoreboardGame,
+        teamID: String,
+        homeLeague: LeagueID,
+        league: LeagueID
+    ) -> LiveActivityCandidate? {
+        guard let info = info(of: game, teamID: teamID, homeLeague: homeLeague, league: league),
               let state = state(of: game, league: league)
         else { return nil }
         return LiveActivityCandidate(info: info, state: state)
@@ -89,6 +101,10 @@ enum LiveActivityAction: Equatable, Sendable {
     case update(gameID: String, state: GameActivityState)
     /// `state` is the last one to show while the activity lingers.
     case end(gameID: String, state: GameActivityState)
+    /// The game has been off every board for `LiveActivityPlanner.
+    /// offBoardTimeout`: end the activity showing `state`, its last content,
+    /// and take it down soon after, not at the system's cap hours later.
+    case expire(gameID: String, state: GameActivityState)
 }
 
 enum LiveActivityPlanner {
@@ -96,11 +112,38 @@ enum LiveActivityPlanner {
     /// past this many, no new one is asked for.
     static let maxActivities = 6
 
+    /// How long a running activity's game may be missing from every
+    /// scoreboard before its activity is ended (`expire`). The center polls
+    /// each favorite's board every minute while the app is open, so ten
+    /// minutes without the game means it has left the boards (a finished
+    /// game past the day's window, a favorite removed), not a slow poll.
+    static let offBoardTimeout: TimeInterval = 10 * 60
+
+    /// When each running activity's game was first found missing from
+    /// `candidates`, carried from one look to the next: a game still missing
+    /// keeps its date from `previous`, one newly missing is dated `now`, and
+    /// one back on the boards, or no longer running, is dropped.
+    static func offBoard(
+        since previous: [String: Date],
+        candidates: [LiveActivityCandidate],
+        running: [String: GameActivityState],
+        now: Date
+    ) -> [String: Date] {
+        let listed = Set(candidates.map(\.gameID))
+        var result: [String: Date] = [:]
+        for gameID in running.keys where !listed.contains(gameID) {
+            result[gameID] = previous[gameID] ?? now
+        }
+        return result
+    }
+
     /// What to do on one look at the scoreboards.
     ///
     /// - A running activity is updated when its game changed and ended once
     ///   the game is over (played out or called off). One whose game is not
-    ///   on the boards is left alone; the game may come back.
+    ///   on the boards is left alone, as the game may come back, until it
+    ///   has been missing `offBoardTimeout` (`offBoardSince`); then it
+    ///   expires.
     /// - A live game with no activity starts one if `canStart`, it was not
     ///   `retired`, and fewer than `limit` would then be running. Ends in
     ///   the same look free their places first; starts go in `candidates`
@@ -112,12 +155,17 @@ enum LiveActivityPlanner {
     ///   - running: the state each running activity last showed, by game id.
     ///   - retired: games whose activity ended or was dismissed; never
     ///     started again.
+    ///   - offBoardSince: when each running game missing from `candidates`
+    ///     was first missed (`offBoard(since:candidates:running:now:)`).
+    ///   - now: the current instant, against `offBoardSince`.
     ///   - canStart: whether a new activity may be asked for now (the app is
     ///     in the foreground and Live Activities are allowed).
     static func plan(
         candidates: [LiveActivityCandidate],
         running: [String: GameActivityState],
         retired: Set<String> = [],
+        offBoardSince: [String: Date] = [:],
+        now: Date = .distantPast,
         canStart: Bool,
         limit: Int = maxActivities
     ) -> [LiveActivityAction] {
@@ -139,6 +187,14 @@ enum LiveActivityPlanner {
             }
         }
 
+        for (gameID, shown) in running.sorted(by: { $0.key < $1.key }) where !seen.contains(gameID) {
+            guard let since = offBoardSince[gameID],
+                  now.timeIntervalSince(since) >= offBoardTimeout
+            else { continue }
+            actions.append(.expire(gameID: gameID, state: shown))
+            runningCount -= 1
+        }
+
         guard canStart else { return actions }
         for game in games where running[game.gameID] == nil {
             guard game.state.phase == .live,
@@ -149,5 +205,58 @@ enum LiveActivityPlanner {
             runningCount += 1
         }
         return actions
+    }
+}
+
+/// The games whose Live Activity ended or was dismissed, kept across
+/// launches so `LiveActivityPlanner` never offers them again.
+///
+/// Persisted retire, chosen over accepting a re-offer: a reader who swiped
+/// a game's activity away, or saw it end, would otherwise get it back on
+/// the next launch while the game is still on the boards — the app cannot
+/// tell "dismissed" from "never started" once the in-memory set is gone. The
+/// cost is that a game retired by mistake stays off the Lock Screen for the
+/// rest of the day; a game is only ever worth one activity, so that is the
+/// lesser surprise.
+///
+/// Each game is kept with the moment it was retired and dropped `horizon`
+/// later — a day, past which the game is off the boards anyway — so the
+/// store never outgrows a day's games.
+struct RetiredLiveActivities {
+    static let horizon: TimeInterval = 24 * 60 * 60
+    static let defaultsKey = "liveActivities.retired"
+
+    private let defaults: UserDefaults
+
+    /// Kept in `defaults`: the App Group's (`SharedPaths.defaults`) in the
+    /// app, a scratch suite in tests.
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    /// The games retired within `horizon` of `now`.
+    func games(at now: Date) -> Set<String> {
+        Set(entries(at: now).keys)
+    }
+
+    /// Records `gameID` as retired at `now`, and forgets the games retired
+    /// more than `horizon` before.
+    func retire(_ gameID: String, at now: Date) {
+        var entries = entries(at: now)
+        entries[gameID] = now
+        defaults.set(entries.mapValues(\.timeIntervalSince1970), forKey: Self.defaultsKey)
+    }
+
+    private func entries(at now: Date) -> [String: Date] {
+        let stored = defaults.dictionary(forKey: Self.defaultsKey) ?? [:]
+        var entries: [String: Date] = [:]
+        for (gameID, value) in stored {
+            guard let seconds = value as? Double else { continue }
+            let retiredAt = Date(timeIntervalSince1970: seconds)
+            if now.timeIntervalSince(retiredAt) < Self.horizon {
+                entries[gameID] = retiredAt
+            }
+        }
+        return entries
     }
 }

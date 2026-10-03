@@ -99,8 +99,11 @@ enum ScoreDiff {
     /// The events between two looks at the same games, keyed by game id, in
     /// game id order.
     ///
-    /// - A game first seen under way starts; one first seen before its start
-    ///   or already over says nothing (a final missed is not news at launch).
+    /// - A game first seen, in whatever state, says nothing: its look is only
+    ///   the seed for the next. The snapshots live in memory, so after a
+    ///   relaunch mid-game every game is first seen again, and one already
+    ///   under way is no more news than a final missed. Only a game seen
+    ///   before its start and then under way starts.
     /// - A game that drops off the board says nothing.
     /// - Going final reports only `final`, whatever else changed with it.
     /// - Under way, a new score and a new period each report; the score
@@ -108,13 +111,7 @@ enum ScoreDiff {
     static func diff(previous: [String: ScoreSnapshot], current: [String: ScoreSnapshot]) -> [ScoreEvent] {
         var events: [ScoreEvent] = []
         for gameID in current.keys.sorted() {
-            guard let now = current[gameID] else { continue }
-            guard let before = previous[gameID] else {
-                if now.state == .inProgress {
-                    events.append(.gameStart(gameID: gameID, snapshot: now))
-                }
-                continue
-            }
+            guard let now = current[gameID], let before = previous[gameID] else { continue }
 
             switch (before.state, now.state) {
             case (.scheduled, .inProgress):

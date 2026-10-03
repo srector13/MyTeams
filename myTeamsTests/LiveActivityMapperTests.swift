@@ -120,20 +120,21 @@ struct LiveActivityMapperTests {
         var game = board("in", period: 1)
         game.competitors[1].homeAway = "home"
         #expect(LiveActivityStateMapper.state(of: game, league: .nfl) == nil)
-        #expect(LiveActivityStateMapper.info(of: game, teamID: "2305", league: .nfl) == nil)
+        #expect(LiveActivityStateMapper.info(of: game, teamID: "2305", homeLeague: .nfl, league: .nfl) == nil)
 
         game.competitors.removeLast()
-        #expect(LiveActivityStateMapper.candidate(for: game, teamID: "2305", league: .nfl) == nil)
+        #expect(LiveActivityStateMapper.candidate(for: game, teamID: "2305", homeLeague: .nfl, league: .nfl) == nil)
     }
 
     @Test("The matchup: away at home, the followed team, the board's league, the kickoff")
     func info() {
         let game = board("in", period: 1, id: "401")
-        let info = LiveActivityStateMapper.info(of: game, teamID: "2306", league: .collegeFootball)
+        let info = LiveActivityStateMapper.info(of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball)
         #expect(info == GameActivityInfo(
             gameID: "401", teamID: "2306", league: "football/college-football",
             homeName: "Kansas", awayName: "K-State", matchup: "K-State at Kansas",
-            kickoff: Date(timeIntervalSince1970: 1_790_000_000)
+            kickoff: Date(timeIntervalSince1970: 1_790_000_000),
+            favoriteID: "football/college-football:2306"
         ))
     }
 
@@ -156,9 +157,11 @@ struct LiveActivityMapperTests {
         #expect(game.clock == "0:48")
         #expect(game.startDate == parseGameDate("2026-09-28T00:20Z"))
 
-        let candidate = try #require(LiveActivityStateMapper.candidate(for: game, teamID: "7", league: .nfl))
+        let candidate = try #require(LiveActivityStateMapper.candidate(for: game, teamID: "7", homeLeague: .nfl, league: .nfl))
         #expect(candidate.info.matchup == "Rams at Broncos")
         #expect(candidate.info.league == "football/nfl")
+        #expect(candidate.info.favoriteID == "football/nfl:7")
+        #expect(candidate.info.deepLink == WidgetDeepLink.url(forTeamID: "football/nfl:7"))
         #expect(candidate.state == state(.live, home: 23, away: 26, period: 4, clock: "0:48"))
         #expect(candidate.state.stage == "4th · 0:48")
     }
@@ -222,6 +225,97 @@ struct LiveActivityPlannerTests {
         ).isEmpty)
     }
 
+    @Test("Off-board dates: kept while missing, set when newly missed, dropped once back or ended")
+    func offBoardDates() {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let later = start.addingTimeInterval(60)
+        let live = state(.live, period: 1)
+        let running = ["1": live, "2": live, "3": live]
+
+        // "1" missing since the start, "2" newly missing, "3" still listed.
+        let first = LiveActivityPlanner.offBoard(
+            since: [:], candidates: [candidate("3", live)], running: running, now: start
+        )
+        #expect(first == ["1": start, "2": start])
+        let second = LiveActivityPlanner.offBoard(
+            since: ["1": start], candidates: [candidate("3", live)], running: running, now: later
+        )
+        #expect(second == ["1": start, "2": later])
+
+        // "1" back on the boards; "2" no longer running.
+        let third = LiveActivityPlanner.offBoard(
+            since: second, candidates: [candidate("1", live)], running: ["1": live, "3": live], now: later
+        )
+        #expect(third == ["3": later])
+    }
+
+    @Test("Off the boards for ten minutes, the activity expires with its last content")
+    func offBoardExpiry() {
+        let since = Date(timeIntervalSince1970: 1_790_000_000)
+        let shown = state(.live, home: 7, period: 3, clock: "4:00")
+        #expect(LiveActivityPlanner.offBoardTimeout == 10 * 60)
+
+        // Nine minutes and change: left alone.
+        #expect(LiveActivityPlanner.plan(
+            candidates: [], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(9 * 60 + 59),
+            canStart: true
+        ).isEmpty)
+
+        // Ten: expired, in the background too.
+        let expired = LiveActivityPlanner.plan(
+            candidates: [], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(10 * 60),
+            canStart: false
+        )
+        #expect(expired == [.expire(gameID: "1", state: shown)])
+
+        // A listed game is never expired, whatever date it carries.
+        #expect(LiveActivityPlanner.plan(
+            candidates: [candidate("1", shown)], running: ["1": shown],
+            offBoardSince: ["1": since], now: since.addingTimeInterval(60 * 60),
+            canStart: true
+        ).isEmpty)
+    }
+
+    @Test("An expiry in the same look frees its place")
+    func expiryFreesPlace() {
+        let since = Date(timeIntervalSince1970: 1_790_000_000)
+        let live = state(.live, period: 2)
+        let running = Dictionary(uniqueKeysWithValues: (1...6).map { ("r\($0)", live) })
+        let fresh = candidate("new", state(.live, period: 1))
+        let candidates = [fresh] + (2...6).map { candidate("r\($0)", live) }
+        let actions = LiveActivityPlanner.plan(
+            candidates: candidates, running: running,
+            offBoardSince: ["r1": since], now: since.addingTimeInterval(LiveActivityPlanner.offBoardTimeout),
+            canStart: true
+        )
+        #expect(actions == [.expire(gameID: "r1", state: live), .start(fresh.info, fresh.state)])
+    }
+
+    @Test("Tracked from look to look, a game that stays off the boards expires once, ten minutes after it was first missed")
+    func offBoardAcrossLooks() {
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let shown = state(.live, home: 3, period: 2)
+        let running = ["1": shown]
+        var since: [String: Date] = [:]
+        var expiredAt: [Int] = []
+        // One look a minute, as the center polls, the game gone throughout.
+        for minute in 0...12 {
+            let now = start.addingTimeInterval(TimeInterval(minute * 60))
+            since = LiveActivityPlanner.offBoard(since: since, candidates: [], running: running, now: now)
+            let actions = LiveActivityPlanner.plan(
+                candidates: [], running: running, offBoardSince: since, now: now, canStart: true
+            )
+            if actions == [.expire(gameID: "1", state: shown)] {
+                expiredAt.append(minute)
+                break
+            }
+            #expect(actions.isEmpty)
+        }
+        #expect(expiredAt == [10])
+    }
+
     @Test("In the background: updates and ends, but no starts")
     func background() {
         let changed = state(.live, home: 3, period: 2)
@@ -272,5 +366,61 @@ struct LiveActivityPlannerTests {
         other.info.teamID = "2306"
         let actions = LiveActivityPlanner.plan(candidates: [live, other], running: [:], canStart: true)
         #expect(actions == [.start(live.info, live.state)])
+    }
+}
+
+@Suite("Live Activity retired games")
+struct RetiredLiveActivitiesTests {
+    private let start = Date(timeIntervalSince1970: 1_790_000_000)
+
+    private func scratchDefaults() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "RetiredLiveActivitiesTests.\(UUID().uuidString)"))
+    }
+
+    @Test("A game retired in one launch is still retired in the next, and never restarted")
+    func persistsAcrossLaunches() throws {
+        let defaults = try scratchDefaults()
+        RetiredLiveActivities(defaults: defaults).retire("1", at: start)
+
+        // The next launch: a new store over the same defaults, the game
+        // still live on the boards.
+        let relaunched = RetiredLiveActivities(defaults: defaults)
+        let retired = relaunched.games(at: start.addingTimeInterval(60 * 60))
+        #expect(retired == ["1"])
+
+        let live = candidate("1", state(.live, home: 7, period: 2))
+        let other = candidate("2", state(.live, period: 1))
+        let actions = LiveActivityPlanner.plan(
+            candidates: [live, other], running: [:], retired: retired, canStart: true
+        )
+        #expect(actions == [.start(other.info, other.state)])
+    }
+
+    @Test("Retired games are forgotten a day later, and dropped from the store")
+    func horizon() throws {
+        let defaults = try scratchDefaults()
+        let store = RetiredLiveActivities(defaults: defaults)
+        #expect(RetiredLiveActivities.horizon == 24 * 60 * 60)
+        #expect(store.games(at: start).isEmpty)
+
+        store.retire("old", at: start)
+        store.retire("new", at: start.addingTimeInterval(12 * 60 * 60))
+        let justBefore = start.addingTimeInterval(RetiredLiveActivities.horizon - 1)
+        #expect(store.games(at: justBefore) == ["old", "new"])
+        let dayLater = start.addingTimeInterval(RetiredLiveActivities.horizon)
+        #expect(store.games(at: dayLater) == ["new"])
+
+        // The next write prunes what has aged out, so the store stays small.
+        store.retire("newer", at: dayLater)
+        let stored = defaults.dictionary(forKey: RetiredLiveActivities.defaultsKey) ?? [:]
+        #expect(Set(stored.keys) == ["new", "newer"])
+    }
+
+    @Test("Retiring again restarts the game's day")
+    func retireAgain() throws {
+        let store = RetiredLiveActivities(defaults: try scratchDefaults())
+        store.retire("1", at: start)
+        store.retire("1", at: start.addingTimeInterval(20 * 60 * 60))
+        #expect(store.games(at: start.addingTimeInterval(30 * 60 * 60)) == ["1"])
     }
 }
