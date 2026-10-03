@@ -27,7 +27,12 @@ struct WidgetGame: Sendable {
     /// than being fetched from the view.
     var teamLogo: Data?
 
-    var teamColor: Color
+    /// The followed team, whose colour and crest the widget is drawn in.
+    var team: TeamRef
+
+    /// The followed team's colour, or a stable fallback when the feed gives
+    /// none: the fill `teamInk(on:)` picks its ink against.
+    var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
 
     /// The entry shown in the widget gallery, and whenever a load fails.
     static func placeholder(
@@ -42,7 +47,7 @@ struct WidgetGame: Sendable {
             gameTime: detail ?? "Time",
             gameChannel: detail ?? "Channel",
             teamLogo: nil,
-            teamColor: team.color
+            team: team
         )
     }
 }
@@ -104,7 +109,7 @@ enum WidgetScheduleLoader {
             gameTime: game.time,
             gameChannel: game.channel,
             teamLogo: await opponentLogo,
-            teamColor: team.color
+            team: team
         )
         return .game(widgetGame, kickoff: game.dateAsDate)
     }
