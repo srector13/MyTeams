@@ -28,6 +28,10 @@ struct GameDetailView: View {
     /// the text over it.
     @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 200
 
+    /// The scoreboard's crests, which scale with the team names under them
+    /// (B-3).
+    @ScaledMetric(relativeTo: .subheadline) private var crestSize: CGFloat = 50
+
     let game: Game
     let team: TeamRef
 
@@ -54,21 +58,27 @@ struct GameDetailView: View {
     var body: some View {
         ScrollView(.vertical) {
             if loading {
-                GameDetailSkeleton()
+                // The real header and scoreboard over placeholder data,
+                // redacted (D-7): the placeholder can't drift from the
+                // layout it stands in for.
+                VStack {
+                    header
+                    card {
+                        scoreboard(score: Self.placeholderScore)
+                    }
+                }
+                .loadingPlaceholder()
             } else {
                 VStack {
                     header
 
-                    // Sized to its content (D-3): long hockey and soccer
-                    // tables, and larger text, grow the card rather than
-                    // overflowing a fixed one.
-                    VStack(alignment: .center, spacing: 15) {
+                    card {
                         if(game.cancelled) {
                             message("This game has been canceled.")
                         } else if (game.postponed) {
                             message("This game has been postponed.")
                         } else if game.dateAsDate <= Date(), let boxScore {
-                            scoreboard(boxScore)
+                            scoreboard(score: "\(boxScore.homeScore) - \(boxScore.awayScore)")
 
                             if let linescore {
                                 LinescoreView(linescore: linescore)
@@ -90,10 +100,6 @@ struct GameDetailView: View {
                             message("No game statistics at this time. Please check back later.")
                         }
                     }
-                    .padding(Theme.Spacing.xl)
-                    .frame(maxWidth: .infinity)
-                    .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
-                    .padding(.horizontal, Theme.Spacing.m)
                 }
             }
 
@@ -202,7 +208,9 @@ struct GameDetailView: View {
     /// The game's colour (black until the summary gives one) over the
     /// venue, weighted to the foot (D-5): the old flat 60% through the top
     /// third, deepening to 85% where the venue line sits over the busiest
-    /// part of a stadium photo. Nowhere lighter than it was.
+    /// part of a stadium photo. Nowhere lighter than it was. Denser under
+    /// Increase Contrast and opaque under Reduce Transparency (X-5), since
+    /// the white header text sits on it.
     ///
     /// No radius of its own: the header runs to the sheet's top edge, whose
     /// corners round it concentric with the device, and its foot is
@@ -212,17 +220,11 @@ struct GameDetailView: View {
             Color.black
             Color(hexString: gameInfo.gameColor)
         }
-        .mask {
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.6), location: 0),
-                    .init(color: .black.opacity(0.6), location: 0.35),
-                    .init(color: .black.opacity(0.85), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        .adaptiveGradientScrim([
+            .init(opacity: 0.6, location: 0),
+            .init(opacity: 0.6, location: 0.35),
+            .init(opacity: 0.85, location: 1),
+        ])
     }
 
     /// The venue, then its city and state where the league's summaries give
@@ -241,16 +243,36 @@ struct GameDetailView: View {
             .padding(.bottom, 10)
     }
 
+    // MARK: - Card
+
+    /// The rounded card under the header. Sized to its content (D-3): long
+    /// hockey and soccer tables, and larger text, grow the card rather than
+    /// overflowing a fixed one.
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .center, spacing: 15) {
+            content()
+        }
+        .padding(Theme.Spacing.xl)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+        .padding(.horizontal, Theme.Spacing.m)
+    }
+
     // MARK: - Scoreboard
 
-    /// Both crests and the scoreline, home team on the left. At
-    /// accessibility text sizes the scoreline sits above the two sides, so
-    /// none of the three is squeezed into a third of the width.
+    /// The scoreline the loading placeholder lays out, redacted: two-digit
+    /// scores, about the width of most.
+    private static let placeholderScore = "00 - 00"
+
+    /// Both crests and the scoreline (`score`, home first), home team on
+    /// the left. At accessibility text sizes the scoreline sits above the
+    /// two sides, so none of the three is squeezed into a third of the
+    /// width.
     @ViewBuilder
-    private func scoreboard(_ boxScore: BoxScore) -> some View {
+    private func scoreboard(score: String) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(spacing: Theme.Spacing.m) {
-                scoreline(boxScore)
+                scoreline(score)
 
                 HStack(alignment: .top) {
                     side(followed: game.gameHome, alignment: .leading)
@@ -262,7 +284,7 @@ struct GameDetailView: View {
                 HStack() {
                     side(followed: game.gameHome, alignment: .leading)
 
-                    scoreline(boxScore)
+                    scoreline(score)
                         .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
 
                     side(followed: !game.gameHome, alignment: .trailing)
@@ -271,9 +293,9 @@ struct GameDetailView: View {
         }
     }
 
-    private func scoreline(_ boxScore: BoxScore) -> some View {
+    private func scoreline(_ score: String) -> some View {
         VStack(alignment: .center) {
-            Text("\(boxScore.homeScore) - \(boxScore.awayScore)")
+            Text(score)
                 .font(.title.bold().monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -286,14 +308,14 @@ struct GameDetailView: View {
     private func side(followed: Bool, alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 5) {
             if followed {
-                TeamLogo(team: team, size: 50)
+                TeamLogo(team: team, size: crestSize)
             } else {
                 RemoteImage(url: URL(string: game.opponentLogo)) {
                     Image("blankTeam")
                         .resizable()
                 }
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 50, height: 50)
+                .frame(width: crestSize, height: crestSize)
             }
 
             Text(followed ? teamLabel : game.opponent)
@@ -329,80 +351,5 @@ struct GameDetailView: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 30)
             .padding(.vertical, 40)
-    }
-}
-
-/// The game sheet's placeholder until its first summary arrives, laid out
-/// like the header and scoreboard it stands in for.
-private struct GameDetailSkeleton: View {
-    @Environment(\.containerSize) private var containerSize
-
-    var body: some View {
-        VStack {
-            ZStack(alignment: .top) {
-                // Takes up the sheet's full width.
-                HStack() {
-                    Spacer()
-                }
-
-                LoadingView()
-                    .frame(width: containerSize.width, height: 200)
-
-                VStack(spacing: 5) {
-                    // Where the grabber and close button float.
-                    Color.clear
-                        .frame(height: closeButtonClearance)
-
-                    LoadingView()
-                        .frame(width: containerSize.width-20, height: 25)
-
-                    Spacer()
-
-                    LoadingView()
-                        .frame(width: 100, height: 15)
-
-                    LoadingView()
-                        .frame(width: 120, height: 15)
-
-                    LoadingView()
-                        .frame(width: 50, height: 15)
-
-                    Spacer()
-
-                    LoadingView()
-                        .frame(width: 200, height: 15)
-                        .padding(.bottom, 10)
-                }.padding(.horizontal, 15)
-            }.frame(height: 200)
-
-            // Sized to its content, like the card it stands in for (D-3).
-            HStack() {
-                crest(alignment: .leading)
-
-                VStack(alignment: .center) {
-                    LoadingView()
-                        .frame(width: 200, height: 30)
-
-                    LoadingView()
-                        .frame(width: 50, height: 15)
-                }.frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
-
-                crest(alignment: .trailing)
-            }
-            .padding(Theme.Spacing.xl)
-            .frame(maxWidth: .infinity)
-            .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
-            .padding(.horizontal, Theme.Spacing.m)
-        }
-    }
-
-    private func crest(alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 5) {
-            LoadingViewCircle()
-                .frame(width: 50, height: 50)
-
-            LoadingView()
-                .frame(width: 75, height: 15)
-        }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
 }

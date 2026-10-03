@@ -38,6 +38,9 @@ struct AlertsSettingsView: View {
     @State private var model = AlertsSettingsModel.live()
     @State private var teams: [TeamRef] = []
 
+    /// A toggle's crest, which scales with the team name beside it (B-3).
+    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
+
     private var store: FavoritesStore { .shared }
 
     var body: some View {
@@ -116,8 +119,8 @@ struct AlertsSettingsView: View {
             set: { store.setNotify($0, for: team.id) }
         )) {
             HStack(spacing: 12) {
-                TeamLogo(team: team, size: 24)
-                    .frame(width: 24, height: 24)
+                TeamLogo(team: team, size: crestSize)
+                    .frame(width: crestSize, height: crestSize)
                     .accessibilityHidden(true)
                 Text(team.displayName)
                 Text(team.league.badge)

@@ -105,6 +105,9 @@ struct TeamBrowserView: View {
     @State private var remoteHits: [TeamRef] = []
     @State private var isSearchingRemotely = false
 
+    /// A row's crest, which scales with the team name beside it (B-3).
+    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
+
     private var store: FavoritesStore { .shared }
 
     private var isSearching: Bool {
@@ -185,8 +188,14 @@ struct TeamBrowserView: View {
                     EditButton()
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("teamBrowser.done")
+                    // Following applies as it's tapped, so this confirms
+                    // the picks: the system's glass checkmark (X-8).
+                    Button(role: .confirm) {
+                        dismiss()
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                    }
+                    .accessibilityIdentifier("teamBrowser.done")
                 }
             }
             .task(id: league) {
@@ -199,6 +208,9 @@ struct TeamBrowserView: View {
                 await searchRemotelyIfNeeded()
             }
         }
+        // Full height, as the browser and as onboarding: a searchable list
+        // of every league's teams has no useful partial height (X-9).
+        .presentationDetents([.large])
     }
 
     // MARK: Pieces
@@ -279,8 +291,8 @@ struct TeamBrowserView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                TeamLogo(team: team, size: 24)
-                    .frame(width: 24, height: 24)
+                TeamLogo(team: team, size: crestSize)
+                    .frame(width: crestSize, height: crestSize)
 
                 Text(team.displayName)
                     .foregroundStyle(.primary)

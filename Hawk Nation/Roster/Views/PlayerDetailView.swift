@@ -476,7 +476,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                             Text(player.number)
                                 .font(.largeTitle.bold().monospacedDigit())
                                 .foregroundStyle(Color.white)
-                                .opacity(0.5)
+                                // Half-strength ink on the team colour,
+                                // firmer under Increase Contrast and Reduce
+                                // Transparency (X-5).
+                                .adaptiveScrim(0.5)
                         }
                         .padding(.horizontal, Theme.Spacing.l)
 
@@ -583,7 +586,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         case .stat(let title, let info):
             StatView(title: title, info: info)
         case .percentage(let title, let progress):
-            StatPercentageView(progress: CGFloat(progress), color: UIColor(teamColor), title: title)
+            StatPercentageView(progress: progress, color: teamColor, title: title)
                 .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0), value: progress)
         }
     }

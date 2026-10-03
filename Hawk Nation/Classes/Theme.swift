@@ -110,6 +110,79 @@ enum Theme {
         let clamped = min(max(base, 0), 1)
         return contrast == .increased ? clamped + (1 - clamped) / 3 : clamped
     }
+
+    /// One stop of a gradient scrim: its opacity at `location`, from 0 at
+    /// the gradient's start to 1 at its end.
+    struct ScrimStop: Equatable, Sendable {
+        var opacity: Double
+        var location: CGFloat
+    }
+
+    /// `scrimOpacity(_:contrast:reduceTransparency:)` at every stop of a
+    /// gradient scrim: each stop raised a third of the way to opaque under
+    /// Increase Contrast, and all of them opaque, one flat scrim, under
+    /// Reduce Transparency. Pure so it can be unit-tested.
+    static func scrimStops(_ stops: [ScrimStop], contrast: ColorSchemeContrast, reduceTransparency: Bool) -> [ScrimStop] {
+        stops.map { stop in
+            ScrimStop(
+                opacity: scrimOpacity(stop.opacity, contrast: contrast, reduceTransparency: reduceTransparency),
+                location: stop.location
+            )
+        }
+    }
+
+    /// Loading placeholders: the skeleton blocks and the redacted layouts
+    /// that stand in for content until it loads (X-6, D-7).
+    enum Placeholder {
+        /// The pulse's floor. Placeholders draw in the system fill, which
+        /// is already translucent, so they pulse between half and full
+        /// strength.
+        static let minOpacity: Double = 0.5
+        /// The pulse's peak.
+        static let maxOpacity: Double = 1
+        /// Under Reduce Motion the placeholder holds still midway through
+        /// the pulse, in the same tone.
+        static let restingOpacity: Double = 0.75
+
+        /// The pulse: two seconds up, two seconds down, for as long as the
+        /// placeholder shows.
+        static var pulse: Animation {
+            .easeInOut(duration: 2).repeatForever(autoreverses: true)
+        }
+
+        /// The placeholder's opacity at either end of the pulse (`raised`),
+        /// or at rest under Reduce Motion. Pure so it can be unit-tested.
+        static func opacity(raised: Bool, reduceMotion: Bool) -> Double {
+            if reduceMotion { return restingOpacity }
+            return raised ? maxOpacity : minOpacity
+        }
+    }
+
+    /// Accessibility settings asked for in the launch environment by the
+    /// GlassUI screenshot pass (`GlassUIScreenshotTests`). XCUITest can't
+    /// switch Increase Contrast, Reduce Transparency or Reduce Motion on
+    /// in-process, so the app stands them in: Increase Contrast for every
+    /// view below the root (`View.launchAccessibilityOverrides()`), Reduce
+    /// Transparency and Reduce Motion for the primitives in this file, the
+    /// only app code that adapts to them. All off unless a key is "1".
+    struct LaunchAccessibility: Equatable, Sendable {
+        static let increaseContrastKey = "GLASSUI_INCREASE_CONTRAST"
+        static let reduceTransparencyKey = "GLASSUI_REDUCE_TRANSPARENCY"
+        static let reduceMotionKey = "GLASSUI_REDUCE_MOTION"
+
+        let increaseContrast: Bool
+        let reduceTransparency: Bool
+        let reduceMotion: Bool
+
+        init(environment: [String: String]) {
+            increaseContrast = environment[Self.increaseContrastKey] == "1"
+            reduceTransparency = environment[Self.reduceTransparencyKey] == "1"
+            reduceMotion = environment[Self.reduceMotionKey] == "1"
+        }
+
+        /// This launch's settings.
+        static let current = LaunchAccessibility(environment: ProcessInfo.processInfo.environment)
+    }
 }
 
 // MARK: - Glass primitives
@@ -152,6 +225,47 @@ extension View {
         modifier(AdaptiveScrim(opacity: opacity))
     }
 
+    /// `adaptiveScrim(_:)` for a scrim that deepens across the view: masks
+    /// the view (a colour, usually) to a linear gradient through `stops`,
+    /// each adapted the way a flat scrim is (X-5). Opaque throughout under
+    /// Reduce Transparency.
+    func adaptiveGradientScrim(
+        _ stops: [Theme.ScrimStop],
+        startPoint: UnitPoint = .top,
+        endPoint: UnitPoint = .bottom
+    ) -> some View {
+        modifier(AdaptiveGradientScrim(stops: stops, startPoint: startPoint, endPoint: endPoint))
+    }
+
+    /// The loading pulse for a placeholder shape (X-6): between
+    /// `Theme.Placeholder`'s floor and peak, or still under Reduce Motion.
+    func placeholderPulse() -> some View {
+        modifier(PlaceholderPulse())
+    }
+
+    /// The view as a placeholder for itself until its data loads (D-7):
+    /// its real layout over placeholder data, redacted, pulsing as the
+    /// skeleton blocks do. VoiceOver hears "Loading" rather than the
+    /// placeholder data.
+    func loadingPlaceholder() -> some View {
+        redacted(reason: .placeholder)
+            .placeholderPulse()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Loading"))
+    }
+
+    /// Stands `Theme.LaunchAccessibility.current`'s Increase Contrast in
+    /// for the system's in the environment below. For the app's root view
+    /// only; changes nothing unless a UI test set the launch key.
+    func launchAccessibilityOverrides() -> some View {
+        let increaseContrast = Theme.LaunchAccessibility.current.increaseContrast
+        // `_colorSchemeContrast` is SwiftUI's own setter for the value,
+        // the one previews use to show Increase Contrast.
+        return transformEnvironment(\._colorSchemeContrast) { contrast in
+            if increaseContrast { contrast = .increased }
+        }
+    }
+
     /// Text and symbols in the ink that reads on `team`'s colour: its
     /// alternate colour when that reaches 4.5:1, otherwise white or black,
     /// whichever contrasts more (G-3).
@@ -165,15 +279,78 @@ extension View {
     }
 }
 
+/// The accessibility settings the primitives here adapt to: the system's,
+/// or the ones a UI test stood in at launch (`Theme.LaunchAccessibility`).
+private struct AdaptiveSettings: DynamicProperty {
+    @Environment(\.colorSchemeContrast) var contrast
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+
+    var reduceTransparency: Bool {
+        systemReduceTransparency || Theme.LaunchAccessibility.current.reduceTransparency
+    }
+
+    var reduceMotion: Bool {
+        systemReduceMotion || Theme.LaunchAccessibility.current.reduceMotion
+    }
+}
+
 private struct AdaptiveScrim: ViewModifier {
     let opacity: Double
 
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    private var settings = AdaptiveSettings()
+
+    init(opacity: Double) {
+        self.opacity = opacity
+    }
 
     func body(content: Content) -> some View {
         content
-            .opacity(Theme.scrimOpacity(opacity, contrast: contrast, reduceTransparency: reduceTransparency))
+            .opacity(Theme.scrimOpacity(opacity, contrast: settings.contrast, reduceTransparency: settings.reduceTransparency))
+    }
+}
+
+private struct AdaptiveGradientScrim: ViewModifier {
+    let stops: [Theme.ScrimStop]
+    let startPoint: UnitPoint
+    let endPoint: UnitPoint
+
+    private var settings = AdaptiveSettings()
+
+    init(stops: [Theme.ScrimStop], startPoint: UnitPoint, endPoint: UnitPoint) {
+        self.stops = stops
+        self.startPoint = startPoint
+        self.endPoint = endPoint
+    }
+
+    func body(content: Content) -> some View {
+        let adapted = Theme.scrimStops(stops, contrast: settings.contrast, reduceTransparency: settings.reduceTransparency)
+        return content
+            .mask {
+                LinearGradient(
+                    stops: adapted.map { Gradient.Stop(color: .black.opacity($0.opacity), location: $0.location) },
+                    startPoint: startPoint,
+                    endPoint: endPoint
+                )
+            }
+    }
+}
+
+private struct PlaceholderPulse: ViewModifier {
+    private var settings = AdaptiveSettings()
+
+    @State private var raised = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(Theme.Placeholder.opacity(raised: raised, reduceMotion: settings.reduceMotion))
+            .onAppear {
+                // Still under Reduce Motion: nothing to animate.
+                guard !settings.reduceMotion else { return }
+                withAnimation(Theme.Placeholder.pulse) {
+                    raised = true
+                }
+            }
     }
 }
 

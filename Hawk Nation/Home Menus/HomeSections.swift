@@ -487,6 +487,10 @@ private struct StandingsTable: View {
 
     @Environment(\.colorSchemeContrast) private var contrast
 
+    /// A row's crest, which scales with the footnote team name beside it
+    /// (B-3).
+    @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 20
+
     /// A numeric column: its heading, and each row's value.
     private struct Column {
         let title: String
@@ -556,7 +560,7 @@ private struct StandingsTable: View {
                     Text("\(entry.rank ?? position + 1)")
                         .foregroundStyle(.secondary)
                     HStack(spacing: 6) {
-                        TeamLogo(team: crestTeam(for: entry), size: 20)
+                        TeamLogo(team: crestTeam(for: entry), size: crestSize)
                         Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
                             .lineLimit(1)
                         // After the name, so the names stay in one column.

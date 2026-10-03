@@ -12,7 +12,8 @@ import Testing
 @testable import myTeams
 
 /// The arithmetic behind the theme's accessibility primitives: scrim
-/// opacity and contrast-picked ink.
+/// opacity, the placeholder pulse, launch-time accessibility stand-ins
+/// and contrast-picked ink.
 @Suite("Theme")
 struct ThemeTests {
     @Test("Scrims keep their opacity by default")
@@ -31,6 +32,60 @@ struct ThemeTests {
     func scrimReduceTransparency() {
         #expect(Theme.scrimOpacity(0.2, contrast: .standard, reduceTransparency: true) == 1)
         #expect(Theme.scrimOpacity(0.2, contrast: .increased, reduceTransparency: true) == 1)
+    }
+
+    @Test("A gradient scrim adapts stop by stop and keeps its locations")
+    func gradientScrim() {
+        let stops = [
+            Theme.ScrimStop(opacity: 0.6, location: 0),
+            Theme.ScrimStop(opacity: 0.85, location: 1),
+        ]
+        #expect(Theme.scrimStops(stops, contrast: .standard, reduceTransparency: false) == stops)
+
+        let raised = Theme.scrimStops(stops, contrast: .increased, reduceTransparency: false)
+        #expect(raised.map(\.location) == [0, 1])
+        #expect(abs(raised[0].opacity - (0.6 + 0.4 / 3)) < 0.0001)
+        #expect(abs(raised[1].opacity - (0.85 + 0.15 / 3)) < 0.0001)
+
+        let flat = Theme.scrimStops(stops, contrast: .standard, reduceTransparency: true)
+        #expect(flat.map(\.opacity) == [1, 1])
+        #expect(flat.map(\.location) == [0, 1])
+    }
+
+    @Test("Placeholders pulse between their floor and peak, and rest still under Reduce Motion")
+    func placeholderPulse() {
+        #expect(Theme.Placeholder.opacity(raised: false, reduceMotion: false) == Theme.Placeholder.minOpacity)
+        #expect(Theme.Placeholder.opacity(raised: true, reduceMotion: false) == Theme.Placeholder.maxOpacity)
+        // Still, in the pulse's own tone, whichever end it was headed for.
+        let resting = Theme.Placeholder.opacity(raised: false, reduceMotion: true)
+        #expect(resting == Theme.Placeholder.opacity(raised: true, reduceMotion: true))
+        #expect(resting > Theme.Placeholder.minOpacity)
+        #expect(resting < Theme.Placeholder.maxOpacity)
+    }
+
+    @Test("Launch accessibility settings are off unless a key is \"1\"")
+    func launchAccessibility() {
+        let none = Theme.LaunchAccessibility(environment: [:])
+        #expect(!none.increaseContrast)
+        #expect(!none.reduceTransparency)
+        #expect(!none.reduceMotion)
+
+        let all = Theme.LaunchAccessibility(environment: [
+            Theme.LaunchAccessibility.increaseContrastKey: "1",
+            Theme.LaunchAccessibility.reduceTransparencyKey: "1",
+            Theme.LaunchAccessibility.reduceMotionKey: "1",
+        ])
+        #expect(all.increaseContrast)
+        #expect(all.reduceTransparency)
+        #expect(all.reduceMotion)
+
+        let motionOnly = Theme.LaunchAccessibility(environment: [
+            Theme.LaunchAccessibility.reduceMotionKey: "1",
+            Theme.LaunchAccessibility.increaseContrastKey: "0",
+        ])
+        #expect(motionOnly.reduceMotion)
+        #expect(!motionOnly.increaseContrast)
+        #expect(!motionOnly.reduceTransparency)
     }
 
     @Test("A followed row's wash strengthens under Increase Contrast")

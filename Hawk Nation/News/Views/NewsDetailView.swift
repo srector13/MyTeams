@@ -27,6 +27,9 @@ struct NewsDetailView: View {
             }
             // Safari insets its own content and bars.
             .ignoresSafeArea()
+            // Full height: a hand-off to Safari, whose page and bars need
+            // the room (X-9).
+            .presentationDetents([.large])
         } else {
             ContentUnavailableView(
                 "Can't Open This Article",
@@ -40,6 +43,9 @@ struct NewsDetailView: View {
                     .accessibilityIdentifier("newsDetail.close")
                     .padding(Theme.Spacing.m)
             }
+            // A short message: the medium detent fits it, and large
+            // gives accessibility text sizes room (X-9).
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
     }

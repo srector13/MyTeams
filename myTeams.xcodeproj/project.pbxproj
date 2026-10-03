@@ -27,7 +27,6 @@
 		A6230D4AA20CC9D1ACFE7EFF /* LeagueScoreboardCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */; };
 		476464CAAE86817C53BEFF90 /* DownloadScoreboardData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3C5F108853415329D714E8 /* DownloadScoreboardData.swift */; };
 		4615931377DF02093FE8F4F2 /* RecordingTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */; };
-		A859F30DBC1A5231139E8E2E /* CircularProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851DE50795B6FCEE85CD4E68 /* CircularProgress.swift */; };
 		27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7DFED7B341798C35C5671F /* ConvertColor.swift */; };
 		43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3336602F15AB9F42EE41A789 /* LoadingView.swift */; };
 		FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */; };
@@ -183,7 +182,6 @@
 		A958F3CCAA603C2C5E068CA3 /* LeagueScoreboardCenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeagueScoreboardCenter.swift"; sourceTree = "<group>"; };
 		AD3C5F108853415329D714E8 /* DownloadScoreboardData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadScoreboardData.swift"; sourceTree = "<group>"; };
 		E5B8D6915F39CF9CF2226087 /* RecordingTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecordingTransport.swift"; sourceTree = "<group>"; };
-		851DE50795B6FCEE85CD4E68 /* CircularProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CircularProgress.swift"; sourceTree = "<group>"; };
 		8F7DFED7B341798C35C5671F /* ConvertColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConvertColor.swift"; sourceTree = "<group>"; };
 		3336602F15AB9F42EE41A789 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoadingView.swift"; sourceTree = "<group>"; };
 		24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RepeatingTask.swift"; sourceTree = "<group>"; };
@@ -335,7 +333,6 @@
 		C1EA25E0921B6F5D2402EC7D /* Classes */ = {
 			isa = PBXGroup;
 			children = (
-				851DE50795B6FCEE85CD4E68 /* CircularProgress.swift */,
 				8F7DFED7B341798C35C5671F /* ConvertColor.swift */,
 				3336602F15AB9F42EE41A789 /* LoadingView.swift */,
 				24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */,
@@ -776,7 +773,6 @@
 				476464CAAE86817C53BEFF90 /* DownloadScoreboardData.swift in Sources */,
 				129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */,
 				2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */,
-				A859F30DBC1A5231139E8E2E /* CircularProgress.swift in Sources */,
 				27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */,
 				43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */,
 				FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */,
