@@ -18,11 +18,11 @@ struct SectionHeader<Accessory: View>: View {
     var body: some View {
         HStack {
             Image(systemName: systemImage)
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
 
             Text(title)
                 .font(Theme.Typography.sectionTitle)
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
 
             Spacer()
 
@@ -79,7 +79,7 @@ struct SectionStatusView: View {
         VStack(spacing: 10) {
             Text(message)
                 .font(.subheadline.bold())
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             if let retry {
@@ -310,7 +310,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             SectionHeader(systemImage: "calendar", title: "Schedule") {
                 Text(record)
                     .font(.subheadline)
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
             }
             .padding([.leading, .top, .trailing])
 
@@ -511,7 +511,7 @@ private struct StandingsTable: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(group.name)
                 .font(.subheadline.bold())
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
 
             // Too wide for the screen at accessibility sizes: it scrolls
             // sideways rather than squeezing the team names out.
@@ -532,13 +532,13 @@ private struct StandingsTable: View {
                 }
             }
             .font(Theme.Typography.statLabel)
-            .foregroundStyle(Color(uiColor: .systemGray))
+            .foregroundStyle(.secondary)
 
             ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
                 let followed = entry.teamID == followedID
                 GridRow {
                     Text("\(entry.rank ?? position + 1)")
-                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         TeamLogo(team: crestTeam(for: entry), size: 20)
                         Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
@@ -546,7 +546,7 @@ private struct StandingsTable: View {
                         if !entry.clincher.isEmpty {
                             Text(entry.clincher)
                                 .font(.caption2)
-                                .foregroundStyle(Color(uiColor: .systemGray))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

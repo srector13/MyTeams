@@ -278,7 +278,7 @@ private struct BoxScoreText: View {
         Text(text)
             .font(style == .heading ? .caption2 : Theme.Typography.caption)
             .fontWeight(style == .body ? .regular : .bold)
-            .foregroundStyle(style == .heading ? Color(uiColor: .systemGray) : Color.primary)
+            .foregroundStyle(style == .heading ? HierarchicalShapeStyle.secondary : .primary)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.8)

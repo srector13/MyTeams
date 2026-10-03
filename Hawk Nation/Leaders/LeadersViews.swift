@@ -114,7 +114,7 @@ private struct TeamLeaderCard: View {
 
             Text(board.label)
                 .font(Theme.Typography.statLabel)
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Text(row.leader.shortName.isEmpty ? row.leader.name : row.leader.shortName)
@@ -140,7 +140,7 @@ private struct LeaderHeadshot: View {
         RemoteImage(url: URL(string: url), showsProgress: false) {
             Image(systemName: "person.crop.circle.fill")
                 .resizable()
-                .foregroundStyle(Color(uiColor: .systemGray3))
+                .foregroundStyle(.tertiary)
         }
         .aspectRatio(contentMode: .fill)
         .frame(width: size, height: size)
@@ -201,7 +201,7 @@ struct LeagueLeadersView: View {
                 if let leaders, !leaders.seasonName.isEmpty {
                     Text(Self.caption(leaders))
                         .font(.footnote)
-                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .foregroundStyle(.secondary)
                 }
 
                 ForEach(shown) { board in
@@ -271,7 +271,7 @@ private struct LeaderRow: View {
             HStack(spacing: 10) {
                 Text("\(row.rank)")
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
                     .frame(width: rankWidth, alignment: .trailing)
 
                 LeaderHeadshot(url: row.leader.headshotURL, size: 36)
@@ -284,12 +284,12 @@ private struct LeaderRow: View {
 
                     Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .foregroundStyle(.secondary)
 
                     if let detail = row.detail {
                         Text(detail)
                             .font(.caption2)
-                            .foregroundStyle(Color(uiColor: .systemGray))
+                            .foregroundStyle(.tertiary)
                             .lineLimit(stacksFigure ? nil : 2)
                     }
                 }
@@ -304,7 +304,7 @@ private struct LeaderRow: View {
                     .font(.headline.monospacedDigit())
                 Text(label)
                     .font(.caption2)
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
             }
         }
         .listRowBackground(followed ? teamColor.opacity(0.15) : Color(uiColor: .secondarySystemGroupedBackground))

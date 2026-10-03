@@ -44,7 +44,7 @@ struct StatRowView: View {
     private var titleText: some View {
         Text(title)
             .font(.subheadline.bold())
-            .foregroundStyle(Color(uiColor: .systemGray))
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
     }
 

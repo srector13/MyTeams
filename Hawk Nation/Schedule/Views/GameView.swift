@@ -89,7 +89,7 @@ struct GameView : View {
                 .frame(height: fillsRow ? nil : statusBarHeight)
                 .padding(.vertical, fillsRow ? Theme.Spacing.s : 0)
 
-        }.background(Color(uiColor: .systemBackground))
+        }.background(Theme.Surface.insetCard)
             .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight)
             .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
             // Nested in the schedule section's card (X-4).

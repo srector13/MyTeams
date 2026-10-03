@@ -298,7 +298,7 @@ struct GameDetailView: View {
 
             Text(followed ? teamLabel : game.opponent)
                 .font(.subheadline.bold())
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(alignment == .leading ? .leading : .trailing)
         }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
@@ -325,7 +325,7 @@ struct GameDetailView: View {
     private func message(_ text: String) -> some View {
         Text(text)
             .font(.subheadline.bold())
-            .foregroundStyle(Color(uiColor: .systemGray))
+            .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, 30)
             .padding(.vertical, 40)

@@ -68,9 +68,7 @@ struct NewsView: View {
                 .frame(maxWidth: stacksThumbnail ? CGFloat.infinity : nil)
                 .overlay {
                     RemoteImage(url: article.urlToImage) {
-                        RoundedRectangle(cornerRadius: 20)
-                            .foregroundStyle(Color(uiColor: .systemGray))
-                            .opacity(0.8)
+                        RemoteImagePlaceholder()
                     }
                     .scaledToFill()
                 }
