@@ -86,9 +86,10 @@ struct NewsView: View {
                 .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
+                // Hierarchical styles, not `.primary` at half opacity, so
+                // they take vibrancy and Increase Contrast (N-2).
                 Text(article.source)
-                    .foregroundStyle(.primary)
-                    .opacity(0.5)
+                    .foregroundStyle(.secondary)
                     .font(.caption2)
                 Text(article.title)
                     .foregroundStyle(.primary)
@@ -98,8 +99,7 @@ struct NewsView: View {
                     .font(.subheadline)
                     .lineLimit(3)
                 Text(article.publishedAt, format: .dateTime.month().day().year())
-                    .foregroundStyle(.primary)
-                    .opacity(0.5)
+                    .foregroundStyle(.tertiary)
                     .font(.caption2)
             }
         }

@@ -48,7 +48,15 @@ struct GameView : View {
     @ScaledMetric(relativeTo: .body) private var statusBarHeight: CGFloat = 40
     @ScaledMetric(relativeTo: .caption) private var statusPillHeight: CGFloat = 25
 
-    private var teamColor: Color { team.color }
+    /// The card's fill: the team's colour, or the fallback its crest
+    /// badge uses when the feed has none, so the ink is picked against
+    /// what's actually drawn.
+    private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
+
+    /// Text and symbols on `teamColor`: white, black or the team's
+    /// alternate colour, whichever reaches 4.5:1 (G-3). White alone failed
+    /// on light team colours.
+    private var ink: Color { TeamColors.ink(on: team) }
 
     private var league: LeagueDescriptor { team.league.descriptor }
 
@@ -106,11 +114,11 @@ struct GameView : View {
                 if(game.cancelled) {
                     Text("Cancelled")
                         .font(.title3.bold())
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(ink)
                 } else if (game.postponed) {
                     Text("Postponed")
                         .font(.title3.bold())
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(ink)
                 }
             }
         } else if(game.completed) {
@@ -142,7 +150,7 @@ struct GameView : View {
     }
 
     private func details(dimmed: Bool) -> some View {
-        GameCardDetails(game: game, dimmed: dimmed)
+        GameCardDetails(game: game, ink: ink, dimmed: dimmed)
             .padding(.vertical, fillsRow ? Theme.Spacing.m : 0)
     }
 
@@ -154,11 +162,13 @@ struct GameView : View {
             .overlay { tint }
     }
 
-    /// The team-coloured wash laid over the details beneath a status.
+    /// The team-coloured wash laid over the details beneath a status,
+    /// denser under Increase Contrast so the status's ink stands clear of
+    /// the details (G-3, X-5).
     private var tint: some View {
         Rectangle()
             .foregroundStyle(teamColor)
-            .opacity(0.5)
+            .adaptiveScrim(0.5)
     }
 
     /// A finished game's outcome over its final score.
@@ -166,7 +176,7 @@ struct GameView : View {
         VStack {
             Text(outcome)
                 .font(.title2.bold())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(ink)
 
             scoreText(score, font: .title3.weight(.heavy))
         }
@@ -240,14 +250,14 @@ struct GameView : View {
             .font(font.monospacedDigit())
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
     }
 
     private func liveLine(_ text: String, font: Font) -> some View {
         Text(text)
             .font(font.bold())
             .multilineTextAlignment(.center)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
     }
 }
 
@@ -257,13 +267,15 @@ struct GameView : View {
 /// come, or beneath a cancellation.
 private struct GameCardDetails: View {
     var game: Game
+    /// The card's contrast-picked ink (`GameView.ink`).
+    var ink: Color
     var dimmed: Bool
 
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             Text(game.opponent)
                 .font(.caption.bold())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(ink)
 
             if dimmed {
                 RemoteImage(url: URL(string: game.opponentLogo)) {
@@ -292,7 +304,7 @@ private struct GameCardDetails: View {
     private func line(_ text: String) -> some View {
         Text(text)
             .font(.caption2.weight(.medium))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
             .opacity(dimmed ? 0.5 : 1)
     }
 }
