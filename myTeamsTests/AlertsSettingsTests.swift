@@ -70,6 +70,7 @@ struct AlertsSettingsTests {
         #expect(row.actionTitle == "Open Settings")
         #expect(row.actionAccessibilityLabel == "Open Settings to turn on notifications")
         #expect(row.title == "Notifications Off")
+        #expect(row.tint == .off)
     }
 
     @Test("Granted offers nothing")
@@ -79,6 +80,7 @@ struct AlertsSettingsTests {
         #expect(row.actionTitle == nil)
         #expect(row.actionAccessibilityLabel == nil)
         #expect(row.title == "Notifications On")
+        #expect(row.tint == .standard)
     }
 
     @Test("Live Activities off offers Settings with a note; on offers nothing")
@@ -87,9 +89,11 @@ struct AlertsSettingsTests {
         #expect(off.action == .openSettings)
         #expect(off.actionAccessibilityLabel == "Open Settings to turn on Live Activities")
         #expect(off.detail.contains("Settings"))
+        #expect(off.tint == .off)
         let on = AlertsStatusRow.liveActivities(enabled: true)
         #expect(on.action == nil)
         #expect(on.title == "Live Activities On")
+        #expect(on.tint == .standard)
     }
 
     // MARK: Model
