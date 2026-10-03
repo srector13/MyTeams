@@ -325,11 +325,15 @@ private struct TeamPicker: View {
             .padding(.horizontal)
             .contentShape(.capsule)
             .background {
-                // One pill, handed from crest to crest by its glass ID.
+                // One pill, handed from crest to crest by its glass ID. Only
+                // a marker, so it takes no touches: interactive glass tracks
+                // touches itself, and in a label it competes with the
+                // crests' buttons for the tap that moves the selection.
                 if selected {
                     Color.clear
-                        .glassChrome(tint: Color(hexString: fillHex), interactive: true)
+                        .glassChrome(tint: Color(hexString: fillHex))
                         .glassEffectID("selection", in: glass)
+                        .allowsHitTesting(false)
                 }
             }
         }
