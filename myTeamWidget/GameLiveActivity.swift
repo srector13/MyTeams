@@ -9,6 +9,7 @@
 #if canImport(ActivityKit) && os(iOS)
 import ActivityKit
 import SwiftUI
+import UIKit
 import WidgetKit
 
 /// Draws a followed game's Live Activity (`GameActivityAttributes`), which
@@ -98,8 +99,22 @@ private struct GameActivityBanner: View {
     /// caption, an invitation to act on a dimmed screen, goes.
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
+    /// The followed team's crest, which scales with the names beside it.
+    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 32
+
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            // Whose game this is (LA-3), as the island's leading mark says
+            // (DI-1). Only where the app has stored the crest: nothing is
+            // fetched here, and nothing rides in the payload (§5.4).
+            if let crest = game.followedCrest {
+                Image(uiImage: crest)
+                    .resizable()
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(width: crestSize, height: crestSize)
+                    .accessibilityHidden(true)
+            }
+
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 row(game.awayName, state.awayScore, leads: state.awayScore > state.homeScore)
                 row(game.homeName, state.homeScore, leads: state.homeScore > state.awayScore)
@@ -158,6 +173,9 @@ private struct GameActivityBanner: View {
             // that trails drops to regular.
             Text("\(score)")
                 .font(leads ? Theme.Typography.statFigure : Theme.Typography.statFigure.weight(.regular))
+                // Rolls the digits when this side scores, as the island
+                // does (LA-3, DI-2); a cross-fade under Reduce Motion.
+                .scoreTransition(value: Double(score))
         }
         .frame(maxWidth: 180)
         .accessibilityElement(children: .ignore)
@@ -222,9 +240,33 @@ extension GameActivityInfo {
     /// `favoriteID` was kept falls back to the board's league, which is the
     /// team's own outside cup ties.
     fileprivate var followedTeam: TeamRef? {
+        followedTeamID.flatMap(TeamCatalog.team(id:))
+    }
+
+    /// The followed team's `TeamRef.id`: `favoriteID`, or else the board's
+    /// league, as long as it names `teamID`.
+    private var followedTeamID: TeamRef.ID? {
         let id = favoriteID ?? LeagueID(path: league).map { TeamRef.id(league: $0, espnID: teamID) }
         guard let id, let parsed = TeamRef.parse(id: id), parsed.espnID == teamID else { return nil }
-        return TeamCatalog.team(id: id)
+        return id
+    }
+
+    /// The followed team's crest, if `LogoStore` has it: the app stores
+    /// its favorites' crests in the app group, which this extension
+    /// shares. Read from disk only, so the payload stays within its size
+    /// budget (§5.4) and the banner never waits on the network (LA-3).
+    fileprivate var followedCrest: UIImage? {
+        guard let id = followedTeamID, let parsed = TeamRef.parse(id: id) else { return nil }
+        // `LogoStore` files a crest under its league and ESPN id alone,
+        // so a team the bundle doesn't know needs only those.
+        let team = TeamCatalog.team(id: id) ?? TeamRef(
+            league: parsed.league, espnID: parsed.espnID,
+            displayName: "", shortName: "",
+            abbreviation: "", location: "",
+            colorHex: "", alternateColorHex: "",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+        return LogoStore.image(for: team, variant: .default)
     }
 
     /// An SF Symbol for the game's sport, for a followed team the bundle
