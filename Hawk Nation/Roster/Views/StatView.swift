@@ -8,45 +8,26 @@
 
 import SwiftUI
 
+/// A season statistic in a player sheet's grid: the figure over its label.
+/// Sizes to its text; the grid sets the width (P-4).
 struct StatView: View {
-    @Environment(\.containerSize) private var containerSize
-
     var title: String
     var info: String
-    
+
     var body: some View {
-            VStack(alignment: .center, spacing: 0){
-                if(info == "") {
-                    Text("N/A")
-                        .font(.system(size: 20))
-                        .fontWeight(.black)
-                        .minimumScaleFactor(0.5)
-                        //.lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                    
-                } else {
-                    Text(info)
-                        .font(.system(size: 20))
-                        .fontWeight(.black)
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                }
-                
-                Text(title)
-                    .font(.system(size: 15))
-                    .fontWeight(.bold)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color(uiColor: .systemGray))
-                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                
-                
-            }.frame(width: (containerSize.width/4), height: containerSize.width/3)
+        VStack(alignment: .center, spacing: Theme.Spacing.xs) {
+            Text(info == "" ? "N/A" : info)
+                .font(Theme.Typography.statFigure)
+                .multilineTextAlignment(.center)
+
+            Text(title)
+                .font(Theme.Typography.statLabel)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(uiColor: .systemGray))
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.s)
+    }
 }
 
 #Preview {
