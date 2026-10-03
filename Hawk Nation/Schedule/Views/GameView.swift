@@ -9,18 +9,29 @@
 import SwiftUI
 
 struct LoadingGameView : View {
+    @ScaledMetric(relativeTo: .body) private var cardWidth = GameView.baseWidth
+    @ScaledMetric(relativeTo: .body) private var cardHeight = GameView.baseHeight
+
     var body: some View {
         LoadingView()
-            .frame(width: 120, height: 160)
+            .frame(width: cardWidth, height: cardHeight)
     }
 }
 
 /// A game's card in a schedule carousel: the opponent and kick-off, overlaid
 /// with the result, the live state, or a cancellation.
 ///
+/// The card scales with Dynamic Type; at accessibility sizes, where the
+/// schedule is a vertical list, it spans the list's width and grows to fit
+/// its text instead (§5.3).
+///
 /// What differs by sport — what a level result is called, and how a game in
 /// progress is drawn — comes from the league's `LeagueDescriptor`.
 struct GameView : View {
+
+    /// The card's size at the default text size, in points.
+    static let baseWidth: CGFloat = 120
+    static let baseHeight: CGFloat = 160
 
     var game: Game
     var team: TeamRef
@@ -30,104 +41,115 @@ struct GameView : View {
     /// schedule feed's own fields.
     var liveScore: LiveGameScore?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .body) private var cardWidth = GameView.baseWidth
+    @ScaledMetric(relativeTo: .body) private var cardHeight = GameView.baseHeight
+    @ScaledMetric(relativeTo: .body) private var infoBarHeight: CGFloat = 40
+    @ScaledMetric(relativeTo: .caption) private var infoPillWidth: CGFloat = 80
+    @ScaledMetric(relativeTo: .caption) private var infoPillHeight: CGFloat = 25
+
     private var teamColor: Color { team.color }
 
     private var league: LeagueDescriptor { team.league.descriptor }
 
+    /// At accessibility text sizes the card fills a list row and sizes to
+    /// its text rather than keeping the carousel's fixed shape.
+    private var fillsRow: Bool { dynamicTypeSize.isAccessibilitySize }
+
     var body: some View {
         VStack(spacing: 0) {
-            ZStack() {
-                Rectangle()
-                    .foregroundStyle(teamColor)
+            status
+                .frame(maxWidth: .infinity)
+                .frame(height: fillsRow ? nil : cardHeight - infoBarHeight)
+                .background {
+                    ZStack {
+                        Rectangle()
+                            .foregroundStyle(teamColor)
 
-                TeamLogo(team: team, size: 200, forceVariant: .default)
-                    .opacity(0.1)
-                    .saturation(0.1)
-                    .contrast(0.5)
-                    .offset(x: 40, y: 50)
-                if(game.cancelled || game.postponed) {
-                    Group {
-                        ZStack {
-                            GameCardDetails(game: game, dimmed: false)
-
-                            tint
-
-                            if(game.cancelled) {
-                                Text("Cancelled")
-                                    .font(.system(size: 20))
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(Color.white)
-                            } else if (game.postponed) {
-                                Text("Postponed")
-                                    .font(.system(size: 20))
-                                    .fontWeight(.bold)
-                                    .foregroundStyle(Color.white)
-                            }
-                        }
-                    }
-                } else {
-                    if(game.completed) {
-                        Group {
-                            ZStack {
-                                GameCardDetails(game: game, dimmed: true)
-
-                                tint
-
-                                if (game.gameWin) {
-                                    result("Win", score: game.score + " - " + game.opponentScore)
-                                } else if (game.isDraw) {
-                                    result(league.drawLabel, score: game.score + " - " + game.opponentScore)
-                                } else {
-                                    result("Loss", score: game.opponentScore + " - " + game.score)
-                                }
-                            }
-                        }
-                    } else {
-                        if(game.dateAsDate < Date()) {
-                            Group {
-                                ZStack {
-                                    GameCardDetails(game: game, dimmed: true)
-
-                                    tint
-
-                                    switch league.liveCardStyle {
-                                    case .periodFirst:
-                                        periodFirstLiveState
-                                    case .scoreFirst:
-                                        scoreFirstLiveState
-                                    }
-                                }
-                            }
-                        } else {
-                            Group {
-                                GameCardDetails(game: game, dimmed: false)
-                            }
-                        }
+                        TeamLogo(team: team, size: 200, forceVariant: .default)
+                            .opacity(0.1)
+                            .saturation(0.1)
+                            .contrast(0.5)
+                            .offset(x: 40, y: 50)
                     }
                 }
+                .clipped()
 
-
-            }.frame(height: 120)
             ZStack() {
                 Rectangle()
                     .foregroundStyle(Color(uiColor: .systemGray4))
 
-                Group() {
-                    RoundedRectangle(cornerRadius: 20)
-                        .frame(width: 80, height: 25)
-                        .foregroundStyle(teamColor)
-
-                    Text("Info")
-                        .font(.system(size: 12))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Color.white)
-                }
-
-            }.frame(height: 40)
+                Text("Info")
+                    .font(Theme.Typography.statLabel)
+                    .foregroundStyle(Color.white)
+                    .frame(minWidth: infoPillWidth, minHeight: infoPillHeight)
+                    .background(teamColor, in: Theme.Radius.chip)
+            }
+            .frame(height: infoBarHeight)
 
         }.background(Color(uiColor: .systemBackground))
-            .frame(width: 120, height: 160)
+            .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight)
+            .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
             .clipShape(.rect(cornerRadius: 10))
+    }
+
+    /// The details, with the result, live state or cancellation over them.
+    @ViewBuilder
+    private var status: some View {
+        if(game.cancelled || game.postponed) {
+            ZStack {
+                washedDetails(dimmed: false)
+
+                if(game.cancelled) {
+                    Text("Cancelled")
+                        .font(.title3.bold())
+                        .foregroundStyle(Color.white)
+                } else if (game.postponed) {
+                    Text("Postponed")
+                        .font(.title3.bold())
+                        .foregroundStyle(Color.white)
+                }
+            }
+        } else if(game.completed) {
+            ZStack {
+                washedDetails(dimmed: true)
+
+                if (game.gameWin) {
+                    result("Win", score: game.score + " - " + game.opponentScore)
+                } else if (game.isDraw) {
+                    result(league.drawLabel, score: game.score + " - " + game.opponentScore)
+                } else {
+                    result("Loss", score: game.opponentScore + " - " + game.score)
+                }
+            }
+        } else if(game.dateAsDate < Date()) {
+            ZStack {
+                washedDetails(dimmed: true)
+
+                switch league.liveCardStyle {
+                case .periodFirst:
+                    periodFirstLiveState
+                case .scoreFirst:
+                    scoreFirstLiveState
+                }
+            }
+        } else {
+            details(dimmed: false)
+        }
+    }
+
+    private func details(dimmed: Bool) -> some View {
+        GameCardDetails(game: game, dimmed: dimmed)
+            .padding(.vertical, fillsRow ? Theme.Spacing.m : 0)
+    }
+
+    /// The details beneath the team-coloured wash a status sits on. The wash
+    /// is an overlay so it covers the details at whatever height they take.
+    private func washedDetails(dimmed: Bool) -> some View {
+        details(dimmed: dimmed)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay { tint }
     }
 
     /// The team-coloured wash laid over the details beneath a status.
@@ -141,15 +163,10 @@ struct GameView : View {
     private func result(_ outcome: String, score: String) -> some View {
         VStack {
             Text(outcome)
-                .font(.system(size: 24))
-                .fontWeight(.bold)
+                .font(.title2.bold())
                 .foregroundStyle(Color.white)
 
-            Text(score)
-                .font(.system(size: 20))
-                .fontWeight(.heavy)
-                .minimumScaleFactor(0.5)
-                .foregroundStyle(Color.white)
+            scoreText(score, font: .title3.weight(.heavy))
         }
     }
 
@@ -157,10 +174,10 @@ struct GameView : View {
     private var periodFirstLiveState: some View {
         VStack {
             if(game.gameHalftime) {
-                liveLine("Halftime", size: 15)
+                liveLine("Halftime", font: .subheadline)
             } else {
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
-                liveLine(game.gameClock, size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
+                liveLine(game.gameClock, font: .subheadline)
             }
 
             if let liveScore {
@@ -180,19 +197,19 @@ struct GameView : View {
                     liveScoreText(liveScore)
 
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.caption.bold())
                         .foregroundStyle(Color.green)
                 }
 
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
-                liveLine(game.gameClock, size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
+                liveLine(game.gameClock, font: .subheadline)
             }
         } else if let liveScore, liveScore.score == liveScore.opponentScore {
             VStack {
                 liveScoreText(liveScore)
 
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 15)
-                liveLine(game.gameClock, size: 15)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
+                liveLine(game.gameClock, font: .subheadline)
             }
         } else if let liveScore {
             VStack {
@@ -200,29 +217,34 @@ struct GameView : View {
                     liveScoreText(liveScore)
 
                     Image(systemName: "arrow.down")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.caption.bold())
                         .foregroundStyle(Color.red)
                 }
 
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), size: 12)
-                liveLine(game.gameClock, size: 12)
+                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .caption)
+                liveLine(game.gameClock, font: .caption)
             }
         }
     }
 
     private func liveScoreText(_ liveScore: LiveGameScore) -> some View {
-        Text("\(liveScore.score) - \(liveScore.opponentScore)")
-            .font(.system(size: 24))
-            .fontWeight(.heavy)
-            .minimumScaleFactor(0.5)
+        scoreText("\(liveScore.score) - \(liveScore.opponentScore)", font: .title2.weight(.heavy))
+    }
+
+    /// A score on one line. The card now grows with the text, so this only
+    /// trims the odd wide score, and never below 0.8 (D-4).
+    private func scoreText(_ score: String, font: Font) -> some View {
+        Text(score)
+            .font(font.monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(Color.white)
     }
 
-    private func liveLine(_ text: String, size: CGFloat) -> some View {
+    private func liveLine(_ text: String, font: Font) -> some View {
         Text(text)
-            .font(.system(size: size))
-            .fontWeight(.bold)
-            .minimumScaleFactor(0.5)
+            .font(font.bold())
+            .multilineTextAlignment(.center)
             .foregroundStyle(Color.white)
     }
 }
@@ -238,8 +260,7 @@ private struct GameCardDetails: View {
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             Text(game.opponent)
-                .font(.system(size: 12))
-                .fontWeight(.bold)
+                .font(.caption.bold())
                 .foregroundStyle(Color.white)
 
             if dimmed {
@@ -268,8 +289,7 @@ private struct GameCardDetails: View {
 
     private func line(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10))
-            .fontWeight(.medium)
+            .font(.caption2.weight(.medium))
             .foregroundStyle(Color.white)
             .opacity(dimmed ? 0.5 : 1)
     }

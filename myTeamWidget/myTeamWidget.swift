@@ -140,8 +140,7 @@ struct WidgetEntryView: View {
     private var systemSmall: some View {
         VStack(spacing: 1) {
             Text(entry.tempGame.teamName)
-                .font(.system(size: 16))
-                .fontWeight(.bold)
+                .font(.headline)
                 .foregroundStyle(.white)
                 .padding(.horizontal, 15)
 
@@ -154,17 +153,20 @@ struct WidgetEntryView: View {
             }
 
             Text(entry.tempGame.gameDate)
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(.white)
 
             Text(entry.tempGame.gameTime)
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(.white)
 
             Text(entry.tempGame.gameChannel)
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundStyle(.white)
         }
+        // The small tile can't grow, so its text scales only as far as the
+        // crest and four lines still fit (W-2).
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Widgets must declare their own background; without this the system
@@ -203,12 +205,14 @@ private struct AccessoryEntryView: View {
                     AccessoryWidgetBackground()
                     VStack(spacing: 0) {
                         Text(entry.tempGame.teamName)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                         Text(entry.tempGame.gameTime)
-                            .font(.system(size: 10))
+                            .font(.caption2)
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
+                    // A fixed circle: the text scales only a little.
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                     .padding(4)
                 }
             } else {

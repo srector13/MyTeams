@@ -19,6 +19,15 @@ struct LeadersSection<Player: RosterPlayer>: View {
 
     @State private var showingLeague = false
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The team's leaders, one card per board that has one.
+    private var leaderCards: [TeamLeader] {
+        model.leaders.compactMap { board in
+            board.rows.first.map { TeamLeader(board: board, row: $0) }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "trophy", title: "Leaders") {
@@ -26,7 +35,7 @@ struct LeadersSection<Player: RosterPlayer>: View {
                     showingLeague = true
                 } label: {
                     Text("\(team.league.badge) Leaders")
-                        .font(.system(size: 15))
+                        .font(.subheadline)
                         .foregroundStyle(team.color)
                 }
             }
@@ -47,13 +56,16 @@ struct LeadersSection<Player: RosterPlayer>: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+            } else if dynamicTypeSize.isAccessibilitySize {
+                // At accessibility text sizes the carousel becomes a list.
+                StackedCarousel(items: leaderCards) { leader in
+                    TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
+                }
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: 10) {
-                        ForEach(model.leaders) { board in
-                            if let row = board.rows.first {
-                                TeamLeaderCard(board: board, row: row, teamColor: team.color)
-                            }
+                        ForEach(leaderCards) { leader in
+                            TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
                         }
                     }
                     .padding([.horizontal, .bottom], 10)
@@ -68,32 +80,49 @@ struct LeadersSection<Player: RosterPlayer>: View {
     }
 }
 
+/// A board and its top row, as the team page shows them.
+private struct TeamLeader: Identifiable {
+    let board: LeaderBoard
+    let row: LeaderBoardRow
+
+    var id: LeaderBoard.ID { board.id }
+}
+
 /// One board's leader on the team page: the figure, the label, the player.
+///
+/// A fixed-width card in the carousel, scaled with the text; a full-width
+/// row in the accessibility-size list.
 private struct TeamLeaderCard: View {
     let board: LeaderBoard
     let row: LeaderBoardRow
     let teamColor: Color
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 110
+
+    private var fillsRow: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(spacing: 4) {
             LeaderHeadshot(url: row.leader.headshotURL, size: 56)
 
             Text(row.value)
-                .font(.system(size: 22))
-                .fontWeight(.bold)
-                .monospacedDigit()
+                .font(Theme.Typography.statFigure)
                 .foregroundStyle(teamColor)
 
             Text(board.label)
-                .font(.system(size: 12))
-                .fontWeight(.semibold)
+                .font(Theme.Typography.statLabel)
                 .foregroundStyle(Color(uiColor: .systemGray))
+                .multilineTextAlignment(.center)
 
             Text(row.leader.shortName.isEmpty ? row.leader.name : row.leader.shortName)
-                .font(.system(size: 13))
-                .lineLimit(1)
+                .font(.footnote)
+                .lineLimit(fillsRow ? nil : 1)
+                .multilineTextAlignment(.center)
         }
-        .frame(width: 110)
+        .frame(width: fillsRow ? nil : cardWidth)
+        .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 15)
@@ -171,7 +200,7 @@ struct LeagueLeadersView: View {
             List {
                 if let leaders, !leaders.seasonName.isEmpty {
                     Text(Self.caption(leaders))
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundStyle(Color(uiColor: .systemGray))
                 }
 
@@ -224,43 +253,57 @@ private struct LeaderRow: View {
     let followed: Bool
     let teamColor: Color
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The rank column, wide enough for "10" at the current text size.
+    @ScaledMetric(relativeTo: .subheadline) private var rankWidth: CGFloat = 22
+
+    /// At accessibility text sizes the figure moves under the player, so
+    /// the name keeps the row's width.
+    private var stacksFigure: Bool { dynamicTypeSize.isAccessibilitySize }
+
     var body: some View {
-        HStack(spacing: 10) {
-            Text("\(row.rank)")
-                .font(.system(size: 14))
-                .monospacedDigit()
-                .foregroundStyle(Color(uiColor: .systemGray))
-                .frame(width: 22, alignment: .trailing)
+        let layout = stacksFigure
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.s))
+            : AnyLayout(HStackLayout(spacing: 10))
 
-            LeaderHeadshot(url: row.leader.headshotURL, size: 36)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.leader.name)
-                    .font(.system(size: 15))
-                    .fontWeight(followed ? .bold : .regular)
-                    .lineLimit(1)
-
-                Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 12))
+        layout {
+            HStack(spacing: 10) {
+                Text("\(row.rank)")
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color(uiColor: .systemGray))
+                    .frame(width: rankWidth, alignment: .trailing)
 
-                if let detail = row.detail {
-                    Text(detail)
-                        .font(.system(size: 11))
+                LeaderHeadshot(url: row.leader.headshotURL, size: 36)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.leader.name)
+                        .font(Theme.Typography.body)
+                        .fontWeight(followed ? .bold : .regular)
+                        .lineLimit(stacksFigure ? nil : 1)
+
+                    Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
+                        .font(Theme.Typography.caption)
                         .foregroundStyle(Color(uiColor: .systemGray))
-                        .lineLimit(2)
+
+                    if let detail = row.detail {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(Color(uiColor: .systemGray))
+                            .lineLimit(stacksFigure ? nil : 2)
+                    }
                 }
             }
 
-            Spacer()
+            if !stacksFigure {
+                Spacer()
+            }
 
-            VStack(alignment: .trailing, spacing: 0) {
+            VStack(alignment: stacksFigure ? .leading : .trailing, spacing: 0) {
                 Text(row.value)
-                    .font(.system(size: 17))
-                    .fontWeight(.bold)
-                    .monospacedDigit()
+                    .font(.headline.monospacedDigit())
                 Text(label)
-                    .font(.system(size: 10))
+                    .font(.caption2)
                     .foregroundStyle(Color(uiColor: .systemGray))
             }
         }

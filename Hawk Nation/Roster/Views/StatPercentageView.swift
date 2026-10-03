@@ -8,54 +8,42 @@
 
 import SwiftUI
 
+/// A rate in a player sheet's grid: a half-ring gauge over its label, or
+/// "N/A" when the rate has no attempts behind it. Sizes to its text, with
+/// the ring scaled alongside it; the grid sets the width (P-4).
 struct StatPercentageView: View {
-    @Environment(\.containerSize) private var containerSize
-
     var progress: CGFloat
     var color: UIColor
     var title: String
 
+    @ScaledMetric(relativeTo: .body) private var ringSize: CGFloat = 90
+
     var body: some View {
-
-        
-            VStack(alignment: .center, spacing: 0) {
-                
-                
-                if(progress.isFinite) {
-                    CircularProgress(percentage: progress,
-                                      fontSize: 10,
-                                      backgroundColor: Color(uiColor: .systemBackground),
-                                      fontColor : Color.primary,
-                                      borderColor1: Color(color.darker()!),
-                                      borderColor2: LinearGradient(gradient: Gradient(colors: [Color(color), Color(color.lighter()!)]),startPoint: .top, endPoint: .bottom)
-                          ).frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                    //.offset(y: 10)
-                    //.padding(.bottom, 10)
-                } else {
-                    Text("N/A")
-                        .font(.system(size: 15))
-                        .fontWeight(.black)
-                        .minimumScaleFactor(0.5)
-                        //.lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                }
-                
-                Text(title)
-                    .font(.system(size: 15))
-                    .fontWeight(.bold)
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(2)
+        VStack(alignment: .center, spacing: Theme.Spacing.xs) {
+            if(progress.isFinite) {
+                CircularProgress(percentage: progress,
+                                 font: Theme.Typography.caption,
+                                 backgroundColor: Color(uiColor: .systemBackground),
+                                 fontColor : Color.primary,
+                                 borderColor1: Color(color.darker()!),
+                                 borderColor2: LinearGradient(gradient: Gradient(colors: [Color(color), Color(color.lighter()!)]),startPoint: .top, endPoint: .bottom)
+                )
+                .frame(width: ringSize, height: ringSize)
+            } else {
+                Text("N/A")
+                    .font(.subheadline.weight(.black))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color(uiColor: .systemGray))
-                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .center)
-                
-            }.frame(width: (containerSize.width/4), height: (containerSize.width/3))
+            }
+
+            Text(title)
+                .font(Theme.Typography.statLabel)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(uiColor: .systemGray))
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, Theme.Spacing.s)
+    }
 }
-
-
-
 
 extension UIColor {
 

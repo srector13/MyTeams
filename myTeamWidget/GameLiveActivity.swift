@@ -28,43 +28,51 @@ struct GameLiveActivity: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     GameActivityTeamScore(name: game.awayName, score: state.awayScore, alignment: .leading)
+                        .islandTextSize()
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     GameActivityTeamScore(name: game.homeName, score: state.homeScore, alignment: .trailing)
+                        .islandTextSize()
                 }
                 // The Dynamic Island's regions are sized by the system, so
-                // their fonts stay fixed; VoiceOver gets labels instead.
+                // their text stays at the default size (`islandTextSize()`);
+                // VoiceOver gets labels instead.
                 DynamicIslandExpandedRegion(.center) {
                     Text(state.stage)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
+                        .islandTextSize()
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     Text(game.matchup)
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .islandTextSize()
                 }
             } compactLeading: {
                 Text(state.stage)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+                    .islandTextSize()
             } compactTrailing: {
                 Text("\(state.awayScore)–\(state.homeScore)")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.footnote.bold())
                     .monospacedDigit()
+                    .islandTextSize()
                     .accessibilityLabel(state.spokenScore(game))
             } minimal: {
                 // The minimal presentation has no stage beside it, so its
                 // label carries the stage too.
                 Text("\(state.awayScore)–\(state.homeScore)")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.caption2.bold())
                     .monospacedDigit()
                     .minimumScaleFactor(0.5)
+                    .islandTextSize()
                     .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             }
             .widgetURL(game.deepLink)
@@ -144,16 +152,25 @@ private struct GameActivityTeamScore: View {
     var body: some View {
         VStack(alignment: alignment, spacing: 0) {
             Text(name)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.caption.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text("\(score)")
-                .font(.system(size: 28, weight: .bold))
+                .font(.title.bold())
                 .monospacedDigit()
         }
         .padding(.horizontal, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name + " " + String(score))
+    }
+}
+
+extension View {
+    /// Holds Dynamic Island text at the default text size. The island's
+    /// regions are sized by the system and don't grow with Dynamic Type, so
+    /// the text styles there name a role, not a size that may scale (§5.3).
+    fileprivate func islandTextSize() -> some View {
+        dynamicTypeSize(.large)
     }
 }
 

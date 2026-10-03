@@ -279,7 +279,11 @@ private struct TeamPicker: View {
 
                         Button(action: editTeams) {
                             Image(systemName: "plus")
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(.subheadline.weight(.semibold))
+                                // The circle matches the fixed-size crests beside
+                                // it, so the symbol stops growing where it would
+                                // outgrow the circle.
+                                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                                 .frame(width: 44, height: 44)
                                 .contentShape(.circle)
                         }

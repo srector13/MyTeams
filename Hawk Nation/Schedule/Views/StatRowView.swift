@@ -14,30 +14,47 @@ struct StatRowView: View {
     var title: String
     var homeStat: String
     var awayStat: String
-    
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack() {
-            Text(homeStat)
-                .font(.system(size: 20))
-                .fontWeight(.bold)
-                .minimumScaleFactor(0.5)
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-        
-            Text(title)
-                .font(.system(size: 15))
-                .foregroundStyle(Color(uiColor: .systemGray))
-                .fontWeight(.bold)
-                .lineLimit(1)
-                .minimumScaleFactor(0.1)
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
-            
-            Text(awayStat)
-                .font(.system(size: 20))
-                .fontWeight(.bold)
-                .minimumScaleFactor(0.5)
-                .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
-            
+        if dynamicTypeSize.isAccessibilitySize {
+            // A third of the width can't hold the title at these sizes: it
+            // goes above, and the two figures share the row beneath it.
+            VStack(spacing: Theme.Spacing.xs) {
+                titleText
+
+                HStack {
+                    stat(homeStat, alignment: .leading)
+                    stat(awayStat, alignment: .trailing)
+                }
+            }
+        } else {
+            HStack() {
+                stat(homeStat, alignment: .leading)
+
+                titleText
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
+
+                stat(awayStat, alignment: .trailing)
+            }
         }
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.subheadline.bold())
+            .foregroundStyle(Color(uiColor: .systemGray))
+            .multilineTextAlignment(.center)
+    }
+
+    /// A team's figure. One line, trimmed no further than 0.8 (D-4).
+    private func stat(_ text: String, alignment: Alignment) -> some View {
+        Text(text)
+            .font(.title3.bold().monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: alignment)
     }
 }
 
