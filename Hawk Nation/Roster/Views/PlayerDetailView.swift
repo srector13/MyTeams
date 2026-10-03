@@ -515,7 +515,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                     }
                     Spacer()
                 }
-                .animation(.snappy, value: pickerSelectedItem)
+                // A blur-replace between tabs (P-7); the swap lands at once
+                // under Reduce Motion.
+                .motionAnimation(Theme.Motion.stateChange, value: pickerSelectedItem)
             }
 
             Spacer()

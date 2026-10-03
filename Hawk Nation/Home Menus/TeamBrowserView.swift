@@ -105,6 +105,10 @@ struct TeamBrowserView: View {
     @State private var remoteHits: [TeamRef] = []
     @State private var isSearchingRemotely = false
 
+    /// The league chips' glass, so the prominent capsule morphs from chip
+    /// to chip, as the crest picker's pill does (B-4).
+    @Namespace private var chipGlass
+
     /// A row's crest, which scales with the team name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
 
@@ -217,7 +221,8 @@ struct TeamBrowserView: View {
 
     /// The league chips: glass buttons, the chosen league's prominent, in one
     /// container so they share a sampling pass (B-1, §5.2). They're the only
-    /// glass in this strip.
+    /// glass in this strip. Choosing a league morphs the prominent glass
+    /// across to its chip, with a selection haptic (B-4, X-11).
     private var leagueChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             GlassEffectContainer(spacing: Theme.Spacing.s) {
@@ -232,6 +237,8 @@ struct TeamBrowserView: View {
                 .padding(.vertical, Theme.Spacing.s)
             }
         }
+        .motionAnimation(Theme.Motion.selection, value: league)
+        .sensoryFeedback(.selection, trigger: league)
     }
 
     @ViewBuilder
@@ -247,13 +254,19 @@ struct TeamBrowserView: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("teamBrowser.league.\(item.label)")
 
+        // The chosen chip's glass carries one ID, handed from chip to chip
+        // as the crest picker's pill is (H-1), so the container morphs it
+        // across rather than one capsule fading out and another in. No new
+        // glass: each chip keeps the one its button style draws (§5.2).
         if selected {
             chip
                 .buttonStyle(.glassProminent)
                 .tint(.accentColor)
+                .glassEffectID("selection", in: chipGlass)
         } else {
             chip
                 .buttonStyle(.glass)
+                .glassEffectID("league.\(item.label)", in: chipGlass)
         }
     }
 
@@ -316,9 +329,13 @@ struct TeamBrowserView: View {
                     .foregroundStyle(followed ? Color.accentColor : Color.secondary)
                     .imageScale(.large)
                     // The store changes outside any animation; the replace
-                    // effect needs one to play.
-                    .animation(.snappy, value: followed)
+                    // effect needs one to play. None under Reduce Motion.
+                    .motionAnimation(Theme.Motion.stateChange, value: followed)
             }
+        }
+        // A success tap on follow, a lighter one on unfollow (B-4, X-11).
+        .sensoryFeedback(trigger: followed) { _, nowFollowed in
+            nowFollowed ? .success : .impact(weight: .light)
         }
         .accessibilityLabel("\(team.displayName), \(team.league.badge)")
         .accessibilityAddTraits(followed ? .isSelected : [])
