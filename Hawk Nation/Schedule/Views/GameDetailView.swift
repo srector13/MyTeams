@@ -188,10 +188,7 @@ struct GameDetailView: View {
                         .id(gameInfo.venueImage)
                 }
 
-                Rectangle()
-                    .foregroundStyle(Color(hexString: gameInfo.gameColor))
-                    .background(Color(uiColor: .black))
-                    .opacity(0.6)
+                scrim
             }
             // The fill image overflows the header: clip it to the header's
             // frame, then mirror what's left into any safe area beside it
@@ -199,6 +196,32 @@ struct GameDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .backgroundExtensionEffect()
+        }
+    }
+
+    /// The game's colour (black until the summary gives one) over the
+    /// venue, weighted to the foot (D-5): the old flat 60% through the top
+    /// third, deepening to 85% where the venue line sits over the busiest
+    /// part of a stadium photo. Nowhere lighter than it was.
+    ///
+    /// No radius of its own: the header runs to the sheet's top edge, whose
+    /// corners round it concentric with the device, and its foot is
+    /// full-bleed above the inset card (X-4's 10-inside-20 is gone).
+    private var scrim: some View {
+        ZStack {
+            Color.black
+            Color(hexString: gameInfo.gameColor)
+        }
+        .mask {
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.6), location: 0),
+                    .init(color: .black.opacity(0.6), location: 0.35),
+                    .init(color: .black.opacity(0.85), location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
     }
 
