@@ -198,45 +198,37 @@ struct GameView : View {
         }
     }
 
-    /// A game in progress as `LiveCardStyle.scoreFirst` draws it: an arrow
-    /// beside the score says whether the followed team leads or trails. With
-    /// no live score yet, only the tinted details show.
+    /// A game in progress as `LiveCardStyle.scoreFirst` draws it: a
+    /// triangle beside the score says whether the followed team leads or
+    /// trails. With no live score yet, only the tinted details show.
     @ViewBuilder
     private var scoreFirstLiveState: some View {
-        if let liveScore, liveScore.score > liveScore.opponentScore {
+        if let liveScore {
             VStack {
                 HStack() {
                     liveScoreText(liveScore)
 
-                    Image(systemName: "arrow.up")
-                        .font(.caption.bold())
-                        .foregroundStyle(Color.green)
+                    if liveScore.score != liveScore.opponentScore {
+                        leadMarker(leading: liveScore.score > liveScore.opponentScore)
+                    }
                 }
 
+                // One size whether leading, level or trailing (G-4).
                 liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
                 liveLine(game.gameClock, font: .subheadline)
-            }
-        } else if let liveScore, liveScore.score == liveScore.opponentScore {
-            VStack {
-                liveScoreText(liveScore)
-
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
-                liveLine(game.gameClock, font: .subheadline)
-            }
-        } else if let liveScore {
-            VStack {
-                HStack() {
-                    liveScoreText(liveScore)
-
-                    Image(systemName: "arrow.down")
-                        .font(.caption.bold())
-                        .foregroundStyle(Color.red)
-                }
-
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .caption)
-                liveLine(game.gameClock, font: .caption)
             }
         }
+    }
+
+    /// Leading or trailing, told by the triangle's direction and a spoken
+    /// label rather than green against red (G-4). Drawn in the card's ink,
+    /// which reads on any team colour where green or red may not.
+    private func leadMarker(leading: Bool) -> some View {
+        Image(systemName: leading ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+            .font(.caption.bold())
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(ink)
+            .accessibilityLabel(leading ? "Leading" : "Trailing")
     }
 
     private func liveScoreText(_ liveScore: LiveGameScore) -> some View {
@@ -334,7 +326,11 @@ extension Game {
             parts.append("\(outcome), \(score) to \(opponentScore)")
         } else if dateAsDate < Date() {
             if let liveScore {
-                parts.append("Live, \(liveScore.score) to \(liveScore.opponentScore)")
+                // The card's lead marker, spoken (G-4): the card's label
+                // replaces its children's, the marker's included.
+                let standing = liveScore.score > liveScore.opponentScore ? "leading, "
+                    : liveScore.score < liveScore.opponentScore ? "trailing, " : ""
+                parts.append("Live, \(standing)\(liveScore.score) to \(liveScore.opponentScore)")
             } else {
                 parts.append("Live")
             }
