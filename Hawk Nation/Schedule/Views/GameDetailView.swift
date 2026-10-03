@@ -8,6 +8,10 @@
 
 import SwiftUI
 
+/// The band at the top of a game sheet left to the system grabber and the
+/// close button floating over it: the button's 44 pt and its inset.
+private let closeButtonClearance: CGFloat = 44 + Theme.Spacing.m
+
 /// The sheet a schedule card opens: the venue, the scoreline and the box
 /// score, refreshed while the game is live.
 ///
@@ -90,15 +94,24 @@ struct GameDetailView: View {
                     .frame(maxWidth: .infinity)
                     .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
                     .padding(.horizontal, Theme.Spacing.m)
-                    .ignoresSafeArea(edges: .top)
                 }
             }
 
             Spacer()
         }
         .scrollIndicators(.hidden)
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
+        // No background of its own: the system sheet draws the surface
+        // (glass at the medium detent), and the venue header runs under the
+        // grabber to the sheet's top edge.
+        .overlay(alignment: .topTrailing) {
+            SheetCloseButton()
+                // Pinned to its 44 pt circle, as the crest picker's "+" is.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .accessibilityIdentifier("gameDetail.close")
+                .padding(Theme.Spacing.m)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .pollingTask {
             let load = await league.downloadGameSheet(
                 gameID: game.gameID,
@@ -141,15 +154,15 @@ struct GameDetailView: View {
     ///
     /// At least `headerHeight` tall, and taller when the text needs it: the
     /// venue and its wash sit behind the text rather than fixing its height.
+    /// The text starts below the grabber and close button; the venue runs
+    /// on under them, and the sheet's own corners round it.
     private var header: some View {
         VStack(spacing: 0) {
-            GameDetailDismissHandle()
-
             Text(game.competitionName)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .padding(.top, 5)
+                .padding(.top, closeButtonClearance)
 
             Spacer(minLength: Theme.Spacing.m)
 
@@ -180,8 +193,13 @@ struct GameDetailView: View {
                     .background(Color(uiColor: .black))
                     .opacity(0.6)
             }
+            // The fill image overflows the header: clip it to the header's
+            // frame, then mirror what's left into any safe area beside it
+            // (landscape), where `ignoresSafeArea` used to stretch it.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .backgroundExtensionEffect()
         }
-        .clipShape(.rect(cornerRadius: 10))
     }
 
     /// The venue, then its city and state where the league's summaries give
@@ -226,7 +244,7 @@ struct GameDetailView: View {
 
                     side(followed: !game.gameHome, alignment: .trailing)
                 }
-            }.ignoresSafeArea()
+            }
         }
     }
 
@@ -291,22 +309,6 @@ struct GameDetailView: View {
     }
 }
 
-/// The bar at the top of a game sheet that closes it.
-private struct GameDetailDismissHandle: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Button(action: {
-            dismiss()
-        }) {
-            RoundedRectangle(cornerRadius: 20)
-                .frame(width: 100, height: 5)
-                .foregroundStyle(Color(uiColor: .white))
-                .opacity(0.7)
-        }.padding([.top, .trailing, .leading, .bottom], 10)
-    }
-}
-
 /// The game sheet's placeholder until its first summary arrives, laid out
 /// like the header and scoreboard it stands in for.
 private struct GameDetailSkeleton: View {
@@ -324,7 +326,9 @@ private struct GameDetailSkeleton: View {
                     .frame(width: containerSize.width, height: 200)
 
                 VStack(spacing: 5) {
-                    GameDetailDismissHandle()
+                    // Where the grabber and close button float.
+                    Color.clear
+                        .frame(height: closeButtonClearance)
 
                     LoadingView()
                         .frame(width: containerSize.width-20, height: 25)
@@ -366,7 +370,6 @@ private struct GameDetailSkeleton: View {
             .frame(maxWidth: .infinity)
             .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
             .padding(.horizontal, Theme.Spacing.m)
-            .ignoresSafeArea(edges: .top)
         }
     }
 
