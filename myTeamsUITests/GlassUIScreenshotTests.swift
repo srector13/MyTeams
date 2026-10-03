@@ -213,11 +213,14 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
-    /// The first element `identifier` names that's on screen and tappable,
-    /// scrolling the page up to `swipes` times to bring one into view.
+    /// The first element whose identifier starts with `identifier` that's
+    /// on screen and tappable, scrolling the page up to `swipes` times to
+    /// bring one into view. A prefix, since cards carry their item's id
+    /// ("roster.player.<id>", "schedule.game.<id>").
     @MainActor
     private func firstHittable(_ identifier: String, in app: XCUIApplication, swipes: Int = 0) -> XCUIElement? {
-        let matches = app.descendants(matching: .any).matching(identifier: identifier)
+        let matches = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", identifier))
         guard matches.firstMatch.waitForExistence(timeout: 10) else { return nil }
         for attempt in 0...swipes {
             if attempt > 0 {
