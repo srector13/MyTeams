@@ -78,10 +78,13 @@ struct Home: View {
                     }
                 }
             }
-            // Attaching the picker as a safe area inset lets SwiftUI sit it
+            // Attaching the picker as a safe-area bar lets SwiftUI sit it
             // above the home indicator and inset the page's content by its
-            // height, which the original did by hand from the window's insets.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            // height, which the original did by hand from the window's
+            // insets. As a bar, rather than a plain inset, it takes part in
+            // the page's scroll-edge effect, which keeps the crests legible
+            // over the content scrolling under them (T-5).
+            .safeAreaBar(edge: .bottom, spacing: 0) {
                 TeamPicker(teams: teams, selection: $selection) {
                     showsBrowser = true
                 }
@@ -220,6 +223,10 @@ private struct TeamPage<Content: View>: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                // The page scrolls under the floating crest picker; the soft
+                // edge fades it there, so neither the crests nor the cards
+                // fight for legibility (T-5, B5).
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
