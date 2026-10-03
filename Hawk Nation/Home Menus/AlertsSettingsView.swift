@@ -102,7 +102,9 @@ struct AlertsSettingsView: View {
                 Button(title) {
                     Task { await model.perform(action) }
                 }
-                .buttonStyle(.bordered)
+                // The screen's primary action, so prominent; a system
+                // style, not glass, since it sits in a list row (A-2, B1).
+                .buttonStyle(.borderedProminent)
                 .accessibilityLabel(label)
                 .accessibilityHint(accessibilityHint(for: action))
                 .accessibilityIdentifier("\(identifier).action")
