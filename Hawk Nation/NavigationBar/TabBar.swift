@@ -189,10 +189,15 @@ private struct TeamPage<Content: View>: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
+                // The team-colour hero, sized from the screen rather than a
+                // fixed 500 pt: deep enough to sit behind the crest and the
+                // page's rounded top on any device. It starts at the safe
+                // area and extends under the navigation bar, the status bar
+                // and any landscape side insets (H-5, B5).
                 Rectangle()
                     .foregroundStyle(team.color)
-                    .frame(height: 500)
-                    .ignoresSafeArea(edges: .top)
+                    .frame(height: containerSize.height / 2)
+                    .backgroundExtensionEffect()
 
                 // Not ignoring the top safe area: the scroll view starts its
                 // content below the navigation bar and scrolls it under.
