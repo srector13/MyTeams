@@ -21,8 +21,7 @@ struct SectionHeader<Accessory: View>: View {
                 .foregroundStyle(Color(uiColor: .systemGray))
 
             Text(title)
-                .font(.system(size: 20))
-                .fontWeight(.bold)
+                .font(Theme.Typography.sectionTitle)
                 .foregroundStyle(Color(uiColor: .systemGray))
 
             Spacer()
@@ -47,8 +46,7 @@ struct SectionStatusView: View {
     var body: some View {
         VStack(spacing: 10) {
             Text(message)
-                .font(.system(size: 15))
-                .fontWeight(.bold)
+                .font(.subheadline.bold())
                 .foregroundStyle(Color(uiColor: .systemGray))
                 .multilineTextAlignment(.center)
 
@@ -58,6 +56,68 @@ struct SectionStatusView: View {
             }
         }
         .padding()
+    }
+}
+
+/// A carousel's cards as a vertical list, for accessibility text sizes,
+/// where a horizontal strip of cards can't hold the text (§5.3). Shows
+/// `collapsedCount` items from `start` until the reader asks for the rest,
+/// so a long schedule or roster doesn't bury the sections beneath it.
+struct StackedCarousel<Item: Identifiable, Row: View>: View {
+    let items: [Item]
+    /// The first item shown while collapsed, such as the last result.
+    var start = 0
+    var collapsedCount = 5
+    @ViewBuilder let row: (Item) -> Row
+
+    @State private var showsAll = false
+
+    private var shown: ArraySlice<Item> {
+        if showsAll || items.count <= collapsedCount {
+            return items[...]
+        }
+        let first = min(max(start, 0), items.count - collapsedCount)
+        return items[first..<(first + collapsedCount)]
+    }
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            ForEach(shown) { item in
+                row(item)
+            }
+
+            if items.count > collapsedCount {
+                Button(showsAll ? "Show Fewer" : "Show All \(items.count)") {
+                    showsAll.toggle()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.bottom, Theme.Spacing.l)
+    }
+}
+
+extension View {
+    /// Lets a table scroll sideways at accessibility text sizes, where it's
+    /// wider than the screen, rather than squeezing its cells (§5.3).
+    func scrollsSidewaysAtAccessibilitySizes() -> some View {
+        modifier(ScrollsSidewaysAtAccessibilitySizes())
+    }
+}
+
+private struct ScrollsSidewaysAtAccessibilitySizes: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            ScrollView(.horizontal) {
+                content
+            }
+        } else {
+            content
+        }
     }
 }
 
@@ -72,8 +132,12 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     @ViewBuilder let filterMenu: FilterMenu
 
     @Environment(\.containerSize) private var containerSize
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var selectedPlayer: Player?
+
+    /// At accessibility text sizes the carousel becomes a vertical list.
+    private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -83,7 +147,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                 } label: {
                     Image(systemName: "line.horizontal.3.decrease.circle")
                         .foregroundStyle(Color(uiColor: .systemGray))
-                        .font(.system(size: 20))
+                        .font(.title3)
                 }
                 .padding(.horizontal, 5)
 
@@ -94,55 +158,68 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                 } label: {
                     Image(systemName: "arrow.up.arrow.down.circle")
                         .foregroundStyle(Color(uiColor: .systemGray))
-                        .font(.system(size: 20))
+                        .font(.title3)
                 }
                 .padding(.horizontal, 5)
             }
             .padding([.leading, .top, .trailing])
 
-            ScrollView(.horizontal) {
-                // Lazy so off-screen cards are never realized — and so an
-                // unrealized card can never start work of its own.
-                LazyHStack {
-                    if model.players.isEmpty {
-                        switch model.rosterState {
-                        case .loading:
-                            // Five placeholder cards, so the carousel occupies
-                            // its final height while the roster loads.
-                            ForEach(0..<5, id: \.self) { _ in
-                                LoadingPlayerView()
-                                    .padding(.leading, 10)
-                                    .padding(.bottom, 15)
-                            }
-                        case .loaded:
-                            // Either the feed listed nobody, or the filter
-                            // matches nobody.
-                            SectionStatusView(message: "No players to show")
-                                .frame(width: max(containerSize.width - 20, 200))
-                        case .failed:
-                            SectionStatusView(message: "Couldn't load the roster") {
-                                Task { await model.reloadRoster() }
-                            }
-                            .frame(width: max(containerSize.width - 20, 200))
-                        }
-                    } else {
-                        ForEach(model.players) { player in
-                            card(player)
-                                .padding(.leading, 10)
-                                .padding(.bottom, 15)
-                                .onTapGesture { selectedPlayer = player }
-                        }
-                    }
-
-                    // Trailing breathing room past the last card.
-                    Color(uiColor: .systemBackground)
-                        .frame(width: 10)
+            if usesStackedLayout && !model.players.isEmpty {
+                StackedCarousel(items: model.players) { player in
+                    card(player)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(.rect)
+                        .onTapGesture { selectedPlayer = player }
                 }
+            } else {
+                rosterCarousel
             }
-            .scrollIndicators(.hidden)
         }
         .background(Color(uiColor: .systemBackground))
         .sheet(item: $selectedPlayer, content: detail)
+    }
+
+    private var rosterCarousel: some View {
+        ScrollView(.horizontal) {
+            // Lazy so off-screen cards are never realized — and so an
+            // unrealized card can never start work of its own.
+            LazyHStack {
+                if model.players.isEmpty {
+                    switch model.rosterState {
+                    case .loading:
+                        // Five placeholder cards, so the carousel occupies
+                        // its final height while the roster loads.
+                        ForEach(0..<5, id: \.self) { _ in
+                            LoadingPlayerView()
+                                .padding(.leading, 10)
+                                .padding(.bottom, 15)
+                        }
+                    case .loaded:
+                        // Either the feed listed nobody, or the filter
+                        // matches nobody.
+                        SectionStatusView(message: "No players to show")
+                            .frame(width: max(containerSize.width - 20, 200))
+                    case .failed:
+                        SectionStatusView(message: "Couldn't load the roster") {
+                            Task { await model.reloadRoster() }
+                        }
+                        .frame(width: max(containerSize.width - 20, 200))
+                    }
+                } else {
+                    ForEach(model.players) { player in
+                        card(player)
+                            .padding(.leading, 10)
+                            .padding(.bottom, 15)
+                            .onTapGesture { selectedPlayer = player }
+                    }
+                }
+
+                // Trailing breathing room past the last card.
+                Color(uiColor: .systemBackground)
+                    .frame(width: 10)
+            }
+        }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -158,6 +235,13 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     @State private var selectedGame: Game?
 
     @Environment(\.containerSize) private var containerSize
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The carousel's height: a game card's, scaled with the text in it.
+    @ScaledMetric(relativeTo: .body) private var cardHeight = GameView.baseHeight
+
+    /// At accessibility text sizes the carousel becomes a vertical list.
+    private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
     private var record: String {
         // The league's record rule decides how abandoned and unflagged
@@ -170,59 +254,71 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "calendar", title: "Schedule") {
                 Text(record)
-                    .font(.system(size: 15))
+                    .font(.subheadline)
                     .foregroundStyle(Color(uiColor: .systemGray))
             }
             .padding([.leading, .top, .trailing])
 
-            ScrollView(.horizontal) {
-                ScrollViewReader { scrollView in
-                    // Realised on demand: every schedule card mounted eagerly
-                    // was the reason a quiet Home screen still made hundreds
-                    // of requests a minute.
-                    LazyHStack {
-                        if model.games.isEmpty {
-                            switch model.scheduleState {
-                            case .loading:
-                                ForEach(0..<5, id: \.self) { _ in
-                                    LoadingGameView()
-                                        .padding(.leading, 10)
-                                }
-                            case .loaded:
-                                SectionStatusView(message: "Nothing scheduled")
-                                    .frame(width: max(containerSize.width - 30, 200))
-                            case .failed:
-                                SectionStatusView(message: "Couldn't load the schedule") {
-                                    Task { await model.reloadSchedule() }
-                                }
-                                .frame(width: max(containerSize.width - 30, 200))
-                            }
-                        } else {
-                            ForEach(model.games) { game in
-                                card(game)
-                                    .padding(.leading, 10)
-                                    .id(game.pointer)
-                                    .onTapGesture { selectedGame = game }
-                            }
-                        }
-
-                        Color(uiColor: .systemBackground)
-                            .frame(width: 10)
-                    }
-                    .frame(height: 160)
-                    .padding([.leading, .bottom], 10)
-                    // Open on the last result rather than the next fixture, so
-                    // the most recent score is the first thing in view.
-                    .onChange(of: model.nextGame, initial: true) { _, nextGame in
-                        guard !model.games.isEmpty else { return }
-                        scrollView.scrollTo(max(nextGame - 1, 0), anchor: .leading)
-                    }
+            if usesStackedLayout && !model.games.isEmpty {
+                // Opens on the last result, as the carousel does.
+                StackedCarousel(items: model.games, start: model.nextGame - 1) { game in
+                    card(game)
+                        .onTapGesture { selectedGame = game }
                 }
+            } else {
+                scheduleCarousel
             }
-            .scrollIndicators(.hidden)
         }
         .background(Color(uiColor: .systemBackground))
         .sheet(item: $selectedGame, content: detail)
+    }
+
+    private var scheduleCarousel: some View {
+        ScrollView(.horizontal) {
+            ScrollViewReader { scrollView in
+                // Realised on demand: every schedule card mounted eagerly
+                // was the reason a quiet Home screen still made hundreds
+                // of requests a minute.
+                LazyHStack {
+                    if model.games.isEmpty {
+                        switch model.scheduleState {
+                        case .loading:
+                            ForEach(0..<5, id: \.self) { _ in
+                                LoadingGameView()
+                                    .padding(.leading, 10)
+                            }
+                        case .loaded:
+                            SectionStatusView(message: "Nothing scheduled")
+                                .frame(width: max(containerSize.width - 30, 200))
+                        case .failed:
+                            SectionStatusView(message: "Couldn't load the schedule") {
+                                Task { await model.reloadSchedule() }
+                            }
+                            .frame(width: max(containerSize.width - 30, 200))
+                        }
+                    } else {
+                        ForEach(model.games) { game in
+                            card(game)
+                                .padding(.leading, 10)
+                                .id(game.pointer)
+                                .onTapGesture { selectedGame = game }
+                        }
+                    }
+
+                    Color(uiColor: .systemBackground)
+                        .frame(width: 10)
+                }
+                .frame(height: cardHeight)
+                .padding([.leading, .bottom], 10)
+                // Open on the last result rather than the next fixture, so
+                // the most recent score is the first thing in view.
+                .onChange(of: model.nextGame, initial: true) { _, nextGame in
+                    guard !model.games.isEmpty else { return }
+                    scrollView.scrollTo(max(nextGame - 1, 0), anchor: .leading)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -253,7 +349,7 @@ struct StandingsSection<Player: RosterPlayer>: View {
                     } label: {
                         Image(systemName: "rectangle.stack")
                             .foregroundStyle(Color(uiColor: .systemGray))
-                            .font(.system(size: 20))
+                            .font(.title3)
                     }
                     .padding(.horizontal, 5)
                 }
@@ -346,50 +442,55 @@ private struct StandingsTable: View {
         let columns = columns
         VStack(alignment: .leading, spacing: 6) {
             Text(group.name)
-                .font(.system(size: 15))
-                .fontWeight(.bold)
+                .font(.subheadline.bold())
                 .foregroundStyle(Color(uiColor: .systemGray))
 
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+            // Too wide for the screen at accessibility sizes: it scrolls
+            // sideways rather than squeezing the team names out.
+            table(columns)
+                .scrollsSidewaysAtAccessibilitySizes()
+        }
+    }
+
+    private func table(_ columns: [Column]) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+            GridRow {
+                Text("#")
+                Text("Team")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ForEach(columns.indices, id: \.self) { index in
+                    Text(columns[index].title)
+                        .gridColumnAlignment(.trailing)
+                }
+            }
+            .font(Theme.Typography.statLabel)
+            .foregroundStyle(Color(uiColor: .systemGray))
+
+            ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
+                let followed = entry.teamID == followedID
                 GridRow {
-                    Text("#")
-                    Text("Team")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("\(entry.rank ?? position + 1)")
+                        .foregroundStyle(Color(uiColor: .systemGray))
+                    HStack(spacing: 6) {
+                        TeamLogo(team: crestTeam(for: entry), size: 20)
+                        Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
+                            .lineLimit(1)
+                        if !entry.clincher.isEmpty {
+                            Text(entry.clincher)
+                                .font(.caption2)
+                                .foregroundStyle(Color(uiColor: .systemGray))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     ForEach(columns.indices, id: \.self) { index in
-                        Text(columns[index].title)
-                            .gridColumnAlignment(.trailing)
+                        Text(columns[index].value(entry))
+                            .monospacedDigit()
                     }
                 }
-                .font(.system(size: 12))
-                .fontWeight(.semibold)
-                .foregroundStyle(Color(uiColor: .systemGray))
-
-                ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
-                    let followed = entry.teamID == followedID
-                    GridRow {
-                        Text("\(entry.rank ?? position + 1)")
-                            .foregroundStyle(Color(uiColor: .systemGray))
-                        HStack(spacing: 6) {
-                            TeamLogo(team: crestTeam(for: entry), size: 20)
-                            Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
-                                .lineLimit(1)
-                            if !entry.clincher.isEmpty {
-                                Text(entry.clincher)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Color(uiColor: .systemGray))
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        ForEach(columns.indices, id: \.self) { index in
-                            Text(columns[index].value(entry))
-                                .monospacedDigit()
-                        }
-                    }
-                    .font(.system(size: 14))
-                    .fontWeight(followed ? .bold : .regular)
-                    .padding(.vertical, 2)
-                    .background(followed ? teamColor.opacity(0.15) : Color.clear)
-                }
+                .font(.footnote)
+                .fontWeight(followed ? .bold : .regular)
+                .padding(.vertical, 2)
+                .background(followed ? teamColor.opacity(0.15) : Color.clear)
             }
         }
     }
@@ -447,7 +548,7 @@ struct NewsSection<Player: RosterPlayer>: View {
                     }
                 }
             }
-            .padding(.leading)
+            .padding(.horizontal)
 
             // Clears the crest picker pinned to the bottom of the screen.
             Color(uiColor: .systemBackground)

@@ -17,8 +17,16 @@ struct PlayerCard<Player: RosterPlayer>: View {
     var player: Player
     var state: PlayerSort
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        VStack(spacing: 5) {
+        // At accessibility text sizes the roster is a vertical list, so the
+        // detail sits beside the headshot rather than under it.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: Theme.Spacing.m))
+            : AnyLayout(VStackLayout(spacing: 5))
+
+        layout {
             RemoteImage(url: URL(string: player.photo)) {
                 Image("blank")
                     .resizable()
@@ -30,21 +38,20 @@ struct PlayerCard<Player: RosterPlayer>: View {
             switch state {
             case .name:
                 Text(player.name)
-                    .font(.system(size: 10))
+                    .font(.caption2)
                     .foregroundStyle(Color(uiColor: .systemGray))
             case .number:
-                caption(player.number, size: 12)
+                caption(player.number, font: .caption)
             case .position:
-                caption(player.position, size: 10)
+                caption(player.position, font: .caption2)
             }
         }
     }
 
     /// A bold caption, falling back to "N/A" when the feed left the field out.
-    private func caption(_ text: String, size: CGFloat) -> some View {
+    private func caption(_ text: String, font: Font) -> some View {
         Text(text.isEmpty ? "N/A" : text)
-            .font(.system(size: size))
-            .fontWeight(.bold)
+            .font(font.bold())
             .foregroundStyle(Color(uiColor: .systemGray))
     }
 }

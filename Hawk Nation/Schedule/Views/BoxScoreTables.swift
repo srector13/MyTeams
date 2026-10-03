@@ -39,6 +39,7 @@ struct LinescoreView: View {
                 }
             }
         }
+        .scrollsSidewaysAtAccessibilitySizes()
         .padding(.vertical, 5)
     }
 }
@@ -111,6 +112,7 @@ private struct HockeySkaterTable: View {
                 }
             }
         }
+        .scrollsSidewaysAtAccessibilitySizes()
     }
 
     /// Plus-minus as hockey writes it: "+1", "0", "-2".
@@ -149,6 +151,7 @@ private struct HockeyGoalieTable: View {
                 }
             }
         }
+        .scrollsSidewaysAtAccessibilitySizes()
     }
 }
 
@@ -190,10 +193,14 @@ struct SoccerLineupsView: View {
 private struct SoccerLineupRow: View {
     let player: SoccerLineups.Player
 
+    @ScaledMetric(relativeTo: .caption2) private var jerseyWidth: CGFloat = 24
+    @ScaledMetric(relativeTo: .caption2) private var cardWidth: CGFloat = 8
+    @ScaledMetric(relativeTo: .caption2) private var cardHeight: CGFloat = 11
+
     var body: some View {
         HStack(spacing: 6) {
             BoxScoreText(player.jersey, style: .heading)
-                .frame(width: 24, alignment: .trailing)
+                .frame(width: jerseyWidth, alignment: .trailing)
 
             BoxScoreText(player.name)
 
@@ -201,7 +208,7 @@ private struct SoccerLineupRow: View {
 
             ForEach(0 ..< player.goals, id: \.self) { _ in
                 Image(systemName: "soccerball")
-                    .font(.system(size: 11))
+                    .font(.caption2)
             }
             ForEach(0 ..< player.yellowCards, id: \.self) { _ in
                 card(.yellow)
@@ -214,7 +221,7 @@ private struct SoccerLineupRow: View {
                 // A starter taken off, or a substitute brought on.
                 let cameOn = !player.starter
                 Image(systemName: cameOn ? "arrow.up" : "arrow.down")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.bold())
                     .foregroundStyle(cameOn ? Color.green : Color.red)
                 BoxScoreText(player.substitutedAt, style: .heading)
             }
@@ -224,7 +231,7 @@ private struct SoccerLineupRow: View {
     private func card(_ color: Color) -> some View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(color)
-            .frame(width: 8, height: 11)
+            .frame(width: cardWidth, height: cardHeight)
     }
 }
 
@@ -240,10 +247,7 @@ private struct BoxScoreTeamTitle: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 17))
-            .fontWeight(.bold)
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
+            .font(.headline)
     }
 }
 
@@ -267,12 +271,14 @@ private struct BoxScoreText: View {
     }
 
     var body: some View {
+        // At accessibility sizes the tables scroll sideways, so a cell only
+        // trims a little at the larger standard sizes (D-4: no lower than 0.8).
         Text(text)
-            .font(.system(size: style == .heading ? 11 : 12))
+            .font(style == .heading ? .caption2 : Theme.Typography.caption)
             .fontWeight(style == .body ? .regular : .bold)
             .foregroundStyle(style == .heading ? Color(uiColor: .systemGray) : Color.primary)
             .monospacedDigit()
             .lineLimit(1)
-            .minimumScaleFactor(0.7)
+            .minimumScaleFactor(0.8)
     }
 }

@@ -11,7 +11,7 @@ import Foundation
 
 // MARK: - Sheet content
 
-/// One cell in a player sheet's three-column grid.
+/// One cell in a player sheet's grid.
 enum PlayerSheetCell: Sendable {
     /// A biography fact, drawn by `BioView`.
     case fact(title: String, info: String)
@@ -20,54 +20,30 @@ enum PlayerSheetCell: Sendable {
     /// A rate drawn as a ring by `StatPercentageView`: `progress` runs 0–1,
     /// and a non-finite one (a rate over zero attempts) reads "N/A".
     case percentage(title: String, progress: Double)
-
-    /// An empty About column that keeps the grid aligned.
-    static let blankFact = PlayerSheetCell.fact(title: "", info: " ")
-    /// An empty Statistics column that keeps the grid aligned.
-    static let blankStat = PlayerSheetCell.stat(title: "", info: " ")
 }
 
-/// One tab of a player sheet: rows of three cells, optionally under section
-/// titles.
+/// One tab of a player sheet: its cells, optionally under section titles.
+///
+/// Cells come grouped in rows of up to three, the order they read in; the
+/// sheet lays them out in as many columns as the text size allows (P-4).
 struct PlayerSheetGrid: Sendable {
-    enum Layout: Sendable {
-        /// Three full cells per row, spread across the card.
-        case spread
-        /// Cells packed from the leading edge under a section title, short
-        /// rows padded out to three columns. The card grows with the rows.
-        case titledSections
-    }
-
     struct Section: Sendable {
         var title: String?
         var rows: [[PlayerSheetCell]]
     }
 
-    var layout: Layout
     var sections: [Section]
     /// Shown beneath the sections, e.g. once a fetch found nothing.
     var message: String?
 
-    init(layout: Layout = .spread, sections: [Section], message: String? = nil) {
-        self.layout = layout
+    init(sections: [Section], message: String? = nil) {
         self.sections = sections
         self.message = message
     }
 
-    /// A single untitled section of spread rows.
+    /// A single untitled section.
     init(rows: [[PlayerSheetCell]]) {
         self.init(sections: [Section(rows: rows)])
-    }
-
-    /// The height of the card the grid sits on.
-    var cardHeight: CGFloat {
-        let rowCount = sections.reduce(0) { $0 + $1.rows.count }
-        switch layout {
-        case .spread:
-            return CGFloat(120 * rowCount)
-        case .titledSections:
-            return CGFloat(max(240, 130 * (1 + rowCount)))
-        }
     }
 }
 
@@ -136,7 +112,6 @@ extension BasketballPlayer: PlayerSheetDescribing {
             [
                 .stat(title: "Average Fouls", info: average(stats.avgFouls)),
                 .stat(title: "Average Turnovers", info: average(stats.avgTurnovers)),
-                .blankStat,
             ],
         ])
     }
@@ -157,8 +132,6 @@ extension FootBallPlayer: PlayerSheetDescribing {
             ],
             [
                 .fact(title: "Age", info: age),
-                .blankFact,
-                .blankFact,
             ],
         ])
     }
@@ -172,7 +145,6 @@ extension FootBallPlayer: PlayerSheetDescribing {
     /// One titled section per position-appropriate stat group.
     private static func grid(_ stats: FootballPlayerStats) -> PlayerSheetGrid {
         PlayerSheetGrid(
-            layout: .titledSections,
             sections: stats.groups.map { group in
                 PlayerSheetGrid.Section(
                     title: group.title,
@@ -250,8 +222,6 @@ extension BaseballPlayer: PlayerSheetDescribing {
                 ],
                 [
                     .stat(title: "Walks", info: "\(stats.walks)"),
-                    .blankStat,
-                    .blankStat,
                 ],
             ])
         }
@@ -279,8 +249,6 @@ extension BaseballPlayer: PlayerSheetDescribing {
             ],
             [
                 .stat(title: "OPS", info: "\(stats.OPS)"),
-                .blankStat,
-                .blankStat,
             ],
         ])
     }
@@ -305,7 +273,7 @@ extension SoccerPlayer: PlayerSheetDescribing {
     /// The season totals usually arrive with the roster, so there is nothing
     /// to wait for.
     var placeholderStatistics: PlayerSheetGrid {
-        hasSeasonStats ? seasonTotals : PlayerSheetGrid(layout: .titledSections, sections: [])
+        hasSeasonStats ? seasonTotals : PlayerSheetGrid(sections: [])
     }
 
     /// A player the roster listed without totals gets the athlete
@@ -368,7 +336,6 @@ extension SoccerPlayer: PlayerSheetDescribing {
             [
                 .stat(title: "Yellow Cards", info: "\(yellowCards)"),
                 .stat(title: "Red Cards", info: "\(redCards)"),
-                .blankStat,
             ],
         ])
     }
@@ -382,8 +349,6 @@ extension SoccerPlayer: PlayerSheetDescribing {
                 .stat(title: "Clean Sheets", info: stats.cleanSheets),
             ], [
                 .stat(title: "Goals Conceded", info: stats.goalsConceded),
-                .blankStat,
-                .blankStat,
             ]]
             : [[
                 .stat(title: "Games Started", info: stats.starts),
@@ -392,11 +357,9 @@ extension SoccerPlayer: PlayerSheetDescribing {
             ], [
                 .stat(title: "Goal Assists", info: stats.assists),
                 .stat(title: "Total Shots", info: stats.shots),
-                .blankStat,
             ]]
         guard stats.hasFigures else {
             return PlayerSheetGrid(
-                layout: .titledSections,
                 sections: [],
                 message: "No season statistics are available for this player yet."
             )
@@ -438,7 +401,6 @@ extension HockeyPlayer: PlayerSheetDescribing {
             }
         }
         return PlayerSheetGrid(
-            layout: .titledSections,
             sections: stats.isEmpty ? [] : [PlayerSheetGrid.Section(title: line.title.isEmpty ? nil : line.title, rows: rows)],
             message: line.loaded && stats.isEmpty
                 ? "No season statistics are available for this player yet."
@@ -452,8 +414,11 @@ extension HockeyPlayer: PlayerSheetDescribing {
 /// The sheet a roster card opens: the player's photo over an About tab and a
 /// Statistics tab, in the team's colours.
 struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
-    @Environment(\.containerSize) private var containerSize
     @Environment(\.dismiss) private var dismiss
+
+    /// A grid cell's narrowest width: three columns at the default text
+    /// size, fewer as the text grows, one at the largest sizes (P-4).
+    @ScaledMetric(relativeTo: .body) private var cellMinimumWidth: CGFloat = 96
 
     let player: Player
     let team: TeamRef
@@ -505,16 +470,16 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                         //PLAYER NAME
                         HStack(alignment: .top) {
                             Text(player.name)
-                                .fontWeight(.bold)
-                                .font(.system(size: 35))
+                                .font(.largeTitle.bold())
+                                .multilineTextAlignment(.center)
                                 .foregroundStyle(Color.white)
 
                             Text(player.number)
-                                .fontWeight(.bold)
-                                .font(.system(size: 35))
+                                .font(.largeTitle.bold().monospacedDigit())
                                 .foregroundStyle(Color.white)
                                 .opacity(0.5)
                         }
+                        .padding(.horizontal, Theme.Spacing.l)
 
                         //PLAYER PHOTO
                         RemoteImage(url: URL(string: player.photo)) {
@@ -576,61 +541,41 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }.buttonStyle(.plain)
     }
 
-    /// A tab's grid on its rounded card.
+    /// A tab's grid on a rounded card that sizes to its content (P-5).
     private func card(_ grid: PlayerSheetGrid) -> some View {
-        ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 20)
-                .frame(width: (containerSize.width - 25), height: grid.cardHeight)
-                .foregroundStyle(Color(uiColor: .systemBackground))
-
-            VStack(alignment: .leading, spacing: 15) {
-                ForEach(Array(grid.sections.enumerated()), id: \.offset) { _, section in
-                    if let title = section.title {
-                        Text(title)
-                            .font(.system(size: 17))
-                            .fontWeight(.bold)
-                            .foregroundStyle(teamColor)
-                            .padding(.top, 5)
-                    }
-
-                    ForEach(Array(section.rows.enumerated()), id: \.offset) { _, row in
-                        gridRow(row, layout: grid.layout)
-                    }
+        VStack(alignment: .leading, spacing: 15) {
+            ForEach(Array(grid.sections.enumerated()), id: \.offset) { _, section in
+                if let title = section.title {
+                    Text(title)
+                        .font(Theme.Typography.cardTitle)
+                        .foregroundStyle(teamColor)
+                        .padding(.top, 5)
                 }
 
-                if let message = grid.message {
-                    Text(message)
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color(uiColor: .systemGray))
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 30)
-                        .frame(maxWidth: .infinity, alignment: .center)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: cellMinimumWidth), spacing: Theme.Spacing.s, alignment: .top)],
+                    spacing: Theme.Spacing.m
+                ) {
+                    ForEach(Array(section.rows.joined().enumerated()), id: \.offset) { _, cell in
+                        cellView(cell)
+                    }
                 }
+            }
 
-                Spacer()
-            }.padding([.all], 20)
+            if let message = grid.message {
+                Text(message)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 30)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
         }
+        .padding(Theme.Spacing.xl)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+        .padding(.horizontal, Theme.Spacing.m)
         .ignoresSafeArea(edges: .top)
-    }
-
-    private func gridRow(_ row: [PlayerSheetCell], layout: PlayerSheetGrid.Layout) -> some View {
-        HStack(alignment: .center) {
-            ForEach(Array(row.enumerated()), id: \.offset) { index, cell in
-                if layout == .spread, index > 0 {
-                    Spacer()
-                }
-                cellView(cell)
-            }
-
-            if layout == .titledSections {
-                // Keep three columns so rows line up under the header.
-                ForEach(0 ..< max(0, 3 - row.count), id: \.self) { _ in
-                    Color.clear
-                        .frame(width: (containerSize.width/4), height: containerSize.width/3)
-                }
-            }
-        }
     }
 
     @ViewBuilder
