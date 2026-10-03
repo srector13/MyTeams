@@ -294,6 +294,13 @@ private struct TeamPicker: View {
     /// A crest, which scales with the selected team's name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 25
 
+    // Spelled out: the private `settings` makes the memberwise init private.
+    init(teams: [TeamRef], selection: Binding<TeamRef.ID>, editTeams: @escaping () -> Void) {
+        self.teams = teams
+        self._selection = selection
+        self.editTeams = editTeams
+    }
+
     var body: some View {
         ScrollViewReader { reader in
             ScrollView(.horizontal, showsIndicators: false) {
