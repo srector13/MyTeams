@@ -99,7 +99,6 @@ struct GameActivityState: Codable, Hashable, Sendable {
 #if canImport(ActivityKit)
 /// A followed game's Live Activity: the Lock Screen banner and the Dynamic
 /// Island.
-@available(iOS 16.2, *)
 struct GameActivityAttributes: ActivityAttributes {
     typealias ContentState = GameActivityState
 

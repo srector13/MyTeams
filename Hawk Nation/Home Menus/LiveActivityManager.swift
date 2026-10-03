@@ -37,7 +37,6 @@ private let logger = Logger(subsystem: "com.myTeams", category: "liveActivities"
 ///
 /// Foreground-driven only: with the app suspended, activities keep their
 /// last content and turn stale after `staleAfter`. Push updates are P4-e.
-@available(iOS 16.2, *)
 @MainActor
 final class LiveActivityManager {
     static let shared = LiveActivityManager()
