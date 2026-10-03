@@ -9,64 +9,48 @@
 import SwiftUI
 import SafariServices
 
-/// An article opened from the news feed: a compact bar naming the outlet and
-/// byline, with the page in Safari below it.
+/// An article opened from the news feed: the page in Safari, filling the
+/// sheet, with Safari's own bars and Done button as its only chrome and its
+/// controls in the team's colour.
 ///
-/// The bar sits above the Safari view, never over it — Apple requires that
-/// nothing hide or obscure `SFSafariViewController`'s content or controls.
+/// Nothing is drawn over the Safari view: Apple requires that nothing hide
+/// or obscure `SFSafariViewController`'s content or controls.
 struct NewsDetailView: View {
     var article: News
     var color: Color
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider()
-
-            if SafariView.canDisplay(article.url) {
-                SafariView(url: article.url)
-                    .ignoresSafeArea(edges: .bottom)
-            } else {
-                ContentUnavailableView(
-                    "Can't Open This Article",
-                    systemImage: "safari",
-                    description: Text("The link isn't a web page.")
-                )
-                .frame(maxHeight: .infinity)
-            }
-        }
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea())
-    }
-
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 0) {
-                Text(article.source)
-                    .font(.headline)
-                if let author = article.author {
-                    Text(author)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .lineLimit(1)
-
-            Spacer()
-
-            Button("Done") {
+        if SafariView.canDisplay(article.url) {
+            SafariView(url: article.url, tint: color) {
                 dismiss()
             }
-            .fontWeight(.semibold)
-            .foregroundStyle(.primary)
+            // Safari insets its own content and bars.
+            .ignoresSafeArea()
+        } else {
+            ContentUnavailableView(
+                "Can't Open This Article",
+                systemImage: "safari",
+                description: Text("The link isn't a web page.")
+            )
+            // No Safari, so no Done: close it like the other sheets.
+            .overlay(alignment: .topTrailing) {
+                SheetCloseButton()
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .accessibilityIdentifier("newsDetail.close")
+                    .padding(Theme.Spacing.m)
+            }
+            .presentationDragIndicator(.visible)
         }
-        .padding(.horizontal)
-        .frame(height: 44)
     }
 }
 
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
+    /// Safari's control tint, e.g. the team's colour; the system's when nil.
+    var tint: Color?
+    /// Called when the reader taps Safari's Done button.
+    var onDone: (() -> Void)?
 
     /// Whether `SFSafariViewController` can load `url`: it throws on any
     /// scheme but http and https.
@@ -75,12 +59,36 @@ struct SafariView: UIViewControllerRepresentable {
         return scheme == "http" || scheme == "https"
     }
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDone: onDone)
+    }
+
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let configuration = SFSafariViewController.Configuration()
         configuration.entersReaderIfAvailable = true
-        return SFSafariViewController(url: url, configuration: configuration)
+        let safari = SFSafariViewController(url: url, configuration: configuration)
+        safari.delegate = context.coordinator
+        safari.preferredControlTintColor = tint.map { UIColor($0) }
+        return safari
     }
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
+        context.coordinator.onDone = onDone
+        uiViewController.preferredControlTintColor = tint.map { UIColor($0) }
+    }
+
+    /// Forwards Done to SwiftUI. Embedded in a sheet rather than presented
+    /// itself, Safari can't close the sheet on its own terms: the sheet's
+    /// `dismiss` does, which also clears the binding that presented it.
+    final class Coordinator: NSObject, SFSafariViewControllerDelegate {
+        var onDone: (() -> Void)?
+
+        init(onDone: (() -> Void)?) {
+            self.onDone = onDone
+        }
+
+        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
+            onDone?()
+        }
     }
 }

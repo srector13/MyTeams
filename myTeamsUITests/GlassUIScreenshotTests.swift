@@ -123,10 +123,11 @@ final class GlassUIScreenshotTests: XCTestCase {
         return app
     }
 
-    /// Walks the screens `myTeamsUITests` reaches by identifier: onboarding,
-    /// two team pages, the team browser and Alerts.
-    // TODO(GlassUI 1c): add game, player, leaders and news sheets once their
-    // cards and close buttons carry accessibility identifiers.
+    /// Walks the screens reachable by identifier: onboarding, the first team
+    /// page and its player, game and news sheets, a second team page, the
+    /// team browser and Alerts.
+    // TODO(GlassUI): add the leaders sheet once its card carries an
+    // accessibility identifier.
     @MainActor
     private func captureScreens(_ app: XCUIApplication, _ configuration: Configuration) {
         // A fresh install opens on the "Pick Your Teams" sheet.
@@ -142,6 +143,8 @@ final class GlassUIScreenshotTests: XCTestCase {
             return
         }
         snapshot("team-page-1", configuration)
+
+        captureSheets(app, configuration)
 
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
         let second = crests.element(boundBy: 1)
@@ -164,6 +167,67 @@ final class GlassUIScreenshotTests: XCTestCase {
                 snapshot("alerts-settings", configuration)
             }
         }
+    }
+
+    /// The first team page's player, game and news sheets, each opened from
+    /// its first card in view and closed again. A card that never loads
+    /// (no network, an empty feed) skips its sheet rather than failing.
+    @MainActor
+    private func captureSheets(_ app: XCUIApplication, _ configuration: Configuration) {
+        if let player = firstHittable("roster.player", in: app) {
+            player.tap()
+            let close = app.buttons["playerDetail.close"]
+            if close.waitForExistence(timeout: 5) {
+                snapshot("player-detail", configuration)
+                close.tap()
+            } else {
+                XCTFail("\(configuration.name): the player sheet never opened")
+            }
+        }
+
+        if let game = firstHittable("schedule.game", in: app, swipes: 4) {
+            game.tap()
+            let close = app.buttons["gameDetail.close"]
+            if close.waitForExistence(timeout: 5) {
+                // Opens at the medium detent; the drag indicator is there
+                // to take it to large.
+                snapshot("game-detail", configuration)
+                close.tap()
+            } else {
+                XCTFail("\(configuration.name): the game sheet never opened")
+            }
+        }
+
+        if let article = firstHittable("news.article", in: app, swipes: 12) {
+            article.tap()
+            // Safari's own Done (labelled "Close" where it draws an xmark),
+            // or the sheet's close button when the link isn't a web page.
+            let safariDone = app.buttons.matching(NSPredicate(format: "label IN %@", ["Done", "Close"])).firstMatch
+            let close = app.buttons["newsDetail.close"]
+            if safariDone.waitForExistence(timeout: 10) || close.exists {
+                snapshot("news-detail", configuration)
+                (close.exists ? close : safariDone).tap()
+            } else {
+                XCTFail("\(configuration.name): the news sheet never opened")
+            }
+        }
+    }
+
+    /// The first element `identifier` names that's on screen and tappable,
+    /// scrolling the page up to `swipes` times to bring one into view.
+    @MainActor
+    private func firstHittable(_ identifier: String, in app: XCUIApplication, swipes: Int = 0) -> XCUIElement? {
+        let matches = app.descendants(matching: .any).matching(identifier: identifier)
+        guard matches.firstMatch.waitForExistence(timeout: 10) else { return nil }
+        for attempt in 0...swipes {
+            if attempt > 0 {
+                app.swipeUp()
+            }
+            if let element = matches.allElementsBoundByIndex.first(where: { $0.isHittable }) {
+                return element
+            }
+        }
+        return nil
     }
 
     @MainActor

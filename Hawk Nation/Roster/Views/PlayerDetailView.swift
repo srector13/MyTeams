@@ -414,8 +414,6 @@ extension HockeyPlayer: PlayerSheetDescribing {
 /// The sheet a roster card opens: the player's photo over an About tab and a
 /// Statistics tab, in the team's colours.
 struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
-    @Environment(\.dismiss) private var dismiss
-
     /// A grid cell's narrowest width: three columns at the default text
     /// size, fewer as the text grows, one at the largest sizes (P-4).
     @ScaledMetric(relativeTo: .body) private var cellMinimumWidth: CGFloat = 96
@@ -438,12 +436,19 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         ScrollView(.vertical) {
             VStack {
                 ZStack(alignment: .top) {
-                    Rectangle()
-                        .foregroundStyle(teamColor)
-                        .frame(height: 40)
+                    // Square on top, where the sheet's own corners round it,
+                    // and rounded where it meets the card below.
+                    ZStack(alignment: .top) {
+                        Rectangle()
+                            .frame(height: 40)
 
-                    RoundedRectangle(cornerRadius: 20)
-                        .foregroundStyle(teamColor)
+                        RoundedRectangle(cornerRadius: 20)
+                    }
+                    .foregroundStyle(teamColor)
+                    // Carries the colour into any safe area beside the
+                    // header (landscape), where `ignoresSafeArea` used to
+                    // stretch it.
+                    .backgroundExtensionEffect()
 
                     //TEAM LOGO
                     TeamLogo(team: team, size: 300, forceVariant: .default)
@@ -452,15 +457,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                         .contrast(0.5)
 
                     VStack(spacing: 0) {
-                        //DISMISS BUTTON
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(width: 100, height: 5)
-                                .foregroundStyle(Color(uiColor: .systemBackground))
-                                .opacity(0.5)
-                        }.padding([.top, .trailing, .leading, .bottom], 10)
+                        // Where the grabber and close button float.
+                        Color.clear
+                            .frame(height: Self.closeButtonClearance)
 
                         // Takes up the sheet's full width.
                         HStack() {
@@ -488,58 +487,57 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                         }
                         .aspectRatio(contentMode: .fill)
                         .frame(width: 180, height: 180)
-
-                        //SELECTOR VIEW
-                        ZStack() {
-                            RoundedRectangle(cornerRadius: 20)
-                                .frame(height: 30)
-
-                            HStack(spacing: 0) {
-                                tabButton("About", tag: 0)
-                                tabButton("Statistics", tag: 1)
-                            }
-                        }
-                        .clipShape(.rect(cornerRadius: 20))
-                        .padding([.bottom, .leading, .trailing], 10)
                     }
                 }
 
+                // Below the header rather than on it: the segmented control's
+                // translucent track is drawn for the sheet's surface, not
+                // for an arbitrary team colour.
+                Picker("Section", selection: $pickerSelectedItem) {
+                    Text("About").tag(0)
+                    Text("Statistics").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("playerDetail.section")
+                .padding(.horizontal, Theme.Spacing.m)
+                .padding(.vertical, Theme.Spacing.s)
+
                 VStack(spacing: 0) {
-                    if(pickerSelectedItem == 0) {
+                    if pickerSelectedItem == 0 {
                         card(player.about)
-                    } else if(pickerSelectedItem == 1) {
+                            .transition(.blurReplace)
+                    } else {
                         card(statistics)
+                            .transition(.blurReplace)
                     }
                     Spacer()
                 }
+                .animation(.snappy, value: pickerSelectedItem)
             }
 
             Spacer()
         }
         .scrollIndicators(.hidden)
-        .background(Color(uiColor: .systemBackground).ignoresSafeArea(.all))
-        .ignoresSafeArea(.all)
+        // No background of its own: the system sheet draws the surface, and
+        // the team-colour header runs under the grabber to its top edge.
+        .overlay(alignment: .topTrailing) {
+            SheetCloseButton()
+                // Pinned to its 44 pt circle, as the crest picker's "+" is.
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .accessibilityIdentifier("playerDetail.close")
+                .padding(Theme.Spacing.m)
+        }
+        // Full height: the header and photo alone fill a medium detent.
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         .task {
             statistics = await player.statistics(league: team.league)
         }
     }
 
-    /// One segment of the About / Statistics picker; the unselected one is
-    /// faded.
-    private func tabButton(_ title: String, tag: Int) -> some View {
-        Button(action: {
-            pickerSelectedItem = tag
-        }) {
-            ZStack(alignment: .center) {
-                Rectangle()
-                    .foregroundStyle(Color(uiColor: .systemBackground))
-                    .frame(height: 30)
-                    .clipped()
-                    .opacity(pickerSelectedItem == tag ? 1 : 0.8)
-                Text(title)
-            }
-        }.buttonStyle(.plain)
-    }
+    /// The band at the top of the sheet left to the system grabber and the
+    /// close button floating over it: the button's 44 pt and its inset.
+    private static var closeButtonClearance: CGFloat { 44 + Theme.Spacing.m }
 
     /// A tab's grid on a rounded card that sizes to its content (P-5).
     private func card(_ grid: PlayerSheetGrid) -> some View {
@@ -575,7 +573,6 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         .frame(maxWidth: .infinity)
         .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
         .padding(.horizontal, Theme.Spacing.m)
-        .ignoresSafeArea(edges: .top)
     }
 
     @ViewBuilder
