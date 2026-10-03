@@ -171,7 +171,10 @@ struct TeamBrowserView: View {
                     }
                 }
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // A bar, not an inset: the list scrolls beneath the chips and
+            // the scroll-edge effect runs under both them and the nav bar,
+            // one chrome region rather than a second opaque strip (B-1).
+            .safeAreaBar(edge: .top, spacing: 0) {
                 leagueChips
             }
             .searchable(text: $query, prompt: "Search teams")
@@ -200,28 +203,46 @@ struct TeamBrowserView: View {
 
     // MARK: Pieces
 
+    /// The league chips: glass buttons, the chosen league's prominent, in one
+    /// container so they share a sampling pass (B-1, §5.2). They're the only
+    /// glass in this strip.
     private var leagueChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(LeagueID.browsable) { item in
-                    Button {
-                        league = item.league
-                    } label: {
-                        Text(item.label)
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 12)
-                            .foregroundStyle(league == item.league ? Color.white : Color.primary)
-                            .background(league == item.league ? Color.accentColor : Color.secondary.opacity(0.15))
-                            .clipShape(.capsule)
+            GlassEffectContainer(spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    ForEach(LeagueID.browsable) { item in
+                        leagueChip(item)
                     }
-                    .buttonStyle(.plain)
                 }
+                // Room for the interactive glass to swell inside the scroll
+                // view's clip.
+                .padding(.horizontal)
+                .padding(.vertical, Theme.Spacing.s)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
         }
-        .background(.bar)
+    }
+
+    @ViewBuilder
+    private func leagueChip(_ item: BrowsableLeague) -> some View {
+        let selected = league == item.league
+        let chip = Button {
+            league = item.league
+        } label: {
+            Text(item.label)
+                .font(.subheadline.weight(.semibold))
+        }
+        .buttonBorderShape(.capsule)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("teamBrowser.league.\(item.label)")
+
+        if selected {
+            chip
+                .buttonStyle(.glassProminent)
+                .tint(.accentColor)
+        } else {
+            chip
+                .buttonStyle(.glass)
+        }
     }
 
     @ViewBuilder
