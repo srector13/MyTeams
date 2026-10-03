@@ -345,4 +345,174 @@ struct FavoritesStoreTests {
         receive(b, reason: NSUbiquitousKeyValueStoreInitialSyncChange)
         #expect(b.teamIDs == a.teamIDs)
     }
+
+    // MARK: Alerts setting
+
+    @Test("The alerts setting round-trips through JSON, and older lists read as never set")
+    func notifyRoundTrip() throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let entries = [
+            FavoriteTeam(teamID: "football/nfl:12", addedAt: t, notify: false, notifyChangedAt: t + 60),
+            FavoriteTeam(teamID: "baseball/mlb:7", addedAt: t),
+        ]
+        let data = try #require(FavoritesCodec.encode(entries))
+        let decoded = try #require(FavoritesCodec.decodeEntries(data))
+        #expect(decoded == entries)
+        #expect(decoded[0].notify == false)
+        #expect(decoded[0].notifyChangedAt == t + 60)
+        #expect(decoded[0].notifySetAt == t + 60)
+        // Never set: the follow's default, as of the follow.
+        #expect(decoded[1].notifyChangedAt == nil)
+        #expect(decoded[1].notifySetAt == t)
+
+        // The key is left out while unset, so builds that predate it read
+        // the same JSON as before.
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let stored = try #require(object["favorites"] as? [[String: Any]])
+        #expect(stored[0]["notifyChangedAt"] != nil)
+        #expect(stored[1]["notifyChangedAt"] == nil)
+    }
+
+    @MainActor
+    @Test("Turning alerts off persists, mirrors to iCloud and survives a relaunch")
+    func setNotifyPersists() throws {
+        let defaults = try scratchDefaults()
+        let cloud = MemoryCloudStore()
+        var reloads = 0
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = FavoritesStore(
+            defaults: defaults,
+            cloud: cloud,
+            seedIDs: seedIDs,
+            isExistingInstall: true,
+            reloadWidgets: { reloads += 1 },
+            now: { now }
+        )
+        let team = seedIDs[1]
+        #expect(store.notify(for: team))
+
+        store.setNotify(false, for: team)
+        #expect(!store.notify(for: team))
+        #expect(store.favorites.first { $0.teamID == team }?.notifyChangedAt == now)
+        #expect(reloads == 1)
+        #expect(FavoritesCodec.decode(defaults.data(forKey: FavoritesCodec.key))?.first { $0.teamID == team }?.notify == false)
+        #expect(cloud.entries.first { $0.teamID == team }?.notify == false)
+        // Order and the other teams are untouched.
+        #expect(store.teamIDs == seedIDs)
+        let others = store.favorites.filter { $0.teamID != team }
+        #expect(others.allSatisfy { $0.notify })
+
+        // Setting it the way it already is, or for a team not followed, is
+        // not an edit.
+        let writes = cloud.writes
+        store.setNotify(false, for: team)
+        store.setNotify(false, for: "football/nfl:99")
+        #expect(reloads == 1)
+        #expect(cloud.writes == writes)
+        #expect(!store.notify(for: "football/nfl:99"))
+
+        let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        #expect(!relaunched.notify(for: team))
+        #expect(relaunched.notify(for: seedIDs[0]))
+
+        store.setNotify(true, for: team)
+        #expect(store.notify(for: team))
+        #expect(cloud.entries.first { $0.teamID == team }?.notify == true)
+    }
+
+    @MainActor
+    @Test("An alerts setting is stamped after the follow, even with the clock behind")
+    func setNotifyAfterFollow() throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [], isExistingInstall: true, reloadWidgets: {}, now: { t })
+        store.add(try #require(TeamCatalog.team(id: seedIDs[1])))
+        store.setNotify(false, for: seedIDs[1])
+        let entry = try #require(store.favorites.first)
+        #expect(entry.notifySetAt > entry.addedAt)
+    }
+
+    @MainActor
+    @Test("Alerts turned off on one device stay off on another, and are not undone")
+    func notifySyncs() throws {
+        let cloud = MemoryCloudStore()
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let bDefaults = try scratchDefaults()
+        var bReloads = 0
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: { bReloads += 1 })
+        let team = seedIDs[2]
+
+        a.setNotify(false, for: team)
+        receive(b)
+        #expect(!b.notify(for: team))
+        #expect(bReloads == 1)
+        #expect(FavoritesCodec.decode(bDefaults.data(forKey: FavoritesCodec.key))?.first { $0.teamID == team }?.notify == false)
+
+        // B's seed copy, still on, never wins it back.
+        b.synchronize()
+        receive(a)
+        a.synchronize()
+        #expect(!a.notify(for: team))
+        #expect(!b.notify(for: team))
+        #expect(cloud.entries.first { $0.teamID == team }?.notify == false)
+    }
+
+    @MainActor
+    @Test("Alerts set on two devices apart resolve to the later setting", arguments: [true, false])
+    func concurrentNotify(offIsLater: Bool) throws {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let x = seedIDs[3]
+        let offAt = offIsLater ? t0 + 200 : t0 + 100
+        let onAt = offIsLater ? t0 + 100 : t0 + 200
+        // Both start with X's alerts off, set long ago.
+        let start = seedIDs.map {
+            FavoriteTeam(teamID: $0, addedAt: FavoritesCodec.seedDate, notify: $0 != x, notifyChangedAt: $0 == x ? t0 : nil)
+        }
+        let aDefaults = try scratchDefaults()
+        FavoritesCodec.save(start, defaults: aDefaults, cloud: nil)
+        let bDefaults = try scratchDefaults()
+        FavoritesCodec.save(start, defaults: bDefaults, cloud: nil)
+        let cloud = MemoryCloudStore()
+        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { onAt })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { offAt })
+
+        // Offline, A turns X's alerts on; B turns them on and off again.
+        // B's write reaches iCloud last.
+        a.setNotify(true, for: x)
+        b.setNotify(true, for: x)
+        b.setNotify(false, for: x)
+        receive(a)
+        receive(b)
+
+        #expect(a.notify(for: x) == !offIsLater)
+        #expect(b.notify(for: x) == !offIsLater)
+        #expect(cloud.entries.first { $0.teamID == x }?.notify == !offIsLater)
+    }
+
+    @Test("Following a team again resets its alerts, whatever an older copy says")
+    func refollowResetsNotify() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let old = FavoriteTeam(teamID: "x", addedAt: t, notify: false, notifyChangedAt: t + 10)
+        let refollowed = FavoriteTeam(teamID: "x", addedAt: t + 30)
+        for merged in [FavoritesCodec.merge([refollowed], [old]), FavoritesCodec.merge([old], [refollowed])] {
+            #expect(merged == [refollowed])
+        }
+    }
+
+    @Test("An alerts setting never brings back a team removed on another device", arguments: [true, false])
+    func notifyEditKeepsRemoval(removalIsLater: Bool) throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let removedAt = removalIsLater ? t + 200 : t + 100
+        let setAt = removalIsLater ? t + 100 : t + 200
+        let edited = FavoriteTeam(teamID: "x", addedAt: t, notify: false, notifyChangedAt: setAt)
+        let removed = FavoriteTeam(teamID: "x", addedAt: t, removedAt: removedAt)
+        for merged in [FavoritesCodec.merge([edited], [removed]), FavoritesCodec.merge([removed], [edited])] {
+            let entry = try #require(merged.first)
+            #expect(merged.count == 1)
+            #expect(entry.isRemoved)
+            #expect(entry.removedAt == removedAt)
+            // The tombstone carries the setting, made after the follow.
+            #expect(!entry.notify)
+            #expect(entry.notifyChangedAt == setAt)
+        }
+    }
 }

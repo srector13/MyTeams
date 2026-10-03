@@ -94,6 +94,7 @@
 		2758B17622312232294B591F /* FavoritesStoreNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */; };
 		254972CEE271C187E523211D /* LeagueScoreboardCenterFanoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 553644DA631607EFF73950A3 /* LeagueScoreboardCenterFanoutTests.swift */; };
 		322E8BF56A3E01EA030B6F96 /* FavoritesScoreboardFollowingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96A94997ED9B4D7848B18A5 /* FavoritesScoreboardFollowingTests.swift */; };
+		397BF01A56956F7850D67D6F /* AlertsSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06D8AC51A70604C3C19C7EDE /* AlertsSettingsTests.swift */; };
 		9C03DD85FE7B79019A43612D /* WidgetDeepLinkRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8908C7681C6E71A212FCEB6 /* WidgetDeepLinkRoutingTests.swift */; };
 		2ECF954DCABCBA4B75365F80 /* FavoritesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDBB71827C45A79D38B20049 /* FavoritesStore.swift */; };
 		129154B029DD4680C0EA43D3 /* TeamBrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1204CF56986AC1138C1805E /* TeamBrowserView.swift */; };
@@ -101,6 +102,8 @@
 		F23520D6A5D15820F4E0CF96 /* FavoritesStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */; };
 		9B7D3A67B141ED86CD214BA2 /* TeamSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */; };
 		A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */; };
+		C60415BD6AD63FDCC0065D93 /* AlertsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FC9E09F90C7500085E831A /* AlertsSettings.swift */; };
+		A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */; };
 		7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */; };
 		2C7DFA31B60B1565FB9D03D2 /* ScoreAlertEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */; };
 		4018B7D252391342C25956F8 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 940348FF9580BF614B9B5506 /* AppDelegate.swift */; };
@@ -241,6 +244,7 @@
 		F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStoreNotificationTests.swift"; sourceTree = "<group>"; };
 		553644DA631607EFF73950A3 /* LeagueScoreboardCenterFanoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LeagueScoreboardCenterFanoutTests.swift"; sourceTree = "<group>"; };
 		B96A94997ED9B4D7848B18A5 /* FavoritesScoreboardFollowingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesScoreboardFollowingTests.swift"; sourceTree = "<group>"; };
+		06D8AC51A70604C3C19C7EDE /* AlertsSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettingsTests.swift"; sourceTree = "<group>"; };
 		F8908C7681C6E71A212FCEB6 /* WidgetDeepLinkRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDeepLinkRoutingTests.swift"; sourceTree = "<group>"; };
 		DDBB71827C45A79D38B20049 /* FavoritesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStore.swift"; sourceTree = "<group>"; };
 		D1204CF56986AC1138C1805E /* TeamBrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamBrowserView.swift"; sourceTree = "<group>"; };
@@ -248,6 +252,8 @@
 		71148A6D7F570E7638E31B26 /* FavoritesStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStoreTests.swift"; sourceTree = "<group>"; };
 		B8673FD4EC890689DDAB3882 /* TeamSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamSearchTests.swift"; sourceTree = "<group>"; };
 		0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertsPermissions.swift"; sourceTree = "<group>"; };
+		60FC9E09F90C7500085E831A /* AlertsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettings.swift"; sourceTree = "<group>"; };
+		A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettingsView.swift"; sourceTree = "<group>"; };
 		77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiff.swift"; sourceTree = "<group>"; };
 		73CCE8CE52BE17095769EA86 /* ScoreAlertEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertEngine.swift"; sourceTree = "<group>"; };
 		940348FF9580BF614B9B5506 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppDelegate.swift"; sourceTree = "<group>"; };
@@ -338,6 +344,8 @@
 				9CB561517D21DC51898A319C /* LiveActivityStateMapper.swift */,
 				EEE774E984A3007954BFA9CA /* LiveActivityManager.swift */,
 				0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */,
+				60FC9E09F90C7500085E831A /* AlertsSettings.swift */,
+				A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */,
 				346F15839B839382E7E93D52 /* Standings.swift */,
 				0D2A095EAB5992522D7B70CC /* Record.swift */,
 				D1204CF56986AC1138C1805E /* TeamBrowserView.swift */,
@@ -556,6 +564,7 @@
 				F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */,
 				553644DA631607EFF73950A3 /* LeagueScoreboardCenterFanoutTests.swift */,
 				B96A94997ED9B4D7848B18A5 /* FavoritesScoreboardFollowingTests.swift */,
+				06D8AC51A70604C3C19C7EDE /* AlertsSettingsTests.swift */,
 				F8908C7681C6E71A212FCEB6 /* WidgetDeepLinkRoutingTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
@@ -748,6 +757,8 @@
 				5BCCFEC612D3E9A0BDBD5315 /* LiveActivityStateMapper.swift in Sources */,
 				CBA4C0FC0601B87C8D95D08A /* LiveActivityManager.swift in Sources */,
 				A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */,
+				C60415BD6AD63FDCC0065D93 /* AlertsSettings.swift in Sources */,
+				A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */,
 				749E671F2916273F3E45E498 /* Standings.swift in Sources */,
 				65D076717FCEAD9E6C2663EB /* Record.swift in Sources */,
 				476464CAAE86817C53BEFF90 /* DownloadScoreboardData.swift in Sources */,
@@ -847,6 +858,7 @@
 				2758B17622312232294B591F /* FavoritesStoreNotificationTests.swift in Sources */,
 				254972CEE271C187E523211D /* LeagueScoreboardCenterFanoutTests.swift in Sources */,
 				322E8BF56A3E01EA030B6F96 /* FavoritesScoreboardFollowingTests.swift in Sources */,
+				397BF01A56956F7850D67D6F /* AlertsSettingsTests.swift in Sources */,
 				9C03DD85FE7B79019A43612D /* WidgetDeepLinkRoutingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

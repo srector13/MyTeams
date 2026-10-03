@@ -158,6 +158,25 @@ final class FavoritesStore {
         didChange()
     }
 
+    /// Whether game alerts are wanted for a followed team.
+    func notify(for teamID: TeamRef.ID) -> Bool {
+        favorites.first { $0.teamID == teamID }?.notify ?? false
+    }
+
+    /// Turns game alerts on or off for a followed team. Does nothing for a
+    /// team not followed, or already set that way.
+    func setNotify(_ notify: Bool, for teamID: TeamRef.ID) {
+        guard let index = favorites.firstIndex(where: { $0.teamID == teamID }),
+              favorites[index].notify != notify
+        else { return }
+        favorites[index].notify = notify
+        // A whole second past the follow at least (the JSON keeps no
+        // fractions), so the setting outweighs the follow's default on other
+        // devices.
+        favorites[index].notifyChangedAt = max(now(), favorites[index].addedAt + 1)
+        didChange()
+    }
+
     /// Reorders the favorites, as `List`'s `.onMove` reports it.
     func move(from source: IndexSet, to destination: Int) {
         favorites.move(fromOffsets: source, toOffset: destination)
