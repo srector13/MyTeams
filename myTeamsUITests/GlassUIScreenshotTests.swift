@@ -45,24 +45,41 @@ final class GlassUIScreenshotTests: XCTestCase {
     /// widen the pass.
     static let typeSizes = TypeSize.allCases
     static let darkModes = [false, true]
-    // TODO(GlassUI 2c): XCUITest can't toggle Increase Contrast or Reduce
-    // Transparency in-process (they're `xcrun simctl ui` / Settings knobs on
-    // the host). Add `true` here once the app maps the launch environment
-    // keys below onto its accessibility environment for UI tests.
+    // XCUITest can't toggle Increase Contrast, Reduce Transparency or
+    // Reduce Motion in-process (they're `xcrun simctl ui` / Settings knobs
+    // on the host), so the app stands them in from the launch environment
+    // keys below (`Theme.LaunchAccessibility`). The full matrix leaves them
+    // off to stay bounded; `accessibilityVariants` covers them on the main
+    // screens. Add `true` here to widen the whole pass.
     static let increaseContrastModes = [false]
     static let reduceTransparencyModes = [false]
+    static let reduceMotionModes = [false]
+
+    /// Each accessibility setting on its own, at the default text size in
+    /// both appearances, for the main screens (`captureMainScreens`).
+    static var accessibilityVariants: [Configuration] {
+        darkModes.flatMap { dark in
+            [
+                Configuration(typeSize: .large, dark: dark, increaseContrast: true, reduceTransparency: false, reduceMotion: false),
+                Configuration(typeSize: .large, dark: dark, increaseContrast: false, reduceTransparency: true, reduceMotion: false),
+                Configuration(typeSize: .large, dark: dark, increaseContrast: false, reduceTransparency: false, reduceMotion: true),
+            ]
+        }
+    }
 
     struct Configuration {
         var typeSize: TypeSize
         var dark: Bool
         var increaseContrast: Bool
         var reduceTransparency: Bool
+        var reduceMotion: Bool
 
         /// Stamped on every screenshot, e.g. `AX3-dark-hc`.
         var name: String {
             var parts = [typeSize.label, dark ? "dark" : "light"]
             if increaseContrast { parts.append("hc") }
             if reduceTransparency { parts.append("rt") }
+            if reduceMotion { parts.append("rm") }
             return parts.joined(separator: "-")
         }
     }
@@ -71,13 +88,16 @@ final class GlassUIScreenshotTests: XCTestCase {
         typeSizes.flatMap { typeSize in
             darkModes.flatMap { dark in
                 increaseContrastModes.flatMap { increaseContrast in
-                    reduceTransparencyModes.map { reduceTransparency in
-                        Configuration(
-                            typeSize: typeSize,
-                            dark: dark,
-                            increaseContrast: increaseContrast,
-                            reduceTransparency: reduceTransparency
-                        )
+                    reduceTransparencyModes.flatMap { reduceTransparency in
+                        reduceMotionModes.map { reduceMotion in
+                            Configuration(
+                                typeSize: typeSize,
+                                dark: dark,
+                                increaseContrast: increaseContrast,
+                                reduceTransparency: reduceTransparency,
+                                reduceMotion: reduceMotion
+                            )
+                        }
                     }
                 }
             }
@@ -108,19 +128,58 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
+    /// The main screens under Increase Contrast, Reduce Transparency and
+    /// Reduce Motion: the scrims, washes and placeholders that adapt to
+    /// them (GlassUI 2c).
+    @MainActor
+    func testAccessibilityVariants() throws {
+        let device = XCUIDevice.shared
+        let originalAppearance = device.appearance
+        defer { device.appearance = originalAppearance }
+
+        for configuration in Self.accessibilityVariants {
+            device.appearance = configuration.dark ? .dark : .light
+            let app = launch(configuration)
+            captureMainScreens(app, configuration)
+            app.terminate()
+        }
+    }
+
     @MainActor
     private func launch(_ configuration: Configuration) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", configuration.typeSize.rawValue]
-        // Not read by the app yet; see `increaseContrastModes`.
+        // Read by the app's `Theme.LaunchAccessibility`.
         if configuration.increaseContrast {
             app.launchEnvironment["GLASSUI_INCREASE_CONTRAST"] = "1"
         }
         if configuration.reduceTransparency {
             app.launchEnvironment["GLASSUI_REDUCE_TRANSPARENCY"] = "1"
         }
+        if configuration.reduceMotion {
+            app.launchEnvironment["GLASSUI_REDUCE_MOTION"] = "1"
+        }
         app.launch()
         return app
+    }
+
+    /// The main screens only: the first team page, and its player and game
+    /// sheets. Onboarding, if it shows, is dismissed unrecorded.
+    @MainActor
+    private func captureMainScreens(_ app: XCUIApplication, _ configuration: Configuration) {
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+
+        guard app.buttons["teamPicker.edit"].waitForExistence(timeout: 10) else {
+            XCTFail("\(configuration.name): the crest bar never appeared")
+            return
+        }
+        snapshot("team-page-1", configuration)
+
+        capturePlayerSheet(app, configuration)
+        captureGameSheet(app, configuration)
     }
 
     /// Walks the screens reachable by identifier: onboarding, the first team
@@ -174,29 +233,8 @@ final class GlassUIScreenshotTests: XCTestCase {
     /// (no network, an empty feed) skips its sheet rather than failing.
     @MainActor
     private func captureSheets(_ app: XCUIApplication, _ configuration: Configuration) {
-        if let player = firstHittable("roster.player", in: app) {
-            player.tap()
-            let close = app.buttons["playerDetail.close"]
-            if close.waitForExistence(timeout: 5) {
-                snapshot("player-detail", configuration)
-                close.tap()
-            } else {
-                XCTFail("\(configuration.name): the player sheet never opened")
-            }
-        }
-
-        if let game = firstHittable("schedule.game", in: app, swipes: 4) {
-            game.tap()
-            let close = app.buttons["gameDetail.close"]
-            if close.waitForExistence(timeout: 5) {
-                // Opens at the medium detent; the drag indicator is there
-                // to take it to large.
-                snapshot("game-detail", configuration)
-                close.tap()
-            } else {
-                XCTFail("\(configuration.name): the game sheet never opened")
-            }
-        }
+        capturePlayerSheet(app, configuration)
+        captureGameSheet(app, configuration)
 
         if let article = firstHittable("news.article", in: app, swipes: 12) {
             article.tap()
@@ -210,6 +248,36 @@ final class GlassUIScreenshotTests: XCTestCase {
             } else {
                 XCTFail("\(configuration.name): the news sheet never opened")
             }
+        }
+    }
+
+    /// The first roster card's player sheet, opened and closed again.
+    @MainActor
+    private func capturePlayerSheet(_ app: XCUIApplication, _ configuration: Configuration) {
+        guard let player = firstHittable("roster.player", in: app) else { return }
+        player.tap()
+        let close = app.buttons["playerDetail.close"]
+        if close.waitForExistence(timeout: 5) {
+            snapshot("player-detail", configuration)
+            close.tap()
+        } else {
+            XCTFail("\(configuration.name): the player sheet never opened")
+        }
+    }
+
+    /// The first schedule card's game sheet, opened and closed again.
+    @MainActor
+    private func captureGameSheet(_ app: XCUIApplication, _ configuration: Configuration) {
+        guard let game = firstHittable("schedule.game", in: app, swipes: 4) else { return }
+        game.tap()
+        let close = app.buttons["gameDetail.close"]
+        if close.waitForExistence(timeout: 5) {
+            // Opens at the medium detent; the drag indicator is there
+            // to take it to large.
+            snapshot("game-detail", configuration)
+            close.tap()
+        } else {
+            XCTFail("\(configuration.name): the game sheet never opened")
         }
     }
 

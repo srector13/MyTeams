@@ -115,11 +115,14 @@ private struct TeamLeaderCard: View {
 
     @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 110
 
+    /// The headshot, scaled with the card and its text (B-3).
+    @ScaledMetric(relativeTo: .body) private var headshotSize: CGFloat = 56
+
     private var fillsRow: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         VStack(spacing: 4) {
-            LeaderHeadshot(url: row.leader.headshotURL, size: 56)
+            LeaderHeadshot(url: row.leader.headshotURL, size: headshotSize)
 
             Text(row.value)
                 .font(Theme.Typography.statFigure)
@@ -185,10 +188,18 @@ struct LeagueLeadersView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { dismiss() }
+                        // Read-only: nothing to confirm, so it closes, as
+                        // the system's glass xmark (X-8).
+                        Button(role: .close) {
+                            dismiss()
+                        } label: {
+                            Label("Close", systemImage: "xmark")
+                        }
                     }
                 }
         }
+        // Full height: ten-deep boards are a long list (X-9).
+        .presentationDetents([.large])
         .task(id: league) { await load() }
     }
 
@@ -272,6 +283,9 @@ private struct LeaderRow: View {
     /// The rank column, wide enough for "10" at the current text size.
     @ScaledMetric(relativeTo: .subheadline) private var rankWidth: CGFloat = 22
 
+    /// The headshot, which scales with the player's name beside it (B-3).
+    @ScaledMetric(relativeTo: .body) private var headshotSize: CGFloat = 36
+
     /// At accessibility text sizes the figure moves under the player, so
     /// the name keeps the row's width.
     private var stacksFigure: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -288,7 +302,7 @@ private struct LeaderRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: rankWidth, alignment: .trailing)
 
-                LeaderHeadshot(url: row.leader.headshotURL, size: 36)
+                LeaderHeadshot(url: row.leader.headshotURL, size: headshotSize)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: Theme.Spacing.xs) {

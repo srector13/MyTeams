@@ -30,6 +30,9 @@ struct MyTeamsApp: App {
     var body: some Scene {
         WindowGroup {
             Home(deepLinkedTeamID: $deepLinkedTeamID)
+                // Accessibility settings a UI test asked for at launch;
+                // nothing otherwise (`Theme.LaunchAccessibility`).
+                .launchAccessibilityOverrides()
                 .onOpenURL { url in
                     if let teamID = WidgetDeepLink.teamID(from: url) {
                         deepLinkedTeamID = teamID

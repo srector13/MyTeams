@@ -210,7 +210,10 @@ private struct TeamPage<Content: View>: View {
                             size: max(containerSize.width - 50, 0),
                             forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
                         )
-                        .opacity(0.5)
+                        // Dimmed into the team colour; stronger under
+                        // Increase Contrast, solid under Reduce
+                        // Transparency (X-5).
+                        .adaptiveScrim(0.5)
                         .offset(x: 50)
                         // The crest deliberately overflows its slot: only the
                         // top sliver shows until the page is scrolled.
@@ -285,6 +288,9 @@ private struct TeamPicker: View {
 
     @Namespace private var glass
 
+    /// A crest, which scales with the selected team's name beside it (B-3).
+    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 25
+
     var body: some View {
         ScrollViewReader { reader in
             ScrollView(.horizontal, showsIndicators: false) {
@@ -297,9 +303,9 @@ private struct TeamPicker: View {
                         Button(action: editTeams) {
                             Image(systemName: "plus")
                                 .font(.subheadline.weight(.semibold))
-                                // The circle matches the fixed-size crests
-                                // beside it, so the symbol stops growing where
-                                // it would outgrow the circle.
+                                // The circle matches the crest pills at the
+                                // default text size, so the symbol stops
+                                // growing where it would outgrow the circle.
                                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                                 .frame(width: 44, height: 44)
                                 .contentShape(.circle)
@@ -335,7 +341,7 @@ private struct TeamPicker: View {
             selection = team.id
         } label: {
             HStack(spacing: 6) {
-                TeamLogo(team: team, size: 25)
+                TeamLogo(team: team, size: crestSize)
 
                 if selected {
                     Text(team.shortName)

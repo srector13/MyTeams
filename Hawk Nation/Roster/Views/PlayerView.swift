@@ -19,6 +19,10 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// The headshot, which scales with the caption under or beside it
+    /// (B-3).
+    @ScaledMetric(relativeTo: .caption) private var headshotSize: CGFloat = 60
+
     var body: some View {
         // At accessibility text sizes the roster is a vertical list, so the
         // detail sits beside the headshot rather than under it.
@@ -32,7 +36,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
                     .resizable()
             }
             .aspectRatio(contentMode: .fill)
-            .frame(width: 60, height: 60)
+            .frame(width: headshotSize, height: headshotSize)
             .clipShape(.circle)
 
             switch state {
@@ -58,10 +62,13 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
 /// The placeholder card shown in a roster carousel before it has loaded.
 struct LoadingPlayerView: View {
+    /// The headshot it stands in for, scaled the same way.
+    @ScaledMetric(relativeTo: .caption) private var headshotSize: CGFloat = 60
+
     var body: some View {
         VStack(spacing: 5) {
             LoadingViewCircle()
-                .frame(width: 60, height: 60)
+                .frame(width: headshotSize, height: headshotSize)
 
             LoadingView()
                 .frame(width: 70, height: 10)
