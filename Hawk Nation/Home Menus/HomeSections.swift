@@ -37,6 +37,20 @@ extension SectionHeader where Accessory == EmptyView {
     }
 }
 
+/// Marks the followed team's row (a standings row, a leaderboard row) by
+/// shape, so it doesn't rest on bold type and a faint team-colour wash
+/// alone (T-7, LL-2). Silent to VoiceOver: the row carries the
+/// `isSelected` trait instead.
+struct FollowedMarker: View {
+    var body: some View {
+        Image(systemName: "star.fill")
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(.primary)
+            .imageScale(.small)
+            .accessibilityHidden(true)
+    }
+}
+
 /// A menu in a section header, drawn as a standard glass circle button at
 /// least 44 pt across (T-1). A header's menus go in one
 /// `GlassEffectContainer(spacing: Theme.Spacing.s)` so they read as a
@@ -471,6 +485,8 @@ private struct StandingsTable: View {
     let followedID: String
     let teamColor: Color
 
+    @Environment(\.colorSchemeContrast) private var contrast
+
     /// A numeric column: its heading, and each row's value.
     private struct Column {
         let title: String
@@ -543,6 +559,10 @@ private struct StandingsTable: View {
                         TeamLogo(team: crestTeam(for: entry), size: 20)
                         Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
                             .lineLimit(1)
+                        // After the name, so the names stay in one column.
+                        if followed {
+                            FollowedMarker()
+                        }
                         if !entry.clincher.isEmpty {
                             Text(entry.clincher)
                                 .font(.caption2)
@@ -550,6 +570,8 @@ private struct StandingsTable: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(followed ? .isSelected : [])
                     ForEach(columns.indices, id: \.self) { index in
                         Text(columns[index].value(entry))
                             .monospacedDigit()
@@ -558,7 +580,7 @@ private struct StandingsTable: View {
                 .font(.footnote)
                 .fontWeight(followed ? .bold : .regular)
                 .padding(.vertical, 2)
-                .background(followed ? teamColor.opacity(0.15) : Color.clear)
+                .background(followed ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast)) : Color.clear)
             }
         }
     }

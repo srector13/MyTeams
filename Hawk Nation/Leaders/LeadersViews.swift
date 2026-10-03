@@ -267,6 +267,7 @@ private struct LeaderRow: View {
     let teamColor: Color
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var contrast
 
     /// The rank column, wide enough for "10" at the current text size.
     @ScaledMetric(relativeTo: .subheadline) private var rankWidth: CGFloat = 22
@@ -290,10 +291,16 @@ private struct LeaderRow: View {
                 LeaderHeadshot(url: row.leader.headshotURL, size: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.leader.name)
-                        .font(Theme.Typography.body)
-                        .fontWeight(followed ? .bold : .regular)
-                        .lineLimit(stacksFigure ? nil : 1)
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text(row.leader.name)
+                            .font(Theme.Typography.body)
+                            .fontWeight(followed ? .bold : .regular)
+                            .lineLimit(stacksFigure ? nil : 1)
+
+                        if followed {
+                            FollowedMarker()
+                        }
+                    }
 
                     Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(Theme.Typography.caption)
@@ -320,7 +327,16 @@ private struct LeaderRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .listRowBackground(followed ? teamColor.opacity(0.15) : Color(uiColor: .secondarySystemGroupedBackground))
+        // One VoiceOver element per row, which says when it's the
+        // followed team's player rather than leaving that to bold type and
+        // a wash (LL-2).
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(followed ? .isSelected : [])
+        .listRowBackground(
+            followed
+                ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast))
+                : Theme.Surface.contentCard
+        )
     }
 }
 

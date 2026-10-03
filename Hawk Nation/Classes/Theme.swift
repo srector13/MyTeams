@@ -93,6 +93,15 @@ enum Theme {
         static var chrome: Glass { .regular }
     }
 
+    /// The opacity of the team-colour wash behind a followed row (a
+    /// standings row, a leaderboard row): faint by default, twice as strong
+    /// under Increase Contrast. The wash only backs up the row's star and
+    /// `isSelected` trait, which carry the meaning without colour (T-7,
+    /// LL-2); text sits on it, so it stays well short of a scrim.
+    static func selectionWashOpacity(contrast: ColorSchemeContrast) -> Double {
+        contrast == .increased ? 0.3 : 0.15
+    }
+
     /// The opacity to draw a scrim at, given the accessibility settings: a
     /// third of the way to opaque under Increase Contrast, and opaque under
     /// Reduce Transparency. Pure so it can be unit-tested.

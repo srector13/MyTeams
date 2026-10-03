@@ -33,6 +33,15 @@ struct ThemeTests {
         #expect(Theme.scrimOpacity(0.2, contrast: .increased, reduceTransparency: true) == 1)
     }
 
+    @Test("A followed row's wash strengthens under Increase Contrast")
+    func selectionWash() {
+        let standard = Theme.selectionWashOpacity(contrast: .standard)
+        let increased = Theme.selectionWashOpacity(contrast: .increased)
+        #expect(standard == 0.15)
+        #expect(increased > standard)
+        #expect(increased < 0.5)
+    }
+
     @Test("Radii nest concentrically")
     func radiiConcentric() {
         // A card inset Spacing.s inside its card, and the page's cards
