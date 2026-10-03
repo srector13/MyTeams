@@ -31,6 +31,7 @@
 		27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F7DFED7B341798C35C5671F /* ConvertColor.swift */; };
 		43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3336602F15AB9F42EE41A789 /* LoadingView.swift */; };
 		FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */; };
+		7A1D0C3E5B9F2A4C6E8D1B31 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */; };
 		F40E52311E166FC0C805078D /* HomeSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F3B13CE1F1A66438291C3 /* HomeSections.swift */; };
 		3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */; };
 		0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF854E8FC1231BAD448D63BA /* TeamModel.swift */; };
@@ -89,6 +90,7 @@
 		F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */; };
 		015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */; };
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
+		7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */; };
 		5C1E7A93D04B62F8A1E93D27 /* WidgetDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */; };
 		3862319C87D5F70D7BF3E0D2 /* ScoreAlertEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */; };
 		2758B17622312232294B591F /* FavoritesStoreNotificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */; };
@@ -181,6 +183,7 @@
 		8F7DFED7B341798C35C5671F /* ConvertColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConvertColor.swift"; sourceTree = "<group>"; };
 		3336602F15AB9F42EE41A789 /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LoadingView.swift"; sourceTree = "<group>"; };
 		24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RepeatingTask.swift"; sourceTree = "<group>"; };
+		7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Theme.swift"; sourceTree = "<group>"; };
 		295F3B13CE1F1A66438291C3 /* HomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeSections.swift"; sourceTree = "<group>"; };
 		8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamHomeView.swift"; sourceTree = "<group>"; };
 		BF854E8FC1231BAD448D63BA /* TeamModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamModel.swift"; sourceTree = "<group>"; };
@@ -239,6 +242,7 @@
 		82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalogTests.swift"; sourceTree = "<group>"; };
 		B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStoreTests.swift"; sourceTree = "<group>"; };
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
+		7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeTests.swift"; sourceTree = "<group>"; };
 		9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDeepLinkTests.swift"; sourceTree = "<group>"; };
 		EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertEngineTests.swift"; sourceTree = "<group>"; };
 		F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FavoritesStoreNotificationTests.swift"; sourceTree = "<group>"; };
@@ -330,6 +334,7 @@
 				8F7DFED7B341798C35C5671F /* ConvertColor.swift */,
 				3336602F15AB9F42EE41A789 /* LoadingView.swift */,
 				24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */,
+				7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */,
 			);
 			path = "Classes";
 			sourceTree = "<group>";
@@ -559,6 +564,7 @@
 				82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */,
 				B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */,
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
+				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */,
 				EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */,
 				F145067F502A5D79A92FE9F1 /* FavoritesStoreNotificationTests.swift */,
@@ -768,6 +774,7 @@
 				27A5131FAB8C20BA658A117E /* ConvertColor.swift in Sources */,
 				43A86B7171FBFFA8D4364942 /* LoadingView.swift in Sources */,
 				FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */,
+				7A1D0C3E5B9F2A4C6E8D1B31 /* Theme.swift in Sources */,
 				F40E52311E166FC0C805078D /* HomeSections.swift in Sources */,
 				3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */,
 				0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */,
@@ -853,6 +860,7 @@
 				F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */,
 				015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */,
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
+				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				5C1E7A93D04B62F8A1E93D27 /* WidgetDeepLinkTests.swift in Sources */,
 				3862319C87D5F70D7BF3E0D2 /* ScoreAlertEngineTests.swift in Sources */,
 				2758B17622312232294B591F /* FavoritesStoreNotificationTests.swift in Sources */,
