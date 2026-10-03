@@ -31,13 +31,26 @@ struct LeadersSection<Player: RosterPlayer>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "trophy", title: "Leaders") {
+                // A standard glass control, like the other sections' header
+                // menus (T-1), rather than bare text in the team colour,
+                // whose contrast depended on the team (T-6). The glass draws
+                // the ink, so it reads whatever the team colour; the chevron
+                // says it opens somewhere.
                 Button {
                     showingLeague = true
                 } label: {
-                    Text("\(team.league.badge) Leaders")
-                        .font(.subheadline)
-                        .foregroundStyle(team.color)
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text("\(team.league.badge) Leaders")
+                            .font(.subheadline)
+                        Image(systemName: "chevron.right")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .accessibilityIdentifier("leaders.league")
             }
             .padding([.leading, .top, .trailing])
 
