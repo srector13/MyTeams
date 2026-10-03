@@ -12,8 +12,8 @@ import Testing
 @testable import myTeams
 
 /// The arithmetic behind the theme's accessibility primitives: scrim
-/// opacity, the placeholder pulse, launch-time accessibility stand-ins
-/// and contrast-picked ink.
+/// opacity, the placeholder pulse, motion and its Reduce Motion fallbacks,
+/// launch-time accessibility stand-ins and contrast-picked ink.
 @Suite("Theme")
 struct ThemeTests {
     @Test("Scrims keep their opacity by default")
@@ -61,6 +61,22 @@ struct ThemeTests {
         #expect(resting == Theme.Placeholder.opacity(raised: true, reduceMotion: true))
         #expect(resting > Theme.Placeholder.minOpacity)
         #expect(resting < Theme.Placeholder.maxOpacity)
+    }
+
+    @Test("Motion plays by default and is dropped under Reduce Motion")
+    func motionAnimation() {
+        #expect(Theme.Motion.animation(Theme.Motion.selection, reduceMotion: false) == Theme.Motion.selection)
+        #expect(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: false) == Theme.Motion.stateChange)
+        #expect(Theme.Motion.animation(Theme.Motion.selection, reduceMotion: true) == nil)
+        #expect(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: true) == nil)
+    }
+
+    @Test("Scores roll their digits, and cross-fade under Reduce Motion")
+    func scoreTransition() {
+        #expect(Theme.Motion.scoreTransition(value: 49, reduceMotion: false) == .numericText(value: 49))
+        #expect(Theme.Motion.scoreTransition(value: 49, reduceMotion: true) == .opacity)
+        #expect(Theme.Motion.scoreAnimation(reduceMotion: false) == Theme.Motion.score)
+        #expect(Theme.Motion.scoreAnimation(reduceMotion: true) == Theme.Motion.reducedFade)
     }
 
     @Test("Launch accessibility settings are off unless a key is \"1\"")

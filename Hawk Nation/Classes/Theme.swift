@@ -158,6 +158,44 @@ enum Theme {
         }
     }
 
+    /// The app's few animations and transitions (Phase 3), each with its
+    /// Reduce Motion fallback, so call sites name a role and never read the
+    /// setting themselves. Applied through `View.motionAnimation(_:value:)`,
+    /// `scoreTransition(value:)` and `zoomTransition(sourceID:in:)`.
+    enum Motion {
+        /// A selection moving between items: the crest picker's pill, a
+        /// league chip (H-7, B-4).
+        static let selection: Animation = .bouncy
+        /// A control changing state in place: a follow toggle, a player
+        /// sheet's tab (B-2, P-7).
+        static let stateChange: Animation = .snappy
+        /// A score's digits rolling to the new figure (G-5, X-12, LA-3).
+        static let score: Animation = .snappy
+        /// The cross-fade a score takes under Reduce Motion: no movement,
+        /// only the old figure fading into the new.
+        static let reducedFade: Animation = .easeInOut(duration: 0.2)
+
+        /// `animation`, or none under Reduce Motion, so the change lands at
+        /// once rather than moving. Pure so it can be unit-tested.
+        static func animation(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+            reduceMotion ? nil : animation
+        }
+
+        /// How a score changes: its digits roll towards `value`, or, under
+        /// Reduce Motion, the old figure cross-fades into the new. `value`
+        /// should only rise as the game goes on (both sides' scores
+        /// summed), so the digits roll one way. Pure so it can be
+        /// unit-tested.
+        static func scoreTransition(value: Double, reduceMotion: Bool) -> ContentTransition {
+            reduceMotion ? .opacity : .numericText(value: value)
+        }
+
+        /// The animation a score's transition plays in.
+        static func scoreAnimation(reduceMotion: Bool) -> Animation {
+            reduceMotion ? reducedFade : score
+        }
+    }
+
     /// Accessibility settings asked for in the launch environment by the
     /// GlassUI screenshot pass (`GlassUIScreenshotTests`). XCUITest can't
     /// switch Increase Contrast, Reduce Transparency or Reduce Motion on
@@ -254,6 +292,33 @@ extension View {
             .accessibilityLabel(Text("Loading"))
     }
 
+    /// `.animation(animation, value:)`, or no animation under Reduce Motion
+    /// (`Theme.Motion.animation(_:reduceMotion:)`). Use in place of
+    /// `.animation(_:value:)` for anything that moves.
+    func motionAnimation(_ animation: Animation, value: some Equatable) -> some View {
+        modifier(MotionAnimation(animation: animation, value: value))
+    }
+
+    /// A score `Text` whose digits roll when `value` changes, or cross-fade
+    /// under Reduce Motion (G-5, X-12, LA-3). `value` is the score, or both
+    /// sides' scores summed for a scoreline.
+    func scoreTransition(value: Double) -> some View {
+        modifier(ScoreTransition(value: value))
+    }
+
+    /// Marks a card as where the sheet it opens zooms from (X-13). Pair
+    /// with `zoomTransition(sourceID:in:)` on the sheet's content.
+    func zoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
+        matchedTransitionSource(id: id, in: namespace)
+    }
+
+    /// A sheet that zooms out of the card marked `zoomSource(id:in:)` with
+    /// `sourceID`, and back into it on close (X-13). The system's slide up
+    /// under Reduce Motion.
+    func zoomTransition<ID: Hashable>(sourceID: ID, in namespace: Namespace.ID) -> some View {
+        modifier(ZoomTransition(sourceID: sourceID, namespace: namespace))
+    }
+
     /// Stands `Theme.LaunchAccessibility.current`'s Increase Contrast in
     /// for the system's in the environment below. For the app's root view
     /// only; changes nothing unless a UI test set the launch key.
@@ -281,7 +346,9 @@ extension View {
 
 /// The accessibility settings the primitives here adapt to: the system's,
 /// or the ones a UI test stood in at launch (`Theme.LaunchAccessibility`).
-private struct AdaptiveSettings: DynamicProperty {
+/// Outside this file only for `withAnimation` around imperative changes,
+/// through `Theme.Motion.animation(_:reduceMotion:)`.
+struct AdaptiveSettings: DynamicProperty {
     @Environment(\.colorSchemeContrast) var contrast
     @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -351,6 +418,64 @@ private struct PlaceholderPulse: ViewModifier {
                     raised = true
                 }
             }
+    }
+}
+
+private struct MotionAnimation<Value: Equatable>: ViewModifier {
+    let animation: Animation
+    let value: Value
+
+    private var settings = AdaptiveSettings()
+
+    init(animation: Animation, value: Value) {
+        self.animation = animation
+        self.value = value
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .animation(Theme.Motion.animation(animation, reduceMotion: settings.reduceMotion), value: value)
+    }
+}
+
+private struct ScoreTransition: ViewModifier {
+    let value: Double
+
+    private var settings = AdaptiveSettings()
+
+    init(value: Double) {
+        self.value = value
+    }
+
+    func body(content: Content) -> some View {
+        // The score changes outside any animation (a poll, a push), and a
+        // content transition needs one to play.
+        content
+            .contentTransition(Theme.Motion.scoreTransition(value: value, reduceMotion: settings.reduceMotion))
+            .animation(Theme.Motion.scoreAnimation(reduceMotion: settings.reduceMotion), value: value)
+    }
+}
+
+private struct ZoomTransition<ID: Hashable>: ViewModifier {
+    let sourceID: ID
+    let namespace: Namespace.ID
+
+    private var settings = AdaptiveSettings()
+
+    init(sourceID: ID, namespace: Namespace.ID) {
+        self.sourceID = sourceID
+        self.namespace = namespace
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if settings.reduceMotion {
+            content
+                .navigationTransition(.automatic)
+        } else {
+            content
+                .navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        }
     }
 }
 
