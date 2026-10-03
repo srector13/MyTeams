@@ -45,9 +45,8 @@ struct GameView : View {
 
     @ScaledMetric(relativeTo: .body) private var cardWidth = GameView.baseWidth
     @ScaledMetric(relativeTo: .body) private var cardHeight = GameView.baseHeight
-    @ScaledMetric(relativeTo: .body) private var infoBarHeight: CGFloat = 40
-    @ScaledMetric(relativeTo: .caption) private var infoPillWidth: CGFloat = 80
-    @ScaledMetric(relativeTo: .caption) private var infoPillHeight: CGFloat = 25
+    @ScaledMetric(relativeTo: .body) private var statusBarHeight: CGFloat = 40
+    @ScaledMetric(relativeTo: .caption) private var statusPillHeight: CGFloat = 25
 
     private var teamColor: Color { team.color }
 
@@ -61,7 +60,7 @@ struct GameView : View {
         VStack(spacing: 0) {
             status
                 .frame(maxWidth: .infinity)
-                .frame(height: fillsRow ? nil : cardHeight - infoBarHeight)
+                .frame(height: fillsRow ? nil : cardHeight - statusBarHeight)
                 .background {
                     ZStack {
                         Rectangle()
@@ -76,17 +75,19 @@ struct GameView : View {
                 }
                 .clipped()
 
-            ZStack() {
-                Rectangle()
-                    .foregroundStyle(Color(uiColor: .systemGray4))
-
-                Text("Info")
-                    .font(Theme.Typography.statLabel)
-                    .foregroundStyle(Color.white)
-                    .frame(minWidth: infoPillWidth, minHeight: infoPillHeight)
-                    .background(teamColor, in: Theme.Radius.chip)
-            }
-            .frame(height: infoBarHeight)
+            // Where the game stands, as content: the whole card is the
+            // button (T-3), so nothing here may look like one (G-2).
+            Text(game.statusSummary)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, Theme.Spacing.s)
+                .frame(minHeight: statusPillHeight)
+                .background(.fill.tertiary, in: Theme.Radius.chip)
+                .frame(maxWidth: .infinity)
+                .frame(height: fillsRow ? nil : statusBarHeight)
+                .padding(.vertical, fillsRow ? Theme.Spacing.s : 0)
 
         }.background(Color(uiColor: .systemBackground))
             .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight)
@@ -292,5 +293,42 @@ private struct GameCardDetails: View {
             .font(.caption2.weight(.medium))
             .foregroundStyle(Color.white)
             .opacity(dimmed ? 0.5 : 1)
+    }
+}
+
+extension Game {
+    /// Where the game stands in a word or two, for the foot of its card:
+    /// "Final", "Live", "Cancelled", "Postponed", or else the start time.
+    var statusSummary: String {
+        if cancelled { return "Cancelled" }
+        if postponed { return "Postponed" }
+        if completed { return "Final" }
+        if dateAsDate < Date() { return "Live" }
+        return time.isEmpty ? date : time
+    }
+
+    /// The card read as one line for VoiceOver: the opponent, the date, then
+    /// the result (the team's score first), the live score or the start
+    /// time. `drawLabel` is what the league calls a level result.
+    func accessibilitySummary(drawLabel: String, liveScore: LiveGameScore?) -> String {
+        var parts = [opponent, date]
+        if cancelled {
+            parts.append("Cancelled")
+        } else if postponed {
+            parts.append("Postponed")
+        } else if completed {
+            let outcome = gameWin ? "Win" : isDraw ? drawLabel : "Loss"
+            parts.append("\(outcome), \(score) to \(opponentScore)")
+        } else if dateAsDate < Date() {
+            if let liveScore {
+                parts.append("Live, \(liveScore.score) to \(liveScore.opponentScore)")
+            } else {
+                parts.append("Live")
+            }
+        } else {
+            parts.append(time)
+            parts.append(channel)
+        }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }

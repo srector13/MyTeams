@@ -48,6 +48,35 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(first.isSelected)
     }
 
+    /// Picks a league from the team browser's glass chips, keyed on their
+    /// identifiers and the selected trait. Opens on NFL, the first chip.
+    @MainActor
+    func testLeagueChipsSelectLeague() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        // The onboarding sheet is the browser; past onboarding, the crest
+        // bar's add/edit button opens it.
+        let done = app.buttons["teamBrowser.done"]
+        if !done.waitForExistence(timeout: 5) {
+            let edit = app.buttons["teamPicker.edit"]
+            XCTAssertTrue(edit.waitForExistence(timeout: 10))
+            edit.tap()
+            XCTAssertTrue(done.waitForExistence(timeout: 5))
+        }
+
+        let nfl = app.buttons["teamBrowser.league.NFL"]
+        let nba = app.buttons["teamBrowser.league.NBA"]
+        XCTAssertTrue(nba.waitForExistence(timeout: 5))
+        XCTAssertTrue(nfl.isSelected)
+        XCTAssertFalse(nba.isSelected)
+
+        nba.tap()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: nba)
+        waitForExpectations(timeout: 5)
+        XCTAssertFalse(nfl.isSelected)
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {

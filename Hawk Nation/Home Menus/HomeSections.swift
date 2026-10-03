@@ -37,6 +37,38 @@ extension SectionHeader where Accessory == EmptyView {
     }
 }
 
+/// A menu in a section header, drawn as a standard glass circle button at
+/// least 44 pt across (T-1). A header's menus go in one
+/// `GlassEffectContainer(spacing: Theme.Spacing.s)` so they read as a
+/// cluster and share a sampling pass (§5.2).
+struct SectionHeaderMenu<Content: View>: View {
+    /// What the menu does, for VoiceOver ("Sort roster").
+    let title: String
+    let systemImage: String
+    let identifier: String
+    @ViewBuilder var content: Content
+
+    /// Grows with the header's text, never below the 44 pt minimum.
+    @ScaledMetric(relativeTo: .body) private var diameter: CGFloat = 44
+
+    var body: some View {
+        Menu {
+            content
+        } label: {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .frame(width: diameter, height: diameter)
+                .contentShape(.circle)
+        }
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .glassChrome(in: Circle(), interactive: true)
+        .accessibilityLabel(title)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 /// Stands in for a section's cards when it has none to show: either the feed
 /// answered with nothing, or it could not be reached and `retry` is offered.
 struct SectionStatusView: View {
@@ -142,35 +174,37 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "person.fill", title: "Roster") {
-                Menu {
-                    filterMenu
-                } label: {
-                    Image(systemName: "line.horizontal.3.decrease.circle")
-                        .foregroundStyle(Color(uiColor: .systemGray))
-                        .font(.title3)
-                }
-                .padding(.horizontal, 5)
+                GlassEffectContainer(spacing: Theme.Spacing.s) {
+                    HStack(spacing: Theme.Spacing.s) {
+                        SectionHeaderMenu(
+                            title: "Filter roster",
+                            systemImage: "line.3.horizontal.decrease",
+                            identifier: "roster.filter"
+                        ) {
+                            filterMenu
+                        }
 
-                Menu {
-                    Button("Name") { model.sort(by: .name) }
-                    Button("Number") { model.sort(by: .number) }
-                    Button("Position") { model.sort(by: .position) }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down.circle")
-                        .foregroundStyle(Color(uiColor: .systemGray))
-                        .font(.title3)
+                        SectionHeaderMenu(
+                            title: "Sort roster",
+                            systemImage: "arrow.up.arrow.down",
+                            identifier: "roster.sort"
+                        ) {
+                            Button("Name") { model.sort(by: .name) }
+                            Button("Number") { model.sort(by: .number) }
+                            Button("Position") { model.sort(by: .position) }
+                        }
+                    }
                 }
-                .padding(.horizontal, 5)
             }
             .padding([.leading, .top, .trailing])
 
             if usesStackedLayout && !model.players.isEmpty {
                 StackedCarousel(items: model.players) { player in
-                    card(player)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                        .onTapGesture { selectedPlayer = player }
-                        .accessibilityIdentifier("roster.player")
+                    playerButton(player) {
+                        card(player)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
                 }
             } else {
                 rosterCarousel
@@ -208,11 +242,11 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                     }
                 } else {
                     ForEach(model.players) { player in
-                        card(player)
-                            .padding(.leading, 10)
-                            .padding(.bottom, 15)
-                            .onTapGesture { selectedPlayer = player }
-                            .accessibilityIdentifier("roster.player")
+                        playerButton(player) {
+                            card(player)
+                        }
+                        .padding(.leading, 10)
+                        .padding(.bottom, 15)
                     }
                 }
 
@@ -222,6 +256,31 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// A player's card as a button that opens their sheet (T-3), so it has a
+    /// pressed state, focus, and VoiceOver's button trait. No glass: it's
+    /// content in a scrolling carousel (§5.2).
+    private func playerButton<CardLabel: View>(_ player: Player, @ViewBuilder label: () -> CardLabel) -> some View {
+        Button {
+            selectedPlayer = player
+        } label: {
+            label()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: player))
+        .accessibilityIdentifier("roster.player.\(player.id)")
+    }
+
+    /// "Jane Doe, number 23, Guard", skipping whatever the feed left blank.
+    private func accessibilityLabel(for player: Player) -> String {
+        [
+            player.name,
+            player.number.isEmpty ? "" : "number \(player.number)",
+            player.position,
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
     }
 }
 
@@ -264,9 +323,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             if usesStackedLayout && !model.games.isEmpty {
                 // Opens on the last result, as the carousel does.
                 StackedCarousel(items: model.games, start: model.nextGame - 1) { game in
-                    card(game)
-                        .onTapGesture { selectedGame = game }
-                        .accessibilityIdentifier("schedule.game")
+                    gameButton(game)
                 }
             } else {
                 scheduleCarousel
@@ -301,11 +358,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                         }
                     } else {
                         ForEach(model.games) { game in
-                            card(game)
+                            gameButton(game)
                                 .padding(.leading, 10)
                                 .id(game.pointer)
-                                .onTapGesture { selectedGame = game }
-                                .accessibilityIdentifier("schedule.game")
                         }
                     }
 
@@ -323,6 +378,24 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// A game's card as a button that opens its sheet (T-3). No glass: it's
+    /// content in a scrolling carousel (§5.2).
+    private func gameButton(_ game: Game) -> some View {
+        Button {
+            selectedGame = game
+        } label: {
+            card(game)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            game.accessibilitySummary(
+                drawLabel: model.team.league.descriptor.drawLabel,
+                liveScore: model.liveScores[game.gameID]
+            )
+        )
+        .accessibilityIdentifier("schedule.game.\(game.id)")
     }
 }
 
@@ -346,16 +419,17 @@ struct StandingsSection<Player: RosterPlayer>: View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "list.number", title: "Standings") {
                 if let standings = model.standings, standings.groups.count > 1 {
-                    Menu {
-                        ForEach(standings.groups) { group in
-                            Button(group.name) { selectedGroupID = group.id }
+                    GlassEffectContainer(spacing: Theme.Spacing.s) {
+                        SectionHeaderMenu(
+                            title: "Select standings group",
+                            systemImage: "rectangle.stack",
+                            identifier: "standings.group"
+                        ) {
+                            ForEach(standings.groups) { group in
+                                Button(group.name) { selectedGroupID = group.id }
+                            }
                         }
-                    } label: {
-                        Image(systemName: "rectangle.stack")
-                            .foregroundStyle(Color(uiColor: .systemGray))
-                            .font(.title3)
                     }
-                    .padding(.horizontal, 5)
                 }
             }
             .padding([.leading, .top, .trailing])
@@ -549,7 +623,6 @@ struct NewsSection<Player: RosterPlayer>: View {
                                 .padding(.top)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityIdentifier("news.article")
                     }
                 }
             }
