@@ -207,7 +207,6 @@ private struct TeamPage<Content: View>: View {
                         // The crest deliberately overflows its slot: only the
                         // top sliver shows until the page is scrolled.
                         .frame(height: containerSize.height / 14)
->>>>>>> origin/main
 
                         content
                             .padding([.top, .horizontal])
