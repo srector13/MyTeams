@@ -108,6 +108,8 @@ struct MonogramTeam: View {
                     .foregroundStyle(ink)
                     .padding(size * 0.22)
             } else {
+                // Proportional to the badge, not to Dynamic Type: the text
+                // is part of the crest artwork (the one fixed size X-1 keeps).
                 Text(team.abbreviation)
                     .font(.system(size: size * 0.38, weight: .bold, design: .rounded))
                     .foregroundStyle(ink)
