@@ -183,10 +183,8 @@ final class GlassUIScreenshotTests: XCTestCase {
     }
 
     /// Walks the screens reachable by identifier: onboarding, the first team
-    /// page and its player, game and news sheets, a second team page, the
-    /// team browser and Alerts.
-    // TODO(GlassUI): add the leaders sheet once its card carries an
-    // accessibility identifier.
+    /// page and its player, game, leaders and news sheets, a second team
+    /// page, the team browser before and after a league change, and Alerts.
     @MainActor
     private func captureScreens(_ app: XCUIApplication, _ configuration: Configuration) {
         // A fresh install opens on the "Pick Your Teams" sheet.
@@ -219,6 +217,16 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
         snapshot("team-browser", configuration)
 
+        // The prominent glass morphed onto the second league's chip (B-4).
+        let chips = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.league."))
+        let secondChip = chips.element(boundBy: 1)
+        if secondChip.waitForExistence(timeout: 5) {
+            secondChip.tap()
+            // Past the morph's settle.
+            _ = secondChip.wait(for: \.isSelected, toEqual: true, timeout: 2)
+            snapshot("team-browser-league-2", configuration)
+        }
+
         let alerts = app.buttons["teamBrowser.alerts"]
         if alerts.waitForExistence(timeout: 5) {
             alerts.tap()
@@ -235,6 +243,7 @@ final class GlassUIScreenshotTests: XCTestCase {
     private func captureSheets(_ app: XCUIApplication, _ configuration: Configuration) {
         capturePlayerSheet(app, configuration)
         captureGameSheet(app, configuration)
+        captureLeadersSheet(app, configuration)
 
         if let article = firstHittable("news.article", in: app, swipes: 12) {
             article.tap()
@@ -270,6 +279,10 @@ final class GlassUIScreenshotTests: XCTestCase {
     private func captureGameSheet(_ app: XCUIApplication, _ configuration: Configuration) {
         guard let game = firstHittable("schedule.game", in: app, swipes: 4) else { return }
         game.tap()
+        // Best effort: the sheet zooming out of its card (X-13), or the
+        // system's slide under Reduce Motion. Whatever frame the screenshot
+        // lands on, it's mid-presentation or just past it.
+        snapshot("game-detail-zoom", configuration)
         let close = app.buttons["gameDetail.close"]
         if close.waitForExistence(timeout: 5) {
             // Opens at the medium detent; the drag indicator is there
@@ -278,6 +291,22 @@ final class GlassUIScreenshotTests: XCTestCase {
             close.tap()
         } else {
             XCTFail("\(configuration.name): the game sheet never opened")
+        }
+    }
+
+    /// The league leaders sheet, opened from the leaders section's header
+    /// button and closed again: its season shows as the title's subtitle
+    /// (LL-3). Skipped if the section never shows the button.
+    @MainActor
+    private func captureLeadersSheet(_ app: XCUIApplication, _ configuration: Configuration) {
+        guard let leaders = firstHittable("leaders.league", in: app, swipes: 6) else { return }
+        leaders.tap()
+        let close = app.buttons["leagueLeaders.close"]
+        if close.waitForExistence(timeout: 5) {
+            snapshot("league-leaders", configuration)
+            close.tap()
+        } else {
+            XCTFail("\(configuration.name): the leaders sheet never opened")
         }
     }
 
