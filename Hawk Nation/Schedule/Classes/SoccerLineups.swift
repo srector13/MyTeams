@@ -57,6 +57,33 @@ struct SoccerLineups: Hashable, Sendable {
     var lineups: [Lineup] { [home, away] }
 }
 
+extension SoccerLineups.Player {
+    /// The lineup row read as one line for VoiceOver, saying what its
+    /// symbols and colours show (D-6): "Kai Havertz, number 29, 1 goal,
+    /// yellow card, substituted off, minute 81". A substitute "came on".
+    var accessibilitySummary: String {
+        var parts = [name]
+        if !jersey.isEmpty {
+            parts.append("number \(jersey)")
+        }
+        if goals > 0 {
+            parts.append(goals == 1 ? "1 goal" : "\(goals) goals")
+        }
+        if yellowCards > 0 {
+            parts.append(yellowCards == 1 ? "yellow card" : "\(yellowCards) yellow cards")
+        }
+        if redCards > 0 {
+            parts.append(redCards == 1 ? "red card" : "\(redCards) red cards")
+        }
+        if !substitutedAt.isEmpty {
+            // "68'" and "90'+3'" read as "68" and "90+3", not "prime".
+            let minute = substitutedAt.filter { $0 != "'" && $0 != "′" }
+            parts.append("\(starter ? "substituted off" : "came on"), minute \(minute)")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
 extension SoccerLineups {
     /// Reads a soccer summary's lineups, or `nil` when `rosters` does not
     /// list a home and an away side with at least one starter between them
