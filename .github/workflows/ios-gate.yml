@@ -8,6 +8,7 @@ on:
 
 jobs:
   ios-gate:
+    # TODO(GlassUI 0.1): move to the GitHub image that ships Xcode 27 (iOS 27 SDK) once documented; image name unverified.
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -32,6 +33,7 @@ jobs:
           set -o pipefail
           xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination 'generic/platform=iOS Simulator' -skipPackagePluginValidation -skipMacroValidation build-for-testing CODE_SIGNING_ALLOWED=NO 2>&1 | tee build-for-testing.log
 
+      # Deployment target is iOS 26.0: keep an iOS 26 simulator here after the Xcode 27 move (add iOS 27 alongside, not instead).
       - name: Test
         shell: bash
         run: |

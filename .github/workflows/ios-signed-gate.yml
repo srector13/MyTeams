@@ -65,6 +65,7 @@ env:
 
 jobs:
   ios-signed-gate:
+    # TODO(GlassUI 0.1): move to the GitHub image that ships Xcode 27 (iOS 27 SDK) once documented; image name unverified.
     runs-on: macos-26
     timeout-minutes: 45
     steps:
