@@ -55,28 +55,32 @@ struct GameLiveActivity: Widget {
                         .islandTextSize()
                 }
             } compactLeading: {
-                Text(state.stage)
-                    .font(.caption.weight(.semibold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                // Whose game this is (DI-1). The stage no longer fits
+                // beside the score in the compact width, so it shows only
+                // when expanded; the trailing label speaks it.
+                FollowedTeamMark(game: game)
                     .islandTextSize()
             } compactTrailing: {
                 Text("\(state.awayScore)–\(state.homeScore)")
                     .font(.footnote.bold())
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: state.scoreTotal))
                     .islandTextSize()
-                    .accessibilityLabel(state.spokenScore(game))
+                    .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             } minimal: {
                 // The minimal presentation has no stage beside it, so its
                 // label carries the stage too.
                 Text("\(state.awayScore)–\(state.homeScore)")
                     .font(.caption2.bold())
                     .monospacedDigit()
+                    .contentTransition(.numericText(value: state.scoreTotal))
                     .minimumScaleFactor(0.5)
                     .islandTextSize()
                     .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             }
+            // The followed team's colour on the island's rim (DI-2), or the
+            // system's own where the bundle doesn't know the team.
+            .keylineTint(game.followedTeam.map { Color(hexString: TeamColors.fillHex(for: $0)) })
             .widgetURL(game.deepLink)
         }
     }
@@ -88,6 +92,11 @@ private struct GameActivityBanner: View {
     var game: GameActivityInfo
     var state: GameActivityState
     var isStale: Bool
+
+    /// Set on the Always-On Lock Screen (LA-2), where only the scores stay
+    /// bright: the names and stage step down to secondary, and the stale
+    /// caption, an invitation to act on a dimmed screen, goes.
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
 
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
@@ -102,11 +111,12 @@ private struct GameActivityBanner: View {
                 Text(state.stage)
                     .font(Theme.Typography.cardTitle)
                     .monospacedDigit()
+                    .foregroundStyle(nonScoreInk)
                 if state.phase == .pending, let kickoff = game.kickoff {
                     Text(kickoff, style: .time)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(.secondary)
-                } else if isStale && state.phase == .live {
+                } else if isStale && state.phase == .live && !isLuminanceReduced {
                     Text("Open myTeams to update")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(.secondary)
@@ -122,6 +132,12 @@ private struct GameActivityBanner: View {
         .padding(.vertical, Theme.Spacing.m)
     }
 
+    /// The ink for everything but the scores: primary, or secondary while
+    /// the Always-On display dims the screen (LA-2).
+    private var nonScoreInk: HierarchicalShapeStyle {
+        isLuminanceReduced ? .secondary : .primary
+    }
+
     /// One side's name and score, heavier while it leads. Theme text styles,
     /// so both scale with Dynamic Type; the Dynamic Island keeps its fixed
     /// sizes, but this banner never does.
@@ -134,6 +150,7 @@ private struct GameActivityBanner: View {
         return HStack(spacing: Theme.Spacing.s) {
             Text(name)
                 .font(Theme.Typography.body.weight(leads ? .bold : .regular))
+                .foregroundStyle(nonScoreInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: Theme.Spacing.xs)
@@ -163,10 +180,64 @@ private struct GameActivityTeamScore: View {
             Text("\(score)")
                 .font(.title.bold())
                 .monospacedDigit()
+                // Rolls the digits when a side scores (DI-2).
+                .contentTransition(.numericText(value: Double(score)))
         }
         .padding(.horizontal, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(name + " " + String(score))
+    }
+}
+
+/// The compact island's leading mark: the followed team's abbreviation
+/// (DI-1), so the island says whose game it is, as the HIG asks of the
+/// leading side.
+///
+/// The payload carries no abbreviation or colour (it stays within the Live
+/// Activity's size budget, §5.4), so the team is looked up in the bundled
+/// catalog. A team the bundle doesn't know gets its sport's symbol instead:
+/// the payload doesn't say whether the followed team is home or away, and
+/// a guessed name would be the opponent's half the time.
+private struct FollowedTeamMark: View {
+    var game: GameActivityInfo
+
+    var body: some View {
+        if let team = game.followedTeam, !team.abbreviation.isEmpty {
+            Text(team.abbreviation)
+                .font(.caption.weight(.heavy))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .accessibilityLabel(team.displayName)
+        } else {
+            Image(systemName: game.sportSymbol)
+                .font(.caption.weight(.semibold))
+                .accessibilityLabel(game.matchup)
+        }
+    }
+}
+
+extension GameActivityInfo {
+    /// The followed team, if the bundled catalog has it. Read from
+    /// `favoriteID`, checked against `teamID`; an activity started before
+    /// `favoriteID` was kept falls back to the board's league, which is the
+    /// team's own outside cup ties.
+    fileprivate var followedTeam: TeamRef? {
+        let id = favoriteID ?? LeagueID(path: league).map { TeamRef.id(league: $0, espnID: teamID) }
+        guard let id, let parsed = TeamRef.parse(id: id), parsed.espnID == teamID else { return nil }
+        return TeamCatalog.team(id: id)
+    }
+
+    /// An SF Symbol for the game's sport, for a followed team the bundle
+    /// can't name.
+    fileprivate var sportSymbol: String {
+        switch LeagueID(path: league)?.sport ?? "" {
+        case "football": return "football.fill"
+        case "basketball": return "basketball.fill"
+        case "baseball": return "baseball.fill"
+        case "hockey": return "hockey.puck.fill"
+        case "soccer": return "soccerball"
+        default: return "sportscourt.fill"
+        }
     }
 }
 
@@ -186,6 +257,12 @@ extension GameActivityState {
     fileprivate func spokenScore(_ game: GameActivityInfo) -> String {
         "\(game.awayName) \(awayScore), \(game.homeName) \(homeScore)"
     }
+
+    /// Both scores together, which only rises: the value the "26–23"
+    /// scoreline's numeric transition rolls towards (DI-2).
+    fileprivate var scoreTotal: Double {
+        Double(awayScore + homeScore)
+    }
 }
 
 extension GameActivityAttributes {
@@ -193,6 +270,14 @@ extension GameActivityAttributes {
         gameID: "401872962", teamID: "7", league: "football/nfl",
         homeName: "Broncos", awayName: "Rams", matchup: "Rams at Broncos",
         kickoff: nil, favoriteID: "football/nfl:7"
+    ))
+
+    /// A followed team the bundle knows (the Chiefs), so the compact island
+    /// shows its abbreviation and keyline rather than the sport's symbol.
+    fileprivate static let seedPreview = GameActivityAttributes(game: GameActivityInfo(
+        gameID: "401872963", teamID: "12", league: "football/nfl",
+        homeName: "Broncos", awayName: "Chiefs", matchup: "Chiefs at Broncos",
+        kickoff: nil, favoriteID: "football/nfl:12"
     ))
 }
 
@@ -215,6 +300,12 @@ extension GameActivityAttributes {
 }
 
 #Preview("Dynamic Island · compact", as: .dynamicIsland(.compact), using: GameActivityAttributes.preview) {
+    GameLiveActivity()
+} contentStates: {
+    GameActivityState(homeScore: 23, awayScore: 26, period: 4, clock: "0:48", phase: .live)
+}
+
+#Preview("Dynamic Island · compact, catalogued team", as: .dynamicIsland(.compact), using: GameActivityAttributes.seedPreview) {
     GameLiveActivity()
 } contentStates: {
     GameActivityState(homeScore: 23, awayScore: 26, period: 4, clock: "0:48", phase: .live)
