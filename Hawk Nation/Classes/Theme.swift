@@ -60,8 +60,17 @@ enum Theme {
         /// Shapes nested inside a card.
         static let inner: CGFloat = 12
 
+        /// The top corners of a page of cards that sits over a hero: its
+        /// cards are inset `Spacing.m` from its edges, so it's that much
+        /// rounder than they are, and concentric with them.
+        static let page: CGFloat = card + Spacing.m
+
         static var cardShape: RoundedRectangle { RoundedRectangle(cornerRadius: card, style: .continuous) }
         static var innerShape: RoundedRectangle { RoundedRectangle(cornerRadius: inner, style: .continuous) }
+        /// `page` on top, square at the foot, which runs off the screen.
+        static var pageShape: UnevenRoundedRectangle {
+            UnevenRoundedRectangle(topLeadingRadius: page, topTrailingRadius: page, style: .continuous)
+        }
         // TODO(GlassUI): try `ConcentricRectangle` here once confirmed in the
         // SDK the CI image ships; a capsule is always correct meanwhile.
         /// League chips, pills and the crest picker.
@@ -77,8 +86,20 @@ enum Theme {
         static let content = Color(uiColor: .systemGroupedBackground)
         /// A content card on `content`.
         static let contentCard = Color(uiColor: .secondarySystemGroupedBackground)
+        /// A card nested in a `contentCard`: a leader card, a game card's
+        /// foot, a skeleton.
+        static let insetCard = Color(uiColor: .tertiarySystemGroupedBackground)
         /// Floating controls: see `View.glassChrome(in:tint:interactive:)`.
         static var chrome: Glass { .regular }
+    }
+
+    /// The opacity of the team-colour wash behind a followed row (a
+    /// standings row, a leaderboard row): faint by default, twice as strong
+    /// under Increase Contrast. The wash only backs up the row's star and
+    /// `isSelected` trait, which carry the meaning without colour (T-7,
+    /// LL-2); text sits on it, so it stays well short of a scrim.
+    static func selectionWashOpacity(contrast: ColorSchemeContrast) -> Double {
+        contrast == .increased ? 0.3 : 0.15
     }
 
     /// The opacity to draw a scrim at, given the accessibility settings: a
@@ -117,6 +138,12 @@ extension View {
         glassChrome(in: Theme.Radius.chip, tint: tint, interactive: interactive)
     }
 
+    /// A section's inset rounded card on the grouped page (T-4). Not glass:
+    /// content cards scroll, and glass is for the chrome above them (B1).
+    func contentCard() -> some View {
+        background(Theme.Surface.contentCard, in: Theme.Radius.cardShape)
+    }
+
     /// Draws a hand-rolled scrim layer (a team-colour wash, a dimmed crest)
     /// at `opacity`, raised under Increase Contrast and made opaque under
     /// Reduce Transparency (X-5). System glass adapts by itself; this is for
@@ -129,7 +156,7 @@ extension View {
     /// alternate colour when that reaches 4.5:1, otherwise white or black,
     /// whichever contrasts more (G-3).
     func teamInk(on team: TeamRef) -> some View {
-        foregroundStyle(Color(hexString: TeamColors.inkHex(on: TeamColors.fillHex(for: team), alternate: team.alternateColorHex)))
+        foregroundStyle(TeamColors.ink(on: team))
     }
 
     /// Text and symbols in white or black, whichever reads on `backgroundHex`.
@@ -164,6 +191,12 @@ extension TeamColors {
         let white = contrastRatio("FFFFFF", backgroundHex) ?? 21
         let black = contrastRatio("000000", backgroundHex) ?? 1
         return white >= black ? "FFFFFF" : "000000"
+    }
+
+    /// The ink `View.teamInk(on:)` draws in, for views that hand it down or
+    /// mix it with other styles: legible on `fillHex(for: team)`.
+    static func ink(on team: TeamRef) -> Color {
+        Color(hexString: inkHex(on: fillHex(for: team), alternate: team.alternateColorHex))
     }
 }
 

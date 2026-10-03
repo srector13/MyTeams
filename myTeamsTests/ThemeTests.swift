@@ -33,6 +33,23 @@ struct ThemeTests {
         #expect(Theme.scrimOpacity(0.2, contrast: .increased, reduceTransparency: true) == 1)
     }
 
+    @Test("A followed row's wash strengthens under Increase Contrast")
+    func selectionWash() {
+        let standard = Theme.selectionWashOpacity(contrast: .standard)
+        let increased = Theme.selectionWashOpacity(contrast: .increased)
+        #expect(standard == 0.15)
+        #expect(increased > standard)
+        #expect(increased < 0.5)
+    }
+
+    @Test("Radii nest concentrically")
+    func radiiConcentric() {
+        // A card inset Spacing.s inside its card, and the page's cards
+        // inset Spacing.m inside the page, keep their corners concentric.
+        #expect(Theme.Radius.card - Theme.Radius.inner == Theme.Spacing.s)
+        #expect(Theme.Radius.page - Theme.Radius.card == Theme.Spacing.m)
+    }
+
     @Test("Ink reaches 4.5:1 on any team colour", arguments: [
         "0051BA", "FFB612", "FFFFFF", "000000", "E31837", "7F7F7F", "00A3E0", "FFCD00",
     ])

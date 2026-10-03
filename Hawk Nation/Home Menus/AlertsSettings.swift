@@ -42,6 +42,15 @@ enum AlertsSettingsAction: Equatable, Sendable {
     case openSettings
 }
 
+/// How a status row's symbol is coloured, so "off" doesn't look like "on"
+/// (A-1). The view maps it to a style; this file stays free of SwiftUI.
+enum AlertsStatusTint: Equatable, Sendable {
+    /// The app's tint: set up, or not yet asked.
+    case standard
+    /// Red: turned off, and only Settings can turn it back on.
+    case off
+}
+
 /// One status row of the Alerts settings: what it says, and what its button
 /// (if any) does.
 struct AlertsStatusRow: Equatable, Sendable {
@@ -51,6 +60,7 @@ struct AlertsStatusRow: Equatable, Sendable {
     var detail: String
     var systemImage: String
     var action: AlertsSettingsAction?
+    var tint: AlertsStatusTint = .standard
 
     /// The button's title for `action`.
     var actionTitle: String? {
@@ -87,7 +97,8 @@ struct AlertsStatusRow: Equatable, Sendable {
                 title: "Notifications Off",
                 detail: "Alerts are turned off for myTeams. Turn on notifications in Settings to get them.",
                 systemImage: "bell.slash",
-                action: .openSettings
+                action: .openSettings,
+                tint: .off
             )
         case .granted:
             AlertsStatusRow(
@@ -116,7 +127,8 @@ struct AlertsStatusRow: Equatable, Sendable {
                 title: "Live Activities Off",
                 detail: "Live scores cannot appear on the Lock Screen. Turn on Live Activities for myTeams in Settings.",
                 systemImage: "platter.filled.bottom.iphone",
-                action: .openSettings
+                action: .openSettings,
+                tint: .off
             )
         }
     }

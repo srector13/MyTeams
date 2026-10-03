@@ -296,9 +296,16 @@ struct TeamBrowserView: View {
 
                 Spacer(minLength: 0)
 
+                // Hierarchical, and replaced rather than swapped, so
+                // following reads as one symbol changing state (B-2).
                 Image(systemName: followed ? "checkmark.circle.fill" : "circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .contentTransition(.symbolEffect(.replace))
                     .foregroundStyle(followed ? Color.accentColor : Color.secondary)
                     .imageScale(.large)
+                    // The store changes outside any animation; the replace
+                    // effect needs one to play.
+                    .animation(.snappy, value: followed)
             }
         }
         .accessibilityLabel("\(team.displayName), \(team.league.badge)")

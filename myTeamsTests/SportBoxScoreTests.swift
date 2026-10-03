@@ -497,6 +497,25 @@ struct SoccerLineupsTests {
         }
     }
 
+    @Test("A lineup row's spoken summary says what its symbols show")
+    func accessibilitySummary() throws {
+        let lineups = try #require(SoccerLineups(summary: Fixture.json("epl_summary_final_401879301")))
+        let starters = lineups.home.starters
+        let havertz = try #require(starters.first { $0.name == "Kai Havertz" })
+        #expect(havertz.accessibilitySummary.contains("1 goal"))
+        let gabriel = try #require(starters.first { $0.name == "Gabriel Magalhães" })
+        #expect(gabriel.accessibilitySummary.contains("yellow card"))
+        let calafiori = try #require(starters.first { $0.name == "Riccardo Calafiori" })
+        #expect(calafiori.accessibilitySummary.hasSuffix("substituted off, minute 81"))
+
+        let substitute = SoccerLineups.Player(
+            athleteID: "1", name: "Sam Sub", jersey: "9", position: "SUB",
+            starter: false, substitutedAt: "67'", subbedOut: false,
+            goals: 2, yellowCards: 1, redCards: 0
+        )
+        #expect(substitute.accessibilitySummary == "Sam Sub, number 9, 2 goals, yellow card, came on, minute 67")
+    }
+
     @Test("A summary with no rosters has no lineups")
     func noRosters() {
         #expect(SoccerLineups(summary: JSON(data: Data())) == nil)

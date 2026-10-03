@@ -16,7 +16,7 @@ struct LoadingNewsView: View {
         HStack(alignment: .top) {
             LoadingView()
                 .frame(width: thumbnailSize, height: thumbnailSize)
-                .clipShape(.rect(cornerRadius: 20))
+                .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
                 LoadingView()
@@ -68,9 +68,7 @@ struct NewsView: View {
                 .frame(maxWidth: stacksThumbnail ? CGFloat.infinity : nil)
                 .overlay {
                     RemoteImage(url: article.urlToImage) {
-                        RoundedRectangle(cornerRadius: 20)
-                            .foregroundStyle(Color(uiColor: .systemGray))
-                            .opacity(0.8)
+                        RemoteImagePlaceholder()
                     }
                     .scaledToFill()
                 }
@@ -84,12 +82,14 @@ struct NewsView: View {
                     )
                     .opacity(0.2)
                 }
-                .clipShape(.rect(cornerRadius: 20))
+                // Nested in the news section's card (X-4).
+                .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
+                // Hierarchical styles, not `.primary` at half opacity, so
+                // they take vibrancy and Increase Contrast (N-2).
                 Text(article.source)
-                    .foregroundStyle(.primary)
-                    .opacity(0.5)
+                    .foregroundStyle(.secondary)
                     .font(.caption2)
                 Text(article.title)
                     .foregroundStyle(.primary)
@@ -99,8 +99,7 @@ struct NewsView: View {
                     .font(.subheadline)
                     .lineLimit(3)
                 Text(article.publishedAt, format: .dateTime.month().day().year())
-                    .foregroundStyle(.primary)
-                    .opacity(0.5)
+                    .foregroundStyle(.tertiary)
                     .font(.caption2)
             }
         }

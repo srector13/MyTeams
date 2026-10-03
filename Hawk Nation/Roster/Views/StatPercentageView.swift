@@ -38,7 +38,7 @@ struct StatPercentageView: View {
             Text(title)
                 .font(Theme.Typography.statLabel)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Theme.Spacing.s)

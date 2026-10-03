@@ -31,13 +31,26 @@ struct LeadersSection<Player: RosterPlayer>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "trophy", title: "Leaders") {
+                // A standard glass control, like the other sections' header
+                // menus (T-1), rather than bare text in the team colour,
+                // whose contrast depended on the team (T-6). The glass draws
+                // the ink, so it reads whatever the team colour; the chevron
+                // says it opens somewhere.
                 Button {
                     showingLeague = true
                 } label: {
-                    Text("\(team.league.badge) Leaders")
-                        .font(.subheadline)
-                        .foregroundStyle(team.color)
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text("\(team.league.badge) Leaders")
+                            .font(.subheadline)
+                        Image(systemName: "chevron.right")
+                            .imageScale(.small)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                    }
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .accessibilityIdentifier("leaders.league")
             }
             .padding([.leading, .top, .trailing])
 
@@ -63,17 +76,18 @@ struct LeadersSection<Player: RosterPlayer>: View {
                 }
             } else {
                 ScrollView(.horizontal) {
-                    LazyHStack(spacing: 10) {
+                    LazyHStack(spacing: Theme.Spacing.m) {
                         ForEach(leaderCards) { leader in
                             TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
                         }
                     }
-                    .padding([.horizontal, .bottom], 10)
+                    .padding(.bottom, Theme.Spacing.l)
                 }
+                .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
                 .scrollIndicators(.hidden)
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .contentCard()
         .sheet(isPresented: $showingLeague) {
             LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: team.color)
         }
@@ -113,7 +127,7 @@ private struct TeamLeaderCard: View {
 
             Text(board.label)
                 .font(Theme.Typography.statLabel)
-                .foregroundStyle(Color(uiColor: .systemGray))
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             Text(row.leader.shortName.isEmpty ? row.leader.name : row.leader.shortName)
@@ -124,10 +138,9 @@ private struct TeamLeaderCard: View {
         .frame(width: fillsRow ? nil : cardWidth)
         .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color(uiColor: .systemGray6))
-        )
+        // Nested in the leaders section's card: the inner radius (X-4, T-6)
+        // on the nested surface rather than a fixed gray.
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
     }
 }
 
@@ -140,7 +153,7 @@ private struct LeaderHeadshot: View {
         RemoteImage(url: URL(string: url), showsProgress: false) {
             Image(systemName: "person.crop.circle.fill")
                 .resizable()
-                .foregroundStyle(Color(uiColor: .systemGray3))
+                .foregroundStyle(.tertiary)
         }
         .aspectRatio(contentMode: .fill)
         .frame(width: size, height: size)
@@ -201,7 +214,7 @@ struct LeagueLeadersView: View {
                 if let leaders, !leaders.seasonName.isEmpty {
                     Text(Self.caption(leaders))
                         .font(.footnote)
-                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .foregroundStyle(.secondary)
                 }
 
                 ForEach(shown) { board in
@@ -254,6 +267,7 @@ private struct LeaderRow: View {
     let teamColor: Color
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var contrast
 
     /// The rank column, wide enough for "10" at the current text size.
     @ScaledMetric(relativeTo: .subheadline) private var rankWidth: CGFloat = 22
@@ -271,25 +285,31 @@ private struct LeaderRow: View {
             HStack(spacing: 10) {
                 Text("\(row.rank)")
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
                     .frame(width: rankWidth, alignment: .trailing)
 
                 LeaderHeadshot(url: row.leader.headshotURL, size: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(row.leader.name)
-                        .font(Theme.Typography.body)
-                        .fontWeight(followed ? .bold : .regular)
-                        .lineLimit(stacksFigure ? nil : 1)
+                    HStack(spacing: Theme.Spacing.xs) {
+                        Text(row.leader.name)
+                            .font(Theme.Typography.body)
+                            .fontWeight(followed ? .bold : .regular)
+                            .lineLimit(stacksFigure ? nil : 1)
+
+                        if followed {
+                            FollowedMarker()
+                        }
+                    }
 
                     Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(Color(uiColor: .systemGray))
+                        .foregroundStyle(.secondary)
 
                     if let detail = row.detail {
                         Text(detail)
                             .font(.caption2)
-                            .foregroundStyle(Color(uiColor: .systemGray))
+                            .foregroundStyle(.tertiary)
                             .lineLimit(stacksFigure ? nil : 2)
                     }
                 }
@@ -304,10 +324,19 @@ private struct LeaderRow: View {
                     .font(.headline.monospacedDigit())
                 Text(label)
                     .font(.caption2)
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
             }
         }
-        .listRowBackground(followed ? teamColor.opacity(0.15) : Color(uiColor: .secondarySystemGroupedBackground))
+        // One VoiceOver element per row, which says when it's the
+        // followed team's player rather than leaving that to bold type and
+        // a wash (LL-2).
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(followed ? .isSelected : [])
+        .listRowBackground(
+            followed
+                ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast))
+                : Theme.Surface.contentCard
+        )
     }
 }
 

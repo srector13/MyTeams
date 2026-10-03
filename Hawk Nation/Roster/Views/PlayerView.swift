@@ -39,7 +39,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
             case .name:
                 Text(player.name)
                     .font(.caption2)
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
             case .number:
                 caption(player.number, font: .caption)
             case .position:
@@ -52,7 +52,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
     private func caption(_ text: String, font: Font) -> some View {
         Text(text.isEmpty ? "N/A" : text)
             .font(font.bold())
-            .foregroundStyle(Color(uiColor: .systemGray))
+            .foregroundStyle(.secondary)
     }
 }
 

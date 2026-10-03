@@ -81,8 +81,16 @@ struct AlertsSettingsView: View {
 
     private func statusRow(_ row: AlertsStatusRow, identifier: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(row.title, systemImage: row.systemImage)
-                .font(.body.weight(.semibold))
+            Label {
+                Text(row.title)
+            } icon: {
+                // Hierarchical, and red when off, so the symbol carries the
+                // state as well as the title does (A-1).
+                Image(systemName: row.systemImage)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(row.tint == .off ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+            }
+            .font(.body.weight(.semibold))
             Text(row.detail)
                 .font(.footnote)
                 .foregroundStyle(.secondary)

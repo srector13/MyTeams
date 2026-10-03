@@ -209,6 +209,7 @@ private struct SoccerLineupRow: View {
             ForEach(0 ..< player.goals, id: \.self) { _ in
                 Image(systemName: "soccerball")
                     .font(.caption2)
+                    .symbolRenderingMode(.hierarchical)
             }
             ForEach(0 ..< player.yellowCards, id: \.self) { _ in
                 card(.yellow)
@@ -222,12 +223,19 @@ private struct SoccerLineupRow: View {
                 let cameOn = !player.starter
                 Image(systemName: cameOn ? "arrow.up" : "arrow.down")
                     .font(.caption2.bold())
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(cameOn ? Color.green : Color.red)
                 BoxScoreText(player.substitutedAt, style: .heading)
             }
         }
+        // One element that says what the ball, the cards and the arrow
+        // show, which colour and shape alone told before (D-6).
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(player.accessibilitySummary)
     }
 
+    /// A referee's card, drawn as a glyph: its corner is part of the
+    /// drawing at this size, not a surface radius, so not a `Theme.Radius`.
     private func card(_ color: Color) -> some View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(color)
@@ -276,7 +284,7 @@ private struct BoxScoreText: View {
         Text(text)
             .font(style == .heading ? .caption2 : Theme.Typography.caption)
             .fontWeight(style == .body ? .regular : .bold)
-            .foregroundStyle(style == .heading ? Color(uiColor: .systemGray) : Color.primary)
+            .foregroundStyle(style == .heading ? HierarchicalShapeStyle.secondary : .primary)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.8)

@@ -48,7 +48,15 @@ struct GameView : View {
     @ScaledMetric(relativeTo: .body) private var statusBarHeight: CGFloat = 40
     @ScaledMetric(relativeTo: .caption) private var statusPillHeight: CGFloat = 25
 
-    private var teamColor: Color { team.color }
+    /// The card's fill: the team's colour, or the fallback its crest
+    /// badge uses when the feed has none, so the ink is picked against
+    /// what's actually drawn.
+    private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
+
+    /// Text and symbols on `teamColor`: white, black or the team's
+    /// alternate colour, whichever reaches 4.5:1 (G-3). White alone failed
+    /// on light team colours.
+    private var ink: Color { TeamColors.ink(on: team) }
 
     private var league: LeagueDescriptor { team.league.descriptor }
 
@@ -89,10 +97,11 @@ struct GameView : View {
                 .frame(height: fillsRow ? nil : statusBarHeight)
                 .padding(.vertical, fillsRow ? Theme.Spacing.s : 0)
 
-        }.background(Color(uiColor: .systemBackground))
+        }.background(Theme.Surface.insetCard)
             .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight)
             .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
-            .clipShape(.rect(cornerRadius: 10))
+            // Nested in the schedule section's card (X-4).
+            .clipShape(Theme.Radius.innerShape)
     }
 
     /// The details, with the result, live state or cancellation over them.
@@ -105,11 +114,11 @@ struct GameView : View {
                 if(game.cancelled) {
                     Text("Cancelled")
                         .font(.title3.bold())
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(ink)
                 } else if (game.postponed) {
                     Text("Postponed")
                         .font(.title3.bold())
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(ink)
                 }
             }
         } else if(game.completed) {
@@ -141,7 +150,7 @@ struct GameView : View {
     }
 
     private func details(dimmed: Bool) -> some View {
-        GameCardDetails(game: game, dimmed: dimmed)
+        GameCardDetails(game: game, ink: ink, dimmed: dimmed)
             .padding(.vertical, fillsRow ? Theme.Spacing.m : 0)
     }
 
@@ -153,11 +162,13 @@ struct GameView : View {
             .overlay { tint }
     }
 
-    /// The team-coloured wash laid over the details beneath a status.
+    /// The team-coloured wash laid over the details beneath a status,
+    /// denser under Increase Contrast so the status's ink stands clear of
+    /// the details (G-3, X-5).
     private var tint: some View {
         Rectangle()
             .foregroundStyle(teamColor)
-            .opacity(0.5)
+            .adaptiveScrim(0.5)
     }
 
     /// A finished game's outcome over its final score.
@@ -165,7 +176,7 @@ struct GameView : View {
         VStack {
             Text(outcome)
                 .font(.title2.bold())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(ink)
 
             scoreText(score, font: .title3.weight(.heavy))
         }
@@ -187,45 +198,37 @@ struct GameView : View {
         }
     }
 
-    /// A game in progress as `LiveCardStyle.scoreFirst` draws it: an arrow
-    /// beside the score says whether the followed team leads or trails. With
-    /// no live score yet, only the tinted details show.
+    /// A game in progress as `LiveCardStyle.scoreFirst` draws it: a
+    /// triangle beside the score says whether the followed team leads or
+    /// trails. With no live score yet, only the tinted details show.
     @ViewBuilder
     private var scoreFirstLiveState: some View {
-        if let liveScore, liveScore.score > liveScore.opponentScore {
+        if let liveScore {
             VStack {
                 HStack() {
                     liveScoreText(liveScore)
 
-                    Image(systemName: "arrow.up")
-                        .font(.caption.bold())
-                        .foregroundStyle(Color.green)
+                    if liveScore.score != liveScore.opponentScore {
+                        leadMarker(leading: liveScore.score > liveScore.opponentScore)
+                    }
                 }
 
+                // One size whether leading, level or trailing (G-4).
                 liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
                 liveLine(game.gameClock, font: .subheadline)
-            }
-        } else if let liveScore, liveScore.score == liveScore.opponentScore {
-            VStack {
-                liveScoreText(liveScore)
-
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .subheadline)
-                liveLine(game.gameClock, font: .subheadline)
-            }
-        } else if let liveScore {
-            VStack {
-                HStack() {
-                    liveScoreText(liveScore)
-
-                    Image(systemName: "arrow.down")
-                        .font(.caption.bold())
-                        .foregroundStyle(Color.red)
-                }
-
-                liveLine(league.liveCardPeriodLabel(game.gamePeriod), font: .caption)
-                liveLine(game.gameClock, font: .caption)
             }
         }
+    }
+
+    /// Leading or trailing, told by the triangle's direction and a spoken
+    /// label rather than green against red (G-4). Drawn in the card's ink,
+    /// which reads on any team colour where green or red may not.
+    private func leadMarker(leading: Bool) -> some View {
+        Image(systemName: leading ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+            .font(.caption.bold())
+            .symbolRenderingMode(.hierarchical)
+            .foregroundStyle(ink)
+            .accessibilityLabel(leading ? "Leading" : "Trailing")
     }
 
     private func liveScoreText(_ liveScore: LiveGameScore) -> some View {
@@ -239,14 +242,14 @@ struct GameView : View {
             .font(font.monospacedDigit())
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
     }
 
     private func liveLine(_ text: String, font: Font) -> some View {
         Text(text)
             .font(font.bold())
             .multilineTextAlignment(.center)
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
     }
 }
 
@@ -256,13 +259,15 @@ struct GameView : View {
 /// come, or beneath a cancellation.
 private struct GameCardDetails: View {
     var game: Game
+    /// The card's contrast-picked ink (`GameView.ink`).
+    var ink: Color
     var dimmed: Bool
 
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             Text(game.opponent)
                 .font(.caption.bold())
-                .foregroundStyle(Color.white)
+                .foregroundStyle(ink)
 
             if dimmed {
                 RemoteImage(url: URL(string: game.opponentLogo)) {
@@ -291,7 +296,7 @@ private struct GameCardDetails: View {
     private func line(_ text: String) -> some View {
         Text(text)
             .font(.caption2.weight(.medium))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(ink)
             .opacity(dimmed ? 0.5 : 1)
     }
 }
@@ -321,7 +326,11 @@ extension Game {
             parts.append("\(outcome), \(score) to \(opponentScore)")
         } else if dateAsDate < Date() {
             if let liveScore {
-                parts.append("Live, \(liveScore.score) to \(liveScore.opponentScore)")
+                // The card's lead marker, spoken (G-4): the card's label
+                // replaces its children's, the marker's included.
+                let standing = liveScore.score > liveScore.opponentScore ? "leading, "
+                    : liveScore.score < liveScore.opponentScore ? "trailing, " : ""
+                parts.append("Live, \(standing)\(liveScore.score) to \(liveScore.opponentScore)")
             } else {
                 parts.append("Live")
             }

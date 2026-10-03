@@ -442,7 +442,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                         Rectangle()
                             .frame(height: 40)
 
-                        RoundedRectangle(cornerRadius: 20)
+                        Theme.Radius.cardShape
                     }
                     .foregroundStyle(teamColor)
                     // Carries the colour into any safe area beside the
@@ -563,7 +563,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             if let message = grid.message {
                 Text(message)
                     .font(.subheadline.bold())
-                    .foregroundStyle(Color(uiColor: .systemGray))
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
                     .frame(maxWidth: .infinity, alignment: .center)

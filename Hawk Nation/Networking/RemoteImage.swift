@@ -77,12 +77,14 @@ private actor ImageCache {
     }
 }
 
-/// The flat grey fill shown across the roster, schedule and news lists while
+/// The flat fill shown across the roster, schedule and news lists while
 /// an image loads. It occupies the same space the image eventually will.
+/// The system fill, not a fixed grey, so it adapts to its surface and to
+/// Increase Contrast (X-3).
 struct RemoteImagePlaceholder: View {
     var body: some View {
         Rectangle()
-            .fill(Color(uiColor: .systemGray4))
+            .fill(.fill)
     }
 }
 

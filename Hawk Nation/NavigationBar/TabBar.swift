@@ -78,10 +78,13 @@ struct Home: View {
                     }
                 }
             }
-            // Attaching the picker as a safe area inset lets SwiftUI sit it
+            // Attaching the picker as a safe-area bar lets SwiftUI sit it
             // above the home indicator and inset the page's content by its
-            // height, which the original did by hand from the window's insets.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            // height, which the original did by hand from the window's
+            // insets. As a bar, rather than a plain inset, it takes part in
+            // the page's scroll-edge effect, which keeps the crests legible
+            // over the content scrolling under them (T-5).
+            .safeAreaBar(edge: .bottom, spacing: 0) {
                 TeamPicker(teams: teams, selection: $selection) {
                     showsBrowser = true
                 }
@@ -186,10 +189,15 @@ private struct TeamPage<Content: View>: View {
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
+                // The team-colour hero, sized from the screen rather than a
+                // fixed 500 pt: deep enough to sit behind the crest and the
+                // page's rounded top on any device. It starts at the safe
+                // area and extends under the navigation bar, the status bar
+                // and any landscape side insets (H-5, B5).
                 Rectangle()
                     .foregroundStyle(team.color)
-                    .frame(height: 500)
-                    .ignoresSafeArea(edges: .top)
+                    .frame(height: containerSize.height / 2)
+                    .backgroundExtensionEffect()
 
                 // Not ignoring the top safe area: the scroll view starts its
                 // content below the navigation bar and scrolls it under.
@@ -208,8 +216,10 @@ private struct TeamPage<Content: View>: View {
                         // top sliver shows until the page is scrolled.
                         .frame(height: containerSize.height / 14)
 
+                        // Full width: `TeamHomeLayout` insets its own
+                        // section cards on the grouped background (T-4).
                         content
-                            .padding([.top, .horizontal])
+                            .padding(.top)
                             .onGeometryChange(for: Bool.self) { proxy in
                                 proxy.frame(in: .global).minY < barBottom
                             } action: { covered in
@@ -218,6 +228,10 @@ private struct TeamPage<Content: View>: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                // The page scrolls under the floating crest picker; the soft
+                // edge fades it there, so neither the crests nor the cards
+                // fight for legibility (T-5, B5).
+                .scrollEdgeEffectStyle(.soft, for: .bottom)
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -233,6 +247,9 @@ private struct TeamPage<Content: View>: View {
                     }
                 }
             }
+            // The grouped page behind the hero, showing past the foot of
+            // the page and under the crest picker, the colour of the page.
+            .background(Theme.Surface.content)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
             } action: { bottom in
