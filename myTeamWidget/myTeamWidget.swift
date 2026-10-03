@@ -323,19 +323,25 @@ private struct AccessoryEntryView: View {
     var body: some View {
         Group {
             if family == .accessoryCircular {
+                // One glanceable value, the start time, under the opponent
+                // that names it (AC-1). The opponent is the accented line,
+                // as the team name is on the rectangular widget.
                 ZStack {
                     AccessoryWidgetBackground()
-                    VStack(spacing: 0) {
+                    VStack(spacing: 1) {
                         Text(entry.tempGame.teamName)
                             .font(.caption2.weight(.semibold))
+                            .widgetAccentable()
                         Text(entry.tempGame.gameTime)
-                            .font(.caption2)
+                            .font(.footnote.weight(.bold))
+                            .monospacedDigit()
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     // A fixed circle: the text scales only a little.
                     .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    .padding(4)
+                    .padding(Theme.Spacing.xs)
+                    .accessibilityElement(children: .combine)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
