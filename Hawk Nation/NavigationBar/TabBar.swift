@@ -208,8 +208,10 @@ private struct TeamPage<Content: View>: View {
                         // top sliver shows until the page is scrolled.
                         .frame(height: containerSize.height / 14)
 
+                        // Full width: `TeamHomeLayout` insets its own
+                        // section cards on the grouped background (T-4).
                         content
-                            .padding([.top, .horizontal])
+                            .padding(.top)
                             .onGeometryChange(for: Bool.self) { proxy in
                                 proxy.frame(in: .global).minY < barBottom
                             } action: { covered in
@@ -233,6 +235,9 @@ private struct TeamPage<Content: View>: View {
                     }
                 }
             }
+            // The grouped page behind the hero, showing past the foot of
+            // the page and under the crest picker, the colour of the page.
+            .background(Theme.Surface.content)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
             } action: { bottom in

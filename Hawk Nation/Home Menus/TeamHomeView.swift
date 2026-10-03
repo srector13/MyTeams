@@ -89,7 +89,6 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
             } filterMenu: {
                 RosterFilterMenu(model: model, entries: team.league.descriptor.rosterFilters)
             }
-            .padding(.top, 5)
 
             // The league's `RecordRule` decides how abandoned and unflagged
             // fixtures count in the record.

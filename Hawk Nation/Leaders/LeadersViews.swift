@@ -63,17 +63,18 @@ struct LeadersSection<Player: RosterPlayer>: View {
                 }
             } else {
                 ScrollView(.horizontal) {
-                    LazyHStack(spacing: 10) {
+                    LazyHStack(spacing: Theme.Spacing.m) {
                         ForEach(leaderCards) { leader in
                             TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
                         }
                     }
-                    .padding([.horizontal, .bottom], 10)
+                    .padding(.bottom, Theme.Spacing.l)
                 }
+                .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
                 .scrollIndicators(.hidden)
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .contentCard()
         .sheet(isPresented: $showingLeague) {
             LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: team.color)
         }

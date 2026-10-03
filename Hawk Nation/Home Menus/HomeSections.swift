@@ -163,7 +163,6 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     @ViewBuilder let detail: (Player) -> Detail
     @ViewBuilder let filterMenu: FilterMenu
 
-    @Environment(\.containerSize) private var containerSize
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var selectedPlayer: Player?
@@ -210,7 +209,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                 rosterCarousel
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .contentCard()
         .sheet(item: $selectedPlayer, content: detail)
     }
 
@@ -218,7 +217,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
         ScrollView(.horizontal) {
             // Lazy so off-screen cards are never realized — and so an
             // unrealized card can never start work of its own.
-            LazyHStack {
+            LazyHStack(spacing: Theme.Spacing.m) {
                 if model.players.isEmpty {
                     switch model.rosterState {
                     case .loading:
@@ -226,35 +225,31 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                         // its final height while the roster loads.
                         ForEach(0..<5, id: \.self) { _ in
                             LoadingPlayerView()
-                                .padding(.leading, 10)
-                                .padding(.bottom, 15)
                         }
                     case .loaded:
                         // Either the feed listed nobody, or the filter
                         // matches nobody.
                         SectionStatusView(message: "No players to show")
-                            .frame(width: max(containerSize.width - 20, 200))
+                            .containerRelativeFrame(.horizontal)
                     case .failed:
                         SectionStatusView(message: "Couldn't load the roster") {
                             Task { await model.reloadRoster() }
                         }
-                        .frame(width: max(containerSize.width - 20, 200))
+                        .containerRelativeFrame(.horizontal)
                     }
                 } else {
                     ForEach(model.players) { player in
                         playerButton(player) {
                             card(player)
                         }
-                        .padding(.leading, 10)
-                        .padding(.bottom, 15)
                     }
                 }
-
-                // Trailing breathing room past the last card.
-                Color(uiColor: .systemBackground)
-                    .frame(width: 10)
             }
+            .padding(.bottom, Theme.Spacing.l)
         }
+        // The margins inset the first and last cards in line with the
+        // header, and the cards still scroll out to the card's edges (T-4).
+        .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
         .scrollIndicators(.hidden)
     }
 
@@ -295,7 +290,6 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     @State private var selectedGame: Game?
 
-    @Environment(\.containerSize) private var containerSize
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The carousel's height: a game card's, scaled with the text in it.
@@ -329,7 +323,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 scheduleCarousel
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .contentCard()
         .sheet(item: $selectedGame, content: detail)
     }
 
@@ -339,36 +333,31 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 // Realised on demand: every schedule card mounted eagerly
                 // was the reason a quiet Home screen still made hundreds
                 // of requests a minute.
-                LazyHStack {
+                LazyHStack(spacing: Theme.Spacing.m) {
                     if model.games.isEmpty {
                         switch model.scheduleState {
                         case .loading:
                             ForEach(0..<5, id: \.self) { _ in
                                 LoadingGameView()
-                                    .padding(.leading, 10)
                             }
                         case .loaded:
                             SectionStatusView(message: "Nothing scheduled")
-                                .frame(width: max(containerSize.width - 30, 200))
+                                .containerRelativeFrame(.horizontal)
                         case .failed:
                             SectionStatusView(message: "Couldn't load the schedule") {
                                 Task { await model.reloadSchedule() }
                             }
-                            .frame(width: max(containerSize.width - 30, 200))
+                            .containerRelativeFrame(.horizontal)
                         }
                     } else {
                         ForEach(model.games) { game in
                             gameButton(game)
-                                .padding(.leading, 10)
                                 .id(game.pointer)
                         }
                     }
-
-                    Color(uiColor: .systemBackground)
-                        .frame(width: 10)
                 }
                 .frame(height: cardHeight)
-                .padding([.leading, .bottom], 10)
+                .padding(.bottom, Theme.Spacing.l)
                 // Open on the last result rather than the next fixture, so
                 // the most recent score is the first thing in view.
                 .onChange(of: model.nextGame, initial: true) { _, nextGame in
@@ -377,6 +366,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 }
             }
         }
+        .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
         .scrollIndicators(.hidden)
     }
 
@@ -460,7 +450,7 @@ struct StandingsSection<Player: RosterPlayer>: View {
                 }
             }
         }
-        .background(Color(uiColor: .systemBackground))
+        .contentCard()
     }
 
     /// The reader's pick, else the team's own table, else the first — a
@@ -591,8 +581,6 @@ struct NewsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let teamColor: Color
 
-    @Environment(\.containerSize) private var containerSize
-
     @State private var selectedArticle: News?
 
     var body: some View {
@@ -623,35 +611,41 @@ struct NewsSection<Player: RosterPlayer>: View {
                                 .padding(.top)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("news.article")
                     }
                 }
             }
-            .padding(.horizontal)
-
-            // Clears the crest picker pinned to the bottom of the screen.
-            Color(uiColor: .systemBackground)
-                .frame(width: containerSize.width, height: 40)
+            .padding([.horizontal, .bottom])
         }
-        .background(Color(uiColor: .systemBackground))
+        // Nothing to clear the crest picker with: the picker is a safe-area
+        // bar, so the page's scroll view insets its content and scrolls it
+        // under the picker's edge effect (T-5).
+        .contentCard()
         .sheet(item: $selectedArticle) { article in
             NewsDetailView(article: article, color: teamColor)
         }
     }
 }
 
-/// The scrolling body of every team page.
+/// The body of every team page: the sections as inset rounded cards on the
+/// grouped background, which rounds its top corners where it meets the
+/// team-colour hero (T-4). No glass: this is scrolling content (B1).
+///
+/// Lays the page out only. The page scrolls in `TeamPage`'s scroll view,
+/// which carries the bottom edge effect under the crest picker.
 struct TeamHomeLayout<Content: View>: View {
     @ViewBuilder var content: Content
 
+    @Environment(\.containerSize) private var containerSize
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 5) {
-                content
-            }
-            .frame(alignment: .leading)
-            .background(Color(uiColor: .systemGray5))
+        VStack(spacing: Theme.Spacing.m) {
+            content
         }
-        .scrollIndicators(.hidden)
-        .background(Color(uiColor: .systemGray5))
+        .padding(Theme.Spacing.m)
+        // At least a screen tall, so a page still loading covers the hero
+        // rather than leaving it showing beneath a short page.
+        .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)
+        .background(Theme.Surface.content, in: Theme.Radius.pageShape)
     }
 }
