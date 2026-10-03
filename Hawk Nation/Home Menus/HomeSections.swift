@@ -170,6 +170,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(.rect)
                         .onTapGesture { selectedPlayer = player }
+                        .accessibilityIdentifier("roster.player")
                 }
             } else {
                 rosterCarousel
@@ -211,6 +212,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                             .padding(.leading, 10)
                             .padding(.bottom, 15)
                             .onTapGesture { selectedPlayer = player }
+                            .accessibilityIdentifier("roster.player")
                     }
                 }
 
@@ -264,6 +266,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 StackedCarousel(items: model.games, start: model.nextGame - 1) { game in
                     card(game)
                         .onTapGesture { selectedGame = game }
+                        .accessibilityIdentifier("schedule.game")
                 }
             } else {
                 scheduleCarousel
@@ -302,6 +305,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                                 .padding(.leading, 10)
                                 .id(game.pointer)
                                 .onTapGesture { selectedGame = game }
+                                .accessibilityIdentifier("schedule.game")
                         }
                     }
 
@@ -545,6 +549,7 @@ struct NewsSection<Player: RosterPlayer>: View {
                                 .padding(.top)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityIdentifier("news.article")
                     }
                 }
             }
