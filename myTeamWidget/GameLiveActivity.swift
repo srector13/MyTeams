@@ -14,7 +14,6 @@ import WidgetKit
 /// Draws a followed game's Live Activity (`GameActivityAttributes`), which
 /// the app starts and keeps current (`LiveActivityManager`): the score,
 /// period and clock on the Lock Screen and in the Dynamic Island.
-@available(iOS 16.2, *)
 struct GameLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: GameActivityAttributes.self) { context in
@@ -75,7 +74,6 @@ struct GameLiveActivity: Widget {
 
 /// The Lock Screen banner: each side's score, away over home as the
 /// matchup reads, and the stage of the game.
-@available(iOS 16.2, *)
 private struct GameActivityBanner: View {
     var game: GameActivityInfo
     var state: GameActivityState
@@ -168,7 +166,6 @@ extension GameActivityState {
     }
 }
 
-@available(iOS 16.2, *)
 extension GameActivityAttributes {
     fileprivate static let preview = GameActivityAttributes(game: GameActivityInfo(
         gameID: "401872962", teamID: "7", league: "football/nfl",

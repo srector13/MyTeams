@@ -48,9 +48,7 @@ struct MyTeamsApp: App {
 
                     // And for Live Activities of their games under way.
                     #if canImport(ActivityKit)
-                    if #available(iOS 16.2, *) {
-                        LiveActivityManager.shared.start()
-                    }
+                    LiveActivityManager.shared.start()
                     #endif
 
                     // Put the bundled crests on disk once, then keep the
