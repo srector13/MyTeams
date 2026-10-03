@@ -128,9 +128,9 @@ struct WidgetEntryView: View {
             case .accessoryRectangular, .accessoryCircular:
                 AccessoryEntryView(entry: entry, family: family)
             #endif
+            case .systemMedium:
+                MediumScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
             default:
-                // Medium too: the column is sized by the height, which the
-                // two share, and centred in the wider tile.
                 ScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
             }
         }
@@ -183,15 +183,96 @@ struct ScheduleTile: View {
         // The small tile can't grow, so its text scales only as far as the
         // crest and four lines still fit (W-2).
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-        .modifier(TileInk(team: game.team, renderingMode: renderingMode))
-        .padding(Theme.Spacing.s)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { watermark }
-        // Widgets must declare their own background; without this the system
-        // draws them on a default light surface.
-        .containerBackground(for: .widget) {
-            game.teamColor
+        .modifier(TileBackdrop(game: game, renderingMode: renderingMode))
+    }
+}
+
+/// The medium Home Screen tile (W-3): the opponent's crest on the left, and
+/// the matchup, date, time and channel on the right, rather than the small
+/// tile's column centred in a tile twice as wide.
+///
+/// Shares the small tile's ink, watermark and container background
+/// (`TileBackdrop`) and its rendering-mode rules (W-1): the opponent's name
+/// is the accented line in both, and the crest keeps its shape, desaturated,
+/// when the system tints.
+struct MediumScheduleTile: View {
+    var game: WidgetGame
+    var renderingMode: WidgetRenderingMode
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.m) {
+            crest
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                // The matchup, as the Lock Screen's rectangular widget
+                // reads it: the followed team, then "vs" the opponent.
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(game.team.shortName)
+                        .font(Theme.Typography.statLabel)
+                    Text("vs \(game.teamName)")
+                        .font(Theme.Typography.cardTitle)
+                        .widgetAccentable()
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(game.gameDate)
+                    Text(game.gameTime)
+                    Text(game.gameChannel)
+                }
+                .font(Theme.Typography.footnote)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            // The details take the width they need, first; the crest fits
+            // the rest.
+            .layoutPriority(1)
         }
+        // Same ceiling as the small tile: the tile is as tall as the small
+        // one, and five lines must still fit beside the crest (W-2).
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .modifier(TileBackdrop(game: game, renderingMode: renderingMode))
+    }
+
+    /// The opponent's crest, or the followed team's when the opponent has
+    /// none (a placeholder, or a feed without a logo), so the left half is
+    /// never empty.
+    @ViewBuilder
+    private var crest: some View {
+        if let data = game.teamLogo ?? game.backgroundLogo, let image = UIImage(data: data) {
+            Image(uiImage: image)
+                .resizable()
+                .renderingMode(.original)
+                // Kept recognisable, in grey, when the system tints.
+                .widgetAccentedRenderingMode(.desaturated)
+                .aspectRatio(contentMode: .fit)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// What the Home Screen tiles share around their content: the ink, the
+/// padding, the faint followed-team crest, and the team colour as the
+/// container background.
+///
+/// The container background is the team colour on the Home Screen families
+/// only; the system drops it in the tinted modes (§5.4), which is why the
+/// tiles draw their identity in the content layer. The Lock Screen
+/// accessories keep their own clear background (`AccessoryEntryView`).
+private struct TileBackdrop: ViewModifier {
+    var game: WidgetGame
+    var renderingMode: WidgetRenderingMode
+
+    func body(content: Content) -> some View {
+        content
+            .modifier(TileInk(team: game.team, renderingMode: renderingMode))
+            .padding(Theme.Spacing.s)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { watermark }
+            // Widgets must declare their own background; without this the
+            // system draws them on a default light surface.
+            .containerBackground(for: .widget) {
+                game.teamColor
+            }
     }
 
     /// The followed team's crest, faint behind the fixture. In the tinted
@@ -242,19 +323,25 @@ private struct AccessoryEntryView: View {
     var body: some View {
         Group {
             if family == .accessoryCircular {
+                // One glanceable value, the start time, under the opponent
+                // that names it (AC-1). The opponent is the accented line,
+                // as the team name is on the rectangular widget.
                 ZStack {
                     AccessoryWidgetBackground()
-                    VStack(spacing: 0) {
+                    VStack(spacing: 1) {
                         Text(entry.tempGame.teamName)
                             .font(.caption2.weight(.semibold))
+                            .widgetAccentable()
                         Text(entry.tempGame.gameTime)
-                            .font(.caption2)
+                            .font(.footnote.weight(.bold))
+                            .monospacedDigit()
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     // A fixed circle: the text scales only a little.
                     .dynamicTypeSize(...DynamicTypeSize.xLarge)
-                    .padding(4)
+                    .padding(Theme.Spacing.xs)
+                    .accessibilityElement(children: .combine)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
@@ -359,6 +446,17 @@ extension WidgetEntry {
 
 #Preview("Small · StandBy (vibrant)", traits: .fixedLayout(width: 170, height: 170)) {
     ScheduleTile(game: WidgetEntry.preview.tempGame, renderingMode: .vibrant)
+        .background(Theme.Surface.content)
+        .environment(\.colorScheme, .dark)
+}
+
+#Preview("Medium · Clear/Tinted (accented)", traits: .fixedLayout(width: 364, height: 170)) {
+    MediumScheduleTile(game: WidgetEntry.preview.tempGame, renderingMode: .accented)
+        .background(Theme.Surface.content)
+}
+
+#Preview("Medium · StandBy (vibrant)", traits: .fixedLayout(width: 364, height: 170)) {
+    MediumScheduleTile(game: WidgetEntry.preview.tempGame, renderingMode: .vibrant)
         .background(Theme.Surface.content)
         .environment(\.colorScheme, .dark)
 }
