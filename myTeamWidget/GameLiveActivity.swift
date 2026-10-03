@@ -89,6 +89,11 @@ private struct GameActivityBanner: View {
     var state: GameActivityState
     var isStale: Bool
 
+    /// Set on the Always-On Lock Screen (LA-2), where only the scores stay
+    /// bright: the names and stage step down to secondary, and the stale
+    /// caption, an invitation to act on a dimmed screen, goes.
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+
     var body: some View {
         HStack(alignment: .center, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -102,11 +107,12 @@ private struct GameActivityBanner: View {
                 Text(state.stage)
                     .font(Theme.Typography.cardTitle)
                     .monospacedDigit()
+                    .foregroundStyle(nonScoreInk)
                 if state.phase == .pending, let kickoff = game.kickoff {
                     Text(kickoff, style: .time)
                         .font(Theme.Typography.caption)
                         .foregroundStyle(.secondary)
-                } else if isStale && state.phase == .live {
+                } else if isStale && state.phase == .live && !isLuminanceReduced {
                     Text("Open myTeams to update")
                         .font(Theme.Typography.caption)
                         .foregroundStyle(.secondary)
@@ -122,6 +128,12 @@ private struct GameActivityBanner: View {
         .padding(.vertical, Theme.Spacing.m)
     }
 
+    /// The ink for everything but the scores: primary, or secondary while
+    /// the Always-On display dims the screen (LA-2).
+    private var nonScoreInk: HierarchicalShapeStyle {
+        isLuminanceReduced ? .secondary : .primary
+    }
+
     /// One side's name and score, heavier while it leads. Theme text styles,
     /// so both scale with Dynamic Type; the Dynamic Island keeps its fixed
     /// sizes, but this banner never does.
@@ -134,6 +146,7 @@ private struct GameActivityBanner: View {
         return HStack(spacing: Theme.Spacing.s) {
             Text(name)
                 .font(Theme.Typography.body.weight(leads ? .bold : .regular))
+                .foregroundStyle(nonScoreInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer(minLength: Theme.Spacing.xs)
