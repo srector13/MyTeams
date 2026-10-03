@@ -200,10 +200,11 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
 
             if usesStackedLayout && !model.players.isEmpty {
                 StackedCarousel(items: model.players) { player in
-                    card(player)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(.rect)
-                        .onTapGesture { selectedPlayer = player }
+                    playerButton(player) {
+                        card(player)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(.rect)
+                    }
                 }
             } else {
                 rosterCarousel
@@ -241,10 +242,11 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                     }
                 } else {
                     ForEach(model.players) { player in
-                        card(player)
-                            .padding(.leading, 10)
-                            .padding(.bottom, 15)
-                            .onTapGesture { selectedPlayer = player }
+                        playerButton(player) {
+                            card(player)
+                        }
+                        .padding(.leading, 10)
+                        .padding(.bottom, 15)
                     }
                 }
 
@@ -254,6 +256,31 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// A player's card as a button that opens their sheet (T-3), so it has a
+    /// pressed state, focus, and VoiceOver's button trait. No glass: it's
+    /// content in a scrolling carousel (§5.2).
+    private func playerButton<CardLabel: View>(_ player: Player, @ViewBuilder label: () -> CardLabel) -> some View {
+        Button {
+            selectedPlayer = player
+        } label: {
+            label()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: player))
+        .accessibilityIdentifier("roster.player.\(player.id)")
+    }
+
+    /// "Jane Doe, number 23, Guard", skipping whatever the feed left blank.
+    private func accessibilityLabel(for player: Player) -> String {
+        [
+            player.name,
+            player.number.isEmpty ? "" : "number \(player.number)",
+            player.position,
+        ]
+        .filter { !$0.isEmpty }
+        .joined(separator: ", ")
     }
 }
 
@@ -296,8 +323,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             if usesStackedLayout && !model.games.isEmpty {
                 // Opens on the last result, as the carousel does.
                 StackedCarousel(items: model.games, start: model.nextGame - 1) { game in
-                    card(game)
-                        .onTapGesture { selectedGame = game }
+                    gameButton(game)
                 }
             } else {
                 scheduleCarousel
@@ -332,10 +358,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                         }
                     } else {
                         ForEach(model.games) { game in
-                            card(game)
+                            gameButton(game)
                                 .padding(.leading, 10)
                                 .id(game.pointer)
-                                .onTapGesture { selectedGame = game }
                         }
                     }
 
@@ -353,6 +378,24 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             }
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// A game's card as a button that opens its sheet (T-3). No glass: it's
+    /// content in a scrolling carousel (§5.2).
+    private func gameButton(_ game: Game) -> some View {
+        Button {
+            selectedGame = game
+        } label: {
+            card(game)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            game.accessibilitySummary(
+                drawLabel: model.team.league.descriptor.drawLabel,
+                liveScore: model.liveScores[game.gameID]
+            )
+        )
+        .accessibilityIdentifier("schedule.game.\(game.id)")
     }
 }
 
