@@ -29,7 +29,7 @@ final class myTeamsUITests: XCTestCase {
             done.tap()
         }
 
-        // The crest bar: a button per favorite, then the add/edit button.
+        // The system tab bar: a tab per favorite, and the Teams (add/edit) tab.
         XCTAssertTrue(app.buttons["teamPicker.edit"].waitForExistence(timeout: 10))
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
         guard crests.element(boundBy: 1).waitForExistence(timeout: 10) else {
@@ -44,13 +44,7 @@ final class myTeamsUITests: XCTestCase {
 
         second.tap()
 
-        // The bar slides away shortly after the tap, leaving a strip along
-        // the bottom edge that brings it back.
-        let reveal = app.buttons["tabBar.reveal"]
-        XCTAssertTrue(reveal.waitForExistence(timeout: 5))
-        reveal.tap()
         XCTAssertTrue(second.waitForExistence(timeout: 5))
-
         XCTAssertTrue(second.isSelected)
         XCTAssertFalse(first.isSelected)
     }
