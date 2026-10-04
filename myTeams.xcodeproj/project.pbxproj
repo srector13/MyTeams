@@ -95,6 +95,7 @@
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */; };
 		5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */; };
+		6D2B3F8E1A4C5B7D9E0F1A21 /* RosterCardLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2B3F8E1A4C5B7D9E0F1A20 /* RosterCardLayoutTests.swift */; };
 		A66D0A558CEC12590E02F9A2 /* TabBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD52FEA243D6F89CB697B876 /* TabBarTests.swift */; };
 		5C1E7A93D04B62F8A1E93D27 /* WidgetDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */; };
 		3862319C87D5F70D7BF3E0D2 /* ScoreAlertEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */; };
@@ -249,6 +250,7 @@
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
 		7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeTests.swift"; sourceTree = "<group>"; };
 		5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GameCardContentTests.swift"; sourceTree = "<group>"; };
+		6D2B3F8E1A4C5B7D9E0F1A20 /* RosterCardLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RosterCardLayoutTests.swift"; sourceTree = "<group>"; };
 		BD52FEA243D6F89CB697B876 /* TabBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabBarTests.swift"; sourceTree = "<group>"; };
 		9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDeepLinkTests.swift"; sourceTree = "<group>"; };
 		EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertEngineTests.swift"; sourceTree = "<group>"; };
@@ -572,6 +574,7 @@
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */,
+				6D2B3F8E1A4C5B7D9E0F1A20 /* RosterCardLayoutTests.swift */,
 				BD52FEA243D6F89CB697B876 /* TabBarTests.swift */,
 				9A4F2B61C87E03D5B2F16A48 /* WidgetDeepLinkTests.swift */,
 				EA265B07826AA61D8CCF59B3 /* ScoreAlertEngineTests.swift */,
@@ -873,6 +876,7 @@
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */,
+				6D2B3F8E1A4C5B7D9E0F1A21 /* RosterCardLayoutTests.swift in Sources */,
 				A66D0A558CEC12590E02F9A2 /* TabBarTests.swift in Sources */,
 				5C1E7A93D04B62F8A1E93D27 /* WidgetDeepLinkTests.swift in Sources */,
 				3862319C87D5F70D7BF3E0D2 /* ScoreAlertEngineTests.swift in Sources */,
