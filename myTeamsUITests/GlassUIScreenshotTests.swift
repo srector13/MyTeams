@@ -202,16 +202,14 @@ final class GlassUIScreenshotTests: XCTestCase {
         snapshot("team-page-1", configuration)
 
         captureSheets(app, configuration)
-        // Scrolling down the page for the sheets slid the tab bar away.
-        revealTabBar(app)
+        // Scrolling down the page for the sheets minimized the tab bar.
+        expandTabBar(app)
 
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
         let second = crests.element(boundBy: 1)
         if second.waitForExistence(timeout: 5) {
             second.tap()
             snapshot("team-page-2", configuration)
-            // The bar slides away shortly after a tab tap.
-            revealTabBar(app, wait: 3)
         }
 
         edit.tap()
@@ -314,14 +312,13 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
-    /// Brings the tab bar back with the strip along the bottom edge, if it
-    /// has slid away: it does on scrolling down, and shortly after a tab
-    /// tap. `wait` gives a collapse on its way time to land.
+    /// Brings the system tab bar back to full size if scrolling down the
+    /// page minimized it: scrolling back up does, as in the system's apps.
     @MainActor
-    private func revealTabBar(_ app: XCUIApplication, wait: TimeInterval = 0) {
-        let reveal = app.buttons["tabBar.reveal"]
-        if reveal.waitForExistence(timeout: wait) {
-            reveal.tap()
+    private func expandTabBar(_ app: XCUIApplication) {
+        let edit = app.buttons["teamPicker.edit"]
+        for _ in 0..<3 where !edit.isHittable {
+            app.swipeDown()
         }
     }
 

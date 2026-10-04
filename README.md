@@ -21,11 +21,11 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
   while the game is live; the league standings with the team's row picked
   out; the team's stat leaders and the league's leaderboards; and the team's
   news feed.
-- **Favorites.** The crest bar at the foot of the screen switches between
-  followed teams; its "Teams" button opens the picker, where teams are
-  followed, reordered and removed. The bar slides away shortly after a tab
-  tap and on scrolling down, and comes back on scrolling up, at the foot of
-  the page, or on a swipe up from the bottom edge. Favorites are stored in the App Group's defaults
+- **Favorites.** The system tab bar at the foot of the screen has a tab per
+  followed team (its crest and short name), with those past the bar's room
+  under "More"; its "Teams" tab opens the picker, where teams are followed,
+  reordered and removed. The bar minimizes on scrolling down, as in the
+  system's apps (never under VoiceOver or Switch Control). Favorites are stored in the App Group's defaults
   (which the widget reads) and mirrored to iCloud key-value storage, so they
   sync between devices.
 - **Onboarding.** A fresh install opens on the "Pick Your Teams" sheet with
@@ -90,7 +90,7 @@ Hawk Nation/          The app target
                       favorites, standings, live scoreboards, score alerts
                       and Live Activities
   Leaders/            Stat leaders: the team's and the league's
-  NavigationBar/      The root screen and its crest bar
+  NavigationBar/      The root screen and its tab bar
   Networking/         Team and league identity, the HTTP client, JSON
                       parsing, team catalogs and cached crests
   News/               The news feed and its article sheet

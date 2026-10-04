@@ -6,100 +6,37 @@
 //  Copyright © 2026 Stephen Rector. All rights reserved.
 //
 
-import CoreGraphics
 import Testing
 
 @testable import myTeams
 
-/// The tab bar's collapse, which follows the page's scrolling, and the
-/// accent its selected tab's label takes.
+/// Where the "Teams" tab sits among the favorites' tabs in the system tab
+/// bar (`HomeTabs.editIndex`).
 @Suite("Tab bar")
 struct TabBarTests {
-    /// A page 2,000 pt tall in an 800 pt window.
-    private func at(_ offset: CGFloat, maxOffset: CGFloat = 1200) -> TabBarCollapse.Position {
-        TabBarCollapse.Position(offset: offset, maxOffset: maxOffset)
+    @Test("The Teams tab comes last while every tab fits the bar")
+    func editLastWhileTheBarHoldsAll() {
+        #expect(HomeTabs.editIndex(teamCount: 0, barCapacity: HomeTabs.compactCapacity) == 0)
+        #expect(HomeTabs.editIndex(teamCount: 1, barCapacity: HomeTabs.compactCapacity) == 1)
+        #expect(HomeTabs.editIndex(teamCount: 4, barCapacity: HomeTabs.compactCapacity) == 4)
     }
 
-    @Test("Scrolling down collapses the bar once past the threshold")
-    func scrollDownCollapses() {
-        let tracker = TabBarCollapse()
-        #expect(tracker.scrolled(to: at(100), byUser: true) == nil)
-        #expect(tracker.scrolled(to: at(105), byUser: true) == nil)
-        #expect(tracker.scrolled(to: at(100 + TabBarCollapse.threshold + 1), byUser: true) == true)
+    @Test("Past the bar's capacity the Teams tab takes the last slot before More")
+    func editBeforeMoreOnceTheyOverflow() {
+        // Five favorites and Teams make six: the bar shows four and More.
+        #expect(HomeTabs.editIndex(teamCount: 5, barCapacity: HomeTabs.compactCapacity) == 3)
+        #expect(HomeTabs.editIndex(teamCount: 12, barCapacity: HomeTabs.compactCapacity) == 3)
     }
 
-    @Test("Scrolling back up brings the bar back")
-    func scrollUpReveals() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(100), byUser: true)
-        #expect(tracker.scrolled(to: at(200), byUser: true) == true)
-        // The turn starts a new run: a small move back leaves the bar.
-        #expect(tracker.scrolled(to: at(195), byUser: true) == nil)
-        #expect(tracker.scrolled(to: at(180), byUser: true) == false)
+    @Test("With no limit on the bar the Teams tab comes last")
+    func editLastWithoutALimit() {
+        #expect(HomeTabs.editIndex(teamCount: 12, barCapacity: nil) == 12)
     }
 
-    @Test("Pulling past the top brings the bar back")
-    func pullAtTopReveals() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(0), byUser: true)
-        #expect(tracker.scrolled(to: at(-30), byUser: true) == false)
-    }
-
-    @Test("Reaching the foot of the page brings the bar back, and keeps it")
-    func footReveals() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(1000), byUser: true)
-        #expect(tracker.scrolled(to: at(1100), byUser: true) == true)
-        #expect(tracker.scrolled(to: at(1195), byUser: true) == false)
-        // Overscroll at the foot doesn't send it away again.
-        #expect(tracker.scrolled(to: at(1240), byUser: true) == false)
-    }
-
-    @Test("A page restoring its offset moves the baseline only")
-    func programmaticScrollIsIgnored() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(0), byUser: true)
-        #expect(tracker.scrolled(to: at(600), byUser: false) == nil)
-        // Measured from 600, not 0.
-        #expect(tracker.scrolled(to: at(605), byUser: true) == nil)
-    }
-
-    @Test("After a reset the next position is only a baseline")
-    func resetForgetsThePage() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(0), byUser: true)
-        tracker.reset()
-        #expect(tracker.scrolled(to: at(400), byUser: true) == nil)
-        #expect(tracker.scrolled(to: at(405), byUser: true) == nil)
-    }
-
-    @Test("A bar brought back by hand starts a new run")
-    func revealRestartsTheRun() {
-        let tracker = TabBarCollapse()
-        _ = tracker.scrolled(to: at(100), byUser: true)
-        _ = tracker.scrolled(to: at(108), byUser: true)
-        tracker.revealed()
-        #expect(tracker.scrolled(to: at(116), byUser: true) == nil)
-    }
-
-    @Test("The selected tab's label takes the team colour where it reads on the bar")
-    func accentPrefersTheTeamColour() {
-        var team = TeamRef.jayhawks
-        team.colorHex = "0051BA"
-        team.alternateColorHex = "E8000D"
-        #expect(TabBarStyle.accentHex(for: team, dark: false) == "0051BA")
-        // Navy is too dark on the dark bar; the red reads.
-        #expect(TabBarStyle.accentHex(for: team, dark: true) == "E8000D")
-    }
-
-    @Test("A label falls back to the primary colour when neither team colour reads")
-    func accentFallsBack() {
-        var team = TeamRef.jayhawks
-        team.colorHex = "FFFFFF"
-        team.alternateColorHex = "FAFAFA"
-        #expect(TabBarStyle.accentHex(for: team, dark: false) == nil)
-        team.colorHex = "000000"
-        team.alternateColorHex = "111111"
-        #expect(TabBarStyle.accentHex(for: team, dark: true) == nil)
+    @Test("The Teams tab's value can't be a team's")
+    func editValueIsNotATeamID() {
+        // A team's id is "<leaguePath>:<espnID>".
+        #expect(!HomeTabs.edit.contains(":"))
+        #expect(HomeTabs.edit == "teamPicker.edit")
     }
 }
