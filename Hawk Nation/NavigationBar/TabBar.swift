@@ -174,6 +174,10 @@ private struct TeamPage<Content: View>: View {
     /// The bottom of the navigation bar, in global coordinates.
     @State private var barBottom: CGFloat = 0
 
+    /// The status bar and navigation bar together: the team-colour header's
+    /// height, about 44 pt plus the top safe area.
+    @State private var barHeight: CGFloat = 0
+
     /// Whether the page's content, rather than the team colour, is behind
     /// the navigation bar.
     @State private var contentUnderBar = false
@@ -184,6 +188,22 @@ private struct TeamPage<Content: View>: View {
     /// title and status bar, when white reads better on it than black.
     private var heroBarScheme: ColorScheme {
         TeamColors.inkHex(on: team.colorHex) == "FFFFFF" ? .dark : .light
+    }
+
+    /// The team's crest, large and dimmed into the team colour, peeking in
+    /// from the trailing edge behind the bar's title.
+    private var barWatermark: some View {
+        // Drawn over the team colour, so a dark background takes the dark
+        // crest where the feed has one.
+        TeamLogo(
+            team: team,
+            size: 160,
+            forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
+        )
+        // Dimmed into the team colour; stronger under Increase Contrast,
+        // solid under Reduce Transparency (X-5).
+        .adaptiveScrim(0.5)
+        .offset(x: 40)
     }
 
     var body: some View {
@@ -199,36 +219,33 @@ private struct TeamPage<Content: View>: View {
                     .frame(height: containerSize.height / 2)
                     .backgroundExtensionEffect()
 
+                // The crest watermark, behind the navigation bar only. Its
+                // frame is the bar's height — status bar plus the bar's
+                // 44 pt — and it is clipped there, so the crest's own size
+                // never sets how tall the team-colour header is. The stack
+                // starts at the bar's bottom, so the offset lifts it into
+                // the bar exactly.
+                barWatermark
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .frame(height: barHeight, alignment: .center)
+                    .clipped()
+                    .offset(y: -barHeight)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+
                 // Not ignoring the top safe area: the scroll view starts its
                 // content below the navigation bar and scrolls it under.
+                // Full width: `TeamHomeLayout` insets its own section cards
+                // on the grouped background (T-4). It starts right at the
+                // bar, so the header is a standard bar's height; the hero
+                // shows only in the page's rounded top corners.
                 ScrollView(.vertical) {
-                    VStack {
-                        // Drawn over the team colour, so a dark background takes
-                        // the dark crest where the feed has one.
-                        TeamLogo(
-                            team: team,
-                            size: max(containerSize.width - 50, 0),
-                            forceVariant: TeamColors.logoVariant(for: team, onBackground: team.colorHex)
-                        )
-                        // Dimmed into the team colour; stronger under
-                        // Increase Contrast, solid under Reduce
-                        // Transparency (X-5).
-                        .adaptiveScrim(0.5)
-                        .offset(x: 50)
-                        // The crest deliberately overflows its slot: only the
-                        // top sliver shows until the page is scrolled.
-                        .frame(height: containerSize.height / 14)
-
-                        // Full width: `TeamHomeLayout` insets its own
-                        // section cards on the grouped background (T-4).
-                        content
-                            .padding(.top)
-                            .onGeometryChange(for: Bool.self) { proxy in
-                                proxy.frame(in: .global).minY < barBottom
-                            } action: { covered in
-                                contentUnderBar = covered
-                            }
-                    }
+                    content
+                        .onGeometryChange(for: Bool.self) { proxy in
+                            proxy.frame(in: .global).minY < barBottom
+                        } action: { covered in
+                            contentUnderBar = covered
+                        }
                 }
                 .scrollIndicators(.hidden)
                 // The page scrolls under the floating crest picker; the soft
@@ -257,6 +274,11 @@ private struct TeamPage<Content: View>: View {
                 proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
             } action: { bottom in
                 barBottom = bottom
+            }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.safeAreaInsets.top
+            } action: { height in
+                barHeight = height
             }
             .navigationTitle(team.displayName)
             .toolbarTitleDisplayMode(.inline)
