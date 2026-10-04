@@ -187,6 +187,7 @@ final class GlassUIScreenshotTests: XCTestCase {
 
         capturePlayerSheet(app, configuration)
         captureGameSheet(app, configuration)
+        captureScheduleCards(app, configuration)
     }
 
     /// Walks the screens reachable by identifier: onboarding, the first team
@@ -268,6 +269,7 @@ final class GlassUIScreenshotTests: XCTestCase {
     private func captureSheets(_ app: XCUIApplication, _ configuration: Configuration) {
         capturePlayerSheet(app, configuration)
         captureGameSheet(app, configuration)
+        captureScheduleCards(app, configuration)
         captureLeadersSheet(app, configuration)
 
         if let article = firstHittable("news.article", in: app, swipes: 12) {
@@ -317,6 +319,14 @@ final class GlassUIScreenshotTests: XCTestCase {
         } else {
             XCTFail("\(configuration.name): the game sheet never opened")
         }
+    }
+
+    /// The schedule carousel's cards (UI-3) in view: names on two lines
+    /// rather than clipped, and the status pills over the team colour.
+    @MainActor
+    private func captureScheduleCards(_ app: XCUIApplication, _ configuration: Configuration) {
+        guard firstHittable("schedule.game", in: app, swipes: 4) != nil else { return }
+        snapshot("schedule-cards", configuration)
     }
 
     /// The league leaders sheet, opened from the leaders section's header
