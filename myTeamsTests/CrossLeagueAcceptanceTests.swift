@@ -685,7 +685,7 @@ struct EuropeanSoccerLeagueTests {
         let teams = RemoteTeamCatalog.parseTeams(try Fixture.json("\(c.prefix)_teams"), league: c.league)
         #expect(teams.count == 15)
         for team in teams {
-            #expect(!team.espnID.isEmpty && team.espnID.allSatisfy(\.isNumber), "\(team.id)")
+            #expect(!team.espnID.isEmpty && team.espnID.allSatisfy { $0.isNumber }, "\(team.id)")
             #expect(team.league == c.league)
             #expect(!team.displayName.isEmpty)
         }
@@ -702,7 +702,7 @@ struct EuropeanSoccerLeagueTests {
 
         // The bare feed alone has nothing left to play.
         let bare = parseSchedule(from: played, team: team)
-        #expect(bare.allSatisfy(\.completed))
+        #expect(bare.allSatisfy { $0.completed })
 
         let merged = mergeScheduleDocuments(played, fixtures: fixtures)
         let games = mergeSchedules(league: merged, cups: [], team: team)
