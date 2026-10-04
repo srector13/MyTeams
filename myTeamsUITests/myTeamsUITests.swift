@@ -172,6 +172,34 @@ final class myTeamsUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    /// The schedule cards (UI-3) speak a whole game, never a placeholder
+    /// such as "nil" or "Optional(…)" for a field the feed left out.
+    /// Skipped if the schedule never loads (no network).
+    @MainActor
+    func testScheduleCardsReadWithoutPlaceholders() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+
+        let cards = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.game."))
+        guard cards.firstMatch.waitForExistence(timeout: 15) else {
+            throw XCTSkip("The schedule never loaded.")
+        }
+        for card in cards.allElementsBoundByIndex.prefix(8) {
+            let label = card.label
+            XCTAssertFalse(label.isEmpty, card.identifier)
+            // Whole words, so "Manila" passes and "nil" doesn't.
+            let words = label.lowercased().components(separatedBy: CharacterSet.letters.inverted)
+            XCTAssertFalse(words.contains("nil"), label)
+            XCTAssertFalse(words.contains("optional"), label)
+        }
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {

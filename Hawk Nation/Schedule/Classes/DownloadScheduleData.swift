@@ -47,6 +47,17 @@ struct Game: Identifiable, Hashable, Sendable {
     /// their own season ids (13846, 14308, …) here instead. `nil` when the
     /// event carries none.
     var seasonType: Int? = nil
+    /// Whether the game is played at a neutral venue (the competition's
+    /// `neutralSite`): a bowl game, a tournament site. Neither team is at
+    /// home, whatever `gameHome` says.
+    var neutralSite = false
+    /// The competition's name as the event gives it (`league.shortName`,
+    /// e.g. "Bundesliga", "UEFA Champions League"), which only the soccer
+    /// feeds carry; empty elsewhere.
+    var leagueName = ""
+    /// The event's week as the feed words it (`week.text`, e.g. "Week 3"),
+    /// which the football and baseball feeds carry; empty elsewhere.
+    var weekText = ""
 
     /// Whether the game is one of the team's league games rather than a cup
     /// tie. See `competition`.
@@ -201,6 +212,7 @@ func parseGame(
     var gameClock = ""
     var gamePeriod = ""
     var halftime = false
+    var neutralSite = false
 
     // Shape pin (M6): ESPN's schedule endpoints carry exactly one
     // competition per event today. Reading only the followed team's keeps a
@@ -213,6 +225,7 @@ func parseGame(
 
     if let competition = played {
         location = competition["venue"]["fullName"].stringValue
+        neutralSite = competition["neutralSite"].boolValue
         gameID = competition["id"].stringValue
 
         if let parsed = parseGameDate(event["date"].stringValue) {
@@ -295,7 +308,10 @@ func parseGame(
         gamePeriod: gamePeriod,
         gameHalftime: halftime,
         competition: competition,
-        seasonType: event["seasonType"]["type"].int
+        seasonType: event["seasonType"]["type"].int,
+        neutralSite: neutralSite,
+        leagueName: event["league"]["shortName"].stringValue,
+        weekText: event["week"]["text"].stringValue
     )
 }
 

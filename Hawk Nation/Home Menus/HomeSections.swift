@@ -320,7 +320,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The carousel's height: a game card's, scaled with the text in it.
-    @ScaledMetric(relativeTo: .body) private var cardHeight = GameView.baseHeight
+    @ScaledMetric(relativeTo: GameView.metricsTextStyle) private var cardHeight = GameView.baseHeight
 
     /// At accessibility text sizes the carousel becomes a vertical list.
     private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -416,7 +416,8 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
         .accessibilityLabel(
             game.accessibilitySummary(
                 drawLabel: model.team.league.descriptor.drawLabel,
-                liveScore: model.liveScores[game.gameID]
+                liveScore: model.liveScores[game.gameID],
+                league: model.team.league.descriptor
             )
         )
         .accessibilityIdentifier("schedule.game.\(game.id)")
