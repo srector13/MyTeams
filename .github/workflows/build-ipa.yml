@@ -21,6 +21,12 @@
 #   ad-hoc:      APPLE_DIST_CERT_P12_BASE64, APPLE_DIST_CERT_P12_PASSWORD,
 #                PROVISION_APP_ADHOC_BASE64, PROVISION_WIDGET_ADHOC_BASE64
 #
+# unsigned_feather input (default false): when ticked, the signed build-ipa job
+# is skipped and build-ipa-unsigned runs instead. It builds Release with code
+# signing disabled and zips Payload/myTeams.app into an unsigned .ipa for
+# on-device re-signing with Feather. It uses no secrets, keychain or profiles,
+# and export_method is ignored.
+#
 # Two profiles are needed per method because the app and the widget extension
 # are separate explicit App IDs with App Groups, and an explicit profile covers
 # exactly one App ID. Per-target selection reuses the signed gate's trick:
@@ -51,6 +57,10 @@ on:
           - ad-hoc
           - development
         default: ad-hoc
+      unsigned_feather:
+        description: 'Unsigned .ipa for re-signing in Feather (no secrets; ignores export_method)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -72,6 +82,7 @@ env:
 
 jobs:
   build-ipa:
+    if: ${{ !inputs.unsigned_feather }}
     # Same runner image as ios-gate.yml / ios-signed-gate.yml.
     # TODO(GlassUI 0.1): move to the GitHub image that ships Xcode 27 (iOS 27 SDK) once documented; image name unverified.
     runs-on: macos-26
@@ -501,3 +512,86 @@ jobs:
           done
           [ -n "${SIGN_DIR:-}" ] && rm -rf "$SIGN_DIR" || true
           [ -n "${RUNNER_TEMP:-}" ] && rm -rf "${RUNNER_TEMP}/build" "${RUNNER_TEMP}/ipa-check" || true
+
+  build-ipa-unsigned:
+    # Feather re-sign route: no secrets, no keychain, no provisioning profiles.
+    if: ${{ inputs.unsigned_feather }}
+    # Same runner image as build-ipa above.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve run metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Diagnostics
+        continue-on-error: true
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Build (code signing disabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # -derivedDataPath pins the product to
+          # ./dd/Build/Products/Release-iphoneos/myTeams.app.
+          xcodebuild build \
+            -project myTeams.xcodeproj -scheme "$SCHEME" -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ./dd \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No -exportArchive: it requires signing. Zip Payload/ by hand.
+          APP="dd/Build/Products/Release-iphoneos/${APP_TARGET}.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Build produced no ${APP}"
+            ls -la dd/Build/Products/Release-iphoneos || true
+            exit 1
+          fi
+          rm -rf Payload output
+          mkdir -p Payload output
+          cp -R "$APP" Payload/
+          PLUGINS="Payload/${APP_TARGET}.app/PlugIns"
+          if [ ! -d "$PLUGINS" ]; then
+            echo "::error::${PLUGINS} is missing. The widget extension was not embedded in the Release build."
+            exit 1
+          fi
+          if [ ! -d "${PLUGINS}/${WIDGET_TARGET}.appex" ]; then
+            echo "::error::${PLUGINS} has no ${WIDGET_TARGET}.appex. The widget extension was not embedded in the Release build."
+            ls -la "$PLUGINS"
+            exit 1
+          fi
+          echo "PASS: ${PLUGINS}/${WIDGET_TARGET}.appex is embedded"
+          zip -qry output/MyTeams-unsigned.ipa Payload
+          ls -la output
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: myteams-ipa-unsigned-${{ github.run_number }}-${{ steps.meta.outputs.short_sha }}
+          path: output/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-ipa-logs-${{ github.run_number }}
+          path: |
+            build.log
+          if-no-files-found: warn
+          retention-days: 7

@@ -23,6 +23,31 @@ This is **not** an App Store or TestFlight build. Nothing is uploaded to App Sto
 The guard step fails within seconds and names any missing secrets for the
 method you picked.
 
+## Feather (unsigned) route
+
+If you re-sign on the iPhone with [Feather](https://github.com/khcrysalis/Feather),
+CI does not need any signing secrets.
+
+1. GitHub → **Actions** → **Build signed IPA** → **Run workflow** → tick
+   **`unsigned_feather`** (`export_method` is ignored) → **Run workflow**.
+   The signed job is skipped. `build-ipa-unsigned` builds Release with
+   `CODE_SIGNING_ALLOWED=NO` and zips `Payload/myTeams.app` by hand. It fails if
+   `myTeamWidgetExtension.appex` is not in `Payload/myTeams.app/PlugIns`.
+2. Download the `myteams-ipa-unsigned-<run#>-<sha7>` artifact (kept 14 days)
+   and unzip it to get `MyTeams-unsigned.ipa`. The build log is in
+   `build-ipa-logs-<run#>`.
+3. Open the `.ipa` in Feather (share sheet → Feather, or import it in the app).
+4. Sign it in Feather with your own certificate + provisioning profile, then install.
+
+Notes:
+- Feather signs every bundle with a **single** profile. The app and the widget
+  normally have separate App IDs, both with the App Group
+  `group.PolarReailty.Hawk-Nation`, so the widget or the shared App Group data
+  may not work until you adjust the entitlements in Feather's entitlement
+  editing.
+- The device's UDID only has to be in whichever profile Feather signs with.
+  None of the profiles or secrets above are involved.
+
 ## What the project needs (grounded in the repo)
 
 | Thing | Value | Source |
