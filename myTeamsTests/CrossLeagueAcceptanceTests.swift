@@ -583,3 +583,244 @@ struct KansasFootballAcceptanceTests {
         #expect(sheet.info.attendance == "30904")
     }
 }
+
+// MARK: - European soccer leagues (BE-3)
+
+/// One BE-3 league's captured club, with the goldens derived from its
+/// fixtures. See FIXTURES.md, "European soccer leagues (BE-3)".
+struct EuropeanLeagueCase: Sendable, CustomTestStringConvertible {
+    let league: LeagueID
+    let prefix: String
+    let teamID: String
+    /// Events in `<prefix>_schedule` (played) and `<prefix>_schedule_fixtures`.
+    let played: Int
+    let fixtures: Int
+    /// The first unplayed event: `<prefix>_schedule_fixtures` events[0].
+    let nextGameID: String
+    /// The table's name (`children[0].name`) and row count.
+    let tableName: String
+    let tableSize: Int
+    /// `rank` 1 in the table.
+    let leaderID: String
+    /// The club's row: wins, draws, losses, points.
+    let record: (wins: Int, ties: Int, losses: Int, points: Int)
+    /// The summary of a finished game: event id, followed side, final score.
+    let finalGameID: String
+    let followedIsHome: Bool
+    let homeScore: Int
+    let awayScore: Int
+
+    var testDescription: String { prefix }
+
+    static let all: [EuropeanLeagueCase] = [
+        // Bayern Munich. bundes_summary_final_401884790: 7–0 at home to Union Berlin (598).
+        EuropeanLeagueCase(league: .bundesliga, prefix: "bundes", teamID: "132", played: 4, fixtures: 10,
+                           nextGameID: "401884777", tableName: "2026-27 German Bundesliga", tableSize: 18,
+                           leaderID: "124", record: (3, 1, 0, 10),
+                           finalGameID: "401884790", followedIsHome: true, homeScore: 7, awayScore: 0),
+        // Internazionale. seriea_summary_final_401874753: 2–2 at Roma (104).
+        EuropeanLeagueCase(league: .serieA, prefix: "seriea", teamID: "110", played: 5, fixtures: 10,
+                           nextGameID: "401875021", tableName: "2026-2027 Italian Serie A", tableSize: 20,
+                           leaderID: "104", record: (4, 1, 0, 13),
+                           finalGameID: "401874753", followedIsHome: false, homeScore: 2, awayScore: 2),
+        // Paris Saint-Germain. ligue1_summary_final_401876449: 2–1 at Marseille (176).
+        EuropeanLeagueCase(league: .ligue1, prefix: "ligue1", teamID: "160", played: 5, fixtures: 10,
+                           nextGameID: "401876442", tableName: "French Ligue 1 2026-27", tableSize: 18,
+                           leaderID: "174", record: (2, 2, 1, 8),
+                           finalGameID: "401876449", followedIsHome: false, homeScore: 1, awayScore: 2),
+        // Arsenal, followed as a Champions League team. The 36-team league
+        // phase is one table. uclleague_summary_final_401915423: 1–0 at Napoli (114).
+        EuropeanLeagueCase(league: .championsLeague, prefix: "uclleague", teamID: "359", played: 1, fixtures: 7,
+                           nextGameID: "401915417", tableName: "League Phase", tableSize: 36,
+                           leaderID: "160", record: (1, 0, 0, 3),
+                           finalGameID: "401915423", followedIsHome: false, homeScore: 0, awayScore: 1),
+    ]
+}
+
+@Suite("Acceptance: European soccer leagues (BE-3)")
+struct EuropeanSoccerLeagueTests {
+    @Test("The registry describes each league as European soccer", arguments: EuropeanLeagueCase.all)
+    func descriptor(_ c: EuropeanLeagueCase) throws {
+        let descriptor = c.league.descriptor
+        #expect(LeagueDescriptor.known[c.league] != nil)
+        #expect(descriptor.kind == .soccer)
+        #expect(descriptor.rosterShape == .flat)
+        #expect(descriptor.periodStyle == .halves)
+        #expect(descriptor.leadersSeasonType == "1")
+        // ESPN files 2026-27 under 2026, the starting year.
+        #expect(descriptor.leadersSeason(at: try published("2026-10-04T12:00:00Z")) == 2026)
+        #expect(descriptor.leadersSeason(at: try published("2027-05-20T12:00:00Z")) == 2026)
+        #expect(c.league.leadersURL(season: 2026)
+            == "https://site.api.espn.com/apis/site/v3/sports/\(c.league.path)/leaders?limit=10&season=2026&seasontype=1")
+        #expect(c.league.standingsURL() == "\(standingsBase)/\(c.league.path)/standings")
+        #expect(c.league.teamsURL == "\(site)/\(c.league.path)/teams?limit=1000")
+    }
+
+    @Test("Domestic seasons roll over in June; the Champions League's in July")
+    func seasonRollover() throws {
+        let june = try published("2027-06-15T12:00:00Z")
+        let july = try published("2027-07-01T12:00:00Z")
+        for league in [LeagueID.bundesliga, .serieA, .ligue1] {
+            #expect(league.descriptor.seasonNaming == .startingYear(rolloverMonth: 6))
+            #expect(league.descriptor.leadersSeason(at: june) == 2027)
+        }
+        #expect(LeagueID.championsLeague.descriptor.seasonNaming == .startingYear(rolloverMonth: 7))
+        #expect(LeagueID.championsLeague.descriptor.leadersSeason(at: june) == 2026)
+        #expect(LeagueID.championsLeague.descriptor.leadersSeason(at: july) == 2027)
+    }
+
+    @Test("Each domestic league plays its cup and both UEFA club competitions; the UCL none")
+    func cups() {
+        let uefa: [LeagueID] = [.soccer("uefa.champions"), .soccer("uefa.europa")]
+        #expect(LeagueID.bundesliga.descriptor.cupCompetitions == [.soccer("ger.dfb_pokal")] + uefa)
+        #expect(LeagueID.serieA.descriptor.cupCompetitions == [.soccer("ita.coppa_italia")] + uefa)
+        #expect(LeagueID.ligue1.descriptor.cupCompetitions == [.soccer("fra.coupe_de_france")] + uefa)
+        #expect(LeagueID.championsLeague.descriptor.cupCompetitions.isEmpty)
+        // The cup the EPL and LALIGA list is now the registered league.
+        #expect(LeagueID.soccer("uefa.champions") == .championsLeague)
+    }
+
+    @Test("Teams: the list parses, with numeric ids and the sample club", arguments: EuropeanLeagueCase.all)
+    func teams(_ c: EuropeanLeagueCase) throws {
+        let teams = RemoteTeamCatalog.parseTeams(try Fixture.json("\(c.prefix)_teams"), league: c.league)
+        #expect(teams.count == 15)
+        for team in teams {
+            #expect(!team.espnID.isEmpty && team.espnID.allSatisfy(\.isNumber), "\(team.id)")
+            #expect(team.league == c.league)
+            #expect(!team.displayName.isEmpty)
+        }
+        #expect(teams.contains { $0.id == "\(c.league.path):\(c.teamID)" })
+    }
+
+    @Test("Schedule: the played feed plus ?fixture=true gives the season ahead", arguments: EuropeanLeagueCase.all)
+    func schedule(_ c: EuropeanLeagueCase) throws {
+        let team = followed(c.league, c.teamID)
+        let played = try Fixture.json("\(c.prefix)_schedule")
+        let fixtures = try Fixture.json("\(c.prefix)_schedule_fixtures")
+        #expect(played["events"].arrayValue.count == c.played)
+        #expect(fixtures["events"].arrayValue.count == c.fixtures)
+
+        // The bare feed alone has nothing left to play.
+        let bare = parseSchedule(from: played, team: team)
+        #expect(bare.allSatisfy(\.completed))
+
+        let merged = mergeScheduleDocuments(played, fixtures: fixtures)
+        let games = mergeSchedules(league: merged, cups: [], team: team)
+        #expect(games.count == c.played + c.fixtures)
+        #expect(games.map(\.pointer) == Array(0 ..< games.count))
+        #expect(games.filter { !$0.completed }.count == c.fixtures)
+        #expect(games.allSatisfy { $0.competition == c.league })
+
+        // Every played game comes before the first fixture, which is next.
+        let next = getNextGame(schedule: games, now: try published("2026-10-04T20:00:00Z"))
+        #expect(next == c.played)
+        #expect(games[next].gameID == c.nextGameID)
+        #expect(!games[next].completed)
+    }
+
+    @Test("Standings: one points table with every club ranked", arguments: EuropeanLeagueCase.all)
+    func standings(_ c: EuropeanLeagueCase) throws {
+        let standings = parseStandings(from: try Fixture.json("\(c.prefix)_standings"), league: c.league)
+        #expect(standings.kind == .pointsTable)
+        #expect(!standings.isEmpty)
+        #expect(standings.seasonDisplayName.hasPrefix("2026-27"))
+        #expect(standings.groups.count == 1)
+        let table = try #require(standings.groups.first)
+        #expect(table.name == c.tableName)
+        #expect(table.entries.count == c.tableSize)
+        #expect(table.entries.first?.teamID == c.leaderID)
+        #expect(table.entries.allSatisfy { $0.rank != nil })
+
+        let row = try #require(standings.entry(for: c.teamID))
+        #expect(row.record.wins == c.record.wins)
+        #expect(row.record.ties == c.record.ties)
+        #expect(row.record.losses == c.record.losses)
+        #expect(row.record.points == c.record.points)
+    }
+
+    @Test("Standings: a preseason table (every stat zeroed) still reads, unranked")
+    func preseasonStandings() throws {
+        // bundes_standings with each row's stats set to 0, as the table reads
+        // before a ball is kicked.
+        var json = try Fixture.json("bundes_standings")
+        let entries = json["children", 0, "standings", "entries"].arrayValue
+        for (index, entry) in entries.enumerated() {
+            let zeroed = entry["stats"].arrayValue.map { stat in
+                stat.setting(["value"], to: .number(0)).setting(["displayValue"], to: .string("0"))
+            }
+            json = json.setting(["children", 0, "standings", "entries", .index(index), "stats"], to: .array(zeroed))
+        }
+        let standings = parseStandings(from: json, league: .bundesliga)
+        let table = try #require(standings.groups.first)
+        #expect(table.entries.count == 18)
+        #expect(table.entries.allSatisfy { $0.rank == nil && $0.record.wins == 0 })
+        // Unranked rows keep the feed's order.
+        #expect(table.entries.map(\.teamID) == entries.map { $0["team", "id"].stringValue })
+    }
+
+    @Test("Roster: a flat list, every headshot the feed's or the silhouette", arguments: EuropeanLeagueCase.all)
+    func roster(_ c: EuropeanLeagueCase) throws {
+        let json = try Fixture.json("\(c.prefix)_roster")
+        #expect(json["athletes", 0, "items"].array == nil)  // flat, not grouped
+        let athletes = json["athletes"].arrayValue
+        let roster = parseSoccerRoster(from: json)
+        #expect(!roster.isEmpty)
+        #expect(roster.count == athletes.count)
+
+        var hrefs: [String: String] = [:]
+        for athlete in athletes {
+            hrefs[athlete["id"].stringValue] = athlete["headshot"]["href"].stringValue
+        }
+        let silhouette = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
+        for player in roster {
+            let href = try #require(hrefs[player.playerID])
+            #expect(player.photo == (href.isEmpty ? silhouette : href), "\(player.playerID)")
+            #expect(["Goalkeeper", "Defender", "Midfielder", "Forward"].contains(player.position))
+        }
+    }
+
+    @Test("Game sheet: a finished match from the league's summary feed", arguments: EuropeanLeagueCase.all)
+    func gameSheet(_ c: EuropeanLeagueCase) async throws {
+        let sheet = try await finishedGameSheet(
+            followed(c.league, c.teamID),
+            fixture: "\(c.prefix)_summary_final_\(c.finalGameID)",
+            gameID: c.finalGameID,
+            followedIsHome: c.followedIsHome
+        )
+        let boxScore = try #require(sheet.boxScore)
+        #expect(boxScore.homeScore == c.homeScore)
+        #expect(boxScore.awayScore == c.awayScore)
+        // Every captured final names both formations and eleven starters a side.
+        let lineups = try #require(sheet.soccerLineups)
+        #expect(lineups.home.starters.count == 11 && lineups.away.starters.count == 11)
+        #expect(!lineups.home.formation.isEmpty && !lineups.away.formation.isEmpty)
+    }
+
+    @Test("An unknown soccer league degrades: a plain descriptor, no teams, no crash")
+    func unknownLeague() async throws {
+        let unknown = LeagueID.soccer("xxx.zzz")
+        #expect(LeagueDescriptor.known[unknown] == nil)
+        let descriptor = unknown.descriptor
+        #expect(descriptor.kind == .soccer)
+        #expect(descriptor.displayName == "soccer/xxx.zzz")
+        #expect(descriptor.cupCompetitions.isEmpty)
+        #expect(descriptor.leadersSeasonType == nil)
+        #expect(unknown.badge == "XXX.ZZZ")
+
+        // ESPN answers an unknown slug's teams with 404 ("League not found",
+        // checked 2026-10-04): nothing cached, no seed, so an empty list.
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "EuropeanSoccerLeagueTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = RecordingTransport(always: .status(404))
+        let catalog = RemoteTeamCatalog(client: HTTPClient(transport: transport), directory: directory)
+        #expect(await catalog.teams(for: unknown).isEmpty)
+        #expect(transport.urls.first?.absoluteString == unknown.teamsURL)
+
+        // Empty documents parse to nothing rather than trapping.
+        #expect(RemoteTeamCatalog.parseTeams(JSON.object([:]), league: unknown).isEmpty)
+        #expect(parseStandings(from: JSON.object([:]), league: unknown).isEmpty)
+        let team = followed(unknown, "1")
+        #expect(mergeSchedules(league: mergeScheduleDocuments(JSON.object([:]), fixtures: nil), cups: [], team: team).isEmpty)
+    }
+}
