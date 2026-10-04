@@ -1,0 +1,597 @@
+# Build signed .ipa (manual)
+#
+# Archives the myTeams scheme on a macOS runner, signs it manually with the
+# credentials from repository secrets, exports an .ipa and uploads it as a
+# downloadable artifact for sideloading onto registered test devices. This is
+# NOT an App Store / TestFlight build.
+#
+# Full setup and sideload instructions: docs/CIOSIGNING.md
+#
+# export_method input:
+#   ad-hoc       (default) Apple Distribution identity + Ad Hoc profiles.
+#                Installs on any device whose UDID is in the profiles.
+#   development  Apple Development identity + iOS App Development profiles.
+#                Reuses the exact secrets of ios-signed-gate.yml.
+#
+# Secrets (the guard step fails early and names whichever are missing for the
+# chosen method):
+#   development: APPLE_CERT_P12_BASE64, APPLE_CERT_P12_PASSWORD,
+#                PROVISION_APP_BASE64, PROVISION_WIDGET_BASE64
+#                (same secrets as ios-signed-gate.yml)
+#   ad-hoc:      APPLE_DIST_CERT_P12_BASE64, APPLE_DIST_CERT_P12_PASSWORD,
+#                PROVISION_APP_ADHOC_BASE64, PROVISION_WIDGET_ADHOC_BASE64
+#
+# unsigned_feather input (default false): when ticked, the signed build-ipa job
+# is skipped and build-ipa-unsigned runs instead. It builds Release with code
+# signing disabled and zips Payload/myTeams.app into an unsigned .ipa for
+# on-device re-signing with Feather. It uses no secrets, keychain or profiles,
+# and export_method is ignored.
+#
+# Two profiles are needed per method because the app and the widget extension
+# are separate explicit App IDs with App Groups, and an explicit profile covers
+# exactly one App ID. Per-target selection reuses the signed gate's trick:
+#   PROVISIONING_PROFILE_SPECIFIER='$(SIGN_PROFILE_$(TARGET_NAME:c99extidentifier))'
+# xcodebuild has no TARGET:SETTING=VALUE form, so each target resolves that
+# indirection to its own profile name. The pbxproj (CODE_SIGN_STYLE = Automatic)
+# is never modified; CODE_SIGN_STYLE=Manual on the command line wins over it.
+#
+# No -allowProvisioningUpdates anywhere: manual signing must not contact the
+# developer portal (there is no Apple ID / API key on the runner), and the flag
+# would only matter for automatic signing.
+#
+# Xcode: like ios-gate.yml and ios-signed-gate.yml, this uses the runner
+# image's default Xcode (no xcode-select). The Diagnostics step prints it.
+#
+# NOTE: the "Reailty" spelling in the identifiers is intentional. It matches what
+# is registered on the developer portal. Do not "fix" it.
+
+name: Build signed IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: 'Export method (ad-hoc = registered test devices; development = dev-profile devices)'
+        type: choice
+        options:
+          - ad-hoc
+          - development
+        default: ad-hoc
+      unsigned_feather:
+        description: 'Unsigned .ipa for re-signing in Feather (no secrets; ignores export_method)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  # Expected team: myTeams.xcodeproj/project.pbxproj:1035 (DEVELOPMENT_TEAM).
+  # The team actually used is read from the profiles at runtime and must match.
+  EXPECTED_TEAM_ID: 68L4YU8U89
+  # PRODUCT_BUNDLE_IDENTIFIER: pbxproj:1068 (myTeams, Release) and
+  # pbxproj:1117 (myTeamWidgetExtension, Release). Re-checked at runtime
+  # against xcodebuild -showBuildSettings.
+  APP_BUNDLE_ID: PolarReailty.Hawk-Nation
+  WIDGET_BUNDLE_ID: PolarReailty.Hawk-Nation.myTeamWidget
+  APP_GROUP: group.PolarReailty.Hawk-Nation
+  SCHEME: myTeams
+  APP_TARGET: myTeams
+  WIDGET_TARGET: myTeamWidgetExtension
+  EXPORT_METHOD: ${{ inputs.export_method }}
+
+jobs:
+  build-ipa:
+    if: ${{ !inputs.unsigned_feather }}
+    # Same runner image as ios-gate.yml / ios-signed-gate.yml.
+    # TODO(GlassUI 0.1): move to the GitHub image that ships Xcode 27 (iOS 27 SDK) once documented; image name unverified.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve method-specific settings
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$EXPORT_METHOD" in
+            ad-hoc)
+              # Xcode 15.3+ name for "ad-hoc".
+              echo "EXPORT_OPTIONS_METHOD=release-testing" >> "$GITHUB_ENV"
+              echo "SIGN_IDENTITY=Apple Distribution" >> "$GITHUB_ENV"
+              ;;
+            development)
+              # Xcode 15.3+ name for "development".
+              echo "EXPORT_OPTIONS_METHOD=debugging" >> "$GITHUB_ENV"
+              echo "SIGN_IDENTITY=Apple Development" >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error::Unknown export_method '${EXPORT_METHOD}'"
+              exit 1
+              ;;
+          esac
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Guard - required signing secrets
+        shell: bash
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+          PROVISION_APP_BASE64: ${{ secrets.PROVISION_APP_BASE64 }}
+          PROVISION_WIDGET_BASE64: ${{ secrets.PROVISION_WIDGET_BASE64 }}
+          APPLE_DIST_CERT_P12_BASE64: ${{ secrets.APPLE_DIST_CERT_P12_BASE64 }}
+          APPLE_DIST_CERT_P12_PASSWORD: ${{ secrets.APPLE_DIST_CERT_P12_PASSWORD }}
+          PROVISION_APP_ADHOC_BASE64: ${{ secrets.PROVISION_APP_ADHOC_BASE64 }}
+          PROVISION_WIDGET_ADHOC_BASE64: ${{ secrets.PROVISION_WIDGET_ADHOC_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ "$EXPORT_METHOD" = "ad-hoc" ]; then
+            required=(APPLE_DIST_CERT_P12_BASE64 APPLE_DIST_CERT_P12_PASSWORD PROVISION_APP_ADHOC_BASE64 PROVISION_WIDGET_ADHOC_BASE64)
+          else
+            required=(APPLE_CERT_P12_BASE64 APPLE_CERT_P12_PASSWORD PROVISION_APP_BASE64 PROVISION_WIDGET_BASE64)
+          fi
+          missing=()
+          for name in "${required[@]}"; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Cannot build a ${EXPORT_METHOD} .ipa. Missing or empty repository secrets: ${missing[*]}"
+            echo "Required for ${EXPORT_METHOD}: ${required[*]}"
+            echo "See docs/CIOSIGNING.md for how to produce them."
+            exit 1
+          fi
+          echo "PASS: all ${EXPORT_METHOD} signing secrets are present"
+
+      - name: Diagnostics
+        continue-on-error: true
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Keychain setup
+        shell: bash
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_P12_PASSWORD: ${{ secrets.APPLE_CERT_P12_PASSWORD }}
+          APPLE_DIST_CERT_P12_BASE64: ${{ secrets.APPLE_DIST_CERT_P12_BASE64 }}
+          APPLE_DIST_CERT_P12_PASSWORD: ${{ secrets.APPLE_DIST_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Pick the credential set in bash, not with `a && b || c` expressions,
+          # so an empty distribution secret can never fall through to the
+          # development one.
+          if [ "$EXPORT_METHOD" = "ad-hoc" ]; then
+            P12_B64="$APPLE_DIST_CERT_P12_BASE64"; P12_PASSWORD="$APPLE_DIST_CERT_P12_PASSWORD"; P12_SECRET=APPLE_DIST_CERT_P12_BASE64
+          else
+            P12_B64="$APPLE_CERT_P12_BASE64"; P12_PASSWORD="$APPLE_CERT_P12_PASSWORD"; P12_SECRET=APPLE_CERT_P12_BASE64
+          fi
+
+          SIGN_DIR="$(mktemp -d "${RUNNER_TEMP}/signing.XXXXXX")"
+          KEYCHAIN_PATH="${SIGN_DIR}/build-ipa.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::${KEYCHAIN_PASSWORD}"
+          P12_PATH="${SIGN_DIR}/cert.p12"
+
+          printf '%s' "$P12_B64" | tr -d '\r\n ' | base64 --decode > "$P12_PATH"
+          if [ ! -s "$P12_PATH" ]; then
+            echo "FAIL: ${P12_SECRET} decoded to an empty file (is it valid base64?)"
+            exit 1
+          fi
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          if ! security import "$P12_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"; then
+            echo "FAIL: security import rejected the .p12. Check the password secret. If the .p12 was made with OpenSSL 3, re-export it with -legacy."
+            exit 1
+          fi
+          rm -f "$P12_PATH"
+
+          # Let codesign use the key without a UI prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" > /dev/null
+
+          # Temp keychain first. Keep login.keychain-db in the search list.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+
+          echo "Codesigning identities in the temp keychain:"
+          IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH")"
+          echo "$IDENTITIES"
+          if ! grep -q "\"${SIGN_IDENTITY}" <<< "$IDENTITIES"; then
+            echo "::error::No valid '${SIGN_IDENTITY}' codesigning identity after importing the .p12"
+            echo "FAIL: a ${EXPORT_METHOD} build needs an '${SIGN_IDENTITY}' certificate together with its private key, not expired or revoked."
+            exit 1
+          fi
+          echo "PASS: '${SIGN_IDENTITY}' codesigning identity is usable"
+
+          {
+            echo "SIGN_DIR=${SIGN_DIR}"
+            echo "KEYCHAIN_PATH=${KEYCHAIN_PATH}"
+          } >> "$GITHUB_ENV"
+
+      - name: Install and check provisioning profiles
+        shell: bash
+        env:
+          PROVISION_APP_BASE64: ${{ secrets.PROVISION_APP_BASE64 }}
+          PROVISION_WIDGET_BASE64: ${{ secrets.PROVISION_WIDGET_BASE64 }}
+          PROVISION_APP_ADHOC_BASE64: ${{ secrets.PROVISION_APP_ADHOC_BASE64 }}
+          PROVISION_WIDGET_ADHOC_BASE64: ${{ secrets.PROVISION_WIDGET_ADHOC_BASE64 }}
+        run: |
+          set -euo pipefail
+          PB=/usr/libexec/PlistBuddy
+          if [ "$EXPORT_METHOD" = "ad-hoc" ]; then
+            APP_B64="$PROVISION_APP_ADHOC_BASE64"; WIDGET_B64="$PROVISION_WIDGET_ADHOC_BASE64"
+          else
+            APP_B64="$PROVISION_APP_BASE64"; WIDGET_B64="$PROVISION_WIDGET_BASE64"
+          fi
+
+          # Xcode 16+ reads UserData; older tooling reads MobileDevice. Install to both.
+          PROFILE_DIRS=(
+            "$HOME/Library/MobileDevice/Provisioning Profiles"
+            "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          )
+          mkdir -p "${PROFILE_DIRS[@]}"
+          : > profile-checks.txt
+          fail=0
+          pass() { echo "PASS: $*" | tee -a profile-checks.txt; }
+          failf() { echo "FAIL: $*" | tee -a profile-checks.txt; fail=1; }
+
+          # usage: install_profile <label> <base64> <bundle id> <ENV prefix>
+          install_profile() {
+            local label="$1" b64="$2" bundle_id="$3" prefix="$4"
+            local raw="${SIGN_DIR}/${label}.mobileprovision"
+            local plist="${SIGN_DIR}/${label}-profile.plist"
+
+            printf '%s' "$b64" | tr -d '\r\n ' | base64 --decode > "$raw"
+            if ! security cms -D -i "$raw" > "$plist" 2>/dev/null || [ ! -s "$plist" ]; then
+              failf "[$label] could not decode the profile (security cms -D failed). Is the secret a base64 .mobileprovision?"
+              return
+            fi
+
+            local name uuid team appid
+            name="$($PB -c 'Print :Name' "$plist")"
+            uuid="$($PB -c 'Print :UUID' "$plist")"
+            team="$($PB -c 'Print :TeamIdentifier:0' "$plist" 2>/dev/null || true)"
+            appid="$($PB -c 'Print :Entitlements:application-identifier' "$plist" 2>/dev/null || true)"
+            echo "[$label] Name='${name}' UUID=${uuid} Team=${team}"
+            echo "[$label] ExpirationDate=$($PB -c 'Print :ExpirationDate' "$plist")"
+
+            local dir
+            for dir in "${PROFILE_DIRS[@]}"; do
+              cp "$raw" "${dir}/${uuid}.mobileprovision"
+            done
+            {
+              echo "${prefix}_PROFILE_NAME=${name}"
+              echo "${prefix}_PROFILE_UUID=${uuid}"
+              echo "${prefix}_PROFILE_TEAM=${team}"
+            } >> "$GITHUB_ENV"
+
+            if [ "$team" = "$EXPECTED_TEAM_ID" ]; then
+              pass "[$label] TeamIdentifier = ${team}"
+            else
+              failf "[$label] TeamIdentifier is '${team}', expected '${EXPECTED_TEAM_ID}' (DEVELOPMENT_TEAM in the pbxproj)"
+            fi
+
+            if [ "$appid" = "${team}.${bundle_id}" ]; then
+              pass "[$label] application-identifier = ${appid}"
+            else
+              failf "[$label] application-identifier is '${appid}', expected '${team}.${bundle_id}'. Generate an explicit (non-wildcard) profile for ${bundle_id}."
+            fi
+
+            # Ad Hoc and Development profiles list devices; App Store and
+            # Enterprise profiles do not (and would not install by UDID).
+            local devices
+            devices="$($PB -c 'Print :ProvisionedDevices' "$plist" 2>/dev/null | grep -cE '^[[:space:]]+[0-9A-Fa-f-]{20,}$' || true)"
+            if [ "${devices:-0}" -gt 0 ]; then
+              pass "[$label] profile lists ${devices} device(s)"
+            else
+              failf "[$label] profile has no ProvisionedDevices. For ${EXPORT_METHOD}, use an $([ "$EXPORT_METHOD" = ad-hoc ] && echo 'Ad Hoc' || echo 'iOS App Development') profile with your test devices selected."
+            fi
+
+            local is_dev
+            is_dev="$($PB -c 'Print :Entitlements:get-task-allow' "$plist" 2>/dev/null || echo false)"
+            if [ "$EXPORT_METHOD" = "ad-hoc" ] && [ "$is_dev" = "true" ]; then
+              failf "[$label] this is a development profile (get-task-allow = true). ad-hoc needs an Ad Hoc distribution profile."
+            elif [ "$EXPORT_METHOD" = "development" ] && [ "$is_dev" != "true" ]; then
+              failf "[$label] this is not a development profile (get-task-allow != true). development needs an iOS App Development profile."
+            else
+              pass "[$label] profile type matches ${EXPORT_METHOD} (get-task-allow = ${is_dev})"
+            fi
+
+            local groups
+            if ! groups="$($PB -c 'Print :Entitlements:com.apple.security.application-groups' "$plist" 2>/dev/null)"; then
+              failf "[$label] profile Entitlements has no com.apple.security.application-groups. Enable App Groups (${APP_GROUP}) on the App ID, then regenerate the profile."
+            elif grep -qE "^[[:space:]]*${APP_GROUP//./\\.}$" <<< "$groups"; then
+              pass "[$label] profile grants App Group ${APP_GROUP}"
+            else
+              failf "[$label] profile App Groups do not include ${APP_GROUP}. Assign the group to ${bundle_id} on the portal, then regenerate the profile."
+            fi
+          }
+
+          install_profile app "$APP_B64" "$APP_BUNDLE_ID" APP
+          install_profile widget "$WIDGET_B64" "$WIDGET_BUNDLE_ID" WIDGET
+
+          # iCloud KVS applies to the app only.
+          if [ -s "${SIGN_DIR}/app-profile.plist" ]; then
+            if kvs="$($PB -c 'Print :Entitlements:com.apple.developer.ubiquity-kvstore-identifier' "${SIGN_DIR}/app-profile.plist" 2>/dev/null)"; then
+              pass "[app] profile grants iCloud KVS (ubiquity-kvstore-identifier = ${kvs})"
+            else
+              failf "[app] profile Entitlements has no com.apple.developer.ubiquity-kvstore-identifier. Enable iCloud (key-value storage) on the App ID, then regenerate the profile."
+            fi
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::Provisioning profile check failed (see FAIL lines above)"
+            exit 1
+          fi
+          # Both profiles passed the team check, so this is EXPECTED_TEAM_ID read
+          # back from the profile itself.
+          echo "TEAM_ID=$($PB -c 'Print :TeamIdentifier:0' "${SIGN_DIR}/app-profile.plist")" >> "$GITHUB_ENV"
+
+      - name: Pre-check per-target signing settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016 # $(...) below is an Xcode build-setting reference, not a shell expansion
+          xcodebuild -showBuildSettings -json \
+            -project myTeams.xcodeproj -scheme "$SCHEME" -configuration Release -destination 'generic/platform=iOS' \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=${SIGN_IDENTITY}" "DEVELOPMENT_TEAM=${TEAM_ID}" \
+            'PROVISIONING_PROFILE_SPECIFIER=$(SIGN_PROFILE_$(TARGET_NAME:c99extidentifier))' \
+            "SIGN_PROFILE_myTeams=${APP_PROFILE_NAME}" \
+            "SIGN_PROFILE_myTeamWidgetExtension=${WIDGET_PROFILE_NAME}" \
+            > build-settings.json 2> build-settings.stderr.log
+          python3 - build-settings.json <<'PY'
+          import json, os, sys
+          entries = json.load(open(sys.argv[1]))
+          expected = {
+              os.environ["APP_TARGET"]: (os.environ["APP_PROFILE_NAME"], os.environ["APP_BUNDLE_ID"]),
+              os.environ["WIDGET_TARGET"]: (os.environ["WIDGET_PROFILE_NAME"], os.environ["WIDGET_BUNDLE_ID"]),
+          }
+          seen = {e.get("target"): e.get("buildSettings", {}) for e in entries}
+          fail = False
+          for target, (profile, bundle_id) in expected.items():
+              if target not in seen:
+                  # -showBuildSettings may omit implicit dependencies; the archive
+                  # and export steps still sign this target with the same settings.
+                  print(f"WARN: target {target} is not in -showBuildSettings output (implicit dependency?)")
+                  continue
+              s = seen[target]
+              got = (s.get("PROVISIONING_PROFILE_SPECIFIER", ""), s.get("CODE_SIGN_STYLE", ""), s.get("PRODUCT_BUNDLE_IDENTIFIER", ""))
+              if got == (profile, "Manual", bundle_id):
+                  print(f"PASS: {target} -> profile '{profile}', Manual, bundle id {bundle_id}")
+              else:
+                  print(f"FAIL: {target} resolves (profile, style, bundle id) = {got}; expected ('{profile}', 'Manual', '{bundle_id}')")
+                  fail = True
+          if os.environ["APP_TARGET"] not in seen:
+              print(f"FAIL: app target {os.environ['APP_TARGET']} is missing from -showBuildSettings output")
+              fail = True
+          sys.exit(1 if fail else 0)
+          PY
+
+      - name: Archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="${RUNNER_TEMP}/build/myTeams.xcarchive"
+          echo "ARCHIVE_PATH=${ARCHIVE_PATH}" >> "$GITHUB_ENV"
+          # shellcheck disable=SC2016 # $(...) below is an Xcode build-setting reference, not a shell expansion
+          xcodebuild archive \
+            -project myTeams.xcodeproj -scheme "$SCHEME" -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -derivedDataPath ./dd \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=${SIGN_IDENTITY}" "DEVELOPMENT_TEAM=${TEAM_ID}" \
+            'PROVISIONING_PROFILE_SPECIFIER=$(SIGN_PROFILE_$(TARGET_NAME:c99extidentifier))' \
+            "SIGN_PROFILE_myTeams=${APP_PROFILE_NAME}" \
+            "SIGN_PROFILE_myTeamWidgetExtension=${WIDGET_PROFILE_NAME}" \
+            OTHER_CODE_SIGN_FLAGS="--keychain ${KEYCHAIN_PATH}" \
+            2>&1 | tee archive.log
+
+      - name: Write ExportOptions.plist
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/build"
+          OPTS="${RUNNER_TEMP}/build/ExportOptions.plist"
+          # plistlib escapes values; profile names may contain spaces or
+          # characters that would break a hand-written heredoc, and plutil
+          # keypaths cannot address keys containing dots (the bundle ids).
+          python3 - "$OPTS" <<'PY'
+          import os, plistlib, sys
+          e = os.environ
+          opts = {
+              "method": e["EXPORT_OPTIONS_METHOD"],
+              "signingStyle": "manual",
+              "signingCertificate": e["SIGN_IDENTITY"],
+              "teamID": e["TEAM_ID"],
+              "provisioningProfiles": {
+                  e["APP_BUNDLE_ID"]: e["APP_PROFILE_NAME"],
+                  e["WIDGET_BUNDLE_ID"]: e["WIDGET_PROFILE_NAME"],
+              },
+              "compileBitcode": False,
+              "uploadSymbols": False,
+              "stripSwiftSymbols": True,
+              "thinning": "<none>",
+          }
+          with open(sys.argv[1], "wb") as f:
+              plistlib.dump(opts, f)
+          PY
+          plutil -lint "$OPTS"
+          cat "$OPTS"
+          cp "$OPTS" ExportOptions.plist
+          echo "EXPORT_OPTIONS_PLIST=${OPTS}" >> "$GITHUB_ENV"
+
+      - name: Export IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No -allowProvisioningUpdates: signing is manual and must not talk
+          # to the developer portal.
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist "$EXPORT_OPTIONS_PLIST" \
+            -exportPath output \
+            2>&1 | tee export.log
+          IPA="$(find output -maxdepth 1 -name '*.ipa' | head -n 1)"
+          if [ -z "$IPA" ]; then
+            echo "::error::xcodebuild -exportArchive produced no .ipa"
+            ls -la output || true
+            exit 1
+          fi
+          echo "IPA_PATH=${IPA}" >> "$GITHUB_ENV"
+          ls -la output
+
+      - name: Verify IPA signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHECK_DIR="${RUNNER_TEMP}/ipa-check"
+          rm -rf "$CHECK_DIR" && mkdir -p "$CHECK_DIR"
+          ditto -x -k "$IPA_PATH" "$CHECK_DIR"
+          APP="$(find "$CHECK_DIR/Payload" -maxdepth 1 -name '*.app' | head -n 1)"
+          APPEX="${APP}/PlugIns/myTeamWidgetExtension.appex"
+          fail=0
+          for bundle in "$APP" "$APPEX"; do
+            label="$(basename "$bundle")"
+            if [ ! -d "$bundle" ]; then echo "FAIL: ${label} missing from .ipa"; fail=1; continue; fi
+            if codesign --verify --deep --strict --verbose=2 "$bundle"; then
+              echo "PASS: codesign --verify --deep --strict: ${label}"
+            else
+              echo "FAIL: codesign --verify: ${label}"; fail=1
+            fi
+            codesign -dv "$bundle" 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)=' | sed "s/^/[${label}] /" || true
+          done
+          security cms -D -i "${APP}/embedded.mobileprovision" > "${CHECK_DIR}/embedded.plist"
+          echo "Embedded profile: $(/usr/libexec/PlistBuddy -c 'Print :Name' "${CHECK_DIR}/embedded.plist")"
+          echo "Devices that can install this build:"
+          /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "${CHECK_DIR}/embedded.plist" || true
+          [ "$fail" -eq 0 ] || { echo "::error::.ipa signature verification failed"; exit 1; }
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: myTeams-ipa-${{ inputs.export_method }}-${{ github.run_number }}-${{ steps.meta.outputs.short_sha }}
+          path: output/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-ipa-logs-${{ github.run_number }}
+          path: |
+            profile-checks.txt
+            build-settings.json
+            build-settings.stderr.log
+            archive.log
+            export.log
+            ExportOptions.plist
+            output/DistributionSummary.plist
+            output/Packaging.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Clean up keychain and profiles
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+            security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" || true
+          fi
+          for uuid in "${APP_PROFILE_UUID:-}" "${WIDGET_PROFILE_UUID:-}"; do
+            [ -n "$uuid" ] || continue
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${uuid}.mobileprovision" \
+                  "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/${uuid}.mobileprovision"
+          done
+          [ -n "${SIGN_DIR:-}" ] && rm -rf "$SIGN_DIR" || true
+          [ -n "${RUNNER_TEMP:-}" ] && rm -rf "${RUNNER_TEMP}/build" "${RUNNER_TEMP}/ipa-check" || true
+
+  build-ipa-unsigned:
+    # Feather re-sign route: no secrets, no keychain, no provisioning profiles.
+    if: ${{ inputs.unsigned_feather }}
+    # Same runner image as build-ipa above.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve run metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Diagnostics
+        continue-on-error: true
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Build (code signing disabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # -derivedDataPath pins the product to
+          # ./dd/Build/Products/Release-iphoneos/myTeams.app.
+          xcodebuild build \
+            -project myTeams.xcodeproj -scheme "$SCHEME" -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath ./dd \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log
+
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No -exportArchive: it requires signing. Zip Payload/ by hand.
+          APP="dd/Build/Products/Release-iphoneos/${APP_TARGET}.app"
+          if [ ! -d "$APP" ]; then
+            echo "::error::Build produced no ${APP}"
+            ls -la dd/Build/Products/Release-iphoneos || true
+            exit 1
+          fi
+          rm -rf Payload output
+          mkdir -p Payload output
+          cp -R "$APP" Payload/
+          PLUGINS="Payload/${APP_TARGET}.app/PlugIns"
+          if [ ! -d "$PLUGINS" ]; then
+            echo "::error::${PLUGINS} is missing. The widget extension was not embedded in the Release build."
+            exit 1
+          fi
+          if [ ! -d "${PLUGINS}/${WIDGET_TARGET}.appex" ]; then
+            echo "::error::${PLUGINS} has no ${WIDGET_TARGET}.appex. The widget extension was not embedded in the Release build."
+            ls -la "$PLUGINS"
+            exit 1
+          fi
+          echo "PASS: ${PLUGINS}/${WIDGET_TARGET}.appex is embedded"
+          zip -qry output/MyTeams-unsigned.ipa Payload
+          ls -la output
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: myteams-ipa-unsigned-${{ github.run_number }}-${{ steps.meta.outputs.short_sha }}
+          path: output/*.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-ipa-logs-${{ github.run_number }}
+          path: |
+            build.log
+          if-no-files-found: warn
+          retention-days: 7
