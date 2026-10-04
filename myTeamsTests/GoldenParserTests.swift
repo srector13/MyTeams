@@ -1019,6 +1019,99 @@ struct GoldenRosterTests {
         #expect(capita.goalsConceded == 31)
         #expect(capita.shotsFaced == 31)
     }
+
+    @Test("MLS roster (Atlanta): five feed headshots, the silhouette for the other 27")
+    func soccerHeadshotFallback() throws {
+        // mls_roster_atlanta.json: 32 athletes, 5 with a headshot object; the
+        // other 27 have no headshot key. ESPN has no image for them at all:
+        // /i/headshots/soccer/players/full/109193.png answers 404, and the
+        // athlete document's headshot is null too.
+        let roster = parseSoccerRoster(from: try Fixture.json("mls_roster_atlanta"))
+        #expect(roster.count == 32)
+
+        let photographed = roster.filter { $0.photo != missingHeadshotURL }
+        #expect(Set(photographed.map(\.playerID)) == ["304153", "48128", "211678", "214446", "291252"])
+
+        let fortune = try #require(roster.first { $0.playerID == "304153" })
+        #expect(fortune.name == "Jay Fortune")
+        #expect(fortune.photo == "https://a.espncdn.com/i/headshots/soccer/players/full/304153.png")
+
+        // No headshot key: the silhouette, not a URL built from the id.
+        let hoyos = try #require(roster.first { $0.playerID == "109193" })
+        #expect(hoyos.name == "Lucas Hoyos")
+        #expect(hoyos.photo == missingHeadshotURL)
+
+        for player in roster where player.photo == missingHeadshotURL {
+            #expect(!player.photo.contains(player.playerID))
+        }
+    }
+
+    @Test("Soccer rosters: a feed headshot passes through, a missing one is the silhouette", arguments: [
+        "sporting_roster", "mls_roster_atlanta", "epl_roster", "laliga_roster", "ligamx_roster", "nwsl_roster",
+    ])
+    func soccerHeadshots(fixture: String) throws {
+        let json = try Fixture.json(fixture)
+        let roster = parseSoccerRoster(from: json).map { (id: $0.playerID, photo: $0.photo) }
+        #expect(roster.count == feedHeadshots(json).count)
+        #expect(headshotMismatches(roster, in: json) == [])
+        #expect(roster.allSatisfy { URL(string: $0.photo) != nil })
+    }
+
+    // The US rosters share `headshotURL` with soccer. Their photos are the
+    // feed's href byte for byte, from the flat (basketball) and grouped
+    // (`athletes[].items[]`: NFL, college football, MLB, NHL) shapes alike.
+    @Test("US rosters: every headshot is the feed's href, unchanged")
+    func usHeadshotsUnchanged() throws {
+        let cases: [(fixture: String, parse: (JSON) -> [(id: String, photo: String)])] = [
+            ("chiefs_roster", { parseFootballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("ncaaf_roster", { parseFootballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("nba_roster", { parseBasketballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("wnba_roster", { parseBasketballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("jayhawks_roster", { parseBasketballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("ncaaw_roster", { parseBasketballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("royals_roster", { parseBaseballRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+            ("nhl_roster", { parseHockeyRoster(from: $0).map { (id: $0.playerID, photo: $0.photo) } }),
+        ]
+
+        for (fixture, parse) in cases {
+            let json = try Fixture.json(fixture)
+            let roster = parse(json)
+            #expect(roster.count == feedHeadshots(json).count, "\(fixture)")
+            #expect(headshotMismatches(roster, in: json) == [], "\(fixture)")
+        }
+
+        // chiefs_roster.json groups[0].items[0], read from the grouped shape.
+        let allen = try #require(
+            parseFootballRoster(from: Fixture.json("chiefs_roster")).first { $0.playerID == "4912218" }
+        )
+        #expect(allen.photo == "https://a.espncdn.com/i/headshots/nfl/players/full/4912218.png")
+    }
+}
+
+/// The roster parsers' stand-in for an athlete the feed has no headshot
+/// for: ESPN's generic silhouette, which is also the bundled `blank` image
+/// the roster views fall back to if it fails to load.
+private let missingHeadshotURL = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
+
+/// Each athlete's `headshot.href` in a roster document, keyed by ESPN id —
+/// "" for an athlete with none. Grouped feeds' `items` are flattened, as
+/// the parsers do.
+private func feedHeadshots(_ json: JSON) -> [String: String] {
+    var hrefs: [String: String] = [:]
+    for athlete in json["athletes"].arrayValue.flatMap({ $0["items"].array ?? [$0] }) {
+        hrefs[athlete["id"].stringValue] = athlete["headshot"]["href"].stringValue
+    }
+    return hrefs
+}
+
+/// The ids of parsed players whose photo is not the feed's own href (or the
+/// silhouette, when the feed has none), or who are not in the feed at all.
+private func headshotMismatches(_ roster: [(id: String, photo: String)], in json: JSON) -> [String] {
+    let hrefs = feedHeadshots(json)
+    return roster.compactMap { player in
+        guard let href = hrefs[player.id] else { return player.id }
+        return player.photo == (href.isEmpty ? missingHeadshotURL : href) ? nil : player.id
+    }
 }
 
 // MARK: - Athlete splits
