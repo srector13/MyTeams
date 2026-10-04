@@ -184,7 +184,7 @@ final class GlassUIScreenshotTests: XCTestCase {
 
     /// Walks the screens reachable by identifier: onboarding, the first team
     /// page and its player, game, leaders and news sheets, a second team
-    /// page, the team browser before and after a league change, and Alerts.
+    /// page, the team browser, a sport and a league in it, and Alerts.
     @MainActor
     private func captureScreens(_ app: XCUIApplication, _ configuration: Configuration) {
         // A fresh install opens on the "Pick Your Teams" sheet.
@@ -219,14 +219,23 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
         snapshot("team-browser", configuration)
 
-        // The prominent glass morphed onto the second league's chip (B-4).
-        let chips = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.league."))
-        let secondChip = chips.element(boundBy: 1)
-        if secondChip.waitForExistence(timeout: 5) {
-            secondChip.tap()
-            // Past the morph's settle.
-            _ = secondChip.wait(for: \.isSelected, toEqual: true, timeout: 2)
-            snapshot("team-browser-league-2", configuration)
+        // A sport's leagues, then a league's teams, then back to the top
+        // for Alerts.
+        let sports = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.sport."))
+        let firstSport = sports.element(boundBy: 0)
+        if firstSport.waitForExistence(timeout: 5) {
+            firstSport.tap()
+            let leagues = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.league."))
+            let firstLeague = leagues.element(boundBy: 0)
+            if firstLeague.waitForExistence(timeout: 5) {
+                snapshot("team-browser-sport", configuration)
+                firstLeague.tap()
+                let teams = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
+                _ = teams.firstMatch.waitForExistence(timeout: 10)
+                snapshot("team-browser-league", configuration)
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            }
+            app.navigationBars.buttons.element(boundBy: 0).tap()
         }
 
         let alerts = app.buttons["teamBrowser.alerts"]

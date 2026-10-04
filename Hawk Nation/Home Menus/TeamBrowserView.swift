@@ -85,10 +85,63 @@ extension TeamSearch {
     }
 }
 
+// MARK: - Sports
+
+/// How the picker names and draws a sport.
+extension SportKind {
+    /// The sport's name in the picker, e.g. `"Football"`.
+    var browserTitle: String {
+        switch self {
+        case .football: "Football"
+        case .basketball: "Basketball"
+        case .baseball: "Baseball"
+        case .soccer: "Soccer"
+        case .hockey: "Hockey"
+        case .other: "More Sports"
+        }
+    }
+
+    /// The SF Symbol the picker draws beside the sport's name.
+    var browserSymbol: String {
+        switch self {
+        case .football: "football.fill"
+        case .basketball: "basketball.fill"
+        case .baseball: "baseball.fill"
+        case .soccer: "soccerball"
+        case .hockey: "hockey.puck.fill"
+        case .other: "sportscourt.fill"
+        }
+    }
+}
+
+/// One sport in the picker and the browsable leagues it plays, in catalog
+/// order.
+struct BrowsableSport: Identifiable, Hashable, Sendable {
+    let kind: SportKind
+    let leagues: [BrowsableLeague]
+
+    var id: SportKind { kind }
+
+    /// `LeagueID.browsable` grouped under each league's sport, sports in the
+    /// order their first league is listed. A sport with no browsable league
+    /// is not here.
+    static let all: [BrowsableSport] = {
+        var order: [SportKind] = []
+        var leagues: [SportKind: [BrowsableLeague]] = [:]
+        for item in LeagueID.browsable {
+            let kind = item.league.descriptor.kind
+            if leagues[kind] == nil { order.append(kind) }
+            leagues[kind, default: []].append(item)
+        }
+        return order.map { BrowsableSport(kind: $0, leagues: leagues[$0] ?? []) }
+    }()
+}
+
 // MARK: - Browser
 
-/// The team picker: every team in a league, searchable, with the reader's
-/// own teams pinned at the top for reordering and removal.
+/// The team picker: sports, then a sport's leagues, then every team in a
+/// league, searchable throughout, with the reader's own teams pinned at the
+/// top for reordering and removal.
 ///
 /// Opened from the crest bar's "+" button and, on a fresh install, as the
 /// "Pick your teams" onboarding sheet. Leads to the Alerts settings
@@ -96,21 +149,27 @@ extension TeamSearch {
 struct TeamBrowserView: View {
     var title = "Teams"
 
+    /// A screen pushed onto the picker's stack.
+    enum Route: Hashable {
+        case sport(SportKind)
+        case league(LeagueID)
+    }
+
     @Environment(\.dismiss) private var dismiss
 
-    @State private var league: LeagueID = LeagueID.browsable[0].league
+    @State private var path: [Route] = []
     @State private var catalogs: [LeagueID: [TeamRef]] = [:]
     @State private var myTeams: [TeamRef] = []
     @State private var query = ""
     @State private var remoteHits: [TeamRef] = []
     @State private var isSearchingRemotely = false
 
-    /// The league chips' glass, so the prominent capsule morphs from chip
-    /// to chip, as the crest picker's pill does (B-4).
-    @Namespace private var chipGlass
-
     /// A row's crest, which scales with the team name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
+
+    /// The tile a sport or league row leads with, which scales with its
+    /// title.
+    @ScaledMetric(relativeTo: .headline) private var tileSize: CGFloat = 40
 
     private var store: FavoritesStore { .shared }
 
@@ -118,156 +177,282 @@ struct TeamBrowserView: View {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// The chosen league's teams, alphabetical by location.
-    private var leagueTeams: [TeamRef] {
+    /// The league on screen, if the reader has drilled down to one.
+    private var currentLeague: LeagueID? {
+        for route in path.reversed() {
+            if case .league(let league) = route { return league }
+        }
+        return nil
+    }
+
+    /// `league`'s teams, alphabetical by location.
+    private func teams(in league: LeagueID) -> [TeamRef] {
         (catalogs[league] ?? []).sorted {
             ($0.location, $0.displayName) < ($1.location, $1.displayName)
         }
     }
 
-    /// Every loaded league's teams that match the query, chosen league first.
+    /// Every loaded league's teams that match the query, the league on
+    /// screen first.
     private var localMatches: [TeamRef] {
-        let ordered = [league] + catalogs.keys.filter { $0 != league }.sorted { $0.path < $1.path }
+        let current = currentLeague
+        let rest = catalogs.keys.filter { $0 != current }.sorted { $0.path < $1.path }
+        let ordered = (current.map { [$0] } ?? []) + rest
         return ordered
             .flatMap { catalogs[$0] ?? [] }
             .filter { TeamSearch.matches($0, query: query) }
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if isSearching {
-                    searchResults
-                } else {
-                    Section {
-                        NavigationLink {
-                            AlertsSettingsView()
-                        } label: {
-                            Label("Alerts", systemImage: "bell.badge")
-                        }
-                        .accessibilityLabel("Alerts")
-                        .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
-                        .accessibilityIdentifier("teamBrowser.alerts")
-                    }
-
-                    if !myTeams.isEmpty {
-                        Section("My Teams") {
-                            ForEach(myTeams) { team in
-                                row(team)
-                                    .swipeActions {
-                                        Button("Remove", role: .destructive) {
-                                            store.remove(team.id)
-                                        }
-                                    }
-                            }
-                            .onMove { moveMyTeams(from: $0, to: $1) }
-                        }
-                    }
-
-                    // TODO(P3): conference sections for college leagues. The
-                    // teams feed carries no group data and `TeamRef` keeps
-                    // none, so college lists are one alphabetical section.
-                    Section(league.badge) {
-                        if catalogs[league] == nil {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        }
-                        ForEach(leagueTeams) { team in
-                            row(team)
-                        }
-                    }
-                }
-            }
-            // A bar, not an inset: the list scrolls beneath the chips and
-            // the scroll-edge effect runs under both them and the nav bar,
-            // one chrome region rather than a second opaque strip (B-1).
-            .safeAreaBar(edge: .top, spacing: 0) {
-                leagueChips
-            }
-            .searchable(text: $query, prompt: "Search teams")
-            .navigationTitle(title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    // Following applies as it's tapped, so this confirms
-                    // the picks: the system's glass checkmark (X-8).
-                    Button(role: .confirm) {
-                        dismiss()
+        NavigationStack(path: $path) {
+            page(title, showsEditButton: true) {
+                Section {
+                    NavigationLink {
+                        AlertsSettingsView()
                     } label: {
-                        Label("Done", systemImage: "checkmark")
+                        Label("Alerts", systemImage: "bell.badge")
                     }
-                    .accessibilityIdentifier("teamBrowser.done")
+                    .accessibilityLabel("Alerts")
+                    .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
+                    .accessibilityIdentifier("teamBrowser.alerts")
+                }
+
+                if !myTeams.isEmpty {
+                    Section("My Teams") {
+                        ForEach(myTeams) { team in
+                            row(team)
+                                .swipeActions {
+                                    Button("Remove", role: .destructive) {
+                                        store.remove(team.id)
+                                    }
+                                }
+                        }
+                        .onMove { moveMyTeams(from: $0, to: $1) }
+                    }
+                }
+
+                Section("Sports") {
+                    ForEach(BrowsableSport.all) { sport in
+                        NavigationLink(value: Route.sport(sport.kind)) {
+                            sportRow(sport)
+                        }
+                        .accessibilityIdentifier("teamBrowser.sport.\(sport.kind.rawValue)")
+                    }
                 }
             }
-            .task(id: league) {
-                await load(league)
+            .navigationDestination(for: Route.self) { route in
+                switch route {
+                case .sport(let kind):
+                    leaguesPage(kind)
+                case .league(let league):
+                    teamsPage(league)
+                }
             }
-            .task(id: store.teamIDs) {
-                myTeams = await store.teamRefs()
+        }
+        // On the stack rather than a page, so a search typed on any page,
+        // and the reader's teams, outlive the push or pop that hides it.
+        .task {
+            // Every browsable league, for the rows' team counts and so
+            // search finds teams in leagues not yet opened.
+            for item in LeagueID.browsable {
+                await load(item.league)
             }
-            .task(id: query) {
-                await searchRemotelyIfNeeded()
-            }
+        }
+        .task(id: store.teamIDs) {
+            myTeams = await store.teamRefs()
+        }
+        .task(id: query) {
+            await searchRemotelyIfNeeded()
+        }
+        // A search belongs to the page it was typed on.
+        .onChange(of: path) {
+            query = ""
         }
         // Full height, as the browser and as onboarding: a searchable list
         // of every league's teams has no useful partial height (X-9).
         .presentationDetents([.large])
     }
 
-    // MARK: Pieces
+    // MARK: Pages
 
-    /// The league chips: glass buttons, the chosen league's prominent, in one
-    /// container so they share a sampling pass (B-1, §5.2). They're the only
-    /// glass in this strip. Choosing a league morphs the prominent glass
-    /// across to its chip, with a selection haptic (B-4, X-11).
-    private var leagueChips: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            GlassEffectContainer(spacing: Theme.Spacing.s) {
-                HStack(spacing: Theme.Spacing.s) {
-                    ForEach(LeagueID.browsable) { item in
-                        leagueChip(item)
-                    }
-                }
-                // Room for the interactive glass to swell inside the scroll
-                // view's clip.
-                .padding(.horizontal)
-                .padding(.vertical, Theme.Spacing.s)
+    /// One page of the picker: `content`, or the search results while there
+    /// is a query, under the shared search field and Done button.
+    private func page<Content: View>(
+        _ title: String,
+        showsEditButton: Bool = false,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let rows = content()
+        return List {
+            if isSearching {
+                searchResults
+            } else {
+                rows
             }
         }
-        .motionAnimation(Theme.Motion.selection, value: league)
-        .sensoryFeedback(.selection, trigger: league)
+        .searchable(text: $query, prompt: "Search all teams")
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if showsEditButton {
+                ToolbarItem(placement: .topBarLeading) {
+                    EditButton()
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                // Following applies as it's tapped, so this confirms
+                // the picks: the system's glass checkmark (X-8).
+                Button(role: .confirm) {
+                    dismiss()
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
+                .accessibilityIdentifier("teamBrowser.done")
+            }
+        }
     }
 
-    @ViewBuilder
-    private func leagueChip(_ item: BrowsableLeague) -> some View {
-        let selected = league == item.league
-        let chip = Button {
-            league = item.league
-        } label: {
-            Text(item.label)
-                .font(.subheadline.weight(.semibold))
+    /// A sport's leagues.
+    private func leaguesPage(_ kind: SportKind) -> some View {
+        let leagues = BrowsableSport.all.first { $0.kind == kind }?.leagues ?? []
+        return page(kind.browserTitle) {
+            Section {
+                ForEach(leagues) { item in
+                    NavigationLink(value: Route.league(item.league)) {
+                        leagueRow(item)
+                    }
+                    .accessibilityIdentifier("teamBrowser.league.\(item.label)")
+                }
+            } header: {
+                Text("Leagues")
+            } footer: {
+                Text(leagues.count == 1 ? "1 league" : "\(leagues.count) leagues")
+            }
         }
-        .buttonBorderShape(.capsule)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("teamBrowser.league.\(item.label)")
+    }
 
-        // The chosen chip's glass carries one ID, handed from chip to chip
-        // as the crest picker's pill is (H-1), so the container morphs it
-        // across rather than one capsule fading out and another in. No new
-        // glass: each chip keeps the one its button style draws (§5.2).
-        if selected {
-            chip
-                .buttonStyle(.glassProminent)
-                .tint(.accentColor)
-                .glassEffectID("selection", in: chipGlass)
-        } else {
-            chip
-                .buttonStyle(.glass)
-                .glassEffectID("league.\(item.label)", in: chipGlass)
+    /// Every team in a league, to follow or unfollow.
+    private func teamsPage(_ league: LeagueID) -> some View {
+        let leagueTeams = teams(in: league)
+        return page(league.descriptor.displayName) {
+            // TODO(P3): conference sections for college leagues. The teams
+            // feed carries no group data and `TeamRef` keeps none, so
+            // college lists are one alphabetical section.
+            Section {
+                if catalogs[league] == nil {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                }
+                ForEach(leagueTeams) { team in
+                    row(team)
+                }
+            } header: {
+                Text(league.badge)
+            } footer: {
+                if catalogs[league] != nil {
+                    Text(teamCount(leagueTeams.count))
+                }
+            }
         }
+        .task(id: league) {
+            await load(league)
+        }
+    }
+
+    // MARK: Rows
+
+    /// A sport: its glyph, name, leagues, and how many of its teams the
+    /// reader follows.
+    private func sportRow(_ sport: BrowsableSport) -> some View {
+        let leagueIDs = Set(sport.leagues.map(\.league))
+        let followed = myTeams.filter { leagueIDs.contains($0.league) }.count
+        let loaded = sport.leagues.compactMap { catalogs[$0.league]?.count }
+        var detail = sport.leagues.count == 1 ? "1 league" : "\(sport.leagues.count) leagues"
+        if loaded.count == sport.leagues.count {
+            detail += " · " + teamCount(loaded.reduce(0, +))
+        }
+
+        return HStack(spacing: Theme.Spacing.m) {
+            Image(systemName: sport.kind.browserSymbol)
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: tileSize, height: tileSize)
+                .background(Color.accentColor.opacity(0.15), in: Theme.Radius.innerShape)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(sport.kind.browserTitle)
+                    .font(.headline)
+                Text(sport.leagues.map(\.label).joined(separator: " · "))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer(minLength: 0)
+
+            followedBadge(followed)
+        }
+        .padding(.vertical, Theme.Spacing.xs)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A league: its badge, full name, team count, and how many of its
+    /// teams the reader follows.
+    private func leagueRow(_ item: BrowsableLeague) -> some View {
+        let name = item.league.descriptor.displayName
+        let followed = myTeams.filter { $0.league == item.league }.count
+        return HStack(spacing: Theme.Spacing.m) {
+            Text(item.label)
+                .font(.caption.weight(.heavy))
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal, Theme.Spacing.xs)
+                .frame(minWidth: tileSize, minHeight: tileSize)
+                .background(Color.accentColor.opacity(0.15), in: Theme.Radius.innerShape)
+                .accessibilityHidden(name == item.label)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.headline)
+                Group {
+                    if let teams = catalogs[item.league] {
+                        Text(teamCount(teams.count))
+                    } else {
+                        Text("Loading teams…")
+                    }
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            followedBadge(followed)
+        }
+        .padding(.vertical, Theme.Spacing.xs)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// How many of a sport's or league's teams the reader follows; nothing
+    /// when none.
+    @ViewBuilder
+    private func followedBadge(_ count: Int) -> some View {
+        if count > 0 {
+            Label("\(count)", systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(Color.accentColor)
+                .accessibilityLabel("\(count) followed")
+        }
+    }
+
+    private func teamCount(_ count: Int) -> String {
+        count == 1 ? "1 team" : "\(count) teams"
     }
 
     @ViewBuilder
@@ -303,7 +488,7 @@ struct TeamBrowserView: View {
                 Task { await ScoreAlertsPermissions.requestIfNeeded() }
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Spacing.m) {
                 TeamLogo(team: team, size: crestSize)
                     .frame(width: crestSize, height: crestSize)
 
@@ -332,6 +517,7 @@ struct TeamBrowserView: View {
                     // effect needs one to play. None under Reduce Motion.
                     .motionAnimation(Theme.Motion.stateChange, value: followed)
             }
+            .padding(.vertical, 2)
         }
         // A success tap on follow, a lighter one on unfollow (B-4, X-11).
         .sensoryFeedback(trigger: followed) { _, nowFollowed in
@@ -339,6 +525,7 @@ struct TeamBrowserView: View {
         }
         .accessibilityLabel("\(team.displayName), \(team.league.badge)")
         .accessibilityAddTraits(followed ? .isSelected : [])
+        .accessibilityIdentifier("teamBrowser.team.\(team.id)")
         .task {
             await RemoteTeamCatalog.shared.prefetchLogos(for: [team])
         }
