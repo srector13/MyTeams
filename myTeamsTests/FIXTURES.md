@@ -610,6 +610,28 @@ Quirks:
   modelled (it would carry `shootoutScore`, shown apart from the
   linescore).
 
+## Soccer headshots (t_f3700e71)
+
+`GoldenRosterTests` pins how the roster parsers resolve headshots. It reads
+one more MLS roster, captured on **2026-10-04 at 18:12:10Z** (`timestamp`)
+from this host, byte-for-byte as ESPN returned it:
+
+```sh
+curl -s "https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/teams/18418/roster?limit=1000" -o mls_roster_atlanta.json
+```
+
+| File | Team | Athletes | With `headshot` |
+|---|---|---|---|
+| `mls_roster_atlanta.json` | Atlanta United FC (18418), 2026 MLS regular season | 32 | 5 |
+
+The other 27 have no `headshot` key. ESPN has no image for them anywhere:
+the CDN path built from the id (`/i/headshots/soccer/players/full/109193.png`)
+answers 404, and the athlete document's `headshot` is `null`. The parsers
+give them the generic silhouette (`combiner/i?img=/i/headshots/nophoto.png`,
+200, the same picture as the bundled `blank` asset). Headshots are as sparse
+across the soccer fixtures above: LALIGA 0 of 30, Premier League 2 of 27,
+Liga MX 2 of 35, Sporting 8 of 31, NWSL 21 of 25.
+
 ## Refreshing
 
 1. Re-run the requests above, for example:
