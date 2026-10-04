@@ -123,16 +123,23 @@ final class myTeamsUITests: XCTestCase {
     }
 
     /// Opens the team browser: the onboarding sheet on a fresh install,
-    /// past onboarding the crest bar's add/edit button.
+    /// past onboarding the tab bar's "Teams" tab.
+    ///
+    /// On a cold launch the tab bar redraws as the favorites and their
+    /// crests resolve, and a tap located before a redraw can land on a
+    /// team's tab instead, which opens nothing. So the tap is retried until
+    /// the browser shows.
     @MainActor
     private func openTeamBrowser(_ app: XCUIApplication) {
         let done = app.buttons["teamBrowser.done"]
-        if !done.waitForExistence(timeout: 5) {
-            let edit = app.buttons["teamPicker.edit"]
-            XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        if done.waitForExistence(timeout: 5) { return }
+        let edit = app.buttons["teamPicker.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        for _ in 0..<3 {
             edit.tap()
-            XCTAssertTrue(done.waitForExistence(timeout: 5))
+            if done.waitForExistence(timeout: 5) { return }
         }
+        XCTFail("The team browser never opened from the Teams tab.")
     }
 
     @MainActor
