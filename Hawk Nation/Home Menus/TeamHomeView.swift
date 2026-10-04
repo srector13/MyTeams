@@ -108,6 +108,17 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
             LeadersSection(model: model, team: team)
 
             NewsSection(model: model, teamColor: team.color)
+        } header: {
+            TeamPageHeader(
+                team: team,
+                summary: TeamHeaderSummary(
+                    team: team,
+                    games: model.games,
+                    nextGame: model.nextGame,
+                    record: model.displayRecord(),
+                    standings: model.standings
+                )
+            )
         }
         // `Home` mounts only the selected team's page, so this runs — and
         // polls — only while the team is selected: a new selection is a new

@@ -194,6 +194,42 @@ enum Theme {
         static func scoreAnimation(reduceMotion: Bool) -> Animation {
             reduceMotion ? reducedFade : score
         }
+
+        /// How a team page's header looks as the page of cards slides up
+        /// over it (`View.recedingHeader(below:)`).
+        struct Recede: Equatable, Sendable {
+            /// How far the header is pushed back down, against the scroll.
+            var offset: CGFloat
+            var scale: CGFloat
+            var opacity: Double
+        }
+
+        /// The header moves up at half the scroll's speed, so the cards
+        /// overtake it.
+        static let recedeParallax: CGFloat = 0.5
+        /// How much smaller the header is once the cards have covered it.
+        static let recedeScale: CGFloat = 0.08
+
+        /// The header `scrolled` points under its resting place, of its
+        /// `height`: drifting at `recedeParallax`, shrinking towards
+        /// `1 - recedeScale` and fading out as the cards cover it. Pulled
+        /// down past the top it's at rest, so it rides the overscroll with
+        /// the cards. Under Reduce Motion it only fades. Pure so it can be
+        /// unit-tested.
+        static func recede(scrolled: CGFloat, height: CGFloat, reduceMotion: Bool) -> Recede {
+            guard scrolled > 0, height > 0 else { return Recede(offset: 0, scale: 1, opacity: 1) }
+            let distance = min(scrolled, height)
+            let progress = distance / height
+            let opacity = Double(1 - progress)
+            if reduceMotion {
+                return Recede(offset: 0, scale: 1, opacity: opacity)
+            }
+            return Recede(
+                offset: distance * recedeParallax,
+                scale: 1 - recedeScale * progress,
+                opacity: opacity
+            )
+        }
     }
 
     /// Accessibility settings asked for in the launch environment by the
@@ -304,6 +340,15 @@ extension View {
     /// sides' scores summed for a scoreline.
     func scoreTransition(value: Double) -> some View {
         modifier(ScoreTransition(value: value))
+    }
+
+    /// A scrolling header that recedes beneath the content scrolling over
+    /// it (`Theme.Motion.recede(scrolled:height:reduceMotion:)`): measured
+    /// against `barBottom`, the bottom of the navigation bar in global
+    /// coordinates, where the header rests. Read per frame from geometry,
+    /// so scrolling never invalidates a view.
+    func recedingHeader(below barBottom: CGFloat) -> some View {
+        modifier(RecedingHeader(barBottom: barBottom))
     }
 
     /// Marks a card as where the sheet it opens zooms from (X-13). Pair
@@ -453,6 +498,33 @@ private struct ScoreTransition: ViewModifier {
         content
             .contentTransition(Theme.Motion.scoreTransition(value: value, reduceMotion: settings.reduceMotion))
             .animation(Theme.Motion.scoreAnimation(reduceMotion: settings.reduceMotion), value: value)
+    }
+}
+
+private struct RecedingHeader: ViewModifier {
+    let barBottom: CGFloat
+
+    private var settings = AdaptiveSettings()
+
+    init(barBottom: CGFloat) {
+        self.barBottom = barBottom
+    }
+
+    func body(content: Content) -> some View {
+        let barBottom = barBottom
+        let reduceMotion = settings.reduceMotion
+        return content
+            .visualEffect { effect, proxy in
+                let recede = Theme.Motion.recede(
+                    scrolled: barBottom - proxy.frame(in: .global).minY,
+                    height: proxy.size.height,
+                    reduceMotion: reduceMotion
+                )
+                return effect
+                    .offset(y: recede.offset)
+                    .scaleEffect(recede.scale)
+                    .opacity(recede.opacity)
+            }
     }
 }
 
