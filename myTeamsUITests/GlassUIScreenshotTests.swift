@@ -202,12 +202,16 @@ final class GlassUIScreenshotTests: XCTestCase {
         snapshot("team-page-1", configuration)
 
         captureSheets(app, configuration)
+        // Scrolling down the page for the sheets slid the tab bar away.
+        revealTabBar(app)
 
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
         let second = crests.element(boundBy: 1)
         if second.waitForExistence(timeout: 5) {
             second.tap()
             snapshot("team-page-2", configuration)
+            // The bar slides away shortly after a tab tap.
+            revealTabBar(app, wait: 3)
         }
 
         edit.tap()
@@ -307,6 +311,17 @@ final class GlassUIScreenshotTests: XCTestCase {
             close.tap()
         } else {
             XCTFail("\(configuration.name): the leaders sheet never opened")
+        }
+    }
+
+    /// Brings the tab bar back with the strip along the bottom edge, if it
+    /// has slid away: it does on scrolling down, and shortly after a tab
+    /// tap. `wait` gives a collapse on its way time to land.
+    @MainActor
+    private func revealTabBar(_ app: XCUIApplication, wait: TimeInterval = 0) {
+        let reveal = app.buttons["tabBar.reveal"]
+        if reveal.waitForExistence(timeout: wait) {
+            reveal.tap()
         }
     }
 
