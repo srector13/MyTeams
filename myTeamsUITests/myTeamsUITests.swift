@@ -49,33 +49,97 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(first.isSelected)
     }
 
-    /// Picks a league from the team browser's glass chips, keyed on their
-    /// identifiers and the selected trait. Opens on NFL, the first chip.
+    /// Drills the team browser from a sport to a league to its teams and
+    /// back, keyed on row identifiers. Basketball lists the NBA.
     @MainActor
-    func testLeagueChipsSelectLeague() throws {
+    func testBrowserDrillsDownSportToLeague() throws {
         let app = XCUIApplication()
         app.launch()
+        openTeamBrowser(app)
 
-        // The onboarding sheet is the browser; past onboarding, the crest
-        // bar's add/edit button opens it.
-        let done = app.buttons["teamBrowser.done"]
-        if !done.waitForExistence(timeout: 5) {
-            let edit = app.buttons["teamPicker.edit"]
-            XCTAssertTrue(edit.waitForExistence(timeout: 10))
-            edit.tap()
-            XCTAssertTrue(done.waitForExistence(timeout: 5))
-        }
+        let basketball = app.buttons["teamBrowser.sport.basketball"]
+        XCTAssertTrue(basketball.waitForExistence(timeout: 5))
+        basketball.tap()
 
-        let nfl = app.buttons["teamBrowser.league.NFL"]
         let nba = app.buttons["teamBrowser.league.NBA"]
         XCTAssertTrue(nba.waitForExistence(timeout: 5))
-        XCTAssertTrue(nfl.isSelected)
-        XCTAssertFalse(nba.isSelected)
-
         nba.tap()
-        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: nba)
-        waitForExpectations(timeout: 5)
-        XCTAssertFalse(nfl.isSelected)
+
+        // The league's teams; with no network and no cache the league can
+        // be empty, so the toggle is checked only when a row loads.
+        let teams = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
+        let team = teams.firstMatch
+        if team.waitForExistence(timeout: 15) {
+            let row = app.buttons[team.identifier]
+            let wasFollowed = row.isSelected
+            row.tap()
+            dismissNotificationPrompt()
+            XCTAssertTrue(row.wait(for: \.isSelected, toEqual: !wasFollowed, timeout: 5))
+            // Put the favorites back as they were.
+            row.tap()
+            dismissNotificationPrompt()
+            XCTAssertTrue(row.wait(for: \.isSelected, toEqual: wasFollowed, timeout: 5))
+        }
+
+        // Back to the leagues, then the sports.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(nba.waitForExistence(timeout: 5))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(basketball.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["teamBrowser.done"].exists)
+    }
+
+    /// Searches every sport from the browser's first page. Results need a
+    /// catalog or ESPN, so an empty search is skipped rather than failed.
+    @MainActor
+    func testBrowserSearchFindsTeams() throws {
+        let app = XCUIApplication()
+        app.launch()
+        openTeamBrowser(app)
+
+        let field = app.searchFields.firstMatch
+        guard field.waitForExistence(timeout: 5) else {
+            throw XCTSkip("No search field on screen.")
+        }
+        field.tap()
+        field.typeText("Lakers")
+
+        // Search replaces the sports list.
+        let hits = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
+        guard hits.firstMatch.waitForExistence(timeout: 20) else {
+            throw XCTSkip("No team catalog or ESPN search available.")
+        }
+        XCTAssertFalse(app.buttons["teamBrowser.sport.basketball"].exists)
+    }
+
+    /// Declines the notification prompt a first follow raises on a fresh
+    /// install, if it shows.
+    @MainActor
+    private func dismissNotificationPrompt() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let alert = springboard.alerts.firstMatch
+        guard alert.waitForExistence(timeout: 2) else { return }
+        alert.buttons.element(boundBy: 0).tap()
+    }
+
+    /// Opens the team browser: the onboarding sheet on a fresh install,
+    /// past onboarding the tab bar's "Teams" tab.
+    ///
+    /// On a cold launch the tab bar redraws as the favorites and their
+    /// crests resolve, and a tap located before a redraw can land on a
+    /// team's tab instead, which opens nothing. So the tap is retried until
+    /// the browser shows.
+    @MainActor
+    private func openTeamBrowser(_ app: XCUIApplication) {
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) { return }
+        let edit = app.buttons["teamPicker.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        for _ in 0..<3 {
+            edit.tap()
+            if done.waitForExistence(timeout: 5) { return }
+        }
+        XCTFail("The team browser never opened from the Teams tab.")
     }
 
     /// The team page's header — its crest, name and record — sits at the
