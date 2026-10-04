@@ -70,14 +70,21 @@ struct TeamEntityQuery: EntityStringQuery {
             }
         }
 
-        var matches: [TeamEntity] = []
+        var matches: [TeamRef] = []
         for league in leagues {
             for team in await catalog.teams(for: league) where TeamSearch.matches(team, query: string) {
-                matches.append(TeamEntity(team: team))
-                if matches.count == Self.searchLimit { return matches }
+                matches.append(team)
             }
         }
-        return matches
+        return Self.entities(for: matches)
+    }
+
+    /// One entity per club, as the app's search lists them
+    /// (`TeamSearch.canonicalClubs(from:)`), at most `searchLimit`.
+    static func entities(for matches: [TeamRef]) -> [TeamEntity] {
+        TeamSearch.canonicalClubs(from: matches)
+            .prefix(searchLimit)
+            .map(TeamEntity.init(team:))
     }
 }
 

@@ -385,6 +385,84 @@ enum TeamSearch {
         guard !folded.isEmpty else { return true }
         return searchableFields(of: team).contains { fold($0).contains(folded) }
     }
+
+    // MARK: Clubs
+
+    /// The search results with each club once, in the order each club first
+    /// appears. See `clubGroups(from:)`.
+    static func canonicalClubs(from teams: [TeamRef]) -> [TeamRef] {
+        clubGroups(from: teams).map(\.canonical)
+    }
+
+    /// The teams grouped into clubs: every row with the same sport and ESPN
+    /// id is one club listed in several competitions, such as Bayern Munich
+    /// under the Bundesliga and the UCL. Never grouped by ESPN id or name
+    /// alone: id 12 is a different team in each sport.
+    ///
+    /// Groups keep the order of their first member, so whatever order the
+    /// caller gave (the league on screen first) holds club by club.
+    static func clubGroups(from teams: [TeamRef]) -> [ClubGroup] {
+        struct Key: Hashable {
+            let sport: String
+            let espnID: String
+        }
+        var order: [Key] = []
+        var members: [Key: [TeamRef]] = [:]
+        for team in teams {
+            let key = Key(sport: team.league.sport, espnID: team.espnID)
+            if members[key] == nil { order.append(key) }
+            members[key, default: []].append(team)
+        }
+        return order.compactMap { members[$0].flatMap(ClubGroup.init(members:)) }
+    }
+
+    /// How many clubs `teams` holds, counting a club listed in several
+    /// competitions once.
+    static func clubCount(_ teams: [TeamRef]) -> Int {
+        clubGroups(from: teams).count
+    }
+}
+
+/// One club and every competition it was found in. See
+/// `TeamSearch.clubGroups(from:)`.
+struct ClubGroup: Identifiable, Hashable, Sendable {
+    /// The row that stands for the club: its domestic league's, else its
+    /// cup's. Following and opening the club go through this one.
+    let canonical: TeamRef
+    /// Every row of the club, in the order given.
+    let members: [TeamRef]
+
+    var id: TeamRef.ID { canonical.id }
+
+    /// `nil` for no members.
+    init?(members: [TeamRef]) {
+        let domestic = members.filter { !$0.league.isCup }
+        // Two domestic leagues cannot happen today; the shorter path wins so
+        // the choice never depends on load order.
+        guard let canonical = (domestic.isEmpty ? members : domestic).min(by: {
+            ($0.league.path.count, $0.league.path) < ($1.league.path.count, $1.league.path)
+        }) else { return nil }
+        self.canonical = canonical
+        self.members = members
+    }
+
+    /// The picker's other leagues the club is in, besides the canonical
+    /// one: leagues first, cups last, each in chip order.
+    var otherLeagues: [LeagueID] {
+        let others = Set(members.map(\.league)).subtracting([canonical.league])
+        let listed = LeagueID.browsable.map(\.league).filter { others.contains($0) }
+        return listed.filter { !$0.isCup } + listed.filter(\.isCup)
+    }
+}
+
+extension LeagueID {
+    /// Whether a known league lists this one among the cups its teams also
+    /// play in (`LeagueDescriptor.cupCompetitions`), as the UCL is.
+    var isCup: Bool { Self.cups.contains(self) }
+
+    private static let cups: Set<LeagueID> = Set(
+        LeagueDescriptor.known.values.flatMap(\.cupCompetitions)
+    )
 }
 
 // MARK: - Catalog

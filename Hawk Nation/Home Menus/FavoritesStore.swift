@@ -83,6 +83,16 @@ final class FavoritesStore {
         favorites.contains { $0.teamID == id }
     }
 
+    /// The followed ids that name `team`'s club in any league: the same
+    /// sport and ESPN id (`TeamSearch.clubGroups`). Bayern followed under
+    /// the UCL counts when search lists Bayern under the Bundesliga.
+    func followedClubIDs(of team: TeamRef) -> [TeamRef.ID] {
+        teamIDs.filter { id in
+            guard let parsed = TeamRef.parse(id: id) else { return false }
+            return parsed.league.sport == team.league.sport && parsed.espnID == team.espnID
+        }
+    }
+
     /// The favorites as teams, in order. Ids the catalog cannot resolve
     /// within a couple of seconds are left out rather than holding up the
     /// crest bar.
