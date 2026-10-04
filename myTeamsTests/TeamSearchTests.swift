@@ -159,8 +159,8 @@ struct ClubSearchTests {
     @Test("1. \"bayern\" is one row, the Bundesliga's, with the UCL as its other league")
     func bayern() throws {
         let clubs = TeamSearch.localClubs(in: try europeanCatalogs(), query: "bayern", current: nil)
-        #expect(clubs.map(\.id) == ["soccer/ger.1:132"])
-        #expect(clubs.first?.members.map(\.id) == ["soccer/ger.1:132", "soccer/uefa.champions:132"])
+        #expect(clubs.map { $0.id } == ["soccer/ger.1:132"])
+        #expect(clubs.first?.members.map { $0.id } == ["soccer/ger.1:132", "soccer/uefa.champions:132"])
         #expect(clubs.first?.otherLeagues == [LeagueID.championsLeague])
         #expect(clubs.first?.canonical.league.badge == "Bundesliga")
     }
@@ -168,7 +168,7 @@ struct ClubSearchTests {
     @Test("2. A UCL club with no listed league is one row, the UCL's, with no other league")
     func aek() throws {
         let clubs = TeamSearch.localClubs(in: try europeanCatalogs(), query: "aek", current: nil)
-        #expect(clubs.map(\.id) == ["soccer/uefa.champions:887"])
+        #expect(clubs.map { $0.id } == ["soccer/uefa.champions:887"])
         #expect(clubs.first?.otherLeagues.isEmpty == true)
     }
 
@@ -181,7 +181,7 @@ struct ClubSearchTests {
             .mls: [sporting],
         ]
         let clubs = TeamSearch.localClubs(in: catalogs, query: "kansas city", current: nil)
-        #expect(Set(clubs.map(\.id)) == ["football/nfl:12", "soccer/usa.nwsl:20907", "baseball/mlb:7", "soccer/usa.1:186"])
+        #expect(Set(clubs.map { $0.id }) == ["football/nfl:12", "soccer/usa.nwsl:20907", "baseball/mlb:7", "soccer/usa.1:186"])
         #expect(clubs.count == 4)
         #expect(clubs.allSatisfy { $0.members.count == 1 && $0.otherLeagues.isEmpty })
     }
@@ -191,9 +191,9 @@ struct ClubSearchTests {
         let nfl = try teams("nfl_teams", league: .nfl)
         let before = nfl.filter { TeamSearch.matches($0, query: query) }
         let clubs = TeamSearch.localClubs(in: [.nfl: nfl], query: query, current: nil)
-        #expect(clubs.map(\.canonical) == before)
+        #expect(clubs.map { $0.canonical } == before)
         #expect(TeamSearch.canonicalClubs(from: nfl) == nfl)
-        #expect(clubs.allSatisfy(\.otherLeagues.isEmpty))
+        #expect(clubs.allSatisfy { $0.otherLeagues.isEmpty })
     }
 
     @MainActor
@@ -234,7 +234,7 @@ struct ClubSearchTests {
         let catalogs = try europeanCatalogs()
         let matches = (catalogs[.championsLeague] ?? []) + (catalogs[.bundesliga] ?? [])
         let clubs = TeamSearch.canonicalClubs(from: matches.filter { TeamSearch.matches($0, query: "bayern") })
-        #expect(clubs.map(\.id) == ["soccer/ger.1:132"])
+        #expect(clubs.map { $0.id } == ["soccer/ger.1:132"])
     }
 
     @Test("8. A league's own page keeps every team: the UCL catalog is not grouped")
@@ -252,7 +252,7 @@ struct ClubSearchTests {
         let soccer12 = team(.mls, "12", displayName: "Kansas City Chiefs", shortName: "Chiefs", abbreviation: "KC", location: "Kansas City")
         let hockey12 = team(.nhl, "12", displayName: "Twelve", shortName: "Twelve", abbreviation: "TW", location: "")
         let clubs = TeamSearch.clubGroups(from: [chiefs, soccer12, hockey12, sporting])
-        #expect(clubs.map(\.id) == [chiefs.id, soccer12.id, hockey12.id, sporting.id])
+        #expect(clubs.map { $0.id } == [chiefs.id, soccer12.id, hockey12.id, sporting.id])
         #expect(TeamSearch.clubCount([chiefs, soccer12, hockey12]) == 3)
     }
 
@@ -261,10 +261,10 @@ struct ClubSearchTests {
         let catalogs = try europeanCatalogs()
         let onUCL = TeamSearch.localClubs(in: catalogs, query: "borussia", current: .championsLeague)
         // Dortmund comes first from the UCL page, but is still the Bundesliga's.
-        #expect(onUCL.map(\.id) == ["soccer/ger.1:124", "soccer/ger.1:268"])
+        #expect(onUCL.map { $0.id } == ["soccer/ger.1:124", "soccer/ger.1:268"])
         #expect(onUCL.first?.otherLeagues == [LeagueID.championsLeague])
         let onBundesliga = TeamSearch.localClubs(in: catalogs, query: "borussia", current: .bundesliga)
-        #expect(Set(onBundesliga.map(\.id)) == Set(onUCL.map(\.id)))
+        #expect(Set(onBundesliga.map { $0.id }) == Set(onUCL.map { $0.id }))
     }
 
     @Test("11. A club followed under two leagues counts once")
@@ -288,19 +288,19 @@ struct ClubSearchTests {
         #expect(LeagueID.soccer("uefa.europa").isCup)
         #expect(!LeagueID.bundesliga.isCup && !LeagueID.nfl.isCup)
 
-        #expect(TeamSearch.canonicalClubs(from: [ucl, ligue1]).map(\.id) == [ligue1.id])
-        #expect(TeamSearch.canonicalClubs(from: [ligue1, ucl]).map(\.id) == [ligue1.id])
+        #expect(TeamSearch.canonicalClubs(from: [ucl, ligue1]).map { $0.id } == [ligue1.id])
+        #expect(TeamSearch.canonicalClubs(from: [ligue1, ucl]).map { $0.id } == [ligue1.id])
         // Two leagues, which cannot happen today: the shorter path, then
         // the first alphabetically, never the order loaded.
         let pair = TeamSearch.clubGroups(from: [ucl, ligue1, laLiga])
-        #expect(pair.map(\.id) == [laLiga.id])
-        #expect(TeamSearch.clubGroups(from: [ucl, laLiga, ligue1]).map(\.id) == [laLiga.id])
+        #expect(pair.map { $0.id } == [laLiga.id])
+        #expect(TeamSearch.clubGroups(from: [ucl, laLiga, ligue1]).map { $0.id } == [laLiga.id])
         // Leagues before cups; leagues the picker does not list are left out.
         #expect(pair.first?.otherLeagues == [LeagueID.ligue1, .championsLeague])
         #expect(TeamSearch.clubGroups(from: [europa, laLiga]).first?.otherLeagues.isEmpty == true)
         // Only cups: the same rule picks one of them; the UCL is still listed.
         let cups = TeamSearch.clubGroups(from: [ucl, europa])
-        #expect(cups.map(\.id) == [europa.id])
+        #expect(cups.map { $0.id } == [europa.id])
         #expect(cups.first?.otherLeagues == [LeagueID.championsLeague])
     }
 }
