@@ -178,6 +178,13 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
         snapshot("team-page-1", configuration)
 
+        // The cards over the receded header, the team's name in the bar
+        // (UI-1); then back to the top for the sheets.
+        app.swipeUp()
+        snapshot("team-page-1-scrolled", configuration)
+        app.swipeDown()
+        app.swipeDown()
+
         capturePlayerSheet(app, configuration)
         captureGameSheet(app, configuration)
     }
@@ -200,6 +207,13 @@ final class GlassUIScreenshotTests: XCTestCase {
             return
         }
         snapshot("team-page-1", configuration)
+
+        // The cards over the receded header, the team's name in the bar
+        // (UI-1); then back to the top for the sheets.
+        app.swipeUp()
+        snapshot("team-page-1-scrolled", configuration)
+        app.swipeDown()
+        app.swipeDown()
 
         captureSheets(app, configuration)
         // Scrolling down the page for the sheets minimized the tab bar.

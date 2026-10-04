@@ -678,25 +678,171 @@ struct NewsSection<Player: RosterPlayer>: View {
     }
 }
 
-/// The body of every team page: the sections as inset rounded cards on the
-/// grouped background, which rounds its top corners where it meets the
-/// team-colour hero (T-4). No glass: this is scrolling content (B1).
-///
-/// Lays the page out only. The page scrolls in `TeamPage`'s scroll view,
-/// which carries the bottom edge effect under the crest picker.
-struct TeamHomeLayout<Content: View>: View {
-    @ViewBuilder var content: Content
+/// What a team page's header says under the team's name: the record, the
+/// team's place in its table, and the next game. Each is `nil` until its
+/// feed has something to say.
+struct TeamHeaderSummary: Equatable, Sendable {
+    /// The season record so far, `"10-6"`, in its sport's shape.
+    var record: String?
+    /// The team's place in its table, `"3rd in AFC West"`, or its poll
+    /// rank, `"No. 5 in AP Top 25"`.
+    var standing: String?
+    /// The next game still to be played, `"vs Raiders · Sun, Oct 12"`.
+    var nextGame: String?
 
-    @Environment(\.containerSize) private var containerSize
+    init(record: String? = nil, standing: String? = nil, nextGame: String? = nil) {
+        self.record = record
+        self.standing = standing
+        self.nextGame = nextGame
+    }
+
+    /// The summary from a team page's model: `record` as the schedule
+    /// section counts it, the team's row in `standings`, and
+    /// `games[nextGame]` if it's still to be played.
+    init(team: TeamRef, games: [Game], nextGame: Int, record: Record, standings: Standings?) {
+        self.record = games.isEmpty ? nil : record.summary
+        self.standing = standings.flatMap { Self.standing(of: team.espnID, in: $0) }
+        self.nextGame = Self.upcoming(games: games, nextGame: nextGame)
+    }
+
+    /// The record and standing on one line, `"10-6 · 3rd in AFC West"`.
+    var recordLine: String? {
+        let parts = [record, standing].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The team's place in the table that holds it, or `nil` where the
+    /// feed ranks nobody yet.
+    static func standing(of teamID: String, in standings: Standings) -> String? {
+        guard let group = standings.group(containing: teamID),
+              let rank = group.entries.first(where: { $0.teamID == teamID })?.rank,
+              rank > 0
+        else { return nil }
+        switch standings.kind {
+        case .rankings:
+            return "No. \(rank) in \(group.name)"
+        case .pointsTable, .records:
+            return "\(ScoreSnapshot.ordinal(rank)) in \(group.name)"
+        }
+    }
+
+    /// `"vs Raiders · Sun, Oct 12"` (`"at"` away from home) for the game at
+    /// `nextGame`, or `nil` once the season's last game is played.
+    static func upcoming(games: [Game], nextGame: Int) -> String? {
+        guard games.indices.contains(nextGame) else { return nil }
+        let game = games[nextGame]
+        guard !game.completed, !game.cancelled, !game.postponed, !game.opponent.isEmpty else { return nil }
+        let date = game.dateAsDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        return "\(game.gameHome ? "vs" : "at") \(game.opponent) · \(date)"
+    }
+}
+
+/// The top of a team page, over the team colour: the team's crest — the
+/// page's only one — its name, and its record, standing and next game.
+/// Text and crest are drawn for the team colour (`teamInk(on:)`,
+/// `TeamColors.logoVariant`). At accessibility text sizes the crest sits
+/// above the name rather than beside it.
+struct TeamPageHeader: View {
+    let team: TeamRef
+    let summary: TeamHeaderSummary
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .largeTitle) private var crestSize: CGFloat = 64
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.m) {
-            content
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.l))
+
+        layout {
+            TeamLogo(
+                team: team,
+                // Capped: past this the crest crowds out the name.
+                size: min(crestSize, 112),
+                forceVariant: TeamColors.logoVariant(for: team, onBackground: TeamColors.fillHex(for: team))
+            )
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(team.displayName)
+                    .font(.largeTitle.bold())
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+
+                if let recordLine = summary.recordLine {
+                    Text(recordLine)
+                        .font(.headline)
+                        .monospacedDigit()
+                }
+
+                if let nextGame = summary.nextGame {
+                    Label(nextGame, systemImage: "calendar")
+                        .font(Theme.Typography.footnote.weight(.semibold))
+                }
+            }
+            .teamInk(on: team)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(Theme.Spacing.m)
-        // At least a screen tall, so a page still loading covers the hero
-        // rather than leaving it showing beneath a short page.
-        .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)
-        .background(Theme.Surface.content, in: Theme.Radius.pageShape)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, Theme.Spacing.s)
+        .padding(.bottom, Theme.Spacing.xl)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("teamPage.header")
+    }
+}
+
+/// The body of every team page: its header over the team colour, then the
+/// sections as inset rounded cards on the grouped background, which rounds
+/// its top corners where it meets the team-colour hero (T-4). No glass:
+/// this is scrolling content (B1).
+///
+/// Lays the page out only. The page scrolls in `TeamPage`'s scroll view,
+/// which draws the team colour behind the header and carries the bottom
+/// edge effect under the tab bar. As the page scrolls, the cards slide up
+/// over the header, which recedes beneath them (`recedingHeader(below:)`),
+/// and the page tells `TeamPage` once they reach the navigation bar
+/// (`TeamPageChrome`).
+struct TeamHomeLayout<Header: View, Content: View>: View {
+    let content: Content
+    let header: Header
+
+    init(@ViewBuilder content: () -> Content, @ViewBuilder header: () -> Header) {
+        self.content = content()
+        self.header = header()
+    }
+
+    @Environment(\.containerSize) private var containerSize
+    @Environment(TeamPageChrome.self) private var chrome: TeamPageChrome?
+
+    var body: some View {
+        let barBottom = chrome?.barBottom ?? 0
+
+        VStack(spacing: 0) {
+            header
+                .recedingHeader(below: barBottom)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    chrome?.headerHeight = height
+                }
+
+            VStack(spacing: Theme.Spacing.m) {
+                content
+            }
+            .padding(Theme.Spacing.m)
+            // At least a screen tall, so a page still loading covers the hero
+            // rather than leaving it showing beneath a short page.
+            .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)
+            .background(Theme.Surface.content, in: Theme.Radius.pageShape)
+            // Drawn after the header, so over it as it recedes.
+            .zIndex(1)
+            .onGeometryChange(for: Bool.self) { proxy in
+                proxy.frame(in: .global).minY < barBottom
+            } action: { covered in
+                chrome?.cardsUnderBar = covered
+            }
+        }
     }
 }

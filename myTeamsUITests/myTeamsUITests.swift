@@ -142,6 +142,36 @@ final class myTeamsUITests: XCTestCase {
         XCTFail("The team browser never opened from the Teams tab.")
     }
 
+    /// The team page's header — its crest, name and record — sits at the
+    /// top of the page, goes under the cards as the page scrolls down and
+    /// comes back on scrolling up (UI-1).
+    @MainActor
+    func testTeamPageHeaderRecedesAndReturns() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+
+        let header = app.descendants(matching: .any)["teamPage.header"]
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+        XCTAssertTrue(header.isHittable)
+
+        // The cards are at least a screen tall, so the page always scrolls
+        // far enough to cover the header.
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertFalse(header.exists && header.isHittable)
+
+        for _ in 0..<4 where !(header.exists && header.isHittable) {
+            app.swipeDown()
+        }
+        expectation(for: NSPredicate(format: "exists == true AND hittable == true"), evaluatedWith: header)
+        waitForExpectations(timeout: 5)
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
