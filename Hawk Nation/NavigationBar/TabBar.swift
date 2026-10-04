@@ -32,6 +32,25 @@ struct Home: View {
 
     @Bindable private var store = FavoritesStore.shared
 
+    /// Whether the tab bar has slid off the bottom (`TabBarCollapse`).
+    @State private var barCollapsed = false
+    /// Follows the page's scrolling for the bar; not observed.
+    @State private var barTracker = TabBarCollapse()
+    /// Bumped by each tab tap, restarting the wait before the bar goes.
+    @State private var tabTaps = 0
+
+    /// VoiceOver and Switch Control can't find a bar that has gone, so it
+    /// stays up under either.
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
+
+    private var settings = AdaptiveSettings()
+
+    // Spelled out: the private `settings` makes the memberwise init private.
+    init(deepLinkedTeamID: Binding<TeamRef.ID?>) {
+        self._deepLinkedTeamID = deepLinkedTeamID
+    }
+
     private var selectedTeam: TeamRef? {
         teams.first { $0.id == selection }
     }
@@ -49,6 +68,17 @@ struct Home: View {
         }
     }
 
+    /// Slides the tab bar out or back, or fades it under Reduce Motion. Never
+    /// out under VoiceOver or Switch Control, nor with no teams to show.
+    private func setBarCollapsed(_ collapsed: Bool) {
+        let collapse = collapsed && !voiceOver && !switchControl && !teams.isEmpty
+        guard collapse != barCollapsed else { return }
+        let animation = settings.reduceMotion ? Theme.Motion.reducedFade : TabBarCollapse.animation
+        withAnimation(animation) {
+            barCollapsed = collapse
+        }
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -61,7 +91,13 @@ struct Home: View {
                     TeamPage(
                         team: team,
                         savedOffset: pages.scrollOffset(for: team.id),
-                        saveOffset: { pages.setScrollOffset($0, for: team.id) }
+                        saveOffset: { pages.setScrollOffset($0, for: team.id) },
+                        barCollapsed: barCollapsed,
+                        scrolled: { position, byUser in
+                            if let collapse = barTracker.scrolled(to: position, byUser: byUser) {
+                                setBarCollapsed(collapse)
+                            }
+                        }
                     ) {
                         TeamHomeView(team: team, pages: pages)
                     }
@@ -83,13 +119,39 @@ struct Home: View {
             // height, which the original did by hand from the window's
             // insets. As a bar, rather than a plain inset, it takes part in
             // the page's scroll-edge effect, which keeps the crests legible
-            // over the content scrolling under them (T-5).
+            // over the content scrolling under them (T-5). A collapse only
+            // moves the bar, so the page keeps its inset and never jumps.
             .safeAreaBar(edge: .bottom, spacing: 0) {
-                TeamPicker(teams: teams, selection: $selection) {
-                    showsBrowser = true
-                }
+                TeamPicker(
+                    teams: teams,
+                    selection: $selection,
+                    collapsed: barCollapsed,
+                    tabTapped: { tabTaps += 1 },
+                    reveal: {
+                        barTracker.revealed()
+                        setBarCollapsed(false)
+                    },
+                    editTeams: { showsBrowser = true }
+                )
             }
             .environment(\.containerSize, proxy.size)
+        }
+        // A tapped tab registers, then the bar slides away; another tap
+        // restarts the wait.
+        .task(id: tabTaps) {
+            guard tabTaps > 0 else { return }
+            try? await Task.sleep(for: TabBarCollapse.hideDelay)
+            guard !Task.isCancelled else { return }
+            setBarCollapsed(true)
+        }
+        // The new team's page reports its own offsets.
+        .onChange(of: selection) {
+            barTracker.reset()
+        }
+        .onChange(of: voiceOver || switchControl) { _, assistive in
+            if assistive {
+                setBarCollapsed(false)
+            }
         }
         .task(id: store.teamIDs) {
             pages.retain(store.teamIDs)
@@ -167,9 +229,19 @@ private struct TeamPage<Content: View>: View {
     /// How far down the reader last left this team's page, in points.
     let savedOffset: CGFloat
     let saveOffset: @MainActor (CGFloat) -> Void
+    /// Whether the tab bar is down, so the page drops its foot's edge
+    /// effect with it.
+    let barCollapsed: Bool
+    /// Every move of the page, and whether the reader made it, for the tab
+    /// bar's collapse (`TabBarCollapse`).
+    let scrolled: @MainActor (TabBarCollapse.Position, _ byUser: Bool) -> Void
     @ViewBuilder var content: Content
 
     @State private var position = ScrollPosition(edge: .top)
+
+    /// Whether the reader is scrolling the page, rather than it restoring
+    /// its offset or standing still.
+    @State private var userScrolling = false
 
     /// The bottom of the navigation bar, in global coordinates.
     @State private var barBottom: CGFloat = 0
@@ -252,12 +324,27 @@ private struct TeamPage<Content: View>: View {
                 // edge fades it there, so neither the crests nor the cards
                 // fight for legibility (T-5, B5).
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
+                // With the bar down there is nothing at the foot to keep
+                // legible.
+                .scrollEdgeEffectHidden(barCollapsed, for: .bottom)
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     geometry.contentOffset.y + geometry.contentInsets.top
                 } action: { _, offset in
                     saveOffset(max(offset, 0))
+                }
+                .onScrollPhaseChange { _, phase in
+                    userScrolling = phase == .interacting || phase == .decelerating
+                }
+                .onScrollGeometryChange(for: TabBarCollapse.Position.self) { geometry in
+                    TabBarCollapse.Position(
+                        offset: geometry.contentOffset.y + geometry.contentInsets.top,
+                        maxOffset: geometry.contentSize.height + geometry.contentInsets.top
+                            + geometry.contentInsets.bottom - geometry.containerSize.height
+                    )
+                } action: { _, position in
+                    scrolled(position, userScrolling)
                 }
                 .onAppear {
                     // The team's model outlives the page, so its content is
@@ -296,113 +383,313 @@ private struct TeamPage<Content: View>: View {
     }
 }
 
-/// The crest row floating above the bottom of the screen. The selected team's
-/// crest grows a label in a glass pill tinted the team's colour. Scrolls
-/// sideways once the favorites outgrow the width, and ends in a button that
-/// opens the team picker.
+/// The tab bar: one tab per favorite team, its crest over its short name,
+/// then a button that opens the team picker. Scrolls sideways once the
+/// favorites outgrow the width.
 ///
-/// The pill and the button are the row's only glass, in one container so
-/// they share a sampling pass and the pill morphs between crests (H-1, H-2).
+/// A standard iOS bar: a frosted `.bar` material with a hairline along its
+/// top, so content scrolling under it never muddies the crests or labels.
+/// The selected tab sits on a neutral marker that moves between tabs and
+/// takes a legible team accent on its label. The marker is a plain fill,
+/// not glass: a glass pill tinted the team's own colour used to bury the
+/// selected crest, leaving only the tint.
+///
+/// `collapsed` slides the bar off the bottom (`TabBarCollapse`); while it
+/// is down, a strip along the bottom edge brings it back on a swipe up or
+/// a tap.
 private struct TeamPicker: View {
     let teams: [TeamRef]
     @Binding var selection: TeamRef.ID
+    let collapsed: Bool
+    /// A tab was tapped, whether or not it changed the selection.
+    let tabTapped: () -> Void
+    let reveal: () -> Void
     let editTeams: () -> Void
 
-    @Namespace private var glass
+    @Namespace private var marker
 
-    /// Reduce Motion, for the scroll to the selected crest (H-7).
+    /// Reduce Motion, for the scroll to the selected tab (H-7).
     private var settings = AdaptiveSettings()
 
-    /// A crest, which scales with the selected team's name beside it (B-3).
-    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 25
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
+
+    /// A crest, scaled with the label under it (B-3).
+    @ScaledMetric(relativeTo: .caption2) private var crestSize: CGFloat = 25
+
+    /// The bar's width, to share it between the tabs while they fit.
+    @State private var barWidth: CGFloat = 0
+    /// The bar's height down to the screen's foot, so a collapse slides it
+    /// all the way off.
+    @State private var barDepth: CGFloat = 0
 
     // Spelled out: the private `settings` makes the memberwise init private.
-    init(teams: [TeamRef], selection: Binding<TeamRef.ID>, editTeams: @escaping () -> Void) {
+    init(
+        teams: [TeamRef],
+        selection: Binding<TeamRef.ID>,
+        collapsed: Bool,
+        tabTapped: @escaping () -> Void,
+        reveal: @escaping () -> Void,
+        editTeams: @escaping () -> Void
+    ) {
         self.teams = teams
         self._selection = selection
+        self.collapsed = collapsed
+        self.tabTapped = tabTapped
+        self.reveal = reveal
         self.editTeams = editTeams
     }
 
+    /// Each tab's width: an even share of the bar while the tabs fit, the
+    /// standard minimum once they scroll.
+    private var itemWidth: CGFloat {
+        let count = CGFloat(teams.count + 1)
+        return max(TabBarStyle.minimumItemWidth, barWidth / count)
+    }
+
     var body: some View {
+        ZStack(alignment: .bottom) {
+            bar
+                .offset(y: collapsed && !settings.reduceMotion ? barDepth : 0)
+                .opacity(collapsed ? 0 : 1)
+                .allowsHitTesting(!collapsed)
+                .accessibilityHidden(collapsed)
+
+            if collapsed {
+                revealStrip
+            }
+        }
+    }
+
+    private var bar: some View {
         ScrollViewReader { reader in
             ScrollView(.horizontal, showsIndicators: false) {
-                GlassEffectContainer {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        ForEach(teams) { team in
-                            crest(team)
-                        }
-
-                        Button(action: editTeams) {
-                            Image(systemName: "plus")
-                                .font(.subheadline.weight(.semibold))
-                                // The circle matches the crest pills at the
-                                // default text size, so the symbol stops
-                                // growing where it would outgrow the circle.
-                                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                                .frame(width: 44, height: 44)
-                                .contentShape(.circle)
-                        }
-                        .buttonStyle(.plain)
-                        .glassChrome(in: Circle(), interactive: true)
-                        .padding(.leading, 6)
-                        .accessibilityLabel("Add or Edit Teams")
-                        .accessibilityIdentifier("teamPicker.edit")
+                HStack(spacing: 0) {
+                    ForEach(teams) { team in
+                        tab(team)
                     }
-                    // Room for the interactive glass to swell inside the
-                    // scroll view's clip.
-                    .padding(.vertical, Theme.Spacing.s)
-                    .padding(.horizontal, Theme.Spacing.l)
+                    editButton
                 }
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
             .onChange(of: selection) { _, selected in
                 withAnimation(Theme.Motion.animation(Theme.Motion.selection, reduceMotion: settings.reduceMotion)) {
                     reader.scrollTo(selected)
                 }
             }
         }
-        // The pill morphs to the new crest, or moves at once under Reduce
-        // Motion; the haptic plays either way (H-7).
+        // The marker moves to the new tab, or at once under Reduce Motion;
+        // the haptic plays either way (H-7).
         .motionAnimation(Theme.Motion.selection, value: selection)
         .sensoryFeedback(.selection, trigger: selection)
-        .padding(.horizontal, Theme.Spacing.s)
-        .padding(.bottom, Theme.Spacing.xs)
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, 2)
+        // The standard tab bar's material, down under the home indicator,
+        // a shade deeper in Dark Mode so bright content behind it stays
+        // muted. Opaque by itself under Reduce Transparency.
+        .background {
+            Rectangle()
+                .fill(.bar)
+                .overlay(Color.black.opacity(colorScheme == .dark ? TabBarStyle.darkDimming : 0))
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color(uiColor: .separator))
+                .frame(height: 1 / displayScale)
+        }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            CGSize(width: proxy.size.width, height: proxy.size.height + proxy.safeAreaInsets.bottom)
+        } action: { size in
+            barWidth = size.width
+            barDepth = size.height
+        }
     }
 
-    private func crest(_ team: TeamRef) -> some View {
+    private func tab(_ team: TeamRef) -> some View {
         let selected = selection == team.id
-        let fillHex = TeamColors.fillHex(for: team)
+        let accent = TabBarStyle.accentHex(for: team, dark: colorScheme == .dark).map { Color(hexString: $0) }
         return Button {
             selection = team.id
+            tabTapped()
         } label: {
-            HStack(spacing: 6) {
+            VStack(spacing: 2) {
+                // Drawn the same, at full strength, selected or not: only the
+                // marker and the label carry the selection.
                 TeamLogo(team: team, size: crestSize)
+                    .scaleEffect(selected ? 1.08 : 1)
 
-                if selected {
-                    Text(team.shortName)
-                        .teamInk(onHex: fillHex)
-                }
+                Text(team.shortName)
+                    .font(.caption2.weight(selected ? .bold : .medium))
+                    .foregroundStyle(selected ? AnyShapeStyle(accent ?? .primary) : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal)
-            .contentShape(.capsule)
+            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Spacing.xs)
+            .frame(width: itemWidth)
             .background {
-                // One pill, handed from crest to crest by its glass ID. Only
-                // a marker, so it takes no touches: interactive glass tracks
-                // touches itself, and in a label it competes with the
-                // crests' buttons for the tap that moves the selection.
                 if selected {
-                    Color.clear
-                        .glassChrome(tint: Color(hexString: fillHex))
-                        .glassEffectID("selection", in: glass)
-                        .allowsHitTesting(false)
+                    Theme.Radius.chip
+                        .fill(Color(uiColor: .tertiarySystemFill))
+                        .matchedGeometryEffect(id: "selection", in: marker)
+                        .padding(.horizontal, Theme.Spacing.xs)
                 }
             }
+            .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        // Tab bar items keep their size and show the large content viewer
+        // past the largest standard size, as the system's do.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityShowsLargeContentViewer()
         .accessibilityLabel(team.displayName)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        // SwiftUI's AccessibilityTraits has no tab-bar-item trait (that's
+        // UIKit's UIAccessibilityTraits.tabBar), so announce as a button.
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
         .accessibilityIdentifier("teamPicker.team.\(team.id)")
         .id(team.id)
+    }
+
+    private var editButton: some View {
+        Button(action: editTeams) {
+            VStack(spacing: 2) {
+                Image(systemName: "plus.circle")
+                    .font(.system(size: crestSize * 0.88))
+                    .frame(width: crestSize, height: crestSize)
+                Text("Teams")
+                    .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
+            .frame(width: itemWidth)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityShowsLargeContentViewer()
+        .accessibilityLabel("Add or Edit Teams")
+        .accessibilityIdentifier("teamPicker.edit")
+    }
+
+    /// Along the foot of the screen while the bar is down: a swipe up from
+    /// the bottom edge, or a tap, brings the bar back.
+    private var revealStrip: some View {
+        Color.clear
+            .frame(height: TabBarStyle.revealStripHeight)
+            .frame(maxWidth: .infinity)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture(minimumDistance: 8)
+                    .onEnded { drag in
+                        if drag.translation.height < -TabBarCollapse.threshold {
+                            reveal()
+                        }
+                    }
+            )
+            .onTapGesture(perform: reveal)
+            .accessibilityElement()
+            .accessibilityLabel("Show Tab Bar")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { reveal() }
+            .accessibilityIdentifier("tabBar.reveal")
+    }
+}
+
+/// The tab bar's metrics and its selected tab's accent.
+enum TabBarStyle {
+    /// The narrowest a tab gets before the bar scrolls.
+    static let minimumItemWidth: CGFloat = 76
+    /// How much darker the bar's material is in Dark Mode.
+    static let darkDimming: Double = 0.12
+    /// The strip along the bottom edge that brings a collapsed bar back.
+    static let revealStripHeight: CGFloat = 24
+
+    /// Roughly the `.bar` material's colour, in each scheme, for picking an
+    /// accent that reads on it.
+    static let lightBarHex = "F7F7F7"
+    static let darkBarHex = "1C1C1E"
+
+    /// WCAG's bar for large text and UI components: a tab label is short and
+    /// bold, and the marker and the selected trait back it up.
+    static let minimumAccentContrast = 3.0
+
+    /// The selected tab's label colour: the team colour, else its alternate,
+    /// whichever first reaches `minimumAccentContrast` on the bar; `nil`,
+    /// for the primary label colour, when neither does. Pure so it can be
+    /// unit-tested.
+    static func accentHex(for team: TeamRef, dark: Bool) -> String? {
+        let bar = dark ? darkBarHex : lightBarHex
+        return [TeamColors.fillHex(for: team), team.alternateColorHex].first { hex in
+            (TeamColors.contrastRatio(hex, bar) ?? 0) >= minimumAccentContrast
+        }
+    }
+}
+
+/// When the tab bar collapses and comes back, from the page's scroll
+/// offset: down when the reader scrolls the page down, back when they
+/// scroll up, pull past the top, or reach the foot of the page. Only the
+/// reader's own scrolling counts; a page restoring its offset moves the
+/// baseline and nothing else. `Home` also collapses the bar shortly after
+/// a tab is tapped (`hideDelay`).
+///
+/// A class kept in `@State` and not observed, so following every scroll
+/// frame redraws nothing; `Home` keeps the collapsed flag itself and sets it
+/// only on a change.
+final class TabBarCollapse {
+    /// How far the page moves one way before the bar follows.
+    static let threshold: CGFloat = 12
+    /// The pause after a tab tap before the bar goes, so the tap shows.
+    static let hideDelay: Duration = .milliseconds(600)
+    /// The bar's slide out and back.
+    static let animation: Animation = .easeInOut(duration: 0.35)
+
+    /// Where the page is, in points from the top of its content, and the
+    /// furthest it scrolls.
+    struct Position: Equatable, Sendable {
+        var offset: CGFloat
+        var maxOffset: CGFloat
+    }
+
+    /// Where the current run in one direction started.
+    private var anchor: CGFloat?
+    private var last: CGFloat?
+
+    /// Forgets the page: the next position is a new baseline.
+    func reset() {
+        anchor = nil
+        last = nil
+    }
+
+    /// The bar came back some other way: the current run starts here.
+    func revealed() {
+        anchor = last
+    }
+
+    /// The page moved to `position`. `true` to collapse the bar, `false` to
+    /// bring it back, `nil` to leave it.
+    func scrolled(to position: Position, byUser: Bool) -> Bool? {
+        let offset = position.offset
+        defer { last = offset }
+        guard byUser, let last, let start = anchor else {
+            anchor = offset
+            return nil
+        }
+        // A turn starts a new run from where the page turned.
+        if (offset - last) * (last - start) < 0 {
+            anchor = last
+        }
+        let travel = offset - (anchor ?? last)
+        let atFoot = position.maxOffset > Self.threshold && offset >= position.maxOffset - Self.threshold
+        if atFoot || travel < -Self.threshold {
+            anchor = offset
+            return false
+        }
+        if travel > Self.threshold && offset > 0 {
+            anchor = offset
+            return true
+        }
+        return nil
     }
 }
 

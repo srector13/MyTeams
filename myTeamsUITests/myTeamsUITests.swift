@@ -43,8 +43,15 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(second.isSelected)
 
         second.tap()
-        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: second)
-        waitForExpectations(timeout: 5)
+
+        // The bar slides away shortly after the tap, leaving a strip along
+        // the bottom edge that brings it back.
+        let reveal = app.buttons["tabBar.reveal"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 5))
+        reveal.tap()
+        XCTAssertTrue(second.waitForExistence(timeout: 5))
+
+        XCTAssertTrue(second.isSelected)
         XCTAssertFalse(first.isSelected)
     }
 

@@ -22,8 +22,10 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
   out; the team's stat leaders and the league's leaderboards; and the team's
   news feed.
 - **Favorites.** The crest bar at the foot of the screen switches between
-  followed teams; its "+" button opens the picker, where teams are followed,
-  reordered and removed. Favorites are stored in the App Group's defaults
+  followed teams; its "Teams" button opens the picker, where teams are
+  followed, reordered and removed. The bar slides away shortly after a tab
+  tap and on scrolling down, and comes back on scrolling up, at the foot of
+  the page, or on a swipe up from the bottom edge. Favorites are stored in the App Group's defaults
   (which the widget reads) and mirrored to iCloud key-value storage, so they
   sync between devices.
 - **Onboarding.** A fresh install opens on the "Pick Your Teams" sheet with
