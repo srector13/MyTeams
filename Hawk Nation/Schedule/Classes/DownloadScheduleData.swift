@@ -314,19 +314,29 @@ func parseGame(
 /// cup's path, and the fixtures are merged (`mergeSchedules`). The league is
 /// primary: its feed failing fails the schedule, while a cup feed that fails,
 /// or that the team has no fixtures in, simply adds nothing.
+///
+/// ESPN's soccer team schedules list only games already kicked off; the
+/// unplayed ones come from the same endpoint with `fixture=true`
+/// (`scheduleFixturesURL`). For a soccer team every schedule, league and cup,
+/// is fetched both ways and the two merged (`mergeScheduleDocuments`), and
+/// the result always goes through `mergeSchedules`, since the played feed
+/// runs newest first and the fixtures oldest first. Other sports' feeds list
+/// the whole season already, and answer `fixture=true` with a different
+/// subset, so they are fetched once.
 func downloadScheduleData(team: TeamRef) async -> Result<[Game], NetworkError> {
     let cups = team.league.descriptor.cupCompetitions
-    guard !cups.isEmpty else {
+    let isSoccer = team.league.sport == "soccer"
+    guard isSoccer || !cups.isEmpty else {
         return await HTTPClient.shared.fetch(team.scheduleURL).map(empty: []) { json in
             parseSchedule(from: json, team: team)
         }
     }
 
-    async let league = HTTPClient.shared.fetch(team.scheduleURL)
+    async let league = fetchSchedule(team.scheduleURL, withFixtures: isSoccer)
     let cupDocuments = await withTaskGroup(of: (Int, JSON?).self) { group in
         for (index, cup) in cups.enumerated() {
             group.addTask {
-                let result = await HTTPClient.shared.fetch(cup.scheduleURL(teamID: team.espnID))
+                let result = await fetchSchedule(cup.scheduleURL(teamID: team.espnID), withFixtures: isSoccer)
                 guard case .success(let json) = result else { return (index, nil) }
                 return (index, json)
             }
@@ -344,6 +354,69 @@ func downloadScheduleData(team: TeamRef) async -> Result<[Game], NetworkError> {
         }
         return mergeSchedules(league: json, cups: cupSchedules, team: team)
     }
+}
+
+/// A team schedule URL asking for the unplayed games, which ESPN's soccer
+/// feeds leave out unless asked: `…/teams/186/schedule?fixture=true`.
+func scheduleFixturesURL(_ scheduleURL: String) -> String {
+    scheduleURL + (scheduleURL.contains("?") ? "&fixture=true" : "?fixture=true")
+}
+
+/// Fetches a team schedule and, when `withFixtures`, its unplayed games too
+/// (`scheduleFixturesURL`), merged into one document.
+///
+/// The played feed is primary: its failure is the result. The fixtures feed
+/// failing adds nothing, and an empty played feed — a season not yet begun —
+/// leaves the fixtures alone.
+private func fetchSchedule(_ url: String, withFixtures: Bool) async -> FetchResult {
+    guard withFixtures else { return await HTTPClient.shared.fetch(url) }
+
+    async let played = HTTPClient.shared.fetch(url)
+    let fixtures = await HTTPClient.shared.fetch(scheduleFixturesURL(url)).document
+
+    switch await played {
+    case .success(let json):
+        return .success(mergeScheduleDocuments(json, fixtures: fixtures))
+    case .empty:
+        return fixtures.map(FetchResult.success) ?? .empty
+    case .failure(let error):
+        return .failure(error)
+    }
+}
+
+/// One schedule document from a soccer team's played feed and its fixtures
+/// feed (`?fixture=true`): the played document, with the fixtures' events
+/// appended after its own.
+///
+/// A game that kicks off between the two requests can be listed by both, so
+/// a fixture is skipped when the played document already lists its event
+/// (matched as `Game.id` matches: the event id, else the competition id).
+/// Order is left to `mergeSchedules`. `nil` fixtures — a feed that failed or
+/// answered empty — leave the played document unchanged.
+func mergeScheduleDocuments(_ played: JSON, fixtures: JSON?) -> JSON {
+    guard let fixtures else { return played }
+
+    func key(_ event: JSON) -> String? {
+        let id = event["id"].stringValue
+        if !id.isEmpty { return id }
+        let competitionID = event["competitions", 0, "id"].stringValue
+        return competitionID.isEmpty ? nil : competitionID
+    }
+
+    var events = played["events"].arrayValue
+    var seen = Set(events.compactMap(key))
+    for event in fixtures["events"].arrayValue {
+        // An event with no id cannot be matched, so it is always kept.
+        if let id = key(event), !seen.insert(id).inserted { continue }
+        events.append(event)
+    }
+
+    var document = played.dictionaryValue
+    document["events"] = .array(events)
+    if document["season"] == nil, let season = fixtures.dictionaryValue["season"] {
+        document["season"] = season
+    }
+    return .object(document)
 }
 
 /// Builds the season's games from a schedule document. See
