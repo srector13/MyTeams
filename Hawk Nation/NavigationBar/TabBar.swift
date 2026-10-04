@@ -96,7 +96,16 @@ struct Home: View {
             Group {
                 if teams.isEmpty {
                     ContentUnavailableView {
-                        Label("No Teams", systemImage: "star")
+                        Label {
+                            Text("No Teams")
+                        } icon: {
+                            // Asset-catalog appearances pick the light/dark art.
+                            Image("myTeamsLogo")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 160)
+                                .accessibilityHidden(true)
+                        }
                     } description: {
                         Text("Follow a team to see its schedule, roster and news.")
                     } actions: {
