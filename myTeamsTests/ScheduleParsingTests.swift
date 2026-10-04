@@ -464,3 +464,85 @@ struct ScheduleCompetitionTests {
         #expect(mergeSchedules(league: league, cups: [], team: arsenal).map(\.eventID) == games.map(\.eventID))
     }
 }
+
+// MARK: - Soccer fixtures
+
+/// A soccer team's schedule from its played feed and its `?fixture=true`
+/// feed (`mergeScheduleDocuments`), which ESPN splits server-side.
+@Suite("Soccer schedule fixtures")
+struct SoccerScheduleFixturesTests {
+    /// sporting_schedule.json: 26 played games, newest first (761836, Sep 27,
+    /// … 761450, Feb 22). sporting_schedule_fixtures.json: the 7 unplayed,
+    /// oldest first (761855, Oct 11, … 761947, Nov 8); no id in both.
+    private let fixtureIDs = ["761855", "761866", "761884", "761899", "761913", "761928", "761947"]
+
+    @Test("Upcoming fixtures join the played games, in kick-off order")
+    func mergesUpcoming() throws {
+        let played = try Fixture.json("sporting_schedule")
+        let fixtures = try Fixture.json("sporting_schedule_fixtures")
+        let document = mergeScheduleDocuments(played, fixtures: fixtures)
+        let games = mergeSchedules(league: document, cups: [], team: .sporting)
+
+        #expect(games.count == 26 + 7)
+        #expect(games.map(\.pointer) == Array(0 ..< 33))
+        #expect(Set(games.map(\.id)).count == 33)
+        let playedIDs = played["events"].map { $0.1["id"].stringValue }
+        #expect(games.map(\.eventID) == Array(playedIDs.reversed()) + fixtureIDs)
+        #expect(games.prefix(26).allSatisfy(\.completed))
+        #expect(games.suffix(7).allSatisfy { !$0.completed })
+        #expect(games.allSatisfy { $0.competition == .mls })
+
+        // 761855: Portland at Sporting Park, 2026-10-11T00:30Z.
+        let portland = try #require(games.first { $0.eventID == "761855" })
+        #expect(portland.opponent == "Portland")
+        #expect(portland.location == "Sporting Park")
+        #expect(portland.gameHome)
+        #expect(!portland.completed)
+        #expect(portland.dateAsDate == parseGameDate("2026-10-11T00:30Z"))
+        #expect(getNextGame(schedule: games) == 26)
+    }
+
+    @Test("With no fixtures the played schedule is unchanged")
+    func noFixtures() throws {
+        let played = try Fixture.json("sporting_schedule")
+        let empty = JSON.object(["events": .array([])])
+
+        #expect(mergeScheduleDocuments(played, fixtures: nil) == played)
+        #expect(mergeScheduleDocuments(played, fixtures: empty) == played)
+
+        let before = mergeSchedules(league: played, cups: [], team: .sporting)
+        let after = mergeSchedules(league: mergeScheduleDocuments(played, fixtures: empty), cups: [], team: .sporting)
+        #expect(after.map(\.eventID) == before.map(\.eventID))
+        #expect(after.count == 26)
+    }
+
+    @Test("A game listed by both feeds appears once")
+    func dedupesAcrossFeeds() throws {
+        let played = try Fixture.json("sporting_schedule")
+        let fixtures = try Fixture.json("sporting_schedule_fixtures")
+        // A game that kicked off between the two requests: the played feed's
+        // latest event, listed again by the fixtures feed.
+        let (kickedOff, _) = try Fixture.event("761836", in: played)
+        let (upcoming, _) = try Fixture.event("761855", in: fixtures)
+        let overlapping = JSON.object(["events": .array([kickedOff, upcoming])])
+
+        let document = mergeScheduleDocuments(played, fixtures: overlapping)
+        #expect(document["events"].arrayValue.count == 27)
+
+        let games = mergeSchedules(league: document, cups: [], team: .sporting)
+        #expect(games.filter { $0.id == "761836" }.count == 1)
+        #expect(games.filter { $0.id == "761855" }.count == 1)
+        // The played copy, with its score, is the one kept.
+        #expect(games.first { $0.id == "761836" }?.completed == true)
+    }
+
+    @Test("The fixtures feed is the schedule URL with fixture=true")
+    func fixturesURL() {
+        let site = "https://site.api.espn.com/apis/site/v2/sports"
+        #expect(scheduleFixturesURL(TeamRef.sporting.scheduleURL) == "\(site)/soccer/usa.1/teams/186/schedule?fixture=true")
+        #expect(scheduleFixturesURL(LeagueID.soccer("usa.open").scheduleURL(teamID: "186"))
+            == "\(site)/soccer/usa.open/teams/186/schedule?fixture=true")
+        #expect(scheduleFixturesURL("\(site)/soccer/eng.1/teams/359/schedule?season=2026")
+            == "\(site)/soccer/eng.1/teams/359/schedule?season=2026&fixture=true")
+    }
+}
