@@ -479,6 +479,72 @@ struct LeagueDescriptor: Sendable, Identifiable {
         leadersSeasonType: soccerLeadersSeasonType
     )
 
+    static let bundesliga = LeagueDescriptor(
+        id: .bundesliga,
+        kind: .soccer,
+        displayName: "Bundesliga",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("ger.dfb_pokal"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
+    static let serieA = LeagueDescriptor(
+        id: .serieA,
+        kind: .soccer,
+        displayName: "Serie A",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("ita.coppa_italia"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
+    static let ligue1 = LeagueDescriptor(
+        id: .ligue1,
+        kind: .soccer,
+        displayName: "Ligue 1",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        seasonNaming: .startingYear(rolloverMonth: 6),
+        cupCompetitions: [.soccer("fra.coupe_de_france"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
+    static let championsLeague = LeagueDescriptor(
+        id: .championsLeague,
+        kind: .soccer,
+        displayName: "UEFA Champions League",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        // Qualifying starts on July 1 (the feed's season startDate,
+        // 2026-07-01). A cup is its own competition, so it plays in no other.
+        seasonNaming: .startingYear(rolloverMonth: 7),
+        cupCompetitions: [],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
     /// Every known league's descriptor, keyed by id. `LeagueID.knownLeagues`
     /// lists the same leagues in order.
     static let known: [LeagueID: LeagueDescriptor] = Dictionary(
@@ -486,6 +552,7 @@ struct LeagueDescriptor: Sendable, Identifiable {
             mensCollegeBasketball, nfl, mlb, mls,
             nba, wnba, womensCollegeBasketball, nhl, collegeFootball,
             premierLeague, laLiga, ligaMX, nwsl,
+            bundesliga, serieA, ligue1, championsLeague,
         ].map { ($0.id, $0) }
     )
 

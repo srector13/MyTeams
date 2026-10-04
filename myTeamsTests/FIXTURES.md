@@ -632,6 +632,89 @@ give them the generic silhouette (`combiner/i?img=/i/headshots/nophoto.png`,
 across the soccer fixtures above: LALIGA 0 of 30, Premier League 2 of 27,
 Liga MX 2 of 35, Sporting 8 of 31, NWSL 21 of 25.
 
+## European soccer leagues (BE-3)
+
+`LeagueRegistryTests.swift` (`CapturedLeague.all`) and the
+`EuropeanSoccerLeagueTests` suite in `CrossLeagueAcceptanceTests.swift` read
+32 documents for the four soccer leagues BE-3 registered — Bundesliga
+(`ger.1`), Serie A (`ita.1`), Ligue 1 (`fra.1`) and the Champions League as
+a league (`uefa.champions`) — captured on **2026-10-04 between 19:48:38Z
+and 19:49:05Z** from this host by the checked-in script:
+
+```sh
+python3 scripts/capture_fixtures_be3.py               # every league
+python3 scripts/capture_fixtures_be3.py bundes        # just this one
+```
+
+It imports P3-a's client, trimming and validation (see "New leagues
+(P3-a)"), so the same rules hold: plain `curl`, 0.5 s apart; teams trimmed
+to 15 (keeping the sample club), scoreboards to 3 events; trimmed files
+re-serialised compactly, every kept element unchanged; every other file
+byte-for-byte. Each kept `schedule_fixtures` event was also checked to be
+a byte-identical substring of an untrimmed capture.
+
+Per league, P3-a's seven files plus `{lg}_schedule_fixtures`: the sample
+club's schedule with `?fixture=true`, **trimmed to the first 10 events**.
+The bare schedule lists only the season's played matches; the fixtures
+feed lists the unplayed ones, which `mergeScheduleDocuments` appends (BE-2).
+Sample clubs: Bayern Munich (132), Internazionale (110), Paris
+Saint-Germain (160), and Arsenal (359) followed as a Champions League team.
+The prefix is `uclleague_`, apart from P3-b's `ucl_*` files, which are the
+cup as seen from an EPL team's schedule.
+
+Notes from the capture:
+
+- Every feed files 2026-27 under **2026** (`season.year`), the starting
+  year. The Champions League's season starts with qualifying on July 1, so
+  its descriptor rolls over in July, the domestic leagues in June.
+- Standings: one child per league holding the whole table, 18–36 rows, five
+  rounds in (Bundesliga four). Child names differ: `"2026-27 German
+  Bundesliga"`, `"2026-2027 Italian Serie A"`, `"French Ligue 1 2026-27"`,
+  and `"League Phase"` for the 36-team Champions League table.
+- Rosters are flat, Goalkeeper/Defender/Midfielder/Forward only. Headshots:
+  Bayern 2 of 25, Inter 0 of 28, PSG 0 of 24, Arsenal (UCL feed) 2 of 27.
+- Stat leaders (`site/v3 …/leaders?season=2026&seasontype=1`, not captured)
+  answered 200 with 12 categories × 10 rows for all four; the Champions
+  League's season type 1 is the league phase.
+- An unknown slug (`soccer/xxx.zzz`) answers teams with **404** `"League not
+  found"` and standings/schedule with 400; the catalog falls back to an
+  empty list.
+
+| File | URL | Captured | Contents |
+|---|---|---|---|
+| `bundes_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams?limit=1000` | 2026-10-04T19:48:38Z | teams=15; trimmed 18 → 15 teams |
+| `bundes_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132/schedule` | 2026-10-04T19:48:39Z | events=4 |
+| `bundes_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132/schedule?fixture=true` | 2026-10-04T19:48:44Z | events=10; trimmed 30 → 10 events |
+| `bundes_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132/roster` | 2026-10-04T19:48:45Z | athletes=25 shape=flat |
+| `bundes_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/news?team=132&limit=25` | 2026-10-04T19:48:46Z | articles=25 |
+| `bundes_scoreboard_20260918.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard?dates=20260918` | 2026-10-04T19:48:46Z | events=1 |
+| `bundes_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/ger.1/standings` | 2026-10-04T19:48:47Z | children=1 entries=18 |
+| `bundes_summary_final_401884790.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/summary?event=401884790` | 2026-10-04T19:48:48Z | phase=final |
+| `seriea_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/teams?limit=1000` | 2026-10-04T19:48:48Z | teams=15; trimmed 20 → 15 teams |
+| `seriea_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/teams/110/schedule` | 2026-10-04T19:48:48Z | events=5 |
+| `seriea_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/teams/110/schedule?fixture=true` | 2026-10-04T19:48:49Z | events=10; trimmed 33 → 10 events |
+| `seriea_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/teams/110/roster` | 2026-10-04T19:48:49Z | athletes=28 shape=flat |
+| `seriea_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/news?team=110&limit=25` | 2026-10-04T19:48:50Z | articles=25 |
+| `seriea_scoreboard_20260919.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard?dates=20260919` | 2026-10-04T19:48:50Z | events=3; trimmed 4 → 3 events |
+| `seriea_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/ita.1/standings` | 2026-10-04T19:48:51Z | children=1 entries=20 |
+| `seriea_summary_final_401874753.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/summary?event=401874753` | 2026-10-04T19:48:57Z | phase=final |
+| `ligue1_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/teams?limit=1000` | 2026-10-04T19:48:57Z | teams=15; trimmed 18 → 15 teams |
+| `ligue1_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/teams/160/schedule` | 2026-10-04T19:48:57Z | events=5 |
+| `ligue1_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/teams/160/schedule?fixture=true` | 2026-10-04T19:48:58Z | events=10; trimmed 29 → 10 events |
+| `ligue1_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/teams/160/roster` | 2026-10-04T19:48:59Z | athletes=24 shape=flat |
+| `ligue1_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/news?team=160&limit=25` | 2026-10-04T19:48:59Z | articles=25 |
+| `ligue1_scoreboard_20260920.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/scoreboard?dates=20260920` | 2026-10-04T19:49:00Z | events=3 |
+| `ligue1_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/fra.1/standings` | 2026-10-04T19:49:00Z | children=1 entries=18 |
+| `ligue1_summary_final_401876449.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.1/summary?event=401876449` | 2026-10-04T19:49:01Z | phase=final |
+| `uclleague_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/teams?limit=1000` | 2026-10-04T19:49:01Z | teams=15; trimmed 36 → 15 teams |
+| `uclleague_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/teams/359/schedule` | 2026-10-04T19:49:02Z | events=1 |
+| `uclleague_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/teams/359/schedule?fixture=true` | 2026-10-04T19:49:02Z | events=7 |
+| `uclleague_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/teams/359/roster` | 2026-10-04T19:49:03Z | athletes=27 shape=flat |
+| `uclleague_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/news?team=359&limit=25` | 2026-10-04T19:49:03Z | articles=25 |
+| `uclleague_scoreboard_20260909.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard?dates=20260909` | 2026-10-04T19:49:04Z | events=3; trimmed 6 → 3 events |
+| `uclleague_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/uefa.champions/standings` | 2026-10-04T19:49:04Z | children=1 entries=36 |
+| `uclleague_summary_final_401915423.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/summary?event=401915423` | 2026-10-04T19:49:05Z | phase=final |
+
 ## Refreshing
 
 1. Re-run the requests above, for example:

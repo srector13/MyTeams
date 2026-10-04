@@ -11,8 +11,8 @@ import Testing
 
 @testable import myTeams
 
-/// One league P3-a registered, with the fixtures captured for it (see
-/// FIXTURES.md, "New leagues (P3-a)").
+/// One league P3-a or BE-3 registered, with the fixtures captured for it
+/// (see FIXTURES.md, "New leagues (P3-a)" and "European soccer leagues (BE-3)").
 struct CapturedLeague: Sendable, CustomTestStringConvertible {
     let league: LeagueID
     /// The fixture name prefix, e.g. `"nba"`.
@@ -51,6 +51,14 @@ struct CapturedLeague: Sendable, CustomTestStringConvertible {
                        summary: "ligamx_summary_final_401877018"),
         CapturedLeague(league: .nwsl, prefix: "nwsl", teamID: "21422", scoreboardDay: "20260814",
                        summary: "nwsl_summary_final_401853969"),
+        CapturedLeague(league: .bundesliga, prefix: "bundes", teamID: "132", scoreboardDay: "20260918",
+                       summary: "bundes_summary_final_401884790"),
+        CapturedLeague(league: .serieA, prefix: "seriea", teamID: "110", scoreboardDay: "20260919",
+                       summary: "seriea_summary_final_401874753"),
+        CapturedLeague(league: .ligue1, prefix: "ligue1", teamID: "160", scoreboardDay: "20260920",
+                       summary: "ligue1_summary_final_401876449"),
+        CapturedLeague(league: .championsLeague, prefix: "uclleague", teamID: "359", scoreboardDay: "20260909",
+                       summary: "uclleague_summary_final_401915423"),
     ]
 }
 
@@ -76,7 +84,7 @@ private func rosterPlayers(_ roster: JSON) -> [JSON] {
 struct LeagueRegistryTests {
     @Test("Every known league has its own descriptor, and nothing else does")
     func knownLeaguesHaveDescriptors() {
-        #expect(LeagueID.knownLeagues.count == 13)
+        #expect(LeagueID.knownLeagues.count == 17)
         #expect(Set(LeagueID.knownLeagues).count == LeagueID.knownLeagues.count)
         #expect(Set(LeagueID.knownLeagues) == Set(LeagueDescriptor.known.keys))
         for league in LeagueID.knownLeagues {
@@ -86,7 +94,7 @@ struct LeagueRegistryTests {
         }
     }
 
-    @Test("The nine P3-a leagues are the known leagues beyond the original four")
+    @Test("The P3-a and BE-3 leagues are the known leagues beyond the original four")
     func capturedLeaguesAreTheNewOnes() {
         let original: Set<LeagueID> = [.mensCollegeBasketball, .nfl, .mlb, .mls]
         #expect(Set(CapturedLeague.all.map(\.league)) == Set(LeagueID.knownLeagues).subtracting(original))
@@ -99,7 +107,7 @@ struct LeagueRegistryTests {
         #expect(LeagueID.womensCollegeBasketball.descriptor.kind == .basketball)
         #expect(LeagueID.nhl.descriptor.kind == .hockey)
         #expect(LeagueID.collegeFootball.descriptor.kind == .football)
-        for soccer in [LeagueID.premierLeague, .laLiga, .ligaMX, .nwsl] {
+        for soccer in [LeagueID.premierLeague, .laLiga, .ligaMX, .nwsl, .bundesliga, .serieA, .ligue1, .championsLeague] {
             #expect(soccer.descriptor.kind == .soccer)
             #expect(soccer.descriptor.periodName("2") == "2nd Half")
             #expect(soccer.descriptor.drawLabel == "Draw")
@@ -121,15 +129,19 @@ struct LeagueRegistryTests {
         #expect(LeagueID.collegeFootball.descriptor.liveCardStyle == .scoreFirst)
     }
 
-    @Test("The picker's chips are unchanged, and name the registry's constants")
+    @Test("The picker's chips name the registry's constants, European soccer after the EPL")
     func browsableLeagues() {
         #expect(LeagueID.browsable.map(\.label) == [
             "NFL", "NBA", "MLB", "NHL", "MLS", "WNBA", "NCAAF", "NCAAM", "NCAAW", "EPL",
+            "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UCL",
         ])
+        #expect(LeagueID.browsable.suffix(5).map(\.league) == [.laLiga, .bundesliga, .serieA, .ligue1, .championsLeague])
         #expect(LeagueID.nba.badge == "NBA")
         #expect(LeagueID.premierLeague.badge == "EPL")
-        // Not offered in the picker yet: badged by their path component.
-        #expect(LeagueID.laLiga.badge == "ESP.1")
+        #expect(LeagueID.laLiga.badge == "La Liga")
+        #expect(LeagueID.championsLeague.badge == "UCL")
+        // Not offered in the picker yet: badged by its path component.
+        #expect(LeagueID.ligaMX.badge == "MEX.1")
     }
 
     @Test("Standings use the /apis/v2 base, the league's group, and an optional season")
