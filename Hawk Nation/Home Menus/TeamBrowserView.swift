@@ -26,6 +26,22 @@ extension TeamSearch {
         return components?.url
     }
 
+    /// Every catalog's teams that match the query, `current`'s first and the
+    /// rest by league path, then grouped into clubs (`clubGroups(from:)`) so
+    /// a club listed under its league and a cup is one result.
+    static func localClubs(
+        in catalogs: [LeagueID: [TeamRef]],
+        query: String,
+        current: LeagueID?
+    ) -> [ClubGroup] {
+        let rest = catalogs.keys.filter { $0 != current }.sorted { $0.path < $1.path }
+        let ordered = (current.map { [$0] } ?? []) + rest
+        let hits = ordered
+            .flatMap { catalogs[$0] ?? [] }
+            .filter { Self.matches($0, query: query) }
+        return clubGroups(from: hits)
+    }
+
     /// Searches ESPN for teams. Returns `[]` on any failure.
     static func remoteTeams(matching query: String, client: HTTPClient = .shared) async -> [TeamRef] {
         guard let url = searchURL(query: query),
@@ -192,15 +208,10 @@ struct TeamBrowserView: View {
         }
     }
 
-    /// Every loaded league's teams that match the query, the league on
-    /// screen first.
-    private var localMatches: [TeamRef] {
-        let current = currentLeague
-        let rest = catalogs.keys.filter { $0 != current }.sorted { $0.path < $1.path }
-        let ordered = (current.map { [$0] } ?? []) + rest
-        return ordered
-            .flatMap { catalogs[$0] ?? [] }
-            .filter { TeamSearch.matches($0, query: query) }
+    /// Every loaded league's clubs that match the query, the league on
+    /// screen first, each club once.
+    private var localMatches: [ClubGroup] {
+        TeamSearch.localClubs(in: catalogs, query: query, current: currentLeague)
     }
 
     var body: some View {
@@ -365,7 +376,7 @@ struct TeamBrowserView: View {
     /// reader follows.
     private func sportRow(_ sport: BrowsableSport) -> some View {
         let leagueIDs = Set(sport.leagues.map(\.league))
-        let followed = myTeams.filter { leagueIDs.contains($0.league) }.count
+        let followed = TeamSearch.clubCount(myTeams.filter { leagueIDs.contains($0.league) })
         let loaded = sport.leagues.compactMap { catalogs[$0.league]?.count }
         var detail = sport.leagues.count == 1 ? "1 league" : "\(sport.leagues.count) leagues"
         if loaded.count == sport.leagues.count {
@@ -404,7 +415,7 @@ struct TeamBrowserView: View {
     /// teams the reader follows.
     private func leagueRow(_ item: BrowsableLeague) -> some View {
         let name = item.league.descriptor.displayName
-        let followed = myTeams.filter { $0.league == item.league }.count
+        let followed = TeamSearch.clubCount(myTeams.filter { $0.league == item.league })
         return HStack(spacing: Theme.Spacing.m) {
             Text(item.label)
                 .font(.caption.weight(.heavy))
@@ -460,8 +471,8 @@ struct TeamBrowserView: View {
         let local = localMatches
         if !local.isEmpty {
             Section("Results") {
-                ForEach(local) { team in
-                    row(team)
+                ForEach(local) { club in
+                    row(club.canonical, club: club)
                 }
             }
         } else if !remoteHits.isEmpty {
@@ -478,10 +489,22 @@ struct TeamBrowserView: View {
         }
     }
 
-    private func row(_ team: TeamRef) -> some View {
-        let followed = store.isFavorite(team.id)
+    /// A team to follow or unfollow. Given its `club`, as search results are,
+    /// the row stands for the club in every league it was found in: it is
+    /// followed under any of them, and the other leagues show as chips.
+    private func row(_ team: TeamRef, club: ClubGroup? = nil) -> some View {
+        let followed = club == nil ? store.isFavorite(team.id) : !store.followedClubIDs(of: team).isEmpty
+        let otherBadges = club?.otherLeagues.map(\.badge) ?? []
+        // One element per club: "Bayern Munich, Bundesliga, also in UCL".
+        let spokenLabel = otherBadges.isEmpty
+            ? "\(team.displayName), \(team.league.badge)"
+            : "\(team.displayName), \(team.league.badge), also in \(otherBadges.joined(separator: ", "))"
         return Button {
-            store.toggle(team)
+            if club == nil {
+                store.toggle(team)
+            } else {
+                store.toggleClub(team)
+            }
             // New favorites want alerts (`FavoriteTeam.notify`), so the
             // first follow is where the reader is asked for them.
             if !followed {
@@ -504,6 +527,17 @@ struct TeamBrowserView: View {
                     .background(Color.secondary.opacity(0.15))
                     .clipShape(.capsule)
 
+                // The club's other leagues, cups last. Only labels: a tap
+                // anywhere on the row follows the club.
+                ForEach(otherBadges, id: \.self) { badge in
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.vertical, 2)
+                        .padding(.horizontal, 6)
+                        .foregroundStyle(.tertiary)
+                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
+                }
+
                 Spacer(minLength: 0)
 
                 // Hierarchical, and replaced rather than swapped, so
@@ -523,7 +557,7 @@ struct TeamBrowserView: View {
         .sensoryFeedback(trigger: followed) { _, nowFollowed in
             nowFollowed ? .success : .impact(weight: .light)
         }
-        .accessibilityLabel("\(team.displayName), \(team.league.badge)")
+        .accessibilityLabel(spokenLabel)
         .accessibilityAddTraits(followed ? .isSelected : [])
         .accessibilityIdentifier("teamBrowser.team.\(team.id)")
         .task {
@@ -571,6 +605,22 @@ struct TeamBrowserView: View {
             : ids.count
         myTeams.move(fromOffsets: source, toOffset: destination)
         store.move(from: storeSource, to: storeDestination)
+    }
+}
+
+extension FavoritesStore {
+    /// Follows or unfollows a club from search, where its row stands for it
+    /// in every league (`followedClubIDs(of:)`). Unfollowed, it is followed
+    /// as `team`; followed under any league, it is unfollowed under all.
+    func toggleClub(_ team: TeamRef) {
+        let followed = followedClubIDs(of: team)
+        if followed.isEmpty {
+            add(team)
+        } else {
+            for id in followed {
+                remove(id)
+            }
+        }
     }
 }
 

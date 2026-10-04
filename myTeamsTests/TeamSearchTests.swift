@@ -123,3 +123,184 @@ struct TeamSearchTests {
         #expect(TeamSearch.parseSearchResults(JSON(data: Data("<html>".utf8))).isEmpty)
     }
 }
+
+// MARK: - Club search
+
+private let royals = team(.mlb, "7", displayName: "Kansas City Royals", shortName: "Royals", abbreviation: "KC", location: "Kansas City")
+
+/// A `UserDefaults` suite of its own, so tests never touch the App Group.
+private func scratchDefaults() throws -> UserDefaults {
+    try #require(UserDefaults(suiteName: "ClubSearchTests.\(UUID().uuidString)"))
+}
+
+/// Search grouping a club listed in its league and a cup into one result,
+/// over the captured `bundes_teams` and `uclleague_teams` documents (both
+/// list Bayern Munich, 132, and Borussia Dortmund, 124). See FIXTURES.md.
+@Suite("Club search")
+struct ClubSearchTests {
+    private func teams(_ fixture: String, league: LeagueID) throws -> [TeamRef] {
+        RemoteTeamCatalog.parseTeams(try Fixture.json(fixture), league: league)
+    }
+
+    /// The Bundesliga and UCL catalogs, as the picker holds them.
+    private func europeanCatalogs() throws -> [LeagueID: [TeamRef]] {
+        [
+            .bundesliga: try teams("bundes_teams", league: .bundesliga),
+            .championsLeague: try teams("uclleague_teams", league: .championsLeague),
+        ]
+    }
+
+    /// A store holding only `ids`, writing nowhere shared.
+    @MainActor
+    private func makeStore(following ids: [TeamRef.ID]) throws -> FavoritesStore {
+        FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: ids, isExistingInstall: true, reloadWidgets: {})
+    }
+
+    @Test("1. \"bayern\" is one row, the Bundesliga's, with the UCL as its other league")
+    func bayern() throws {
+        let clubs = TeamSearch.localClubs(in: try europeanCatalogs(), query: "bayern", current: nil)
+        #expect(clubs.map(\.id) == ["soccer/ger.1:132"])
+        #expect(clubs.first?.members.map(\.id) == ["soccer/ger.1:132", "soccer/uefa.champions:132"])
+        #expect(clubs.first?.otherLeagues == [LeagueID.championsLeague])
+        #expect(clubs.first?.canonical.league.badge == "Bundesliga")
+    }
+
+    @Test("2. A UCL club with no listed league is one row, the UCL's, with no other league")
+    func aek() throws {
+        let clubs = TeamSearch.localClubs(in: try europeanCatalogs(), query: "aek", current: nil)
+        #expect(clubs.map(\.id) == ["soccer/uefa.champions:887"])
+        #expect(clubs.first?.otherLeagues.isEmpty == true)
+    }
+
+    @Test("3. \"kansas city\" is still four teams in four leagues")
+    func kansasCity() throws {
+        let catalogs: [LeagueID: [TeamRef]] = [
+            .nfl: try teams("nfl_teams", league: .nfl),
+            .nwsl: try teams("nwsl_teams", league: .nwsl),
+            .mlb: [royals],
+            .mls: [sporting],
+        ]
+        let clubs = TeamSearch.localClubs(in: catalogs, query: "kansas city", current: nil)
+        #expect(Set(clubs.map(\.id)) == ["football/nfl:12", "soccer/usa.nwsl:20907", "baseball/mlb:7", "soccer/usa.1:186"])
+        #expect(clubs.count == 4)
+        #expect(clubs.allSatisfy { $0.members.count == 1 && $0.otherLeagues.isEmpty })
+    }
+
+    @Test("4. A league with no club elsewhere searches exactly as before", arguments: ["a", "kansas", "new york", "chiefs", "zzz"])
+    func nflUnchanged(_ query: String) throws {
+        let nfl = try teams("nfl_teams", league: .nfl)
+        let before = nfl.filter { TeamSearch.matches($0, query: query) }
+        let clubs = TeamSearch.localClubs(in: [.nfl: nfl], query: query, current: nil)
+        #expect(clubs.map(\.canonical) == before)
+        #expect(TeamSearch.canonicalClubs(from: nfl) == nfl)
+        #expect(clubs.allSatisfy(\.otherLeagues.isEmpty))
+    }
+
+    @MainActor
+    @Test("5. A club followed under its cup shows as followed on its league's row")
+    func siblingCheckmark() throws {
+        // An existing UCL favorite, not migrated.
+        let store = try makeStore(following: ["soccer/uefa.champions:132", "football/nfl:12"])
+        let bayern = try #require(TeamSearch.localClubs(in: try europeanCatalogs(), query: "bayern", current: nil).first)
+        #expect(!store.isFavorite(bayern.id))
+        #expect(store.followedClubIDs(of: bayern.canonical) == ["soccer/uefa.champions:132"])
+        #expect(store.teamIDs == ["soccer/uefa.champions:132", "football/nfl:12"])
+
+        let dortmund = try #require(TeamSearch.localClubs(in: try europeanCatalogs(), query: "dortmund", current: nil).first)
+        #expect(store.followedClubIDs(of: dortmund.canonical).isEmpty)
+    }
+
+    @MainActor
+    @Test("6. Toggling a club follows its canonical row, and unfollows it under every league")
+    func siblingToggle() throws {
+        let catalogs = try europeanCatalogs()
+        let bayern = try #require(TeamSearch.localClubs(in: catalogs, query: "bayern", current: nil).first).canonical
+        let store = try makeStore(following: ["football/nfl:12"])
+
+        store.toggleClub(bayern)
+        #expect(store.teamIDs == ["football/nfl:12", "soccer/ger.1:132"])
+        store.toggleClub(bayern)
+        #expect(store.teamIDs == ["football/nfl:12"])
+
+        // Followed under both before the change: one tap clears both.
+        let both = try makeStore(following: ["soccer/uefa.champions:132", "football/nfl:12", "soccer/ger.1:132"])
+        both.toggleClub(bayern)
+        #expect(both.teamIDs == ["football/nfl:12"])
+    }
+
+    @Test("7. The widget's search offers one entity per club")
+    func widgetEntities() throws {
+        // The widget searches the favorites' leagues first: the UCL here.
+        let catalogs = try europeanCatalogs()
+        let matches = (catalogs[.championsLeague] ?? []) + (catalogs[.bundesliga] ?? [])
+        let clubs = TeamSearch.canonicalClubs(from: matches.filter { TeamSearch.matches($0, query: "bayern") })
+        #expect(clubs.map(\.id) == ["soccer/ger.1:132"])
+    }
+
+    @Test("8. A league's own page keeps every team: the UCL catalog is not grouped")
+    func leaguePagesUnchanged() throws {
+        let catalogs = try europeanCatalogs()
+        let ucl = try #require(catalogs[.championsLeague])
+        #expect(ucl.count == 15)
+        #expect(ucl.contains { $0.id == "soccer/uefa.champions:132" })
+        #expect(ucl.allSatisfy { $0.league == .championsLeague })
+        #expect(catalogs[.bundesliga]?.count == 15)
+    }
+
+    @Test("9. The same ESPN id in two sports, or the same name under two ids, is two clubs")
+    func neverMergedAcrossSports() {
+        let soccer12 = team(.mls, "12", displayName: "Kansas City Chiefs", shortName: "Chiefs", abbreviation: "KC", location: "Kansas City")
+        let hockey12 = team(.nhl, "12", displayName: "Twelve", shortName: "Twelve", abbreviation: "TW", location: "")
+        let clubs = TeamSearch.clubGroups(from: [chiefs, soccer12, hockey12, sporting])
+        #expect(clubs.map(\.id) == [chiefs.id, soccer12.id, hockey12.id, sporting.id])
+        #expect(TeamSearch.clubCount([chiefs, soccer12, hockey12]) == 3)
+    }
+
+    @Test("10. Clubs keep the order they first appear in: the league on screen first")
+    func firstOccurrenceOrder() throws {
+        let catalogs = try europeanCatalogs()
+        let onUCL = TeamSearch.localClubs(in: catalogs, query: "borussia", current: .championsLeague)
+        // Dortmund comes first from the UCL page, but is still the Bundesliga's.
+        #expect(onUCL.map(\.id) == ["soccer/ger.1:124", "soccer/ger.1:268"])
+        #expect(onUCL.first?.otherLeagues == [LeagueID.championsLeague])
+        let onBundesliga = TeamSearch.localClubs(in: catalogs, query: "borussia", current: .bundesliga)
+        #expect(Set(onBundesliga.map(\.id)) == Set(onUCL.map(\.id)))
+    }
+
+    @Test("11. A club followed under two leagues counts once")
+    func followCount() throws {
+        let catalogs = try europeanCatalogs()
+        let bayern = try #require(catalogs[.bundesliga]?.first { $0.espnID == "132" })
+        let bayernUCL = try #require(catalogs[.championsLeague]?.first { $0.espnID == "132" })
+        let aek = try #require(catalogs[.championsLeague]?.first { $0.espnID == "887" })
+        #expect(TeamSearch.clubCount([bayern, bayernUCL, aek]) == 2)
+        #expect(TeamSearch.clubCount([chiefs, sporting]) == 2)
+        #expect(TeamSearch.clubCount([]) == 0)
+    }
+
+    @Test("12. The domestic league is canonical whatever the order; cups are listed last")
+    func canonicalChoice() {
+        let ucl = team(.championsLeague, "500", displayName: "Club", shortName: "Club", abbreviation: "CLB", location: "")
+        let europa = team(.soccer("uefa.europa"), "500", displayName: "Club", shortName: "Club", abbreviation: "CLB", location: "")
+        let ligue1 = team(.ligue1, "500", displayName: "Club", shortName: "Club", abbreviation: "CLB", location: "")
+        let laLiga = team(.laLiga, "500", displayName: "Club", shortName: "Club", abbreviation: "CLB", location: "")
+        #expect(LeagueID.championsLeague.isCup)
+        #expect(LeagueID.soccer("uefa.europa").isCup)
+        #expect(!LeagueID.bundesliga.isCup && !LeagueID.nfl.isCup)
+
+        #expect(TeamSearch.canonicalClubs(from: [ucl, ligue1]).map(\.id) == [ligue1.id])
+        #expect(TeamSearch.canonicalClubs(from: [ligue1, ucl]).map(\.id) == [ligue1.id])
+        // Two leagues, which cannot happen today: the shorter path, then
+        // the first alphabetically, never the order loaded.
+        let pair = TeamSearch.clubGroups(from: [ucl, ligue1, laLiga])
+        #expect(pair.map(\.id) == [laLiga.id])
+        #expect(TeamSearch.clubGroups(from: [ucl, laLiga, ligue1]).map(\.id) == [laLiga.id])
+        // Leagues before cups; leagues the picker does not list are left out.
+        #expect(pair.first?.otherLeagues == [LeagueID.ligue1, .championsLeague])
+        #expect(TeamSearch.clubGroups(from: [europa, laLiga]).first?.otherLeagues.isEmpty == true)
+        // Only cups: the same rule picks one of them; the UCL is still listed.
+        let cups = TeamSearch.clubGroups(from: [ucl, europa])
+        #expect(cups.map(\.id) == [europa.id])
+        #expect(cups.first?.otherLeagues == [LeagueID.championsLeague])
+    }
+}
