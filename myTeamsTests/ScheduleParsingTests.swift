@@ -484,11 +484,11 @@ struct SoccerScheduleFixturesTests {
         let games = mergeSchedules(league: document, cups: [], team: .sporting)
 
         #expect(games.count == 26 + 7)
-        #expect(games.map(\.pointer) == Array(0 ..< 33))
-        #expect(Set(games.map(\.id)).count == 33)
+        #expect(games.map { $0.pointer } == Array(0 ..< 33))
+        #expect(Set(games.map { $0.id }).count == 33)
         let playedIDs = played["events"].map { $0.1["id"].stringValue }
-        #expect(games.map(\.eventID) == Array(playedIDs.reversed()) + fixtureIDs)
-        #expect(games.prefix(26).allSatisfy(\.completed))
+        #expect(games.map { $0.eventID } == Array(playedIDs.reversed()) + fixtureIDs)
+        #expect(games.prefix(26).allSatisfy { $0.completed })
         #expect(games.suffix(7).allSatisfy { !$0.completed })
         #expect(games.allSatisfy { $0.competition == .mls })
 
@@ -512,7 +512,7 @@ struct SoccerScheduleFixturesTests {
 
         let before = mergeSchedules(league: played, cups: [], team: .sporting)
         let after = mergeSchedules(league: mergeScheduleDocuments(played, fixtures: empty), cups: [], team: .sporting)
-        #expect(after.map(\.eventID) == before.map(\.eventID))
+        #expect(after.map { $0.eventID } == before.map { $0.eventID })
         #expect(after.count == 26)
     }
 
