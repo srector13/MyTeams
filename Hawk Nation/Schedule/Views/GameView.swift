@@ -29,8 +29,10 @@ struct LoadingGameView : View {
 /// progress is drawn — comes from the league's `LeagueDescriptor`.
 struct GameView : View {
 
-    /// The card's size at the default text size, in points.
-    static let baseWidth: CGFloat = 120
+    /// The card's size at the default text size, in points. Wide enough for
+    /// an opponent's name and the channel on one line; at 120 they ran into
+    /// the card's rounded edges.
+    static let baseWidth: CGFloat = 150
     static let baseHeight: CGFloat = 160
 
     var game: Game
@@ -150,8 +152,10 @@ struct GameView : View {
     }
 
     private func details(dimmed: Bool) -> some View {
-        GameCardDetails(game: game, ink: ink, dimmed: dimmed)
+        GameCardDetails(game: game, ink: ink, dimmed: dimmed, wraps: fillsRow)
             .padding(.vertical, fillsRow ? Theme.Spacing.m : 0)
+            // The same inset on both sides, clear of the rounded corners.
+            .padding(.horizontal, Theme.Spacing.s)
     }
 
     /// The details beneath the team-coloured wash a status sits on. The wash
@@ -251,7 +255,10 @@ struct GameView : View {
         Text(text)
             .font(font.bold())
             .multilineTextAlignment(.center)
+            .lineLimit(fillsRow ? nil : 1)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(ink)
+            .padding(.horizontal, Theme.Spacing.s)
     }
 }
 
@@ -264,19 +271,25 @@ private struct GameCardDetails: View {
     /// The card's contrast-picked ink (`GameView.ink`).
     var ink: Color
     var dimmed: Bool
+    /// Whether the text may wrap: only where the card fills a list row at
+    /// accessibility sizes. In the carousel's fixed-size card every line
+    /// keeps to one line, so none runs past the card's edge or bottom.
+    var wraps: Bool
 
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
-            Text(game.opponent)
+            fitted(Text(game.opponent))
                 .font(.caption.bold())
                 .foregroundStyle(ink)
 
+            // Fitted, not filled: a wide crest filled past its 60 pt frame
+            // and spilled over the text beside it.
             if dimmed {
                 RemoteImage(url: URL(string: game.opponentLogo)) {
                     Image("blankTeam")
                         .resizable()
                 }
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
                 .frame(width: 60, height: 60)
                 .opacity(0.5)
             } else if(game.opponentLogo == "") {
@@ -285,7 +298,7 @@ private struct GameCardDetails: View {
                     .frame(width: 60, height: 60)
             } else {
                 RemoteImage(url: URL(string: game.opponentLogo))
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
                     .frame(width: 60, height: 60)
             }
 
@@ -296,10 +309,20 @@ private struct GameCardDetails: View {
     }
 
     private func line(_ text: String) -> some View {
-        Text(text)
+        fitted(Text(text))
             .font(.caption2.weight(.medium))
             .foregroundStyle(ink)
             .opacity(dimmed ? 0.5 : 1)
+    }
+
+    /// A line held to the card's width: one line, shrunk a little and then
+    /// truncated rather than clipped at the card's edge.
+    private func fitted(_ text: Text) -> some View {
+        text
+            .multilineTextAlignment(.center)
+            .lineLimit(wraps ? nil : 1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity)
     }
 }
 
