@@ -112,8 +112,12 @@ enum TeamNameField: String, Sendable {
     case shortDisplayName
 }
 
-// These formatters keep the device's locale, so month names and the choice of
-// a 12- or 24-hour clock follow the reader's region settings.
+// The display formatters keep the device's locale, and build their pattern
+// from a template (`setLocalizedDateFormatFromTemplate`), so month names, the
+// order of day, month and year, and the choice of a 12- or 24-hour clock all
+// follow the reader's region settings. A fixed `dateFormat` such as
+// "h:mm a" forced a 12-hour clock on every reader. Fixed formats are kept
+// for parsing only (`eventDateParser`).
 //
 // They are shared rather than rebuilt for each of the several hundred games
 // parsed per refresh; `DateFormatter` is `Sendable`, and none of these are
@@ -127,32 +131,44 @@ enum TeamNameField: String, Sendable {
 /// wrong for anyone following a team from elsewhere.
 private let scheduleDisplayZone = TimeZone.autoupdatingCurrent
 
-/// Formats a game's calendar date for display, e.g. "Jan 18, 2021".
+/// Formats a game's calendar date for display: "Jan 08, 2021" in the US,
+/// "08 Jan 2021" in the UK.
 private let gameDateFormatter: DateFormatter = {
     let formatter = DateFormatter()
-    formatter.dateFormat = "MMM dd, yyyy"
+    formatter.setLocalizedDateFormatFromTemplate("yyyyMMMdd")
     formatter.timeZone = scheduleDisplayZone
     return formatter
 }()
 
-/// Formats a game's start time for display, e.g. "7:00 PM".
+/// Formats a game's start time for display: "7:00 PM" on a 12-hour clock,
+/// "19:00" on a 24-hour one (`j` is the locale's preferred hour).
 private let gameTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
-    formatter.dateFormat = "h:mm a"
+    formatter.setLocalizedDateFormatFromTemplate("jmm")
     formatter.timeZone = scheduleDisplayZone
     return formatter
 }()
 
 /// Reads the UTC timestamps ESPN puts on events.
-private let eventDateParser: DateFormatter = {
-    let formatter = DateFormatter()
+private let eventDateParser = makeEventDateParser()
+
+/// Configures `formatter` to read ESPN's fixed `yyyy-MM-dd HH:mm` timestamps.
+///
+/// A fixed format must not follow the device: under a Buddhist or Japanese
+/// calendar `yyyy` reads as that era's year, and a user's 12/24-hour
+/// override can rewrite `HH` (Apple QA1480). `en_US_POSIX` and the Gregorian
+/// calendar pin both. `formatter` defaults to a new one; the tests pass one
+/// already set to another locale and calendar, as a device might be.
+func makeEventDateParser(_ formatter: DateFormatter = DateFormatter()) -> DateFormatter {
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     // ESPN's `Z` suffix means UTC; parse in UTC explicitly so the result is
     // the same instant on every device instead of the wall-clock reading of
     // whatever timezone the device happens to be set to.
     formatter.timeZone = TimeZone(secondsFromGMT: 0)
     return formatter
-}()
+}
 
 /// Reads an ESPN event timestamp, which is UTC in the form
 /// `2021-01-18T23:00Z`, as the exact instant it names.
@@ -239,10 +255,9 @@ func parseGame(
         halftime = status["type"]["description"].stringValue == "Halftime"
         gameClock = status["displayClock"].stringValue
         gamePeriod = status["period"].stringValue
-
-        let detail = status["type"]["detail"].stringValue
-        postponed = detail == "Postponed"
-        cancelled = detail == "Canceled"
+        let calledOff = gameCalledOff(status["type"])
+        cancelled = calledOff.cancelled
+        postponed = calledOff.postponed
 
         channel = competition["broadcasts", 0, "media", "shortName"].stringValue
         if channel.isEmpty {
@@ -313,6 +328,37 @@ func parseGame(
         leagueName: event["league"]["shortName"].stringValue,
         weekText: event["week"]["text"].stringValue
     )
+}
+
+/// Whether an event's `status.type` says the game was called off: cancelled
+/// (it will not be played) or postponed (it will be, later).
+///
+/// The `detail` wording is read first, then the status `name`
+/// (`STATUS_CANCELED`, `STATUS_POSTPONED`, …). Failing both, a game ESPN has
+/// closed (`state` "post") without completing it — abandoned, or under a
+/// status name not seen before — counts as cancelled: it has no result, and
+/// read as neither it would fall through to "Live" for good once its start
+/// had passed. A rain delay is `in`, not `post`, so stays live.
+///
+/// Internal so the tests can pin it against captured status shapes.
+func gameCalledOff(_ type: JSON) -> (cancelled: Bool, postponed: Bool) {
+    switch type["detail"].stringValue {
+    case "Canceled": return (true, false)
+    case "Postponed": return (false, true)
+    default: break
+    }
+    switch type["name"].stringValue {
+    case "STATUS_CANCELED", "STATUS_ABANDONED":
+        return (true, false)
+    // A suspended game resumes another day, as a postponed one is played.
+    case "STATUS_POSTPONED", "STATUS_SUSPENDED":
+        return (false, true)
+    default: break
+    }
+    if type["state"].stringValue == "post", !type["completed"].boolValue {
+        return (true, false)
+    }
+    return (false, false)
 }
 
 /// Loads a team's season schedule.

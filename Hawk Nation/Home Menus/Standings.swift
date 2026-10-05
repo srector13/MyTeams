@@ -254,10 +254,14 @@ private struct StandingsStats {
     }
 
     /// The stat as a whole number: its numeric `value`, else its
-    /// `displayValue` read leniently (`"+8"` is 8).
+    /// `displayValue` read leniently (`"+8"` is 8). A `value` outside `Int`'s
+    /// range is passed over rather than converted, which would trap.
     func int(_ key: String) -> Int? {
         guard let stat = stat(key) else { return nil }
-        if case .number(let value) = stat["value"], value.isFinite { return Int(value) }
+        if case .number(let value) = stat["value"], value.isFinite,
+           let int = Int(exactly: value.rounded(.towardZero)) {
+            return int
+        }
         return Int(stat["displayValue"].stringValue.replacingOccurrences(of: "+", with: ""))
     }
 

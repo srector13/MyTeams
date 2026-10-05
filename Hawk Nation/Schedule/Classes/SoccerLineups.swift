@@ -148,8 +148,12 @@ extension SoccerLineups.Player {
         self.starter = entry["starter"].boolValue
         self.substitutedAt = substitution?["clock", "displayValue"].stringValue ?? ""
         self.subbedOut = entry["subbedOut"].boolValue
-        self.goals = stats["totalGoals"] ?? 0
-        self.yellowCards = stats["yellowCards"] ?? 0
-        self.redCards = stats["redCards"] ?? 0
+        // The box score draws one icon per goal or card (`ForEach(0 ..< n)`),
+        // so a negative count from a malformed feed would trap and a huge one
+        // would build thousands of views. Nine is more than any match sees.
+        func count(_ name: String) -> Int { max(0, min(stats[name] ?? 0, 9)) }
+        self.goals = count("totalGoals")
+        self.yellowCards = count("yellowCards")
+        self.redCards = count("redCards")
     }
 }

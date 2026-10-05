@@ -536,48 +536,83 @@ func downloadBaseballPlayerStats(
 
 /// Extracts a baseball player's season totals from a splits document. See
 /// `downloadBaseballPlayerStats`.
+///
+/// Each figure is looked up by its name in the document's `names` array
+/// (`ERA`, `wins`, … for a pitcher; `atBats`, `runs`, … for a batter), as
+/// `parseFootballPlayerStats` does, so a column ESPN inserts or reorders
+/// cannot shift every figure along by one; a name the feed drops reads as
+/// zero. A document without `names` matching its values one-for-one is read
+/// by position in the order those names are listed here.
 func parseBaseballPlayerStats(from json: JSON, playerPosition: String) -> BaseballPlayerStats {
-    let stats = json["splitCategories"][0]["splits"][0]["stats"]
+    let values = json["splitCategories"][0]["splits"][0]["stats"].arrayValue
+    let names = json["names"].arrayValue.map(\.stringValue)
+    let byName = !names.isEmpty && names.count == values.count
     var result = BaseballPlayerStats.empty
 
-    if playerPosition.contains("Pitcher") {
-        result.EarnedRunAverage = stats[0].floatValue
-        result.wins = stats[1].intValue
-        result.losses = stats[2].intValue
-        result.saves = stats[3].intValue
-        result.saveOpportunities = stats[4].intValue
-        result.gamesPlayed = stats[5].intValue
-        result.gamesStarted = stats[6].intValue
-        result.completeGames = stats[7].intValue
-        result.innings = stats[8].floatValue
-        result.hits = stats[9].intValue
-        result.runs = stats[10].intValue
-        result.earnedRuns = stats[11].intValue
-        result.homeRuns = stats[12].intValue
-        result.walks = stats[13].intValue
-        result.strikeouts = stats[14].intValue
-        result.opponentAvg = stats[15].floatValue
+    let isPitcher = playerPosition.contains("Pitcher")
+    let order = isPitcher ? baseballPitchingStatNames : baseballBattingStatNames
+    var feed: [String: JSON] = [:]
+    if byName {
+        for (name, value) in zip(names, values) where feed[name] == nil { feed[name] = value }
     } else {
-        result.AtBats = stats[0].intValue
-        result.Runs = stats[1].intValue
-        result.Hits = stats[2].intValue
-        result.Doubles = stats[3].intValue
-        result.Triples = stats[4].intValue
-        result.HomeRuns = stats[5].intValue
-        result.RBIs = stats[6].floatValue
-        result.Walks = stats[7].intValue
-        result.HitByPitch = stats[8].intValue
-        result.Strikeouts = stats[9].intValue
-        result.StolenBases = stats[10].intValue
-        result.CaughtStealing = stats[11].intValue
-        result.Avg = stats[12].floatValue
-        result.OnBasePct = stats[13].floatValue
-        result.SlugAvg = stats[14].floatValue
-        result.OPS = stats[15].floatValue
+        for (name, value) in zip(order, values) { feed[name] = value }
+    }
+    func stat(_ name: String) -> JSON { feed[name] ?? .null }
+
+    if isPitcher {
+        result.EarnedRunAverage = stat("ERA").floatValue
+        result.wins = stat("wins").intValue
+        result.losses = stat("losses").intValue
+        result.saves = stat("saves").intValue
+        result.saveOpportunities = stat("saveOpportunities").intValue
+        result.gamesPlayed = stat("gamesPlayed").intValue
+        result.gamesStarted = stat("gamesStarted").intValue
+        result.completeGames = stat("completeGames").intValue
+        result.innings = stat("innings").floatValue
+        result.hits = stat("hits").intValue
+        result.runs = stat("runs").intValue
+        result.earnedRuns = stat("earnedRuns").intValue
+        result.homeRuns = stat("homeRuns").intValue
+        result.walks = stat("walks").intValue
+        result.strikeouts = stat("strikeouts").intValue
+        result.opponentAvg = stat("opponentAvg").floatValue
+    } else {
+        result.AtBats = stat("atBats").intValue
+        result.Runs = stat("runs").intValue
+        result.Hits = stat("hits").intValue
+        result.Doubles = stat("doubles").intValue
+        result.Triples = stat("triples").intValue
+        result.HomeRuns = stat("homeRuns").intValue
+        result.RBIs = stat("RBIs").floatValue
+        result.Walks = stat("walks").intValue
+        result.HitByPitch = stat("hitByPitch").intValue
+        result.Strikeouts = stat("strikeouts").intValue
+        result.StolenBases = stat("stolenBases").intValue
+        result.CaughtStealing = stat("caughtStealing").intValue
+        result.Avg = stat("avg").floatValue
+        result.OnBasePct = stat("onBasePct").floatValue
+        result.SlugAvg = stat("slugAvg").floatValue
+        result.OPS = stat("OPS").floatValue
     }
 
     return result
 }
+
+/// A pitcher's splits `names`, in the order the feed lists them
+/// (royals_splits_5136077.json).
+private let baseballPitchingStatNames = [
+    "ERA", "wins", "losses", "saves", "saveOpportunities", "gamesPlayed",
+    "gamesStarted", "completeGames", "innings", "hits", "runs", "earnedRuns",
+    "homeRuns", "walks", "strikeouts", "opponentAvg",
+]
+
+/// A batter's splits `names`, in the order the feed lists them (the same
+/// fixture's `extraPlayerPageAthleteSplits.batting.names`).
+private let baseballBattingStatNames = [
+    "atBats", "runs", "hits", "doubles", "triples", "homeRuns", "RBIs",
+    "walks", "hitByPitch", "strikeouts", "stolenBases", "caughtStealing",
+    "avg", "onBasePct", "slugAvg", "OPS",
+]
 
 /// Loads a soccer player's headline statistics in `league`.
 ///

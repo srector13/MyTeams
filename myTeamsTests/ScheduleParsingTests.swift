@@ -40,6 +40,27 @@ struct ScheduleParsingTests {
         #expect(date == expected)
     }
 
+    @Test("A device on the Buddhist calendar reads ESPN timestamps unchanged")
+    func parsesEventDateUnderBuddhistCalendar() throws {
+        // A formatter as a Thai device would leave it: th_TH with the
+        // Buddhist calendar, under which a fixed "yyyy" reads 2021 as the
+        // Buddhist year (543 years earlier on the Gregorian count) (A-1).
+        let device = DateFormatter()
+        device.locale = Locale(identifier: "th_TH@calendar=buddhist")
+        device.calendar = Calendar(identifier: .buddhist)
+        device.timeZone = TimeZone(secondsFromGMT: 0)
+        device.dateFormat = "yyyy-MM-dd HH:mm"
+        let expected = Date(timeIntervalSince1970: 1_611_010_800)  // 2021-01-18T23:00Z
+        #expect(device.date(from: "2021-01-18 23:00") != expected)
+
+        // The event parser pins en_US_POSIX and Gregorian over the device's.
+        let parser = makeEventDateParser(device)
+        #expect(parser.locale.identifier == "en_US_POSIX")
+        #expect(parser.calendar.identifier == .gregorian)
+        #expect(parser.date(from: "2021-01-18 23:00") == expected)
+        #expect(parseGameDate("2021-01-18T23:00Z") == expected)
+    }
+
     @Test("A timestamp in an unexpected shape reads as no date")
     func rejectsMalformedDate() {
         #expect(parseGameDate("") == nil)
@@ -331,6 +352,63 @@ struct ScheduleParsingTests {
         #expect(first.first?.id == "401700001")
         #expect(first.last?.id == "2026-11-08T01:00Z|Duke|1")
         #expect(Set(first.map(\.id)).count == first.count)
+    }
+
+    @Test("Called-off games are read from the status name and state, not only the detail wording")
+    func calledOffStatuses() throws {
+        // royals_schedule.json 401814790 is the only called-off game in the
+        // captured schedules: status.type {name STATUS_POSTPONED, state
+        // "post", completed false, detail "Postponed"}. The variants keep
+        // that shape and change the name and detail, as ESPN words a
+        // suspended or abandoned game (A-14).
+        let (event, pointer) = try Fixture.event("401814790", in: try Fixture.json("royals_schedule"))
+        let typePath: [JSON.Index] = ["competitions", 0, "status", "type"]
+        let type = event[typePath]
+        #expect(type["name"].stringValue == "STATUS_POSTPONED")
+        #expect(type["state"].stringValue == "post")
+        #expect(!type["completed"].boolValue)
+
+        func parsed(name: String, detail: String, state: String = "post") -> Game {
+            let variant = type
+                .setting(["name"], to: .string(name))
+                .setting(["detail"], to: .string(detail))
+                .setting(["state"], to: .string(state))
+            return parseGame(from: event.setting(typePath, to: variant), team: .royals, pointer: pointer)
+        }
+
+        let postponed = parseGame(from: event, team: .royals, pointer: pointer)
+        #expect(postponed.postponed && !postponed.cancelled)
+
+        // A postponement worded some other way is still read from its name.
+        let reworded = parsed(name: "STATUS_POSTPONED", detail: "Postponed - Rain")
+        #expect(reworded.postponed && !reworded.cancelled)
+
+        let suspended = parsed(name: "STATUS_SUSPENDED", detail: "Suspended")
+        #expect(suspended.postponed && !suspended.cancelled)
+
+        let abandoned = parsed(name: "STATUS_ABANDONED", detail: "Abandoned")
+        #expect(abandoned.cancelled && !abandoned.postponed)
+
+        // Closed without a result under a name not seen before: called off,
+        // rather than "Live" for good once its start has passed.
+        let unknown = parsed(name: "STATUS_FORFEIT_PENDING", detail: "Match Void")
+        #expect(unknown.cancelled && !unknown.postponed)
+        #expect(!unknown.completed)
+
+        // A delay mid-game is still in progress.
+        let delayed = parsed(name: "STATUS_DELAYED", detail: "Rain Delay", state: "in")
+        #expect(!delayed.cancelled && !delayed.postponed)
+    }
+
+    @Test("Finished and scheduled games are never read as called off")
+    func notCalledOff() {
+        let finished = JSON(data: Data(#"{"name": "STATUS_FINAL", "state": "post", "completed": true, "detail": "Final"}"#.utf8))
+        let scheduled = JSON(data: Data(#"{"name": "STATUS_SCHEDULED", "state": "pre", "completed": false}"#.utf8))
+        for type in [finished, scheduled, JSON.null] {
+            let calledOff = gameCalledOff(type)
+            #expect(!calledOff.cancelled)
+            #expect(!calledOff.postponed)
+        }
     }
 
     private func game(
