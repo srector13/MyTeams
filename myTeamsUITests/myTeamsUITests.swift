@@ -200,6 +200,31 @@ final class myTeamsUITests: XCTestCase {
         }
     }
 
+    /// A cold launch shows the brand splash over the first frames, then
+    /// clears it for the app: it never stays up. The earliest screenshot
+    /// is attached; whether it caught the splash depends on how fast the
+    /// first frame came.
+    @MainActor
+    func testSplashLogoOnLaunch() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "splash-launch"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        XCTAssertEqual(app.state, .runningForeground)
+
+        // Gone, and the app under it reachable: onboarding on a fresh
+        // install, the tab bar after.
+        let splash = app.images["splash.logo"]
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: splash)
+        waitForExpectations(timeout: 5)
+        let done = app.buttons["teamBrowser.done"]
+        let edit = app.buttons["teamPicker.edit"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5) || edit.waitForExistence(timeout: 10))
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
