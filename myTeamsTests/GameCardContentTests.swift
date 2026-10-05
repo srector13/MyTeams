@@ -284,6 +284,9 @@ struct GameCardContentTests {
         #expect(GameCardContent.competitionLabel(
             of: game(competition: .championsLeague, leagueName: "UEFA Champions League"), league: arsenalLeague
         ) == "Champions League")
+        #expect(GameCardContent.competitionLabel(
+            of: game(competition: .soccer("uefa.europa.conf"), leagueName: "UEFA Conference League"), league: arsenalLeague
+        ) == "Conference League")
         #expect(GameCardContent.competitionLabel(of: game(competition: .premierLeague), league: arsenalLeague) == nil)
 
         // An unknown cup: the feed's name, else nothing, never the path.

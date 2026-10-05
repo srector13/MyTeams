@@ -447,9 +447,9 @@ struct ScheduleCompetitionTests {
 
     @Test("Soccer leagues name their cups; other leagues have none")
     func registryCups() {
-        #expect(LeagueID.premierLeague.descriptor.cupCompetitions
-            == [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")])
-        #expect(LeagueID.laLiga.descriptor.cupCompetitions == [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")])
+        let uefa: [LeagueID] = [.soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf")]
+        #expect(LeagueID.premierLeague.descriptor.cupCompetitions == [.soccer("eng.fa"), .soccer("eng.league_cup")] + uefa)
+        #expect(LeagueID.laLiga.descriptor.cupCompetitions == [.soccer("esp.copa_del_rey")] + uefa)
         #expect(LeagueID.ligaMX.descriptor.cupCompetitions == [.soccer("concacaf.champions"), .soccer("concacaf.leagues.cup")])
         #expect(LeagueID.mls.descriptor.cupCompetitions.contains(.soccer("usa.open")))
         #expect(LeagueID.nwsl.descriptor.cupCompetitions.isEmpty)

@@ -609,6 +609,7 @@ extension LeagueID {
         case "eng.league_cup": return "EFL Cup"
         case "uefa.champions": return "Champions League"
         case "uefa.europa": return "Europa League"
+        case "uefa.europa.conf": return "Conference League"
         case "esp.copa_del_rey": return "Copa del Rey"
         case "ger.dfb_pokal": return "DFB-Pokal"
         case "ita.coppa_italia": return "Coppa Italia"

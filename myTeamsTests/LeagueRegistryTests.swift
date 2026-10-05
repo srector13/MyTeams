@@ -160,6 +160,20 @@ struct LeagueRegistryTests {
         #expect(LeagueID(sport: "hockey", league: "ahl").standingsURL() == "\(base)/hockey/ahl/standings")
     }
 
+    @Test("Every European league's teams can play all three UEFA club competitions (A-7)")
+    func europeanCups() {
+        let uefa: [LeagueID] = [.soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf")]
+        for league in [LeagueID.premierLeague, .laLiga, .bundesliga, .serieA, .ligue1] {
+            let cups = league.descriptor.cupCompetitions
+            for competition in uefa {
+                #expect(cups.contains(competition), "\(league) lacks \(competition)")
+            }
+            #expect(Set(cups).count == cups.count, "\(league) lists a cup twice")
+        }
+        #expect(LeagueID.soccer("uefa.europa.conf").scheduleURL(teamID: "359")
+            == "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa.conf/teams/359/schedule")
+    }
+
     @Test("Scoreboards: women's college basketball asks for Division I like the men's")
     func scoreboardURLs() {
         let site = "https://site.api.espn.com/apis/site/v2/sports"
