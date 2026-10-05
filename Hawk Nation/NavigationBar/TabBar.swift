@@ -180,8 +180,10 @@ struct Home: View {
             }
             .accessibilityLabel(Text("Add or Edit Teams"))
             .accessibilityIdentifier(HomeTabs.edit)
-            // In the iPad sidebar it's the footer instead (B-14).
-            .defaultVisibility(.hidden, for: .sidebar)
+            // Left visible in every placement: hiding it for the sidebar
+            // (`defaultVisibility`) coincided with it missing from the
+            // phone's bar in UI tests. The iPad sidebar adds a footer
+            // entry as well (B-14).
 
             ForEach(Array(teams.dropFirst(editIndex))) { team in
                 teamTab(team)
