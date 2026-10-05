@@ -400,7 +400,6 @@ struct FollowFromTeamPageTests {
             defaults: defaults,
             cloud: nil,
             seedIDs: [TeamRef.jayhawks.id],
-            isExistingInstall: true,
             reloadWidgets: {}
         )
     }
