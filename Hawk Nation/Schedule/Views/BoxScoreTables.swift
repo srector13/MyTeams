@@ -49,8 +49,11 @@ struct LinescoreView: View {
 /// A hockey game's player tables, one team after the other: forwards,
 /// defense, then goalies. The comparison strip above them is the sheet's
 /// usual `BoxScore` rows (`BoxScore.init(hockey:)`).
+///
+/// A player's name opens their sheet through `onPlayer` (C-6).
 struct HockeyBoxScoreView: View {
     let boxScore: HockeyBoxScore
+    var onPlayer: ((GameSheetPlayer) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -59,13 +62,13 @@ struct HockeyBoxScoreView: View {
                     BoxScoreTeamTitle(team.name)
 
                     if !team.forwards.isEmpty {
-                        HockeySkaterTable(title: "Forwards", skaters: team.forwards)
+                        HockeySkaterTable(title: "Forwards", skaters: team.forwards, onPlayer: onPlayer)
                     }
                     if !team.defense.isEmpty {
-                        HockeySkaterTable(title: "Defense", skaters: team.defense)
+                        HockeySkaterTable(title: "Defense", skaters: team.defense, onPlayer: onPlayer)
                     }
                     if !team.goalies.isEmpty {
-                        HockeyGoalieTable(goalies: team.goalies)
+                        HockeyGoalieTable(goalies: team.goalies, onPlayer: onPlayer)
                     }
                 }
             }
@@ -75,9 +78,13 @@ struct HockeyBoxScoreView: View {
 }
 
 /// One group of skaters: POS, name, TOI, G, A, P, +/-, S, PIM.
+///
+/// The name cell is the button: a `GridRow` wrapped in one would stop being
+/// a row of the grid.
 private struct HockeySkaterTable: View {
     let title: String
     let skaters: [HockeyBoxScore.Skater]
+    let onPlayer: ((GameSheetPlayer) -> Void)?
 
     var body: some View {
         Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 4) {
@@ -102,6 +109,7 @@ private struct HockeySkaterTable: View {
                     BoxScoreText(skater.position)
                     BoxScoreText(skater.shortName)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .opensPlayerSheet(GameSheetPlayer(skater: skater), onPlayer: onPlayer)
                     BoxScoreText(skater.timeOnIce)
                     BoxScoreText("\(skater.goals)")
                     BoxScoreText("\(skater.assists)")
@@ -124,6 +132,7 @@ private struct HockeySkaterTable: View {
 /// A team's goalies: name, TOI, SA, SV, GA, SV%.
 private struct HockeyGoalieTable: View {
     let goalies: [HockeyBoxScore.Goalie]
+    let onPlayer: ((GameSheetPlayer) -> Void)?
 
     var body: some View {
         Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 4) {
@@ -143,6 +152,7 @@ private struct HockeyGoalieTable: View {
                 GridRow {
                     BoxScoreText(goalie.shortName)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .opensPlayerSheet(GameSheetPlayer(goalie: goalie), onPlayer: onPlayer)
                     BoxScoreText(goalie.timeOnIce)
                     BoxScoreText("\(goalie.shotsAgainst)")
                     BoxScoreText("\(goalie.saves)", style: .emphasis)
@@ -159,8 +169,11 @@ private struct HockeyGoalieTable: View {
 
 /// Both sides' lineups: the starting eleven, then the substitutes who came
 /// on, each marked with goals, cards and substitution minutes.
+///
+/// A row opens the player's sheet through `onPlayer` (C-6).
 struct SoccerLineupsView: View {
     let lineups: SoccerLineups
+    var onPlayer: ((GameSheetPlayer) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -173,6 +186,7 @@ struct SoccerLineupsView: View {
                     BoxScoreText("Starting XI", style: .heading)
                     ForEach(lineup.starters) { player in
                         SoccerLineupRow(player: player)
+                            .opensPlayerSheet(GameSheetPlayer(lineupRow: player), onPlayer: onPlayer)
                     }
 
                     if !lineup.substitutes.isEmpty {
@@ -180,6 +194,7 @@ struct SoccerLineupsView: View {
                             .padding(.top, 6)
                         ForEach(lineup.substitutes) { player in
                             SoccerLineupRow(player: player)
+                            .opensPlayerSheet(GameSheetPlayer(lineupRow: player), onPlayer: onPlayer)
                         }
                     }
                 }
@@ -240,6 +255,144 @@ private struct SoccerLineupRow: View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(color)
             .frame(width: cardWidth, height: cardHeight)
+    }
+}
+
+// MARK: - Player sheets
+
+/// The player a lineup or box-score row opens a sheet for (C-6): the sport's
+/// own roster type, built from what the row knows, so the sheet is the
+/// roster's `PlayerDetailView`.
+///
+/// A row knows the athlete's id, name, number and position, and nothing of
+/// their biography, so the About facts read "N/A"; the season statistics
+/// load from the athlete's id once the sheet opens.
+enum GameSheetPlayer: Identifiable, Hashable, Sendable {
+    case soccer(SoccerPlayer)
+    case hockey(HockeyPlayer)
+
+    /// The ESPN athlete id: never empty, as the factories refuse a row
+    /// without one.
+    var id: String {
+        switch self {
+        case .soccer(let player): player.playerID
+        case .hockey(let player): player.playerID
+        }
+    }
+
+    /// The player in a soccer lineup row, or `nil` when the feed gave the
+    /// row no athlete id.
+    init?(lineupRow row: SoccerLineups.Player) {
+        guard !row.athleteID.isEmpty else { return nil }
+        self = .soccer(SoccerPlayer(
+            name: row.name,
+            number: row.jersey,
+            numberInt: Self.numberInt(row.jersey),
+            height: Self.unknown,
+            weight: Self.unknown,
+            position: Self.soccerPosition(row.position),
+            photo: "",
+            age: Self.unknown,
+            playerID: row.athleteID,
+            birthPlace: Self.unknown,
+            citizenshipCountry: Self.unknown,
+            fouls: 0,
+            foulsSuffered: 0,
+            redCards: 0,
+            yellowCards: 0,
+            ownGoals: 0,
+            appearances: 0,
+            subAppearances: 0,
+            goalAssists: 0,
+            offsides: 0,
+            shotsOnTarget: 0,
+            totalShots: 0,
+            totalGoals: 0,
+            saves: 0,
+            shotsFaced: 0,
+            goalsConceded: 0,
+            lastName: Self.lastName(row.name),
+            // No roster totals: the sheet reads the athlete document.
+            hasSeasonStats: false
+        ))
+    }
+
+    /// The player in a hockey skater row, or `nil` without an athlete id.
+    init?(skater: HockeyBoxScore.Skater) {
+        guard let player = Self.hockeyPlayer(
+            id: skater.athleteID, name: skater.name, jersey: skater.jersey, position: skater.position
+        ) else { return nil }
+        self = .hockey(player)
+    }
+
+    /// The player in a hockey goalie row, or `nil` without an athlete id.
+    init?(goalie: HockeyBoxScore.Goalie) {
+        guard let player = Self.hockeyPlayer(
+            id: goalie.athleteID, name: goalie.name, jersey: goalie.jersey, position: "Goalie"
+        ) else { return nil }
+        self = .hockey(player)
+    }
+
+    private static func hockeyPlayer(id: String, name: String, jersey: String, position: String) -> HockeyPlayer? {
+        guard !id.isEmpty else { return nil }
+        return HockeyPlayer(
+            playerID: id,
+            name: name,
+            number: jersey,
+            numberInt: numberInt(jersey),
+            height: unknown,
+            weight: unknown,
+            position: position.isEmpty ? unknown : position,
+            hometown: unknown,
+            photo: "",
+            age: unknown,
+            shoots: unknown,
+            lastName: lastName(name)
+        )
+    }
+
+    /// An About fact the row can't supply, written as the roster writes one
+    /// its feed left out.
+    private static let unknown = "N/A"
+
+    /// The jersey as a number, or the roster's no-number value.
+    private static func numberInt(_ jersey: String) -> Int {
+        Int(jersey) ?? 1000
+    }
+
+    private static func lastName(_ name: String) -> String {
+        name.split(separator: " ").last.map(String.init) ?? name
+    }
+
+    /// The lineup's abbreviation as the roster's position name where the
+    /// sheet depends on it: `SoccerPlayer` picks the keeper's statistics by
+    /// `"Goalkeeper"`. A substitute's `"SUB"` names no position.
+    private static func soccerPosition(_ abbreviation: String) -> String {
+        switch abbreviation {
+        case "G", "GK": "Goalkeeper"
+        case "", "SUB": unknown
+        default: abbreviation
+        }
+    }
+}
+
+private extension View {
+    /// The row as a button that opens `player`'s sheet, or the row as it is
+    /// when it has no player (no athlete id) or nothing to open the sheet.
+    @ViewBuilder
+    func opensPlayerSheet(_ player: GameSheetPlayer?, onPlayer: ((GameSheetPlayer) -> Void)?) -> some View {
+        if let player, let onPlayer {
+            Button {
+                onPlayer(player)
+            } label: {
+                self.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows the player's details")
+            .accessibilityIdentifier("gameDetail.player.\(player.id)")
+        } else {
+            self
+        }
     }
 }
 

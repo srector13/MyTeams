@@ -43,6 +43,8 @@ struct GameDetailView: View {
     /// The last status a summary gave; `nil` until one has (A-2).
     @State private var refreshedStatus: GameStatus?
     @State private var loading = true
+    /// The lineup or box-score player whose sheet is open (C-6).
+    @State private var sheetPlayer: GameSheetPlayer?
 
     /// Paces refreshes that produced no sheet: 30 seconds, doubling while
     /// ESPN throttles. See `PollBackoff`.
@@ -96,10 +98,10 @@ struct GameDetailView: View {
                             // The sport's own tables, beneath the
                             // comparison rows every sport shares.
                             if let hockey {
-                                HockeyBoxScoreView(boxScore: hockey)
+                                HockeyBoxScoreView(boxScore: hockey, onPlayer: { sheetPlayer = $0 })
                             }
                             if let soccerLineups {
-                                SoccerLineupsView(lineups: soccerLineups)
+                                SoccerLineupsView(lineups: soccerLineups, onPlayer: { sheetPlayer = $0 })
                             }
                         } else {
                             message("No game statistics at this time. Please check back later.")
@@ -123,6 +125,18 @@ struct GameDetailView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        // The roster's player sheet, over this one. Its colours and the
+        // league its statistics load from are the followed team's: both
+        // sides of a game play in that league, and a summary names the
+        // opponent by ESPN id only, with no `TeamRef` to draw it in.
+        .sheet(item: $sheetPlayer) { player in
+            switch player {
+            case .soccer(let player):
+                PlayerDetailView(player: player, team: team)
+            case .hockey(let player):
+                PlayerDetailView(player: player, team: team)
+            }
+        }
         .pollingTask {
             let load = await league.downloadGameSheet(
                 gameID: game.gameID,
