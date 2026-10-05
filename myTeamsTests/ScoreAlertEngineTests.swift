@@ -127,6 +127,8 @@ private final class AlertRecorder: @unchecked Sendable {
     private var granted: Bool
     /// The favorite each game's latest alert was posted for, by game id.
     private var teams: [String: TeamRef.ID?] = [:]
+    /// How loud each game's latest alert was, by game id.
+    private var deliveries: [String: ScoreAlertDelivery] = [:]
 
     init(granted: Bool = true) {
         (steps, continuation) = AsyncStream.makeStream(of: Step.self)
@@ -147,8 +149,11 @@ private final class AlertRecorder: @unchecked Sendable {
         return granted
     }
 
-    func deliver(_ event: ScoreEvent, teamID: TeamRef.ID?) async {
-        lock.withLock { teams[event.gameID] = .some(teamID) }
+    func deliver(_ event: ScoreEvent, teamID: TeamRef.ID?, delivery: ScoreAlertDelivery) async {
+        lock.withLock {
+            teams[event.gameID] = .some(teamID)
+            deliveries[event.gameID] = delivery
+        }
         continuation.yield(.delivered(event))
     }
 
@@ -156,6 +161,11 @@ private final class AlertRecorder: @unchecked Sendable {
     /// before any, `.some(nil)` for one posted without a team.
     func team(for gameID: String) -> TeamRef.ID?? {
         lock.withLock { teams[gameID] }
+    }
+
+    /// How loud game `gameID`'s latest alert was; `nil` before any.
+    func delivery(for gameID: String) -> ScoreAlertDelivery? {
+        lock.withLock { deliveries[gameID] }
     }
 }
 
@@ -174,12 +184,46 @@ private func nextSteps(
     return steps
 }
 
-/// The engine's inputs a test changes as it goes: the favorites and the
-/// clock the debounce reads.
+/// Stands in for the engine's wait until a held event's window ends: each
+/// wait asked for is announced on `requests`, and returns only when the
+/// test rings.
+private final class Alarm: @unchecked Sendable {
+    let requests: AsyncStream<Duration>
+    private let continuation: AsyncStream<Duration>.Continuation
+    private let lock = NSLock()
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init() {
+        (requests, continuation) = AsyncStream.makeStream(of: Duration.self)
+    }
+
+    func sleep(_ duration: Duration) async throws {
+        await withCheckedContinuation { waiter in
+            lock.withLock { waiters.append(waiter) }
+            continuation.yield(duration)
+        }
+    }
+
+    /// Ends every wait asked for so far.
+    func ring() {
+        let woken = lock.withLock {
+            let woken = waiters
+            waiters = []
+            return woken
+        }
+        for waiter in woken {
+            waiter.resume()
+        }
+    }
+}
+
+/// The engine's inputs a test changes as it goes: the favorites, the clock
+/// the debounce reads, and the reader's alert preferences.
 @MainActor
 private final class Inputs {
     var favorites: [FavoriteTeam]
     var now = Date(timeIntervalSince1970: 1_790_000_000)
+    var preferences = AlertPreferences()
 
     init(favorites: [FavoriteTeam]) {
         self.favorites = favorites
@@ -209,11 +253,14 @@ struct ScoreAlertEngineTests {
         )
     }
 
+    /// An engine over `center`, posting to `recorder`. Its wait for a held
+    /// event's window (`sleep`) never ends unless a test supplies one.
     @MainActor
     private func makeEngine(
         _ center: LeagueScoreboardCenter,
         _ recorder: AlertRecorder,
-        _ inputs: Inputs
+        _ inputs: Inputs,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in try await Task.sleep(for: .seconds(24 * 60 * 60)) }
     ) -> ScoreAlertEngine {
         ScoreAlertEngine(
             center: center,
@@ -222,14 +269,20 @@ struct ScoreAlertEngineTests {
                 return inputs.favorites
             },
             now: { inputs.now },
+            preferences: { inputs.preferences },
             isAuthorized: { await recorder.isAuthorized() },
-            deliver: { await recorder.deliver($0, teamID: $1) }
+            deliver: { await recorder.deliver($0, teamID: $1, delivery: $2) },
+            sleep: sleep
         )
     }
 
-    /// The Broncos game as the engine sees it on the captured board.
+    /// The Broncos game as the engine sees it on the captured board, its
+    /// periods named as the NFL names them.
     private func broncosSnapshot(home: Int = 23, away: Int = 26, state: ScoreSnapshot.State = .inProgress) -> ScoreSnapshot {
-        ScoreSnapshot(homeName: "Broncos", awayName: "Rams", homeScore: home, awayScore: away, period: 4, state: state)
+        ScoreSnapshot(
+            homeName: "Broncos", awayName: "Rams", homeScore: home, awayScore: away, period: 4, state: state,
+            periodNaming: PeriodNaming(league: .nfl)
+        )
     }
 
     @Test("A followed game's start, score and final each post, the observation re-arming after every change")
@@ -444,7 +497,10 @@ struct ScoreAlertEngineTests {
         board = try moving(broncosGame, in: board, to: "in", period: 4, home: 23, away: 26)
         try boards.serve(board, at: url)
         await center.refresh(.nfl)
-        let chiefsLive = ScoreSnapshot(homeName: "Dolphins", awayName: "Chiefs", homeScore: 10, awayScore: 17, period: 3, state: .inProgress)
+        let chiefsLive = ScoreSnapshot(
+            homeName: "Dolphins", awayName: "Chiefs", homeScore: 10, awayScore: 17, period: 3, state: .inProgress,
+            periodNaming: PeriodNaming(league: .nfl)
+        )
         let first = await nextSteps(3, from: &steps)
         #expect(first == [
             .looked,
@@ -525,7 +581,10 @@ struct ScoreAlertEngineTests {
             .authorizationChecked(granted: true),
             .delivered(.gameStart(
                 gameID: arsenalGame,
-                snapshot: ScoreSnapshot(homeName: "Napoli", awayName: "Arsenal", homeScore: 0, awayScore: 1, period: 2, state: .inProgress)
+                snapshot: ScoreSnapshot(
+                    homeName: "Napoli", awayName: "Arsenal", homeScore: 0, awayScore: 1, period: 2, state: .inProgress,
+                    periodNaming: PeriodNaming(league: championsLeague)
+                )
             )),
         ])
         // The cup tie's alert opens Arsenal's page, in the Premier League.
@@ -553,8 +612,14 @@ struct ScoreAlertEngineTests {
             .authorizationChecked(granted: true),
             .delivered(.scoreChange(
                 gameID: barcelonaGame,
-                previous: ScoreSnapshot(homeName: "Barcelona", awayName: "Feyenoord", homeScore: 4, awayScore: 1, period: 2, state: .inProgress),
-                snapshot: ScoreSnapshot(homeName: "Barcelona", awayName: "Feyenoord", homeScore: 5, awayScore: 1, period: 2, state: .inProgress)
+                previous: ScoreSnapshot(
+                    homeName: "Barcelona", awayName: "Feyenoord", homeScore: 4, awayScore: 1, period: 2, state: .inProgress,
+                    periodNaming: PeriodNaming(league: championsLeague)
+                ),
+                snapshot: ScoreSnapshot(
+                    homeName: "Barcelona", awayName: "Feyenoord", homeScore: 5, awayScore: 1, period: 2, state: .inProgress,
+                    periodNaming: PeriodNaming(league: championsLeague)
+                )
             )),
         ])
 
@@ -644,6 +709,200 @@ struct ScoreAlertEngineTests {
 
         center.unsubscribe(subscription)
     }
+
+    @Test("A score held back by the window goes out on the first look past it, with the latest score")
+    @MainActor
+    func heldScoreFollowsUp() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        // Seen before its start, then under way.
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let kickoff = await nextSteps(3, from: &steps)
+        #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
+
+        // A minute later the Broncos score: inside the window, held.
+        inputs.advance(60)
+        let scored = try moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26)
+        try boards.serve(scored, at: url)
+        await center.refresh(.nfl)
+        let held = await nextSteps(1, from: &steps)
+        #expect(held == [.looked])
+
+        // Past the window, a look with no news for the Broncos (only
+        // another game on the board moved) posts the held score.
+        inputs.advance(70)
+        try boards.serve(
+            moving(chiefsGame, in: scored, to: "post", completed: true, period: 4, home: 10, away: 31),
+            at: url
+        )
+        await center.refresh(.nfl)
+        let followUp = await nextSteps(3, from: &steps)
+        #expect(followUp == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("With no look after it, a held score goes out when its window ends")
+    @MainActor
+    func heldScoreReleasedOnTime() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let alarm = Alarm()
+        var waits = alarm.requests.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs, sleep: { try await alarm.sleep($0) })
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        _ = await nextSteps(3, from: &steps)
+
+        // A minute later the Broncos score: held, and a wake set for the
+        // window's end, a minute on.
+        inputs.advance(60)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let held = await nextSteps(1, from: &steps)
+        #expect(held == [.looked])
+        let wait = await waits.next(isolation: #isolation)
+        #expect(wait == .seconds(61))
+
+        // The board sits unchanged through a break; the wake posts the
+        // score without a look.
+        inputs.advance(61)
+        alarm.ring()
+        let released = await nextSteps(2, from: &steps)
+        #expect(released == [
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("A kind turned off is never posted, and doesn't take the game's window")
+    @MainActor
+    func kindsTurnedOff() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        inputs.preferences.sendsStarts = false
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+
+        // Kickoff, with starts off: looked at, nothing posted or asked.
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let kickoff = await nextSteps(1, from: &steps)
+        #expect(kickoff == [.looked])
+
+        // Thirty seconds on, a score: the start took no window, so it goes.
+        inputs.advance(30)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+        #expect(recorder.delivery(for: broncosGame) == .standard)
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("During quiet hours alerts are delivered quietly, not dropped")
+    @MainActor
+    func quietHours() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        // An hour of quiet from the test's own "now", on the engine's clock
+        // (`Calendar.current`), whatever the machine's time zone.
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: inputs.now)
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        inputs.preferences.quietHoursEnabled = true
+        inputs.preferences.quietStart = minute
+        inputs.preferences.quietEnd = AlertPreferences.normalized(minute + 60)
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+
+        // Five minutes into the quiet hour, the game starts.
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let kickoff = await nextSteps(3, from: &steps)
+        #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
+        #expect(recorder.delivery(for: broncosGame) == .quiet)
+
+        // Past the quiet hour, a score is delivered as usual.
+        inputs.advance(60 * 60)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown.count == 3)
+        #expect(recorder.delivery(for: broncosGame) == .standard)
+
+        center.unsubscribe(subscription)
+    }
 }
 
 @Suite("Score alert engine: snapshots and notification content")
@@ -715,5 +974,75 @@ struct ScoreAlertContentTests {
         #expect(another.content.threadIdentifier == request.content.threadIdentifier)
         #expect(another.content.title == "Final")
     }
+
+    @Test("Read with its league, an alert names the period as the league does")
+    func leagueStageInAlert() throws {
+        let nfl = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+        let live = try #require(nfl.games.first { $0.gameID == broncosGame })
+        let snapshot = try #require(ScoreAlertEngine.snapshot(of: live, league: .nfl))
+        #expect(snapshot.stageLabel == "4th Quarter")
+
+        let request = ScoreAlertEngine.request(for: .periodEnd(gameID: broncosGame, period: 3, snapshot: snapshot))
+        #expect(request.content.title == "End of 3rd Quarter")
+        #expect(request.content.body == "Rams 26 – Broncos 23 (4th Quarter)")
+
+        // Into overtime.
+        var overtime = live
+        overtime.period = 5
+        let afterRegulation = try #require(ScoreAlertEngine.snapshot(of: overtime, league: .nfl))
+        let endOfFourth = ScoreAlertEngine.request(for: .periodEnd(gameID: broncosGame, period: 4, snapshot: afterRegulation))
+        #expect(endOfFourth.content.title == "End of 4th Quarter")
+        #expect(endOfFourth.content.body == "Rams 26 – Broncos 23 (OT)")
+    }
+
+    @Test("A quiet alert is passive and silent; a standard one sounds")
+    func quietRequest() throws {
+        let nfl = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+        let live = try #require(nfl.games.first { $0.gameID == broncosGame })
+        let snapshot = try #require(ScoreAlertEngine.snapshot(of: live, league: .nfl))
+        let event = ScoreEvent.final(gameID: broncosGame, snapshot: snapshot)
+
+        let quiet = ScoreAlertEngine.request(for: event, teamID: broncos.id, delivery: .quiet)
+        #expect(quiet.content.sound == nil)
+        #expect(quiet.content.interruptionLevel == .passive)
+        #expect(quiet.content.title == "Final")
+
+        let standard = ScoreAlertEngine.request(for: event, teamID: broncos.id)
+        #expect(standard.content.sound != nil)
+        #expect(standard.content.interruptionLevel != .passive)
+    }
+
+    @Test("In the foreground: no banner for the team on screen, nor for a quiet alert")
+    func foregroundPresentation() throws {
+        let nfl = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+        let live = try #require(nfl.games.first { $0.gameID == broncosGame })
+        let snapshot = try #require(ScoreAlertEngine.snapshot(of: live, league: .nfl))
+        let event = ScoreEvent.scoreChange(gameID: broncosGame, previous: snapshot, snapshot: snapshot)
+        let broncosAlert = ScoreAlertEngine.request(for: event, teamID: broncos.id).content
+
+        // The Broncos' page is foremost: the alert goes to the list only.
+        #expect(ScoreAlertEngine.presentationOptions(for: broncosAlert, foregroundTeamID: broncos.id) == [.list])
+        // Another team's page, or none: a banner with sound.
+        #expect(ScoreAlertEngine.presentationOptions(for: broncosAlert, foregroundTeamID: chiefs.id) == [.banner, .list, .sound])
+        #expect(ScoreAlertEngine.presentationOptions(for: broncosAlert, foregroundTeamID: nil) == [.banner, .list, .sound])
+        // An alert linked to no team shows as before.
+        let unlinked = ScoreAlertEngine.request(for: event).content
+        #expect(ScoreAlertEngine.presentationOptions(for: unlinked, foregroundTeamID: broncos.id) == [.banner, .list, .sound])
+
+        // A quiet alert never banners.
+        let quiet = ScoreAlertEngine.request(for: event, teamID: broncos.id, delivery: .quiet).content
+        #expect(ScoreAlertEngine.presentationOptions(for: quiet, foregroundTeamID: nil) == [.list])
+    }
     #endif
+
+    @Test("The foreground team hook reads back what was set, from any thread")
+    func foregroundHook() async {
+        let hook = ScoreAlertForeground()
+        #expect(hook.teamID == nil)
+        hook.teamID = broncos.id
+        let read = await Task.detached { hook.teamID }.value
+        #expect(read == broncos.id)
+        hook.teamID = nil
+        #expect(hook.teamID == nil)
+    }
 }
