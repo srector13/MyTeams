@@ -265,10 +265,11 @@ struct GoldenScheduleTests {
         #expect(pregame.gamePeriod == "0")
     }
 
-    // KNOWN-BUG (§7 #13): status is read from exact detail strings, so a
-    // suspended game is neither postponed nor cancelled. Correct: read
-    // status.type.name (STATUS_SUSPENDED) and treat it as abandoned.
-    @Test("A Suspended detail string flags nothing", .tags(.knownBug))
+    // Was KNOWN-BUG (§7 #13): status was read from exact detail strings, so
+    // a suspended game was neither postponed nor cancelled. Status is now
+    // read from status.type.name and state as well (pass-3 A-14); the
+    // variants are pinned in ScheduleParsingTests.calledOffStatuses.
+    @Test("A Suspended detail string falls back to the status name")
     func suspendedIsUnflagged() throws {
         // royals_schedule.json id 401814790 with status.type.detail "Suspended"
         let schedule = try Fixture.json("royals_schedule")
@@ -277,8 +278,8 @@ struct GoldenScheduleTests {
             from: event.setting(detailPath, to: .string("Suspended")),
             team: .royals, pointer: pointer
         )
-        #expect(!game.postponed)  // KNOWN-BUG
-        #expect(!game.cancelled)  // KNOWN-BUG
+        #expect(game.postponed)  // status.type.name STATUS_POSTPONED
+        #expect(!game.cancelled)
         #expect(!game.completed)
     }
 

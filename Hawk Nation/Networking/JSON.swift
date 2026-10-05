@@ -161,9 +161,12 @@ public enum JSON: Sendable, Equatable {
     public var float: Float? { number.map(Float.init) }
     public var floatValue: Float { Float(number ?? 0) }
 
+    /// The node as a whole number, truncated toward zero. A value outside
+    /// `Int`'s range (a string such as `"1e30"`, say) is `nil`: `Int(_:)`
+    /// traps on it.
     public var int: Int? {
         guard let number, number.isFinite else { return nil }
-        return Int(number)
+        return Int(exactly: number.rounded(.towardZero))
     }
     public var intValue: Int { int ?? 0 }
 
