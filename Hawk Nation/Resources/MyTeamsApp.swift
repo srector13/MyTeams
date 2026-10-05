@@ -52,6 +52,7 @@ struct MyTeamsApp: App {
                     // Watch the live scoreboards for favorites' alerts. Asks
                     // for no permission; following a team does.
                     ScoreAlertEngine.shared.start()
+                    WidgetScoreboardWriter.shared.start()
 
                     // And for Live Activities of their games under way.
                     #if canImport(ActivityKit)
