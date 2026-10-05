@@ -369,20 +369,29 @@ final class myTeamsUITests: XCTestCase {
 
         let follow = app.buttons["teamPage.follow"]
         XCTAssertTrue(follow.waitForExistence(timeout: 15), "BYU's page never opened with a follow button.")
-        XCTAssertFalse(follow.isSelected)
         XCTAssertTrue(app.buttons["home.settings"].exists, "No Settings beside the follow button.")
 
+        // A bar button doesn't carry the selected trait to XCUITest, so the
+        // flip is read from its label: "Follow …" to "Following …" and back.
+        let unfollowed = follow.label
         follow.tap()
-        XCTAssertTrue(follow.wait(for: \.isSelected, toEqual: true, timeout: 5), "Following didn't flip the button.")
+        XCTAssertTrue(waitForLabel(of: follow, toDifferFrom: unfollowed), "Following didn't flip the button.")
         // Undo: the same button unfollows.
         follow.tap()
-        XCTAssertTrue(follow.wait(for: \.isSelected, toEqual: false, timeout: 5), "A second tap didn't undo the follow.")
+        XCTAssertTrue(follow.wait(for: \.label, toEqual: unfollowed, timeout: 5), "A second tap didn't undo the follow.")
 
         // Back to Kansas's page, which has no follow button.
         app.navigationBars.containing(.button, identifier: "teamPage.follow")
             .firstMatch.buttons.element(boundBy: 0).tap()
         XCTAssertTrue(follow.waitForNonExistence(timeout: 5), "Still on BYU's page.")
         XCTAssertTrue(app.descendants(matching: .any)["home.brandLogo"].firstMatch.waitForExistence(timeout: 5))
+    }
+
+    /// Whether `element`'s label changes from `label` within `timeout`.
+    @MainActor
+    private func waitForLabel(of element: XCUIElement, toDifferFrom label: String, timeout: TimeInterval = 5) -> Bool {
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", label), object: element)
+        return XCTWaiter.wait(for: [changed], timeout: timeout) == .completed
     }
 
     /// Past onboarding, on Kansas's page, opens the league's leaderboards
