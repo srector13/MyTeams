@@ -59,6 +59,13 @@ enum SharedPaths {
         caches.appending(path: "TeamCatalog", directoryHint: .isDirectory)
     }
 
+    /// The team catalog cache of fixture launches (`HTTPClient.servesFixtures`),
+    /// apart from the live one: the fixtures' trimmed leagues never reach a
+    /// live launch, nor a live league a fixture launch.
+    static var fixtureTeamCatalog: URL {
+        caches.appending(path: "TeamCatalog-Fixtures", directoryHint: .isDirectory)
+    }
+
     /// `subpath` inside the group container, or the process's own `directory`.
     private static func directory(_ directory: FileManager.SearchPathDirectory, inGroup subpath: String) -> URL {
         let local = FileManager.default.urls(for: directory, in: .userDomainMask)[0]
@@ -242,7 +249,8 @@ enum LogoStore {
     /// Returns whether a crest is stored afterwards.
     @discardableResult
     static func prefetched(_ team: TeamRef, variant: LogoVariant, favorite: Bool = false) async -> Bool {
-        guard let source = sourceURL(for: team, variant: variant) else {
+        // A fixture launch keeps the crests it has: the bundled ones.
+        guard !HTTPClient.servesFixtures, let source = sourceURL(for: team, variant: variant) else {
             return url(for: team, variant: variant) != nil
         }
         let favoriteFile = fileURL(for: team, variant: variant, favorite: true)

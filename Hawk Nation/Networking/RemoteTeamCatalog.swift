@@ -88,7 +88,7 @@ actor RemoteTeamCatalog {
 
     init(
         client: HTTPClient = .shared,
-        directory: URL = SharedPaths.teamCatalog,
+        directory: URL = HTTPClient.servesFixtures ? SharedPaths.fixtureTeamCatalog : SharedPaths.teamCatalog,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.client = client

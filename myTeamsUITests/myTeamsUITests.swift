@@ -29,14 +29,14 @@ final class myTeamsUITests: XCTestCase {
         }
 
         // The system tab bar: a tab per favorite, and the Teams (add/edit) tab.
-        XCTAssertTrue(app.buttons["teamPicker.edit"].waitForExistence(timeout: 10))
-        let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
+        XCTAssertTrue(teamsTab(app).waitForExistence(timeout: 10))
+        let crests = teamTabs(app)
         XCTAssertTrue(
             crests.element(boundBy: 1).waitForExistence(timeout: 10),
             "Needs two followed teams; a fresh install follows four."
         )
-        let first = app.buttons[crests.element(boundBy: 0).identifier]
-        let second = app.buttons[crests.element(boundBy: 1).identifier]
+        let first = pinnedTab(crests.element(boundBy: 0), in: app)
+        let second = pinnedTab(crests.element(boundBy: 1), in: app)
 
         // The first favorite opens selected.
         XCTAssertTrue(first.isSelected)
@@ -153,13 +153,52 @@ final class myTeamsUITests: XCTestCase {
     private func openTeamBrowser(_ app: XCUIApplication) {
         let done = app.buttons["teamBrowser.done"]
         if done.waitForExistence(timeout: 5) { return }
-        let edit = app.buttons["teamPicker.edit"]
+        let edit = teamsTab(app)
         XCTAssertTrue(edit.waitForExistence(timeout: 10))
         for _ in 0..<3 {
             edit.tap()
             if done.waitForExistence(timeout: 5) { return }
         }
         XCTFail("The team browser never opened from the Teams tab.")
+    }
+
+    /// The "Teams" tab's accessibility label, as `Home` gives it.
+    private static let teamsTabLabel = "Add or Edit Teams"
+
+    /// The tab bar's "Teams" tab: by its identifier, `teamPicker.edit`, or
+    /// by its accessibility label when the bar's button doesn't carry it.
+    ///
+    /// SwiftUI copies a `Tab`'s accessibility identifier onto the system tab
+    /// bar's button only some of the time on the iOS 26 simulator: on the
+    /// launches that miss it, every tab still has its label but none has an
+    /// identifier, for as long as the test waits. The label is the app's own
+    /// (`.accessibilityLabel` on the tab), not the tab's title.
+    @MainActor
+    private func teamsTab(_ app: XCUIApplication) -> XCUIElement {
+        let byIdentifier = app.buttons["teamPicker.edit"]
+        if byIdentifier.waitForExistence(timeout: 5) {
+            return byIdentifier
+        }
+        print("No \"teamPicker.edit\" identifier after 5 s; finding the tab by its label. The bar:\n\(app.tabBars.firstMatch.debugDescription)")
+        return app.tabBars.buttons.matching(NSPredicate(format: "label == %@", Self.teamsTabLabel)).firstMatch
+    }
+
+    /// The favorites' tabs, in bar order: those with a `teamPicker.team.`
+    /// identifier, or, on a launch whose bar lost its identifiers (see
+    /// `teamsTab(_:)`), every tab but "Teams".
+    @MainActor
+    private func teamTabs(_ app: XCUIApplication) -> XCUIElementQuery {
+        app.tabBars.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@)",
+            "teamPicker.team.", Self.teamsTabLabel
+        ))
+    }
+
+    /// `tab` found again by its identifier, or its label without one, so it
+    /// stays the same tab whatever the bar's order does.
+    @MainActor
+    private func pinnedTab(_ tab: XCUIElement, in app: XCUIApplication) -> XCUIElement {
+        tab.identifier.isEmpty ? app.tabBars.buttons[tab.label] : app.buttons[tab.identifier]
     }
 
     /// The team page's crest and name are pinned in the navigation bar
@@ -281,8 +320,7 @@ final class myTeamsUITests: XCTestCase {
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: splash)
         waitForExpectations(timeout: 5)
         let done = app.buttons["teamBrowser.done"]
-        let edit = app.buttons["teamPicker.edit"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5) || edit.waitForExistence(timeout: 10))
+        XCTAssertTrue(done.waitForExistence(timeout: 5) || teamsTab(app).waitForExistence(timeout: 10))
     }
 
     @MainActor

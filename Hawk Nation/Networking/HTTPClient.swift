@@ -234,6 +234,19 @@ struct HTTPClient: Sendable {
         return defaultSession
     }
 
+    /// Whether this launch serves fixtures (`launchTransport(environment:)`).
+    /// Crests, headshots and the team catalog's disk cache then stay off the
+    /// network and out of the live launches' files too, so a fixture launch
+    /// is hermetic and settles as fast as its documents load. Always `false`
+    /// in Release.
+    static let servesFixtures: Bool = {
+        #if DEBUG
+        return launchTransport(environment: ProcessInfo.processInfo.environment) is FixtureTransport
+        #else
+        return false
+        #endif
+    }()
+
     /// A session that keeps responses in the shared URL cache, so the
     /// once-a-minute score refresh is cheap when nothing has changed upstream.
     ///
