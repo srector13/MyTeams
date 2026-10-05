@@ -188,6 +188,62 @@ func parseGamePhase(from json: JSON) -> GamePhase {
     }
 }
 
+/// The status beneath a game sheet's scoreline: "Final", "Halftime", or
+/// the period and clock.
+///
+/// The sheet reads it from each refreshed summary rather than from the
+/// `Game` it was opened with, whose period and clock froze at the tap and
+/// which never turned "Final" (A-2).
+struct GameStatus: Hashable, Sendable {
+    var completed: Bool
+    var halftime: Bool
+    /// The period as the feed numbers it (`"2"`); see
+    /// `LeagueDescriptor.liveCardPeriodLabel(_:)`.
+    var period: String
+    /// The game clock as the feed writes it (`"4:12"`, `"67'"`).
+    var clock: String
+    /// The feed's own one-line status (`"Final/OT"`, `"2nd - 4:12"`); empty
+    /// for a status taken from a `Game`.
+    var detail: String = ""
+}
+
+extension GameStatus {
+    /// The status the schedule feed gave `game` when it was tapped.
+    init(game: Game) {
+        self.init(
+            completed: game.completed,
+            halftime: game.gameHalftime,
+            period: game.gamePeriod,
+            clock: game.gameClock
+        )
+    }
+
+    /// The status a sheet shows: the last one a summary gave, or the
+    /// tapped `game`'s while none has loaded.
+    static func shown(refreshed: GameStatus?, tapped game: Game) -> GameStatus {
+        refreshed ?? GameStatus(game: game)
+    }
+}
+
+/// Reads the game's status from the header of its summary document, or
+/// `nil` when the document carries none (a partial response), so a sheet
+/// keeps the status it already shows.
+func parseGameStatus(from json: JSON) -> GameStatus? {
+    let status = json["header", "competitions", 0, "status"]
+    let type = status["type"]
+    guard type.dictionary != nil else { return nil }
+
+    return GameStatus(
+        completed: type["completed"].boolValue,
+        // The schedule feed's test, and the paused status's name.
+        halftime: type["description"].stringValue == "Halftime"
+            || type["name"].stringValue == "STATUS_HALFTIME",
+        period: status["period"].stringValue,
+        clock: status["displayClock"].stringValue,
+        detail: type["detail"].stringValue
+    )
+}
+
 /// Everything a game's detail sheet shows, read from one summary document.
 ///
 /// The sheets used to fetch the same summary twice per refresh — once for the
@@ -198,11 +254,14 @@ struct GameDetail<Stats: Sendable>: Sendable {
     var stats: [Stats]
     var info: GameInfo
     var phase: GamePhase
+    /// `nil` when the document carries no status. See `parseGameStatus`.
+    var status: GameStatus?
 
     init(json: JSON, team: TeamRef, stats: [Stats]) {
         self.stats = stats
         self.info = parseGameInfo(from: json, team: team)
         self.phase = parseGamePhase(from: json)
+        self.status = parseGameStatus(from: json)
     }
 
     /// How long a detail sheet waits after a fetch that produced no document.
@@ -554,6 +613,9 @@ struct GameSheet: Sendable {
     var soccerLineups: SoccerLineups?
     var info: GameInfo
     var phase: GamePhase
+    /// The status line beneath the scoreline; `nil` when the summary
+    /// carries no status.
+    var status: GameStatus?
     /// How long to wait before refetching, or `nil` to stop.
     var refreshInterval: Duration?
 
@@ -561,6 +623,7 @@ struct GameSheet: Sendable {
         self.boxScore = boxScore(detail.stats)
         self.info = detail.info
         self.phase = detail.phase
+        self.status = detail.status
         self.refreshInterval = detail.refreshInterval
     }
 
