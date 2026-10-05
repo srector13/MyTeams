@@ -21,6 +21,36 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available
 
+      # Boot the test simulator now, so the work iOS does after a fresh
+      # boot (indexing, asset and data migration) finishes during the build
+      # rather than under the UI tests. Booted later by xcodebuild, it left
+      # XCUITest waiting up to two minutes for an app launch (t_2cab5bf3).
+      - name: Boot simulator
+        continue-on-error: true
+        shell: bash
+        run: |
+          DEST=$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]+' | head -1 | sed 's/[[:space:]]*$//') || true
+          [ -z "$DEST" ] && DEST="iPhone 17"
+          # The device "name=$DEST,OS=latest" names: the newest iOS runtime's.
+          UDID=$(xcrun simctl list devices available -j | DEST="$DEST" python3 -c '
+          import json, os, re, sys
+          best = None
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              match = re.search(r"iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime)
+              if not match:
+                  continue
+              version = tuple(int(part or 0) for part in match.groups())
+              for device in devices:
+                  if device["name"] == os.environ["DEST"] and (best is None or version > best[0]):
+                      best = (version, device["udid"])
+          print(best[1] if best else "")
+          ')
+          echo "Booting $DEST ($UDID)"
+          [ -n "$UDID" ] || exit 0
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+
       - name: Build
         shell: bash
         run: |
@@ -40,7 +70,10 @@ jobs:
           set -o pipefail
           DEST=$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]+' | head -1 | sed 's/[[:space:]]*$//') || true
           [ -z "$DEST" ] && DEST="iPhone 17"
-          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,name=$DEST,OS=latest" -skipPackagePluginValidation -skipMacroValidation test CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
+          DESTINATION="platform=iOS Simulator,name=$DEST,OS=latest"
+          # The simulator booted before the build, when that step found it.
+          [ -n "${SIM_UDID:-}" ] && DESTINATION="platform=iOS Simulator,id=$SIM_UDID"
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "$DESTINATION" -skipPackagePluginValidation -skipMacroValidation test CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
 
       - name: Upload logs
         if: failure()
