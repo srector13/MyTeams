@@ -55,6 +55,57 @@ enum SectionLoadState: Sendable, Equatable {
     case failed
 }
 
+/// The team page's feeds that refresh on a time-to-live (A-3). The schedule
+/// is not one of them: it has its own once-a-minute refresh while the page
+/// is on screen.
+enum TeamFeed: CaseIterable, Hashable, Sendable {
+    case roster
+    case news
+    case standings
+    case leaders
+
+    /// How long a loaded feed is shown before the page's next appearance
+    /// fetches it again. News and standings move on a match day; the roster
+    /// and leaders rarely do, but nothing is lost asking on the same clock.
+    var timeToLive: TimeInterval { 15 * 60 }
+
+    /// The feeds a followed game going final changes: the match report, the
+    /// table and the season's stat lines. They are refetched at once rather
+    /// than when their time-to-live runs out.
+    static let changedByFinalWhistle: Set<TeamFeed> = [.news, .standings, .leaders]
+}
+
+/// Whether a feed should be fetched (again): it has not loaded, it failed,
+/// it was marked stale (`loadedAt` cleared), or it is `timeToLive` old.
+func feedNeedsRefresh(
+    state: SectionLoadState,
+    loadedAt: Date?,
+    timeToLive: TimeInterval,
+    now: Date
+) -> Bool {
+    guard state == .loaded, let loadedAt else { return true }
+    return now.timeIntervalSince(loadedAt) >= timeToLive
+}
+
+/// Whether a game `old` listed as unfinished is finished in `new`: the
+/// moment the news, standings and leaders feeds change (A-3).
+func gameWentFinal(from old: [Game], to new: [Game]) -> Bool {
+    let unfinished = Set(old.filter { !$0.completed }.map(\.id))
+    return new.contains { $0.completed && unfinished.contains($0.id) }
+}
+
+/// The roster's name order (A-15): by last name as Finder sorts names —
+/// case- and diacritic-aware, so "de Jong", "Ødegaard" and "van Dijk" file
+/// among the other names rather than after "Z" — then by full name, then by
+/// shirt number.
+func rosterNameOrder<Player: RosterPlayer>(_ lhs: Player, _ rhs: Player) -> Bool {
+    let byLastName = lhs.lastName.localizedStandardCompare(rhs.lastName)
+    if byLastName != .orderedSame { return byLastName == .orderedAscending }
+    let byName = lhs.name.localizedStandardCompare(rhs.name)
+    if byName != .orderedSame { return byName == .orderedAscending }
+    return lhs.numberInt < rhs.numberInt
+}
+
 /// Everything one team tab displays, and the loading that fills it.
 ///
 /// Team pages differ only in which roster they fetch and which feeds they
@@ -82,6 +133,10 @@ final class TeamModel<Player: RosterPlayer> {
     private(set) var newsState: SectionLoadState = .loading
     private(set) var standingsState: SectionLoadState = .loading
     private(set) var leadersState: SectionLoadState = .loading
+
+    /// When each feed last loaded, or nothing when it has not, or a game
+    /// going final made it stale (A-3). See `needsRefresh(_:)`.
+    @ObservationIgnored private var loadedAt: [TeamFeed: Date] = [:]
 
     /// Live scores for the games in the live window, keyed by `Game.gameID`,
     /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
@@ -114,7 +169,11 @@ final class TeamModel<Player: RosterPlayer> {
     private let loadRoster: @Sendable (TeamRef) async -> Result<[Player], NetworkError>
     private let loadStandings: @Sendable (LeagueID) async -> Result<Standings, NetworkError>
     private let loadLeaders: @Sendable (TeamRef) async -> Result<StatLeaders, NetworkError>
+    private let loadNews: @Sendable (String) async -> Result<[News], NetworkError>
+    private let loadSchedule: @Sendable (TeamRef) async -> Result<[Game], NetworkError>
     private let scoreboards: LeagueScoreboardCenter
+    /// The clock the feeds' time-to-live is read against; a test's own.
+    private let now: @MainActor () -> Date
 
     /// The page's standing requests for its league's scoreboard and each
     /// of its cups', held while the schedule refresh runs (see
@@ -135,14 +194,20 @@ final class TeamModel<Player: RosterPlayer> {
         loadLeaders: @escaping @Sendable (TeamRef) async -> Result<StatLeaders, NetworkError> = {
             await downloadStatLeaders(league: $0.league, teamID: $0.espnID, depth: 1)
         },
-        scoreboards: LeagueScoreboardCenter = .shared
+        loadNews: @escaping @Sendable (String) async -> Result<[News], NetworkError> = { await downloadNewsData(queryURL: $0) },
+        loadSchedule: @escaping @Sendable (TeamRef) async -> Result<[Game], NetworkError> = { await downloadScheduleData(team: $0) },
+        scoreboards: LeagueScoreboardCenter = .shared,
+        now: @escaping @MainActor () -> Date = { Date() }
     ) {
         self.team = team
         self.newsURL = newsURL
         self.loadRoster = loadRoster
         self.loadStandings = loadStandings
         self.loadLeaders = loadLeaders
+        self.loadNews = loadNews
+        self.loadSchedule = loadSchedule
         self.scoreboards = scoreboards
+        self.now = now
     }
 
     /// The team's league record so far this season, in its sport's shape,
@@ -159,34 +224,116 @@ final class TeamModel<Player: RosterPlayer> {
     /// screen.
     ///
     /// Scores and clocks move during a game, so the schedule is refetched every
-    /// minute; rosters, news, standings and leaders do not, so they are
-    /// fetched once.
+    /// minute; rosters, news, standings and leaders move more slowly, so they
+    /// are fetched when the page appears and their time-to-live has run out
+    /// (`TeamFeed.timeToLive`), or as soon as a followed game goes final
+    /// (A-3).
     /// The model outlives its page (`TeamPages`), so a page coming back
-    /// refetches only the schedule, and whichever other feed has not loaded
-    /// yet.
+    /// refetches the schedule, and whichever other feed has not loaded yet or
+    /// has gone stale.
     func load() async {
         // A page that failed last time it appeared shows its skeletons again
-        // while it retries.
+        // while it retries; `refreshExpiredFeeds` does the same for the rest.
+        if scheduleState == .failed { scheduleState = .loading }
+
+        async let schedule = fetchSchedule()
+        async let feeds: Void = refreshExpiredFeeds()
+
+        let loadedSchedule = await schedule
+        await feeds
+
+        await publish(schedule: loadedSchedule)
+        await refreshSchedulePeriodically()
+    }
+
+    /// Refetches every feed — roster, schedule, news, standings and leaders —
+    /// whatever its age: pull-to-refresh (C-1). What is on screen stays there
+    /// until each answer arrives, and a failed refresh keeps it.
+    func refreshAll() async {
         if rosterState == .failed { rosterState = .loading }
         if scheduleState == .failed { scheduleState = .loading }
         if newsState == .failed { newsState = .loading }
         if standingsState == .failed { standingsState = .loading }
+        if leadersState == .failed { leadersState = .loading }
 
-        async let roster = fetchRosterUnlessLoaded()
+        async let roster = fetchRoster(if: true)
         async let schedule = fetchSchedule()
-        async let news = fetchNewsUnlessLoaded()
-        async let leagueStandings = fetchStandingsUnlessLoaded()
-        async let teamLeaders: Void = loadLeadersIfNeeded()
+        async let news = fetchNews(if: true)
+        async let leagueStandings = fetchStandings(if: true)
+        async let teamLeaders = fetchLeaders(if: true)
 
-        let (loadedRoster, loadedSchedule, loadedNews, loadedStandings) = await (roster, schedule, news, leagueStandings)
-        await teamLeaders
+        let (loadedRoster, loadedSchedule, loadedNews, loadedStandings, loadedLeaders) =
+            await (roster, schedule, news, leagueStandings, teamLeaders)
 
-        if let loadedRoster { apply(roster: loadedRoster) }
+        // The schedule first: a game it shows going final marks the other
+        // feeds stale, and their answers here are the fresh ones.
         apply(schedule: loadedSchedule)
+        updateScoreboardSubscription()
+        if let loadedRoster { apply(roster: loadedRoster) }
         if let loadedNews { apply(news: loadedNews) }
         if let loadedStandings { apply(standings: loadedStandings) }
+        if let loadedLeaders { apply(leaders: loadedLeaders) }
+    }
 
-        await refreshSchedulePeriodically()
+    /// Refetches whichever of the roster, news, standings and leaders is due
+    /// (`needsRefresh(_:)`): not loaded yet, failed, past its time-to-live,
+    /// or made stale by a game going final (A-3). The rest stay as they are.
+    func refreshExpiredFeeds() async {
+        let current = now()
+        let due = Set(TeamFeed.allCases.filter { needsRefresh($0, now: current) })
+        guard !due.isEmpty else { return }
+
+        // A feed that failed last time shows its skeletons again while it
+        // retries.
+        if rosterState == .failed { rosterState = .loading }
+        if newsState == .failed { newsState = .loading }
+        if standingsState == .failed { standingsState = .loading }
+        if leadersState == .failed { leadersState = .loading }
+
+        async let roster = fetchRoster(if: due.contains(.roster))
+        async let news = fetchNews(if: due.contains(.news))
+        async let leagueStandings = fetchStandings(if: due.contains(.standings))
+        async let teamLeaders = fetchLeaders(if: due.contains(.leaders))
+
+        let (loadedRoster, loadedNews, loadedStandings, loadedLeaders) =
+            await (roster, news, leagueStandings, teamLeaders)
+
+        if let loadedRoster { apply(roster: loadedRoster) }
+        if let loadedNews { apply(news: loadedNews) }
+        if let loadedStandings { apply(standings: loadedStandings) }
+        if let loadedLeaders { apply(leaders: loadedLeaders) }
+    }
+
+    /// Whether `feed` is due a fetch on the page's next appearance: see
+    /// `feedNeedsRefresh`.
+    func needsRefresh(_ feed: TeamFeed) -> Bool {
+        needsRefresh(feed, now: now())
+    }
+
+    private func needsRefresh(_ feed: TeamFeed, now: Date) -> Bool {
+        feedNeedsRefresh(
+            state: state(of: feed),
+            loadedAt: loadedAt[feed],
+            timeToLive: feed.timeToLive,
+            now: now
+        )
+    }
+
+    private func state(of feed: TeamFeed) -> SectionLoadState {
+        switch feed {
+        case .roster: rosterState
+        case .news: newsState
+        case .standings: standingsState
+        case .leaders: leadersState
+        }
+    }
+
+    /// Publishes a schedule fetch, and when it shows a followed game gone
+    /// final, refetches the feeds that changed with it straight away (A-3).
+    private func publish(schedule result: Result<[Game], NetworkError>) async {
+        if apply(schedule: result) {
+            await refreshExpiredFeeds()
+        }
     }
 
     /// Refetches the schedule once a minute until the surrounding task is
@@ -224,7 +371,7 @@ final class TeamModel<Player: RosterPlayer> {
             } catch {
                 return
             }
-            apply(schedule: await fetchSchedule())
+            await publish(schedule: await fetchSchedule())
             // The live window moves with the clock, not only with the feed.
             updateScoreboardSubscription()
         }
@@ -245,12 +392,14 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
-    /// Loads the team's leaders unless they are already on screen, so a
-    /// page coming back does not ask the leaders feed again. One that
-    /// failed last time retries; `reloadLeaders` refetches regardless.
+    /// Loads the team's leaders unless they are already on screen and
+    /// fresh, so a page coming back does not ask the leaders feed again
+    /// within its time-to-live. One that failed last time retries;
+    /// `reloadLeaders` refetches regardless.
     func loadLeadersIfNeeded() async {
+        guard needsRefresh(.leaders) else { return }
         if leadersState == .failed { leadersState = .loading }
-        if let loaded = await fetchLeadersUnlessLoaded() {
+        if let loaded = await fetchLeaders(if: true) {
             apply(leaders: loaded)
         }
     }
@@ -267,14 +416,14 @@ final class TeamModel<Player: RosterPlayer> {
     /// next scheduled refresh.
     func reloadSchedule() async {
         scheduleState = .loading
-        apply(schedule: await fetchSchedule())
+        await publish(schedule: await fetchSchedule())
         updateScoreboardSubscription()
     }
 
     /// Refetches the news after a failed load.
     func reloadNews() async {
         newsState = .loading
-        apply(news: await downloadNewsData(queryURL: newsURL))
+        apply(news: await loadNews(newsURL))
     }
 
     /// Refetches the standings after a failed load.
@@ -292,51 +441,63 @@ final class TeamModel<Player: RosterPlayer> {
     // MARK: - Applying results
 
     private func fetchSchedule() async -> Result<[Game], NetworkError> {
-        await downloadScheduleData(team: team)
+        await loadSchedule(team)
     }
 
-    /// The roster, or `nil` when it is already on screen.
-    private func fetchRosterUnlessLoaded() async -> Result<[Player], NetworkError>? {
-        guard rosterState != .loaded else { return nil }
+    /// The roster, or `nil` when it is not `due`.
+    private func fetchRoster(if due: Bool) async -> Result<[Player], NetworkError>? {
+        guard due else { return nil }
         return await loadRoster(team)
     }
 
-    /// The news, or `nil` when it is already on screen.
-    private func fetchNewsUnlessLoaded() async -> Result<[News], NetworkError>? {
-        guard newsState != .loaded else { return nil }
-        return await downloadNewsData(queryURL: newsURL)
+    /// The news, or `nil` when it is not `due`.
+    private func fetchNews(if due: Bool) async -> Result<[News], NetworkError>? {
+        guard due else { return nil }
+        return await loadNews(newsURL)
     }
 
-    /// The standings, or `nil` when they are already on screen.
-    private func fetchStandingsUnlessLoaded() async -> Result<Standings, NetworkError>? {
-        guard standingsState != .loaded else { return nil }
+    /// The standings, or `nil` when they are not `due`.
+    private func fetchStandings(if due: Bool) async -> Result<Standings, NetworkError>? {
+        guard due else { return nil }
         return await loadStandings(team.league)
     }
 
-    /// The leaders, or `nil` when they are already on screen.
-    private func fetchLeadersUnlessLoaded() async -> Result<StatLeaders, NetworkError>? {
-        guard leadersState != .loaded else { return nil }
+    /// The leaders, or `nil` when they are not `due`.
+    private func fetchLeaders(if due: Bool) async -> Result<StatLeaders, NetworkError>? {
+        guard due else { return nil }
         return await loadLeaders(team)
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen
     /// rather than blanking the carousel; it only shows as an error when
     /// there is nothing else to show.
-    private func apply(schedule result: Result<[Game], NetworkError>) {
+    ///
+    /// - Returns: whether a game on screen went final with this fetch, which
+    ///   marks the feeds it changes stale (A-3).
+    @discardableResult
+    private func apply(schedule result: Result<[Game], NetworkError>) -> Bool {
         switch result {
         case .success(let schedule):
             scheduleState = .loaded
             // A feed that suddenly lists nothing mid-season is far likelier a
             // hiccup than a cleared schedule, so games on screen stay put.
-            guard !schedule.isEmpty else { return }
+            guard !schedule.isEmpty else { return false }
 
+            let wentFinal = gameWentFinal(from: games, to: schedule)
             games = schedule
             nextGame = getNextGame(
                 schedule: schedule,
                 pastDatesCountAsPlayed: recordRule.usesDateForNextGame
             )
+            if wentFinal {
+                for feed in TeamFeed.changedByFinalWhistle {
+                    loadedAt[feed] = nil
+                }
+            }
+            return wentFinal
         case .failure(let error):
             fail(&scheduleState, with: error, hasContent: !games.isEmpty)
+            return false
         }
     }
 
@@ -344,6 +505,7 @@ final class TeamModel<Player: RosterPlayer> {
         switch result {
         case .success(let roster):
             rosterState = .loaded
+            loadedAt[.roster] = now()
             allPlayers = roster
             applyFilterAndSort()
         case .failure(let error):
@@ -355,6 +517,7 @@ final class TeamModel<Player: RosterPlayer> {
         switch result {
         case .success(let loaded):
             standingsState = .loaded
+            loadedAt[.standings] = now()
             standings = loaded
         case .failure(let error):
             fail(&standingsState, with: error, hasContent: standings.map { !$0.isEmpty } ?? false)
@@ -365,6 +528,7 @@ final class TeamModel<Player: RosterPlayer> {
         switch result {
         case .success(let loaded):
             leadersState = .loaded
+            loadedAt[.leaders] = now()
             leaders = leaderBoards(from: loaded, kind: team.league.descriptor.kind, depth: 1)
         case .failure(let error):
             fail(&leadersState, with: error, hasContent: !leaders.isEmpty)
@@ -375,6 +539,7 @@ final class TeamModel<Player: RosterPlayer> {
         switch result {
         case .success(let loaded):
             newsState = .loaded
+            loadedAt[.news] = now()
             articles = loaded
         case .failure(let error):
             fail(&newsState, with: error, hasContent: !articles.isEmpty)
@@ -409,7 +574,8 @@ final class TeamModel<Player: RosterPlayer> {
         let filtered = activeFilter.map { allPlayers.filter($0) } ?? allPlayers
 
         players = switch sort {
-        case .name: filtered.sorted { $0.lastName < $1.lastName }
+        // Not a raw `<`, which put "de Jong" and "Ødegaard" after "Z" (A-15).
+        case .name: filtered.sorted(by: rosterNameOrder)
         case .number: filtered.sorted { $0.numberInt < $1.numberInt }
         case .position: filtered.sorted { $0.position < $1.position }
         }

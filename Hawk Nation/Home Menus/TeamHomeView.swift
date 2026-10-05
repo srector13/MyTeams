@@ -36,7 +36,8 @@ struct TeamHomeView: View {
 ///
 /// `Home` mounts only the selected team's page. Each team's model is kept
 /// here, so a page that comes back shows what it had loaded at once and
-/// fetches only its schedule again; so is its scroll offset, which the page
+/// fetches only its schedule again, plus any feed past its time-to-live
+/// (`TeamModel.refreshExpiredFeeds`, A-3); so is its scroll offset, which the page
 /// restores. Deliberately not observable: nothing redraws when an entry is
 /// added or a scroll offset is recorded.
 @MainActor
@@ -122,7 +123,9 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         }
         // `Home` mounts only the selected team's page, so this runs — and
         // polls — only while the team is selected: a new selection is a new
-        // page, and the old page's task is cancelled with it.
+        // page, and the old page's task is cancelled with it. Each mount
+        // also refetches whichever feed has gone stale (A-3); a forced
+        // refresh of every feed is `model.refreshAll()` (C-1).
         .task(id: team.id) { await model.load() }
     }
 }
