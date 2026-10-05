@@ -31,11 +31,20 @@ struct NewsDetailView: View {
             // the room (X-9).
             .presentationDetents([.large])
         } else {
-            ContentUnavailableView(
-                "Can't Open This Article",
-                systemImage: "safari",
-                description: Text("The link isn't a web page.")
-            )
+            ContentUnavailableView {
+                Label {
+                    Text("Can't Open This Article")
+                } icon: {
+                    // Asset-catalog appearances pick the light/dark art.
+                    Image("myTeamsLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 120)
+                        .accessibilityHidden(true)
+                }
+            } description: {
+                Text("The link isn't a web page.")
+            }
             // No Safari, so no Done: close it like the other sheets.
             .overlay(alignment: .topTrailing) {
                 SheetCloseButton()

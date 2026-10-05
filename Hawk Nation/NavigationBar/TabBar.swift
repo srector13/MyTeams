@@ -396,6 +396,14 @@ private struct TeamPage<Content: View>: View {
                 // A title, not a button: no glass behind it.
                 .sharedBackgroundVisibility(.hidden)
 
+                // The app's mark, small, in the bar's ink: the white
+                // silhouette as a template, so it reads on any team colour.
+                ToolbarItem(placement: .topBarLeading) {
+                    BrandBarLogo(backgroundHex: heroHex)
+                }
+                // A mark, not a button: no glass behind it.
+                .sharedBackgroundVisibility(.hidden)
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showsSettings = true
@@ -446,6 +454,26 @@ private struct TeamBarTitle: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("teamPage.header")
+    }
+}
+
+/// The myTeams mark in a team page's bar: the mono-white logo drawn as a
+/// template in the bar's ink (`teamInk(onHex:)`), white or black, so it
+/// reads on whatever the team colour is, like the title beside it.
+private struct BrandBarLogo: View {
+    let backgroundHex: String
+
+    var body: some View {
+        Image("myTeamsLogoMonoWhite")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            // Fixed: brand presence, not a control that grows with text.
+            .frame(height: 20)
+            .teamInk(onHex: backgroundHex)
+            .accessibilityLabel("myTeams")
+            .accessibilityAddTraits(.isImage)
+            .accessibilityIdentifier("home.brandLogo")
     }
 }
 

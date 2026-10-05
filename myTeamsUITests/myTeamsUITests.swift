@@ -193,6 +193,28 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertEqual(header.frame.minY, resting.minY, accuracy: 1, "Header moved with the overscroll.")
     }
 
+    /// The myTeams mark sits small in the leading slot of the team page's
+    /// bar (t_829bb3cc), alongside the pinned crest and name.
+    @MainActor
+    func testBrandLogoInTeamPageBar() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+
+        let header = app.descendants(matching: .any)["teamPage.header"].firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 10))
+        let logo = app.descendants(matching: .any)["home.brandLogo"].firstMatch
+        XCTAssertTrue(logo.waitForExistence(timeout: 5))
+        let bar = app.navigationBars.firstMatch
+        XCTAssertGreaterThanOrEqual(logo.frame.minY, bar.frame.minY - 1, "Logo above the bar.")
+        XCTAssertLessThanOrEqual(logo.frame.maxY, bar.frame.maxY + 1, "Logo below the bar.")
+        XCTAssertLessThan(logo.frame.maxX, header.frame.minX, "Logo overlaps the crest and name.")
+    }
+
     /// The schedule cards (UI-3) speak a whole game, never a placeholder
     /// such as "nil" or "Optional(…)" for a field the feed left out.
     /// Skipped if the schedule never loads (no network).
