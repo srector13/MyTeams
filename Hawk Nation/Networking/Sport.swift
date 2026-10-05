@@ -184,7 +184,9 @@ struct LeagueDescriptor: Sendable, Identifiable {
     /// play in, each an ESPN league of its own. A team's schedule fetches
     /// each alongside the league (`downloadScheduleData`); a team not in a
     /// cup gets an empty feed from it. Every path here was checked against
-    /// a live team schedule on 2026-09-28.
+    /// a live team schedule: the Europa League, the Champions League and the
+    /// rest on 2026-09-28, the Conference League's `"uefa.europa.conf"`
+    /// (finding A-7) on 2026-10-05.
     var cupCompetitions: [LeagueID] = []
 
     /// The `seasontype` a stat leaders request names, alongside the season
@@ -426,7 +428,10 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("eng.fa"), .soccer("eng.league_cup"), .soccer("uefa.champions")],
+        cupCompetitions: [
+            .soccer("eng.fa"), .soccer("eng.league_cup"),
+            .soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf"),
+        ],
         leadersSeasonType: soccerLeadersSeasonType
     )
 
@@ -442,7 +447,10 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("esp.copa_del_rey"), .soccer("uefa.champions")],
+        cupCompetitions: [
+            .soccer("esp.copa_del_rey"),
+            .soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf"),
+        ],
         leadersSeasonType: soccerLeadersSeasonType
     )
 
@@ -491,7 +499,10 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("ger.dfb_pokal"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        cupCompetitions: [
+            .soccer("ger.dfb_pokal"),
+            .soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf"),
+        ],
         leadersSeasonType: soccerLeadersSeasonType
     )
 
@@ -507,7 +518,10 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("ita.coppa_italia"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        cupCompetitions: [
+            .soccer("ita.coppa_italia"),
+            .soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf"),
+        ],
         leadersSeasonType: soccerLeadersSeasonType
     )
 
@@ -523,7 +537,10 @@ struct LeagueDescriptor: Sendable, Identifiable {
         rosterFilters: soccerRosterFilters,
         venueBackdropAsset: "soccerField",
         seasonNaming: .startingYear(rolloverMonth: 6),
-        cupCompetitions: [.soccer("fra.coupe_de_france"), .soccer("uefa.champions"), .soccer("uefa.europa")],
+        cupCompetitions: [
+            .soccer("fra.coupe_de_france"),
+            .soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf"),
+        ],
         leadersSeasonType: soccerLeadersSeasonType
     )
 

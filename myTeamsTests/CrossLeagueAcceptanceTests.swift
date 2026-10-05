@@ -669,15 +669,20 @@ struct EuropeanSoccerLeagueTests {
         #expect(LeagueID.championsLeague.descriptor.leadersSeason(at: july) == 2027)
     }
 
-    @Test("Each domestic league plays its cup and both UEFA club competitions; the UCL none")
+    @Test("Each domestic league plays its cup and all three UEFA club competitions; the UCL none")
     func cups() {
-        let uefa: [LeagueID] = [.soccer("uefa.champions"), .soccer("uefa.europa")]
+        let uefa: [LeagueID] = [.soccer("uefa.champions"), .soccer("uefa.europa"), .soccer("uefa.europa.conf")]
+        #expect(LeagueID.premierLeague.descriptor.cupCompetitions == [.soccer("eng.fa"), .soccer("eng.league_cup")] + uefa)
+        #expect(LeagueID.laLiga.descriptor.cupCompetitions == [.soccer("esp.copa_del_rey")] + uefa)
         #expect(LeagueID.bundesliga.descriptor.cupCompetitions == [.soccer("ger.dfb_pokal")] + uefa)
         #expect(LeagueID.serieA.descriptor.cupCompetitions == [.soccer("ita.coppa_italia")] + uefa)
         #expect(LeagueID.ligue1.descriptor.cupCompetitions == [.soccer("fra.coupe_de_france")] + uefa)
         #expect(LeagueID.championsLeague.descriptor.cupCompetitions.isEmpty)
         // The cup the EPL and LALIGA list is now the registered league.
         #expect(LeagueID.soccer("uefa.champions") == .championsLeague)
+        // Every UEFA competition is a cup, and its ties name it on the card.
+        #expect(uefa.allSatisfy(\.isCup))
+        #expect(uefa.map(\.cupDisplayName) == ["Champions League", "Europa League", "Conference League"])
     }
 
     @Test("Teams: the list parses, with numeric ids and the sample club", arguments: EuropeanLeagueCase.all)
