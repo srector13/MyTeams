@@ -27,6 +27,12 @@
 # on-device re-signing with Feather. It uses no secrets, keychain or profiles,
 # and export_method is ignored.
 #
+# GitHub Release: build-ipa-unsigned runs on EVERY run (unsigned_feather only
+# decides whether the signed job runs too) and publishes a GitHub Release
+# tagged v1.0.N (N = highest existing v1.0.* tag + 1, starting at v1.0.1) on
+# the built commit. Its single asset is the unsigned .ipa, renamed
+# myTeams-<tag>-unsigned.ipa. The signed .ipa is never attached to a release.
+#
 # Two profiles are needed per method because the app and the widget extension
 # are separate explicit App IDs with App Groups, and an explicit profile covers
 # exactly one App ID. Per-target selection reuses the signed gate's trick:
@@ -515,10 +521,14 @@ jobs:
 
   build-ipa-unsigned:
     # Feather re-sign route: no secrets, no keychain, no provisioning profiles.
-    if: ${{ inputs.unsigned_feather }}
+    # Runs on every run (no `if:`) so every run publishes a GitHub Release.
     # Same runner image as build-ipa above.
     runs-on: macos-26
     timeout-minutes: 60
+    # Creating the release (and its tag) needs write; the signed job keeps
+    # the workflow-level contents: read.
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -586,11 +596,89 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Compute release tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The checkout is shallow and tagless; fetch every tag first.
+          git fetch --tags --force --quiet origin
+          LAST="$(git tag -l 'v1.0.*' | sed -n 's/^v1\.0\.\([0-9][0-9]*\)$/\1/p' | sort -n | tail -n 1)"
+          TAG="v1.0.$(( ${LAST:-0} + 1 ))"
+          echo "Highest existing v1.0.* build: ${LAST:-none}; this build: ${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHORT_SHA: ${{ steps.meta.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          # An .ipa is already a zip of Payload/, so publish the packaged file
+          # as-is under the release name; no second zip.
+          ASSET_DIR="${RUNNER_TEMP}/release"
+          ASSET_NAME="myTeams-${TAG}-unsigned.ipa"
+          rm -rf "$ASSET_DIR" && mkdir -p "$ASSET_DIR"
+          cp output/MyTeams-unsigned.ipa "${ASSET_DIR}/${ASSET_NAME}"
+          # No grep -q: exiting early would SIGPIPE unzip and trip pipefail.
+          if ! unzip -Z1 "${ASSET_DIR}/${ASSET_NAME}" | grep "^Payload/${APP_TARGET}\.app/" > /dev/null; then
+            echo "::error::${ASSET_NAME} does not hold Payload/${APP_TARGET}.app at its root"
+            exit 1
+          fi
+
+          # Re-run / concurrent-run guard: fail loudly rather than skip or
+          # overwrite. (Simpler than bump-and-retry; re-run the workflow to get
+          # the next number.)
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null \
+             || gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Tag or release ${TAG} already exists (another run published it first). Re-run the workflow to take the next build number."
+            exit 1
+          fi
+
+          # Created as a draft so the release never appears without its asset;
+          # the tag is created on the built commit when it is published.
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+            --target "$GITHUB_SHA" \
+            --title "MyTeams build ${TAG} (sha ${SHORT_SHA})" \
+            --notes "Unsigned build of ${GITHUB_SHA} (run ${GITHUB_RUN_NUMBER}) for re-signing in Feather."
+          RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases" --jq ".[] | select(.draft and .tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::Could not find the draft release for ${TAG}"
+            exit 1
+          fi
+          trap 'echo "::error::Publishing ${TAG} failed; deleting the draft"; gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" || true' ERR
+
+          # Upload through the REST API so the content type is exactly
+          # application/octet-stream (gh release upload guesses it from the
+          # extension).
+          curl --fail-with-body -sS -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@${ASSET_DIR}/${ASSET_NAME}" \
+            "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${ASSET_NAME}" \
+            > /dev/null
+
+          ASSETS="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq '.[] | "\(.name) \(.content_type)"')"
+          if [ "$ASSETS" != "${ASSET_NAME} application/octet-stream" ]; then
+            echo "::error::Expected exactly one asset '${ASSET_NAME} application/octet-stream', got: ${ASSETS}"
+            false
+          fi
+
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false > /dev/null
+          trap - ERR
+          echo "Published ${TAG}: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-ipa-logs-${{ github.run_number }}
+          # Both jobs run when unsigned_feather is false, and artifact names
+          # must be unique per run, so only the Feather-only run keeps the
+          # original name.
+          name: ${{ inputs.unsigned_feather && 'build-ipa-logs' || 'build-ipa-unsigned-logs' }}-${{ github.run_number }}
           path: |
             build.log
           if-no-files-found: warn

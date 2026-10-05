@@ -30,12 +30,17 @@ CI does not need any signing secrets.
 
 1. GitHub → **Actions** → **Build signed IPA** → **Run workflow** → tick
    **`unsigned_feather`** (`export_method` is ignored) → **Run workflow**.
-   The signed job is skipped. `build-ipa-unsigned` builds Release with
-   `CODE_SIGNING_ALLOWED=NO` and zips `Payload/myTeams.app` by hand. It fails if
-   `myTeamWidgetExtension.appex` is not in `Payload/myTeams.app/PlugIns`.
-2. Download the `myteams-ipa-unsigned-<run#>-<sha7>` artifact (kept 14 days)
-   and unzip it to get `MyTeams-unsigned.ipa`. The build log is in
-   `build-ipa-logs-<run#>`.
+   The signed job is skipped. `build-ipa-unsigned` runs on every run of the
+   workflow, ticked or not; ticking only skips the signed job. It builds Release
+   with `CODE_SIGNING_ALLOWED=NO` and zips `Payload/myTeams.app` by hand. It
+   fails if `myTeamWidgetExtension.appex` is not in
+   `Payload/myTeams.app/PlugIns`. It then publishes a GitHub Release tagged
+   `v1.0.N` (next after the highest existing `v1.0.*` tag) on the built commit.
+2. Easiest: open the `v1.0.N` release (repo → **Releases**) and download its
+   single asset, `myTeams-<tag>-unsigned.ipa`. No unzipping needed.
+   Alternatively, download the `myteams-ipa-unsigned-<run#>-<sha7>` artifact
+   (kept 14 days) and unzip it to get `MyTeams-unsigned.ipa`. The build log is
+   in `build-ipa-logs-<run#>`.
 3. Open the `.ipa` in Feather (share sheet → Feather, or import it in the app).
 4. Sign it in Feather with your own certificate + provisioning profile, then install.
 
