@@ -26,7 +26,8 @@ struct Home: View {
     @Binding var deepLinkedTeamID: TeamRef.ID?
 
     /// The favorites as teams. Starts with those the bundled catalog knows,
-    /// so the first frame has the seed teams, then fills in from the catalog.
+    /// so the first frame has any bundled teams followed, then fills in from
+    /// the catalog.
     @State private var teams: [TeamRef] = FavoritesStore.shared.teamIDs.compactMap(TeamCatalog.team(id:))
 
     @State private var selection: TeamRef.ID = FavoritesStore.shared.teamIDs.first ?? ""
@@ -104,10 +105,19 @@ struct Home: View {
     var body: some View {
         GeometryReader { proxy in
             Group {
-                if teams.isEmpty {
+                if teams.isEmpty && !store.teamIDs.isEmpty {
+                    // Favorites still resolving at launch: not the empty
+                    // state, which would flash "Add Teams" at a reader who
+                    // follows teams.
+                    Theme.Surface.content
+                        .ignoresSafeArea()
+                } else if teams.isEmpty {
+                    // No favorites: a fresh install, or every team
+                    // unfollowed. The way in is here rather than a sheet
+                    // at launch (t_afe5c297).
                     ContentUnavailableView {
                         Label {
-                            Text("No Teams")
+                            Text("No Teams Yet")
                         } icon: {
                             // Asset-catalog appearances pick the light/dark art.
                             Image("myTeamsLogo")
@@ -117,9 +127,16 @@ struct Home: View {
                                 .accessibilityHidden(true)
                         }
                     } description: {
-                        Text("Follow a team to see its schedule, roster and news.")
+                        Text("Add the teams you follow to see their schedules, scores and news.")
                     } actions: {
-                        Button("Pick Your Teams") { showsBrowser = true }
+                        Button {
+                            showsBrowser = true
+                        } label: {
+                            Label("Add Teams", systemImage: "plus.circle")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityHint("Find a team by sport, league or name, and follow it.")
+                        .accessibilityIdentifier("home.addTeams")
                     }
                 } else {
                     tabs
@@ -146,16 +163,11 @@ struct Home: View {
             }
         }
         .sheet(isPresented: $showsBrowser) {
-            TeamBrowserView()
+            TeamBrowserView(title: "Add Teams")
         }
         // Outlives any one team's page (A-5).
         .sheet(isPresented: $showsSettings) {
             SettingsView()
-        }
-        // A fresh install opens on "Pick your teams", the seed teams already
-        // checked. Dismissing it, however, finishes onboarding.
-        .sheet(isPresented: $store.needsOnboarding, onDismiss: { store.completeOnboarding() }) {
-            TeamBrowserView(title: "Pick Your Teams")
         }
     }
 

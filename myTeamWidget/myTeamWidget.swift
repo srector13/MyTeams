@@ -18,6 +18,9 @@ struct WidgetEntry: TimelineEntry {
     var followedTeam = ""
     /// The followed team's `TeamRef.id`, for the link a tap opens.
     var teamID: TeamRef.ID?
+    /// Whether there is no team to show: none chosen and none followed.
+    /// The widget then asks for one (`NoTeamView`) and `tempGame` is unused.
+    var needsTeam = false
 }
 
 /// Builds a team's entries for the configurable widget's provider.
@@ -42,6 +45,12 @@ enum WidgetTimelines {
 
     static func placeholder(for team: TeamRef) -> WidgetEntry {
         WidgetEntry(date: .now, tempGame: .placeholder(for: team), followedTeam: team.shortName, teamID: team.id)
+    }
+
+    /// The entry with no team to show (t_afe5c297). A tap opens the app,
+    /// on its "Add Teams"; following a team reloads the timeline.
+    static var noTeam: WidgetEntry {
+        WidgetEntry(date: .now, tempGame: .placeholder(for: WidgetTeams.fallback), needsTeam: true)
     }
 
     /// The one line a tile shows when there is no game to show (B-16).
@@ -96,19 +105,27 @@ enum WidgetTimelines {
 }
 
 /// Supplies the configurable widget: the team chosen in its settings, else
-/// the reader's first favorite, else the Jayhawks.
+/// the reader's first favorite, else, with none followed, a prompt to add
+/// one (`WidgetTimelines.noTeam`).
 struct TeamTimelineProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> WidgetEntry {
         WidgetTimelines.placeholder(for: WidgetTeams.firstSeedFavorite)
     }
 
     func snapshot(for configuration: SelectTeamIntent, in context: Context) async -> WidgetEntry {
-        let team = await WidgetTeams.team(for: configuration)
+        guard let team = await WidgetTeams.team(for: configuration) else {
+            // The gallery shows what the widget does, on its sample team.
+            return context.isPreview ? WidgetTimelines.placeholder(for: WidgetTeams.fallback) : WidgetTimelines.noTeam
+        }
         return await WidgetTimelines.snapshot(for: team, isPreview: context.isPreview)
     }
 
     func timeline(for configuration: SelectTeamIntent, in context: Context) async -> Timeline<WidgetEntry> {
-        let team = await WidgetTeams.team(for: configuration)
+        guard let team = await WidgetTeams.team(for: configuration) else {
+            // Following a team reloads every timeline (`FavoritesStore`);
+            // the hourly refresh only backs that up.
+            return Timeline(entries: [WidgetTimelines.noTeam], policy: .after(.now + WidgetTimelines.refreshInterval))
+        }
         let timeline = await WidgetTimelines.timeline(for: team)
         // After the timeline is built, so the league's team list (up to a
         // megabyte for college leagues) is never parsed while the schedule
@@ -128,15 +145,19 @@ struct WidgetEntryView: View {
 
     var body: some View {
         Group {
-            switch family {
-            #if os(iOS)
-            case .accessoryRectangular, .accessoryCircular:
-                AccessoryEntryView(entry: entry, family: family)
-            #endif
-            case .systemMedium:
-                MediumScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
-            default:
-                ScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
+            if entry.needsTeam {
+                NoTeamView(family: family)
+            } else {
+                switch family {
+                #if os(iOS)
+                case .accessoryRectangular, .accessoryCircular:
+                    AccessoryEntryView(entry: entry, family: family)
+                #endif
+                case .systemMedium:
+                    MediumScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
+                default:
+                    ScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
+                }
             }
         }
         // A tap opens the followed team's page in the app.
@@ -338,6 +359,69 @@ private struct TileInk: ViewModifier {
     }
 }
 
+/// The widget with no team to show: none chosen in its settings and none
+/// followed in the app (t_afe5c297). Asks for one rather than showing a team
+/// the reader never picked; a tap opens the app, on its "Add Teams".
+private struct NoTeamView: View {
+    var family: WidgetFamily
+
+    var body: some View {
+        Group {
+            #if os(iOS)
+            if family == .accessoryCircular {
+                ZStack {
+                    AccessoryWidgetBackground()
+                    Image(systemName: "plus")
+                        .font(.title3.weight(.semibold))
+                        .widgetAccentable()
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Add Teams")
+                .containerBackground(for: .widget) { Color.clear }
+            } else if family == .accessoryRectangular {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Add Teams")
+                        .font(.headline)
+                        .widgetAccentable()
+                    Text("Open myTeams to follow a team.")
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .containerBackground(for: .widget) { Color.clear }
+            } else {
+                tile
+            }
+            #else
+            tile
+            #endif
+        }
+    }
+
+    private var tile: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: "plus.circle")
+                .font(.title)
+                .widgetAccentable()
+                .accessibilityHidden(true)
+            Text("Add Teams")
+                .font(Theme.Typography.cardTitle)
+                .widgetAccentable()
+            Text("Open myTeams to follow a team.")
+                .font(Theme.Typography.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .lineLimit(2)
+        .minimumScaleFactor(0.7)
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .padding(Theme.Spacing.s)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .containerBackground(.fill.tertiary, for: .widget)
+    }
+}
+
 #if os(iOS)
 /// The Lock Screen's compact layouts: the followed team, its opponent and
 /// when they play.
@@ -400,7 +484,8 @@ private struct AccessoryEntryView: View {
 /// The one configurable widget: any team, chosen in its settings. Keeps the
 /// original Jayhawks widget's kind, so those placements carry over and, left
 /// unconfigured, show the first favorite (the Jayhawks, on an existing
-/// install that has not reordered them).
+/// install that has not reordered them), or ask for a team with none
+/// followed.
 struct TeamScheduleWidget: Widget {
     private var families: [WidgetFamily] {
         #if os(iOS)
@@ -520,3 +605,9 @@ extension WidgetEntry {
     WidgetEntry.preview
 }
 #endif
+
+#Preview("Small · no team", as: .systemSmall) {
+    TeamScheduleWidget()
+} timeline: {
+    WidgetTimelines.noTeam
+}

@@ -26,11 +26,36 @@ import WidgetKit
 @MainActor
 @Observable
 final class FavoritesStore {
-    static let shared = FavoritesStore()
+    static let shared: FavoritesStore = {
+        #if DEBUG
+        if let ids = launchFavoriteIDs(environment: ProcessInfo.processInfo.environment) {
+            // A UI-test launch: its favorites, local only, so the run
+            // neither reads nor writes iCloud.
+            let preset = ids.map { FavoriteTeam(teamID: $0, addedAt: FavoritesCodec.seedDate) }
+            FavoritesCodec.save(preset, defaults: SharedPaths.defaults, cloud: nil)
+            return FavoritesStore(cloud: nil)
+        }
+        #endif
+        return FavoritesStore()
+    }()
 
-    /// Set in the shared defaults once the "Pick your teams" sheet has been
-    /// dismissed.
-    static let onboardingKey = "onboarding.completed.v2"
+    #if DEBUG
+    /// The launch-environment key UI tests set to start from a known list:
+    /// comma-separated `TeamRef.id`s, replacing whatever is stored. A value
+    /// naming no team (`"none"`) starts with no favorites, as a fresh
+    /// install does. Read only in Debug builds.
+    static let launchFavoritesKey = "MYTEAMS_FAVORITES"
+
+    /// The favorites a launch environment asks for, or `nil` to load the
+    /// stored ones.
+    static func launchFavoriteIDs(environment: [String: String]) -> [TeamRef.ID]? {
+        guard let value = environment[launchFavoritesKey] else { return nil }
+        return value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { TeamRef.parse(id: $0) != nil }
+    }
+    #endif
 
     /// The favorites, in display order.
     private(set) var favorites: [FavoriteTeam]
@@ -45,6 +70,7 @@ final class FavoritesStore {
 
     /// Whether `favorites` is this install's seed, not yet edited. The first
     /// iCloud copy to arrive then sets the order, as a restore would have.
+    /// Only ever with a seed passed in: the app's is empty.
     private var seedIsProvisional: Bool
 
     /// Counts the favorites `teamRefs()` stood a placeholder in for that
@@ -56,11 +82,6 @@ final class FavoritesStore {
     /// running, so each is waited on once.
     @ObservationIgnored private var pendingLookups: Set<TeamRef.ID> = []
 
-    /// Whether to open the "Pick your teams" sheet at launch: a fresh install
-    /// that has never finished onboarding. Installs whose favorites were
-    /// restored from iCloud, or that a previous build already ran on, skip it.
-    var needsOnboarding: Bool
-
     private let defaults: UserDefaults
     private let cloud: (any FavoritesCloudStore)?
     private let reloadWidgets: @MainActor () -> Void
@@ -69,8 +90,9 @@ final class FavoritesStore {
     init(
         defaults: UserDefaults = SharedPaths.defaults,
         cloud: (any FavoritesCloudStore)? = NSUbiquitousKeyValueStore.default,
-        seedIDs: [TeamRef.ID] = FavoriteTeams.seedIDs,
-        isExistingInstall: Bool = UserDefaults.standard.object(forKey: LogoStore.seededDefaultsKey) != nil,
+        // None: a fresh install starts empty, on the home screen's "Add
+        // Teams" (t_afe5c297). Tests pass some to start from a list.
+        seedIDs: [TeamRef.ID] = [],
         reloadWidgets: @escaping @MainActor () -> Void = { WidgetCenter.shared.reloadAllTimelines() },
         now: @escaping @MainActor () -> Date = { Date() }
     ) {
@@ -83,9 +105,6 @@ final class FavoritesStore {
         tombstones = FavoritesCodec.decodeEntries(defaults.data(forKey: FavoritesCodec.key))?.filter(\.isRemoved) ?? []
         orderChangedAt = FavoritesCodec.decodeOrderChangedAt(defaults.data(forKey: FavoritesCodec.key))
         seedIsProvisional = loaded.source == .seeded
-        needsOnboarding = loaded.source == .seeded
-            && !isExistingInstall
-            && !defaults.bool(forKey: Self.onboardingKey)
         observeCloud()
         synchronize()
     }
@@ -269,12 +288,6 @@ final class FavoritesStore {
         // no fractions), so it wins on every device, however close behind.
         orderChangedAt = max(now(), orderChangedAt.map { $0 + 1 } ?? .distantPast)
         didChange()
-    }
-
-    /// Records that the onboarding sheet was dismissed.
-    func completeOnboarding() {
-        needsOnboarding = false
-        defaults.set(true, forKey: Self.onboardingKey)
     }
 
     private func didChange() {

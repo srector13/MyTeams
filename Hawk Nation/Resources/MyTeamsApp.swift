@@ -14,9 +14,8 @@ struct MyTeamsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
-        // Load (or seed) the favorites before the launch task below marks
-        // the crests seeded: the store reads that mark to tell an existing
-        // install from a fresh one when deciding on onboarding.
+        // Load (or restore from iCloud) the favorites before anything reads
+        // them. A fresh install has none: `Home` shows "Add Teams".
         _ = FavoritesStore.shared
     }
 
