@@ -62,6 +62,12 @@ private func displayed(_ date: Date, _ format: String) -> String {
     return formatter.string(from: date)
 }
 
+/// `text` with ICU's narrow no-break space (U+202F, emitted before AM/PM by
+/// template-based time formatters on modern iOS) read as a plain space.
+private func plainSpaced(_ text: String) -> String {
+    text.replacingOccurrences(of: "\u{202F}", with: " ")
+}
+
 // MARK: - Schedule
 
 @Suite("Golden: schedule parsing", .tags(.golden))
@@ -99,11 +105,12 @@ struct GoldenScheduleTests {
         // .date "2025-11-04T01:00Z" is the UTC instant 1762218000.
         #expect(game.dateAsDate == Date(timeIntervalSince1970: 1_762_218_000))
         #expect(game.date == displayed(game.dateAsDate, "MMM dd, yyyy"))
-        #expect(game.time == displayed(game.dateAsDate, "h:mm a"))
+        #expect(plainSpaced(game.time) == displayed(game.dateAsDate, "h:mm a"))
         if isUSEnglish && isUSCentral {
             // 01:00Z is 7:00 PM the previous evening in Central (CST, UTC-6).
             #expect(game.date == "Nov 03, 2025")
-            #expect(game.time == "7:00 PM")
+            // game.time is "jmm"-templated: ICU puts U+202F before PM.
+            #expect(plainSpaced(game.time) == "7:00 PM")
         }
     }
 
@@ -170,10 +177,11 @@ struct GoldenScheduleTests {
         #expect(game.location == "Arrowhead Stadium")
         #expect(game.dateAsDate == Date(timeIntervalSince1970: 1_789_950_000))  // "2026-09-21T00:20Z"
         #expect(game.date == displayed(game.dateAsDate, "MMM dd, yyyy"))
-        #expect(game.time == displayed(game.dateAsDate, "h:mm a"))
+        #expect(plainSpaced(game.time) == displayed(game.dateAsDate, "h:mm a"))
         if isUSEnglish && isUSCentral {
             #expect(game.date == "Sep 20, 2026")  // 19:20 CDT (UTC-5)
-            #expect(game.time == "7:20 PM")
+            // game.time is "jmm"-templated: ICU puts U+202F before PM.
+            #expect(plainSpaced(game.time) == "7:20 PM")
         }
     }
 
