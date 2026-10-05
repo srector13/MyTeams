@@ -31,10 +31,10 @@ struct RecordFormatTests {
         #expect(Record(wins: 0, losses: 0, format: .winLoss).summary == "0-0")
     }
 
-    @Test("W-L-T always shows its third column")
+    @Test("A soccer schedule's W-D-L always shows its draws, in the middle")
     func winLossTie() {
-        #expect(Record(wins: 4, losses: 1, ties: 0, format: .winLossTie).summary == "4-1-0")
-        #expect(Record(wins: 6, losses: 17, ties: 3, format: .winLossTie).summary == "6-17-3")
+        #expect(Record(wins: 4, losses: 1, ties: 0, format: .winLossTie).summary == "4-0-1")
+        #expect(Record(wins: 6, losses: 17, ties: 3, format: .winLossTie).summary == "6-3-17")
     }
 
     @Test("W-L-OTL puts overtime losses third, and never mixes in ties")
@@ -62,7 +62,7 @@ struct RecordFormatTests {
             Record(wins: 5, losses: 2, ties: 1, overtimeLosses: 3, points: 16, format: format).summary
         }
         #expect(record(.winLoss) == "5-2-1")
-        #expect(record(.winLossTie) == "5-2-1")
+        #expect(record(.winLossTie) == "5-1-2")
         #expect(record(.winLossOvertimeLoss) == "5-2-3")
         #expect(record(.winDrawLossPoints) == "5-1-2, 16 pts")
     }
@@ -93,7 +93,8 @@ struct RecordFormatTests {
 struct ScheduleRecordTests {
     /// The records the schedule header showed before `Record`, from the
     /// same fixtures `GoldenParserTests.seasonRecords` counts. Basketball,
-    /// football and baseball read exactly as before; MLS keeps "6-17-3".
+    /// football and baseball read exactly as before; MLS's 6 W, 17 L, 3 D
+    /// now reads W-D-L, "6-3-17", like its table (B-8).
     @Test("The original leagues' headers are unchanged")
     func originalLeaguesUnchanged() throws {
         func games(_ fixture: String, _ team: TeamRef) throws -> [Game] {
@@ -116,17 +117,21 @@ struct ScheduleRecordTests {
             now: Date(timeIntervalSince1970: 1_790_532_000)
         )
         #expect(sporting == Record(wins: 6, losses: 17, ties: 3, format: .winLossTie))
-        #expect(sporting.summary == "6-17-3")
+        #expect(sporting.summary == "6-3-17")
     }
 
-    @Test("A soccer header always shows its draws: Arsenal's 4-1 is now 4-1-0")
+    @Test("A soccer header always shows its draws, W-D-L: Arsenal's 4-1 is now 4-0-1")
     func soccerShowsDraws() throws {
-        // Deliberate change: the header used to drop a zero draws column
-        // ("4-1"), which read like a basketball record.
+        // Deliberate changes: the header used to drop a zero draws column
+        // ("4-1"), which read like a basketball record, and then put the
+        // draws last ("4-1-0") against the table's W-D-L beside it (B-8).
         let games = parseSchedule(from: try Fixture.json("epl_schedule"), team: followed(.premierLeague, "359"))
         let record = scheduleRecord(games: games, league: .premierLeague)
         #expect(record == Record(wins: 4, losses: 1, ties: 0, format: .winLossTie))
-        #expect(record.summary == "4-1-0")
+        #expect(record.summary == "4-0-1")
+        // The same order as Arsenal's row in epl_standings, less the points.
+        let row = try #require(parseStandings(from: try Fixture.json("epl_standings"), league: .premierLeague).entry(for: "359"))
+        #expect(row.record.summary.hasPrefix(record.summary + ","))
     }
 
     @Test("Hockey: a loss after the third period is an overtime loss")

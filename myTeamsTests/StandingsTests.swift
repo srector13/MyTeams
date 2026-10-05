@@ -110,6 +110,72 @@ struct StandingsParsingTests {
         #expect(angelCity.record.summary == "12-6-8, 42 pts")
     }
 
+    @Test("Bundesliga: rows marked with their zones, and one legend line per distinct note (C-2)")
+    func bundesZones() throws {
+        let table = try standings("bundes_standings", .bundesliga)
+        #expect(table.kind == .pointsTable)
+        let group = try #require(table.groups.first)
+        #expect(group.entries.count == 18)
+
+        // Rows 1-7 and 16-18 carry a note; 8th to 15th none.
+        #expect(group.entries.map { $0.zone != nil } == (1...18).map { !(8...15).contains($0) })
+        // Hamburg (127), 16th: note {"color": "#FEB4B5", "description": "Relegation playoff"}.
+        let hamburg = try #require(table.entry(for: "127"))
+        #expect(hamburg.rank == 16)
+        #expect(hamburg.zone == StandingsZone(note: "Relegation playoff", colorHex: "FEB4B5"))
+        // Werder Bremen (137), 8th: no note, so no bar.
+        #expect(table.entry(for: "137")?.zone == nil)
+
+        // Top of the table first. Europa League and Conference League
+        // qualifying share a colour but each gets its own line.
+        #expect(group.zones == [
+            StandingsZone(note: "Champions League", colorHex: "81D6AC"),
+            StandingsZone(note: "Europa League", colorHex: "B2BFD0"),
+            StandingsZone(note: "Conference League qualifying", colorHex: "B2BFD0"),
+            StandingsZone(note: "Relegation playoff", colorHex: "FEB4B5"),
+            StandingsZone(note: "Relegation", colorHex: "FF7F84"),
+        ])
+
+        // A table with no notes has no legend.
+        #expect(try standings("nba_standings", .nba).groups.allSatisfy(\.zones.isEmpty))
+    }
+
+    @Test("A soccer table goes by the league's name, not the season's, in its title and the header (B-8)")
+    func soccerTableTitle() throws {
+        let table = try standings("bundes_standings", .bundesliga)
+        let group = try #require(table.groups.first)
+        let leagueName = LeagueID.bundesliga.descriptor.displayName
+        #expect(leagueName == "Bundesliga")
+        // The feed names its one table after the season.
+        #expect(group.name == "2026-27 German Bundesliga")
+        #expect(group.title(kind: table.kind, leagueName: leagueName) == "Bundesliga")
+
+        // SC Freiburg (126): 3 W, 1 D, 0 L, 10 pts, third.
+        let freiburg = TeamRef(
+            league: .bundesliga, espnID: "126",
+            displayName: "SC Freiburg", shortName: "Freiburg", abbreviation: "SCF", location: "",
+            colorHex: "", alternateColorHex: "",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+        let summary = TeamHeaderSummary(
+            team: freiburg, games: [], nextGame: 0,
+            record: Record(wins: 3, losses: 0, ties: 1, format: .winLossTie), standings: table
+        )
+        #expect(summary.standing == "3rd in Bundesliga")
+        #expect(TeamHeaderSummary.standing(of: "126", in: table, leagueName: leagueName) == "3rd in Bundesliga")
+
+        // The schedule's record reads in the table's W-D-L order.
+        let row = try #require(table.entry(for: "126"))
+        #expect(row.record.summary == "3-1-0, 10 pts")
+        #expect(Record(wins: 3, losses: 0, ties: 1, format: .winLossTie).summary == "3-1-0")
+
+        // A conference keeps the feed's name: Kansas (2305), 16th in the Big 12.
+        let ncaaf = try standings("ncaaf_standings", .collegeFootball)
+        let big12 = try #require(ncaaf.group(containing: "2305"))
+        #expect(big12.title(kind: ncaaf.kind, leagueName: "NCAA Football") == "Big 12 Conference")
+        #expect(TeamHeaderSummary.standing(of: "2305", in: ncaaf, leagueName: "NCAA Football") == "16th in Big 12 Conference")
+    }
+
     // MARK: Basketball
 
     @Test("NBA: two conferences in preseason, every seed 0 so feed order is kept")

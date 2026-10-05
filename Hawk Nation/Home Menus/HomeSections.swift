@@ -328,7 +328,7 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     private var record: String {
         // The league's record rule decides how abandoned and unflagged
         // fixtures count (`RecordRule`); its sport decides the columns —
-        // "10-6", soccer's "4-1-0", hockey's "40-30-12". See `Record.Format`.
+        // "10-6", soccer's "4-0-1", hockey's "40-30-12". See `Record.Format`.
         model.displayRecord().summary
     }
 
@@ -431,7 +431,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 /// losses, goal difference and points; hockey's wins, losses, overtime
 /// losses and points; everyone else's wins and losses and games behind; a
 /// poll's rank and record. A league of several tables (conferences, college
-/// divisions) offers the others from the header's menu.
+/// divisions) offers the others from the header's menu. A soccer table marks
+/// the zones its feed notes (qualification, relegation) in their colours,
+/// with a legend beneath.
 struct StandingsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let team: TeamRef
@@ -549,22 +551,48 @@ private struct StandingsTable: View {
 
     var body: some View {
         let columns = columns
-        VStack(alignment: .leading, spacing: 6) {
-            Text(group.name)
+        let zones = group.zones
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text(group.title(kind: kind, leagueName: league.descriptor.displayName))
                 .font(.subheadline.bold())
                 .foregroundStyle(.secondary)
 
             // Too wide for the screen at accessibility sizes: it scrolls
             // sideways rather than squeezing the team names out.
-            table(columns)
+            table(columns, zoned: !zones.isEmpty)
                 .scrollsSidewaysAtAccessibilitySizes()
+
+            if !zones.isEmpty {
+                legend(zones)
+            }
         }
     }
 
-    private func table(_ columns: [Column]) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+    /// What each zone's bar means, one line per zone, top of the table
+    /// first (C-2).
+    private func legend(_ zones: [StandingsZone]) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            ForEach(zones, id: \.note) { zone in
+                Text(zone.note)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, Theme.Spacing.s)
+                    .overlay(alignment: .leading) {
+                        ZoneBar(colorHex: zone.colorHex)
+                    }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("standings.legend")
+    }
+
+    /// The table's rows. A `zoned` table insets the rank column, marked
+    /// rows or not, to leave room for the zone bars and keep it in line.
+    private func table(_ columns: [Column], zoned: Bool) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.xs) {
             GridRow {
                 Text("#")
+                    .padding(.leading, zoned ? Theme.Spacing.s : 0)
                 Text("Team")
                     .frame(maxWidth: .infinity, alignment: .leading)
                 ForEach(columns.indices, id: \.self) { index in
@@ -578,9 +606,18 @@ private struct StandingsTable: View {
             ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
                 let followed = entry.teamID == followedID
                 GridRow {
+                    // The zone bar runs the row's full height: the cell is
+                    // stretched to the row's tallest (the crest) first.
                     Text("\(entry.rank ?? position + 1)")
                         .foregroundStyle(.secondary)
-                    HStack(spacing: 6) {
+                        .padding(.leading, zoned ? Theme.Spacing.s : 0)
+                        .frame(maxHeight: .infinity)
+                        .overlay(alignment: .leading) {
+                            if let zone = entry.zone {
+                                ZoneBar(colorHex: zone.colorHex)
+                            }
+                        }
+                    HStack(spacing: Theme.Spacing.s) {
                         TeamLogo(team: crestTeam(for: entry), size: crestSize)
                         Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
                             .lineLimit(1)
@@ -597,6 +634,8 @@ private struct StandingsTable: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(followed ? .isSelected : [])
+                    // The zone the bar shows by colour alone.
+                    .accessibilityValue(entry.zone?.note ?? "")
                     ForEach(columns.indices, id: \.self) { index in
                         Text(columns[index].value(entry))
                             .monospacedDigit()
@@ -623,6 +662,54 @@ private struct StandingsTable: View {
     }
 }
 
+/// A zone's mark: a 3 pt bar in the feed's colour down the leading edge of
+/// a table row or legend line, as tall as whatever it is laid over.
+private struct ZoneBar: View {
+    let colorHex: String
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(Color(hexString: colorHex))
+            .frame(width: 3)
+            .accessibilityHidden(true)
+    }
+}
+
+/// A stretch of a soccer table the feed annotates — `"Champions League"`
+/// at the top, `"Relegation"` at the foot — and the colour it marks it in.
+struct StandingsZone: Hashable, Sendable {
+    let note: String
+    /// Six hex digits, as `StandingsEntry.noteColorHex` keeps them.
+    let colorHex: String
+}
+
+extension StandingsEntry {
+    /// The zone the row is in, or `nil` where the feed marks none (or gives
+    /// no colour to mark it in).
+    var zone: StandingsZone? {
+        guard !note.isEmpty, !noteColorHex.isEmpty else { return nil }
+        return StandingsZone(note: note, colorHex: noteColorHex)
+    }
+}
+
+extension StandingsGroup {
+    /// The table's zones for its legend: each note once, in the order the
+    /// rows first reach it, top of the table first.
+    var zones: [StandingsZone] {
+        var seen = Set<String>()
+        return entries.compactMap(\.zone).filter { seen.insert($0.note).inserted }
+    }
+
+    /// The table's name on screen. A soccer feed names its one table after
+    /// the season (`"2026-27 German Bundesliga"`), so a points table goes
+    /// by the league's own name (`"Bundesliga"`) where there is one; a
+    /// conference, division or poll keeps the feed's name.
+    func title(kind: StandingsKind, leagueName: String?) -> String {
+        guard kind == .pointsTable, let leagueName, !leagueName.isEmpty else { return name }
+        return leagueName
+    }
+}
+
 /// The news feed at the foot of a team page.
 struct NewsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
@@ -636,9 +723,9 @@ struct NewsSection<Player: RosterPlayer>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "book", title: "News")
-                .padding([.leading, .top])
+                .padding([.horizontal, .top])
 
-            VStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .center, spacing: Theme.Spacing.m) {
                 if model.articles.isEmpty {
                     switch model.newsState {
                     case .loading:
@@ -658,7 +745,6 @@ struct NewsSection<Player: RosterPlayer>: View {
                             selectedArticle = article
                         } label: {
                             NewsView(article: article)
-                                .padding(.top)
                         }
                         .buttonStyle(.plain)
                         .zoomSource(id: article.id, in: cardZoom)
@@ -702,7 +788,9 @@ struct TeamHeaderSummary: Equatable, Sendable {
     /// `games[nextGame]` if it's still to be played.
     init(team: TeamRef, games: [Game], nextGame: Int, record: Record, standings: Standings?) {
         self.record = games.isEmpty ? nil : record.summary
-        self.standing = standings.flatMap { Self.standing(of: team.espnID, in: $0) }
+        self.standing = standings.flatMap {
+            Self.standing(of: team.espnID, in: $0, leagueName: team.league.descriptor.displayName)
+        }
         self.nextGame = Self.upcoming(games: games, nextGame: nextGame)
     }
 
@@ -713,17 +801,20 @@ struct TeamHeaderSummary: Equatable, Sendable {
     }
 
     /// The team's place in the table that holds it, or `nil` where the
-    /// feed ranks nobody yet.
-    static func standing(of teamID: String, in standings: Standings) -> String? {
+    /// feed ranks nobody yet. A soccer table goes by `leagueName`,
+    /// `"3rd in Bundesliga"`, not the feed's season-prefixed name (see
+    /// `StandingsGroup.title(kind:leagueName:)`).
+    static func standing(of teamID: String, in standings: Standings, leagueName: String? = nil) -> String? {
         guard let group = standings.group(containing: teamID),
               let rank = group.entries.first(where: { $0.teamID == teamID })?.rank,
               rank > 0
         else { return nil }
+        let title = group.title(kind: standings.kind, leagueName: leagueName)
         switch standings.kind {
         case .rankings:
-            return "No. \(rank) in \(group.name)"
+            return "No. \(rank) in \(title)"
         case .pointsTable, .records:
-            return "\(ScoreSnapshot.ordinal(rank)) in \(group.name)"
+            return "\(ScoreSnapshot.ordinal(rank)) in \(title)"
         }
     }
 

@@ -23,8 +23,9 @@ struct Record: Hashable, Sendable {
         /// Wins and losses, with ties appended only when there are some:
         /// `"10-6"`, or an NFL season with a tie, `"10-6-1"`.
         case winLoss
-        /// Wins, losses and ties, always three parts: a soccer schedule's
-        /// `"4-1-0"`, read the way MLS has always shown it.
+        /// Wins, draws and losses, always three parts: a soccer schedule's
+        /// `"4-0-1"`, draws in the middle so it matches the table beside it.
+        /// (The case keeps its old name; only the order it draws in changed.)
         case winLossTie
         /// Hockey: wins, regulation losses, then overtime and shootout
         /// losses, `"40-30-12"`.
@@ -72,7 +73,7 @@ struct Record: Hashable, Sendable {
         case .winLoss:
             ties > 0 ? "\(wins)-\(losses)-\(ties)" : "\(wins)-\(losses)"
         case .winLossTie:
-            "\(wins)-\(losses)-\(ties)"
+            "\(wins)-\(ties)-\(losses)"
         case .winLossOvertimeLoss:
             "\(wins)-\(losses)-\(overtimeLosses)"
         case .winDrawLossPoints:
@@ -94,7 +95,8 @@ extension SportKind {
     /// How a team's own schedule adds up into its record in the header.
     ///
     /// Soccer always shows its draws column, even at zero, so a 4–1 start
-    /// does not read like a basketball record. Hockey splits overtime losses
+    /// does not read like a basketball record, and puts it between wins and
+    /// losses as its table does. Hockey splits overtime losses
     /// out, as the league's own tables do.
     var scheduleRecordFormat: Record.Format {
         switch self {
