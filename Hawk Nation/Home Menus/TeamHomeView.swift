@@ -84,6 +84,34 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
     /// The page around this content (`TeamPage`); absent in previews.
     @Environment(TeamPageChrome.self) private var chrome: TeamPageChrome?
 
+    /// Where a player sheet asked for with this team's page waits
+    /// (`TeamNavigator.pendingPlayer`); absent in previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
+
+    /// The player whose sheet was asked for with the page, such as a leader
+    /// tapped on a leaderboard (t_8d15e070). A roster card's own sheet is
+    /// `RosterSection`'s.
+    @State private var requestedPlayer: Player?
+
+    /// Whether the page is on screen: not under a page pushed over it, nor
+    /// a "More" tab's page waiting off screen. Only a page on screen opens
+    /// a requested sheet.
+    @State private var isOnScreen = false
+
+    /// Opens the player sheet asked for with this page, once the page is on
+    /// screen and its roster lists the player; forgets one the roster
+    /// turns out not to list.
+    private func presentRequestedPlayer() {
+        guard isOnScreen, let navigator else { return }
+        let roster = model.allPlayers
+        guard let id = navigator.takePlayer(
+            for: team.id,
+            rosterIDs: roster.map { String(describing: $0.id) },
+            rosterState: model.rosterState
+        ) else { return }
+        requestedPlayer = roster.first { String(describing: $0.id) == id }
+    }
+
     var body: some View {
         TeamHomeLayout {
             RosterSection(model: model) { player in
@@ -134,6 +162,17 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         // scroll view is `TeamPage`'s, so it calls back through the chrome.
         .onAppear {
             chrome?.refresh = { [model] in await model.refreshAll() }
+            isOnScreen = true
+            presentRequestedPlayer()
+        }
+        .onDisappear { isOnScreen = false }
+        // A player asked for while the page is on screen, or whose roster
+        // has just loaded.
+        .onChange(of: navigator?.pendingPlayer) { presentRequestedPlayer() }
+        .onChange(of: model.rosterState) { presentRequestedPlayer() }
+        .onChange(of: model.allPlayers.count) { presentRequestedPlayer() }
+        .sheet(item: $requestedPlayer) { player in
+            PlayerDetailView(player: player, team: team)
         }
     }
 }

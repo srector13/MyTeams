@@ -19,6 +19,14 @@ struct LeadersSection<Player: RosterPlayer>: View {
 
     @State private var showingLeague = false
 
+    /// A leader tapped on the league's boards, whose team's page opens
+    /// once the boards' sheet is down (t_8d15e070).
+    @State private var pickedLeader: StatLeader?
+
+    /// Opens a leader's team page and their sheet on it; absent in
+    /// previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
+
     /// The team colour as a fill, with a fallback for a team the feed gave
     /// no colour, which would otherwise draw clear (B-3).
     private var teamFill: Color { Color(hexString: TeamColors.fillHex(for: team)) }
@@ -76,13 +84,13 @@ struct LeadersSection<Player: RosterPlayer>: View {
             } else if dynamicTypeSize.isAccessibilitySize {
                 // At accessibility text sizes the carousel becomes a list.
                 StackedCarousel(items: leaderCards) { leader in
-                    TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
+                    leaderButton(leader)
                 }
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: Theme.Spacing.m) {
                         ForEach(leaderCards) { leader in
-                            TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
+                            leaderButton(leader)
                         }
                     }
                     .scrollTargetLayout()
@@ -96,8 +104,50 @@ struct LeadersSection<Player: RosterPlayer>: View {
             }
         }
         .contentCard()
-        .sheet(isPresented: $showingLeague) {
-            LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: teamFill)
+        // A leader picked on the boards opens once the sheet is down, so
+        // their player sheet never races this one's dismissal.
+        .sheet(isPresented: $showingLeague, onDismiss: { openPickedLeader() }) {
+            LeagueLeadersView(
+                league: team.league,
+                followedTeamID: team.espnID,
+                teamColor: teamFill,
+                onPick: { pickedLeader = $0 }
+            )
+        }
+    }
+
+    /// A team leader's card, which opens their player sheet on this page
+    /// (`TeamNavigator`).
+    @ViewBuilder
+    private func leaderButton(_ leader: TeamLeader) -> some View {
+        let card = TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
+        if let navigator, !leader.row.leader.athleteID.isEmpty {
+            Button {
+                navigator.open(team, playerID: leader.row.leader.athleteID)
+            } label: {
+                card.contentShape(Theme.Radius.innerShape)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows the player.")
+            .accessibilityIdentifier("leaders.card.\(leader.row.leader.athleteID)")
+        } else {
+            card
+        }
+    }
+
+    /// Opens the team page of the leader picked on the league's boards,
+    /// with their player sheet on it: this page for one of this team's
+    /// players, a favorite's tab, or the team's page pushed over this one.
+    private func openPickedLeader() {
+        guard let leader = pickedLeader, let navigator else { return }
+        pickedLeader = nil
+        if leader.teamID == team.espnID {
+            navigator.open(team, playerID: leader.athleteID)
+        } else {
+            navigator.open(
+                teamID: TeamRef.id(league: team.league, espnID: leader.teamID),
+                playerID: leader.athleteID
+            )
         }
     }
 }
@@ -201,6 +251,9 @@ struct LeagueLeadersView: View {
     /// The ESPN id of the team whose players are highlighted, if any.
     var followedTeamID: String?
     var teamColor: Color = .accentColor
+    /// Given, a row is a button that hands its leader here and closes the
+    /// sheet, so the presenter can open their team's page (t_8d15e070).
+    var onPick: ((StatLeader) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
@@ -259,12 +312,7 @@ struct LeagueLeadersView: View {
                 ForEach(shown) { board in
                     Section {
                         ForEach(board.rows) { row in
-                            LeaderRow(
-                                row: row,
-                                label: board.label,
-                                followed: row.leader.teamID == followedTeamID,
-                                teamColor: teamColor
-                            )
+                            leaderRow(row, label: board.label)
                         }
                     } header: {
                         Text(board.title)
@@ -273,6 +321,36 @@ struct LeagueLeadersView: View {
             }
             .listStyle(.insetGrouped)
         }
+    }
+
+    /// A board's row: a button to the leader's team page and their player
+    /// sheet on it (`onPick`), for a leader the feed gave a team.
+    private func leaderRow(_ row: LeaderBoardRow, label: String) -> some View {
+        let followed = row.leader.teamID == followedTeamID
+        let content = LeaderRow(row: row, label: label, followed: followed)
+        return Group {
+            if let onPick, Self.canPick(row.leader) {
+                Button {
+                    onPick(row.leader)
+                    dismiss()
+                } label: {
+                    content.contentShape(.rect)
+                }
+                // Label ink, not the tint: it reads as the row it was.
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the player on their team's page.")
+                .accessibilityIdentifier("leagueLeaders.row.\(row.leader.athleteID)")
+            } else {
+                content
+            }
+        }
+        .modifier(LeaderRowBackground(followed: followed, teamColor: teamColor))
+    }
+
+    /// Whether a leader names both themself and their team, which opening
+    /// their team's page and player sheet needs.
+    static func canPick(_ leader: StatLeader) -> Bool {
+        !leader.athleteID.isEmpty && !leader.teamID.isEmpty
     }
 
     /// The season caption, once the leaders have loaded; empty until then,
@@ -305,15 +383,14 @@ struct LeagueLeadersView: View {
     }
 }
 
-/// One row of a league leaderboard.
+/// One row of a league leaderboard. Its background is the row's
+/// (`LeaderRowBackground`).
 private struct LeaderRow: View {
     let row: LeaderBoardRow
     let label: String
     let followed: Bool
-    let teamColor: Color
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.colorSchemeContrast) private var contrast
 
     /// The rank column, wide enough for "10" at the current text size.
     @ScaledMetric(relativeTo: .subheadline) private var rankWidth: CGFloat = 22
@@ -381,7 +458,20 @@ private struct LeaderRow: View {
         // a wash (LL-2).
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(followed ? .isSelected : [])
-        .listRowBackground(
+    }
+}
+
+/// A leaderboard row's background: the followed team's players picked out
+/// in its colour. On the row itself, which may be a button around a
+/// `LeaderRow` (`LeagueLeadersView.leaderRow`), where the list reads it.
+private struct LeaderRowBackground: ViewModifier {
+    let followed: Bool
+    let teamColor: Color
+
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content.listRowBackground(
             followed
                 ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast))
                 : Theme.Surface.contentCard
