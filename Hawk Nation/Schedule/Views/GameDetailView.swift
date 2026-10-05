@@ -40,6 +40,8 @@ struct GameDetailView: View {
     @State private var hockey: HockeyBoxScore?
     @State private var soccerLineups: SoccerLineups?
     @State private var gameInfo = GameInfo.empty
+    /// The last status a summary gave; `nil` until one has (A-2).
+    @State private var refreshedStatus: GameStatus?
     @State private var loading = true
 
     /// Paces refreshes that produced no sheet: 30 seconds, doubling while
@@ -146,6 +148,10 @@ struct GameDetailView: View {
             hockey = sheet.hockey
             soccerLineups = sheet.soccerLineups
             gameInfo = sheet.info
+            // A summary with no status keeps the one already shown.
+            if let status = sheet.status {
+                refreshedStatus = status
+            }
             loading = false
             backoff.reset()
             // A summary that stays fresh longer than the phase's interval is
@@ -177,13 +183,18 @@ struct GameDetailView: View {
 
             headerLine(game.time)
             headerLine(game.date)
-            headerLine(game.channel)
+            // No line for the parser's "TBD" (A-19), as on the cards.
+            if let broadcast = GameCardContent.broadcast(of: game) {
+                headerLine(broadcast)
+            }
 
             Spacer(minLength: Theme.Spacing.m)
 
-            headerLine(venueLine)
+            if !venueLine.isEmpty {
+                headerLine(venueLine)
+            }
         }
-        .padding(.horizontal, 15)
+        .padding(.horizontal, Theme.Spacing.l)
         // Takes up the sheet's full width.
         .frame(maxWidth: .infinity, minHeight: headerHeight)
         .background {
@@ -208,12 +219,17 @@ struct GameDetailView: View {
         }
     }
 
-    /// The game's colour (black until the summary gives one) over the
-    /// venue, weighted to the foot (D-5): the old flat 60% through the top
-    /// third, deepening to 85% where the venue line sits over the busiest
-    /// part of a stadium photo. Nowhere lighter than it was. Denser under
-    /// Increase Contrast and opaque under Reduce Transparency (X-5), since
-    /// the white header text sits on it.
+    /// How much of the game's colour tints the black scrim (B-2): a blend,
+    /// not a replacement. Even a white host blends to #737373 at most,
+    /// 4.7:1 under the white header text; at half, it would be 4.0:1.
+    nonisolated static let teamWashOpacity = 0.45
+
+    /// The game's colour, blended into black (B-2), over the venue,
+    /// weighted to the foot (D-5): the old flat 60% through the top third,
+    /// deepening to 85% where the venue line sits over the busiest part of
+    /// a stadium photo. Nowhere lighter than it was. Denser under Increase
+    /// Contrast and opaque under Reduce Transparency (X-5), since the white
+    /// header text sits on it.
     ///
     /// No radius of its own: the header runs to the sheet's top edge, whose
     /// corners round it concentric with the device, and its foot is
@@ -222,6 +238,7 @@ struct GameDetailView: View {
         ZStack {
             Color.black
             Color(hexString: gameInfo.gameColor)
+                .opacity(Self.teamWashOpacity)
         }
         .adaptiveGradientScrim([
             .init(opacity: 0.6, location: 0),
@@ -233,9 +250,25 @@ struct GameDetailView: View {
     /// The venue, then its city and state where the league's summaries give
     /// them cleanly. See `LeagueDescriptor.venueBackdropAsset`.
     private var venueLine: String {
-        league.venueBackdropAsset == nil
-            ? "\(game.location) | \(gameInfo.city), \(gameInfo.state)"
-            : game.location
+        Self.formatVenueLine(
+            location: game.location,
+            city: gameInfo.city,
+            state: gameInfo.state,
+            showsAddress: league.venueBackdropAsset == nil
+        )
+    }
+
+    /// "Venue | City, State" from the parts that aren't empty (A-19), so a
+    /// summary that failed or gave no address leaves no "Venue | , ".
+    /// Empty when there are none. `showsAddress` false gives the venue only.
+    nonisolated static func formatVenueLine(location: String, city: String, state: String, showsAddress: Bool) -> String {
+        func nonEmpty(_ parts: [String]) -> [String] {
+            parts
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        let address = showsAddress ? nonEmpty([city, state]).joined(separator: ", ") : ""
+        return nonEmpty([location, address]).joined(separator: " | ")
     }
 
     private func headerLine(_ text: String) -> some View {
@@ -243,7 +276,7 @@ struct GameDetailView: View {
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
             .foregroundStyle(.white)
-            .padding(.bottom, 10)
+            .padding(.bottom, Theme.Spacing.s)
     }
 
     // MARK: - Card
@@ -252,12 +285,12 @@ struct GameDetailView: View {
     /// hockey and soccer tables, and larger text, grow the card rather than
     /// overflowing a fixed one.
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .center, spacing: 15) {
+        VStack(alignment: .center, spacing: Theme.Spacing.l) {
             content()
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+        .contentCard()
         .padding(.horizontal, Theme.Spacing.m)
     }
 
@@ -311,15 +344,18 @@ struct GameDetailView: View {
 
     /// One team's crest over its name.
     private func side(followed: Bool, alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 5) {
+        VStack(alignment: alignment, spacing: Theme.Spacing.xs) {
             if followed {
                 TeamLogo(team: team, size: crestSize)
             } else {
+                // Fitted to its square, as `TeamLogo` and the schedule card
+                // fit theirs: a filled wide crest spilled over the
+                // scoreline (B-10).
                 RemoteImage(url: URL(string: game.opponentLogo)) {
                     Image("blankTeam")
                         .resizable()
                 }
-                .aspectRatio(contentMode: .fill)
+                .aspectRatio(contentMode: .fit)
                 .frame(width: crestSize, height: crestSize)
             }
 
@@ -330,16 +366,19 @@ struct GameDetailView: View {
         }.frame(minWidth: 0, maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
     }
 
-    /// "Final", "Halftime", or the period and clock beneath the scoreline.
+    /// "Final", "Halftime", or the period and clock beneath the scoreline,
+    /// from the refreshed summary, or the tapped game's until one loads
+    /// (A-2).
     @ViewBuilder
     private var status: some View {
-        if(game.completed) {
+        let shown = GameStatus.shown(refreshed: refreshedStatus, tapped: game)
+        if shown.completed {
             statusLine("Final")
-        } else if(game.gameHalftime) {
+        } else if shown.halftime {
             statusLine("Halftime")
         } else {
-            statusLine(league.liveCardPeriodLabel(game.gamePeriod))
-            statusLine(game.gameClock)
+            statusLine(league.liveCardPeriodLabel(shown.period))
+            statusLine(shown.clock)
         }
     }
 
@@ -354,7 +393,7 @@ struct GameDetailView: View {
             .font(.subheadline.bold())
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
-            .padding(.horizontal, 30)
+            .padding(.horizontal, Theme.Spacing.xl)
             .padding(.vertical, 40)
     }
 }
