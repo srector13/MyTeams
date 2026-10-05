@@ -189,7 +189,6 @@ struct FavoritesStoreTests {
             defaults: defaults,
             cloud: cloud,
             seedIDs: seedIDs,
-            isExistingInstall: true,
             reloadWidgets: { reloads += 1 }
         )
         #expect(store.teamIDs == seedIDs)
@@ -208,26 +207,156 @@ struct FavoritesStoreTests {
         #expect(store.isFavorite("baseball/mlb:7"))
     }
 
-    @MainActor
-    @Test("Onboarding shows only on a fresh install, until completed")
-    func onboardingGate() throws {
-        let fresh = try scratchDefaults()
-        let store = FavoritesStore(defaults: fresh, cloud: nil, seedIDs: seedIDs, isExistingInstall: false, reloadWidgets: {})
-        #expect(store.needsOnboarding)
-        store.completeOnboarding()
-        #expect(!store.needsOnboarding)
-        #expect(fresh.bool(forKey: FavoritesStore.onboardingKey))
-        // Relaunch: the list is local now, so no sheet.
-        #expect(!FavoritesStore(defaults: fresh, cloud: nil, seedIDs: seedIDs, isExistingInstall: false, reloadWidgets: {}).needsOnboarding)
+    // MARK: First launch (t_afe5c297)
 
-        let upgraded = try scratchDefaults()
-        #expect(!FavoritesStore(defaults: upgraded, cloud: nil, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}).needsOnboarding)
-
-        let restored = try scratchDefaults()
+    @Test("An empty seed writes nothing, to either store")
+    func emptySeedWritesNothing() throws {
+        let defaults = try scratchDefaults()
         let cloud = MemoryCloudStore()
-        cloud.set(FavoritesCodec.encode([FavoriteTeam(teamID: "football/nfl:12")]), forKey: FavoritesCodec.key)
-        #expect(!FavoritesStore(defaults: restored, cloud: cloud, seedIDs: seedIDs, isExistingInstall: false, reloadWidgets: {}).needsOnboarding)
+
+        let first = FavoritesCodec.loadOrSeed(defaults: defaults, cloud: cloud, seedIDs: [])
+        #expect(first.source == .empty)
+        #expect(first.favorites.isEmpty)
+        #expect(defaults.data(forKey: FavoritesCodec.key) == nil)
+        // No empty list in iCloud to stand in for another device's.
+        #expect(cloud.writes == 0)
+        #expect(defaults.bool(forKey: FavoritesCodec.seededKey))
     }
+
+    @MainActor
+    @Test("A fresh install follows no teams")
+    func freshInstallIsEmpty() throws {
+        let defaults = try scratchDefaults()
+        let cloud = MemoryCloudStore()
+        var reloads = 0
+        // The app's own seed: none passed.
+        let store = FavoritesStore(defaults: defaults, cloud: cloud, reloadWidgets: { reloads += 1 })
+        #expect(store.teamIDs.isEmpty)
+        #expect(store.favorites.isEmpty)
+        #expect(FavoritesCodec.storedIDs(in: defaults) == nil)
+        #expect(cloud.writes == 0)
+        #expect(reloads == 0)
+
+        // Relaunched, still none, and still nothing written.
+        let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, reloadWidgets: {})
+        #expect(relaunched.teamIDs.isEmpty)
+        #expect(cloud.writes == 0)
+    }
+
+    @MainActor
+    @Test("Stored favorites survive the store starting again with no seed")
+    func storedFavoritesArePreserved() throws {
+        // An install an earlier build seeded, then the reader edited.
+        let defaults = try scratchDefaults()
+        let cloud = MemoryCloudStore()
+        _ = FavoritesCodec.loadOrSeed(defaults: defaults, cloud: cloud, seedIDs: seedIDs)
+        let seeded = FavoritesStore(defaults: defaults, cloud: cloud, reloadWidgets: {})
+        seeded.remove(seedIDs[2])
+        let kept = [seedIDs[0], seedIDs[1], seedIDs[3]]
+        #expect(seeded.teamIDs == kept)
+        let stored = defaults.data(forKey: FavoritesCodec.key)
+        let writes = cloud.writes
+
+        for _ in 0..<2 {
+            let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, reloadWidgets: {})
+            #expect(relaunched.teamIDs == kept)
+        }
+        // Read, not rewritten.
+        #expect(defaults.data(forKey: FavoritesCodec.key) == stored)
+        #expect(cloud.writes == writes)
+
+        // A list emptied by the reader stays empty, and is not reseeded.
+        let emptied = try scratchDefaults()
+        FavoritesCodec.save([], defaults: emptied, cloud: nil)
+        #expect(FavoritesStore(defaults: emptied, cloud: nil, reloadWidgets: {}).teamIDs.isEmpty)
+    }
+
+    @MainActor
+    @Test("A fresh install takes the reader's iCloud favorites, at launch or when they arrive")
+    func freshInstallRestoresFromCloud() throws {
+        let synced = [
+            FavoriteTeam(teamID: "football/nfl:12", addedAt: Date(timeIntervalSince1970: 1_790_000_000)),
+            FavoriteTeam(teamID: "hockey/nhl:25", addedAt: Date(timeIntervalSince1970: 1_790_000_100)),
+        ]
+
+        // Already in iCloud at first launch.
+        let cloud = MemoryCloudStore()
+        cloud.set(FavoritesCodec.encode(synced), forKey: FavoritesCodec.key)
+        let restored = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, reloadWidgets: {})
+        #expect(restored.teamIDs == synced.map(\.teamID))
+
+        // Arriving after first launch, with the initial sync.
+        let lateCloud = MemoryCloudStore()
+        let defaults = try scratchDefaults()
+        var reloads = 0
+        let store = FavoritesStore(defaults: defaults, cloud: lateCloud, reloadWidgets: { reloads += 1 })
+        #expect(store.teamIDs.isEmpty)
+        lateCloud.set(FavoritesCodec.encode(synced), forKey: FavoritesCodec.key)
+        receive(store, reason: NSUbiquitousKeyValueStoreInitialSyncChange)
+        #expect(store.teamIDs == synced.map(\.teamID))
+        #expect(FavoritesCodec.storedIDs(in: defaults) == synced.map(\.teamID))
+        #expect(reloads == 1)
+
+        // Or, missed while the app ran, at the next launch: no empty list
+        // was stored locally to shadow it.
+        let missedCloud = MemoryCloudStore()
+        let missedDefaults = try scratchDefaults()
+        _ = FavoritesStore(defaults: missedDefaults, cloud: missedCloud, reloadWidgets: {})
+        missedCloud.set(FavoritesCodec.encode(synced), forKey: FavoritesCodec.key)
+        let next = FavoritesStore(defaults: missedDefaults, cloud: missedCloud, reloadWidgets: {})
+        #expect(next.teamIDs == synced.map(\.teamID))
+    }
+
+    @MainActor
+    @Test("With no favorites, the queries answer empty and the first follow is the only one")
+    func zeroFavoritesQueries() async throws {
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, reloadWidgets: {})
+        #expect(await store.teamRefs(within: .seconds(1)) { _ in nil }.isEmpty)
+        #expect(!store.isFavorite(seedIDs[0]))
+        #expect(!store.notify(for: seedIDs[0]))
+        // Editing nothing does nothing.
+        store.remove(seedIDs[0])
+        store.setNotify(false, for: seedIDs[0])
+        #expect(store.teamIDs.isEmpty)
+
+        store.add(try #require(TeamCatalog.team(id: seedIDs[1])))
+        #expect(store.teamIDs == [seedIDs[1]])
+    }
+
+    @MainActor
+    @Test("Home with no favorites selects nothing and drops a widget link")
+    func homeRoutingWithNoFavorites() {
+        let resolved = HomeRouting.favoritesResolved(HomeRouting.State(selection: ""), teams: [])
+        #expect(resolved.selection == "")
+
+        // The last team unfollowed: the selection clears.
+        let unfollowed = HomeRouting.favoritesResolved(HomeRouting.State(selection: seedIDs[0]), teams: [])
+        #expect(unfollowed.selection == "")
+
+        // A link to a team no longer followed is dropped, not left pending.
+        let linked = HomeRouting.linkChanged(
+            HomeRouting.State(selection: "", pendingLink: seedIDs[0]),
+            teams: [],
+            favoriteIDs: []
+        )
+        #expect(linked.pendingLink == nil)
+        #expect(linked.selection == "")
+        #expect(HomeTabs.barCount(teamCount: 0, barCapacity: HomeTabs.compactCapacity) == 0)
+    }
+
+    #if DEBUG
+    @MainActor
+    @Test("A UI-test launch names its favorites, or none")
+    func launchFavorites() {
+        #expect(FavoritesStore.launchFavoriteIDs(environment: [:]) == nil)
+        #expect(FavoritesStore.launchFavoriteIDs(environment: ["MYTEAMS_FAVORITES": "none"]) == [])
+        #expect(FavoritesStore.launchFavoriteIDs(environment: ["MYTEAMS_FAVORITES": ""]) == [])
+        #expect(
+            FavoritesStore.launchFavoriteIDs(environment: ["MYTEAMS_FAVORITES": "football/nfl:12, baseball/mlb:7,bogus"])
+                == ["football/nfl:12", "baseball/mlb:7"]
+        )
+    }
+    #endif
 
     // MARK: iCloud sync
 
@@ -236,10 +365,10 @@ struct FavoritesStoreTests {
     func addSyncs() throws {
         let cloud = MemoryCloudStore()
         let first3 = Array(seedIDs.prefix(3))
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: first3, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: first3, reloadWidgets: {})
         let bDefaults = try scratchDefaults()
         var bReloads = 0
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: first3, isExistingInstall: true, reloadWidgets: { bReloads += 1 })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: first3, reloadWidgets: { bReloads += 1 })
         #expect(b.teamIDs == first3)
 
         a.add(try #require(TeamCatalog.team(id: seedIDs[3])))
@@ -258,9 +387,9 @@ struct FavoritesStoreTests {
     @Test("A team removed on one device is removed on another, and its tombstone kept")
     func removeSyncs() throws {
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
         let bDefaults = try scratchDefaults()
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
         let removed = seedIDs[1]
 
         a.remove(removed)
@@ -291,8 +420,8 @@ struct FavoritesStoreTests {
         let addedAt = removeIsLater ? t0 + 100 : t0 + 200
         let removedAt = removeIsLater ? t0 + 200 : t0 + 100
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { addedAt })
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { removedAt })
+        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { addedAt })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { removedAt })
 
         // A follows X again; B unfollows it. B's write reaches iCloud last.
         a.add(try #require(TeamCatalog.team(id: x)))
@@ -310,8 +439,8 @@ struct FavoritesStoreTests {
     @Test("Receiving a change never writes it back to iCloud")
     func receiveDoesNotEcho() throws {
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
-        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
 
         a.remove(seedIDs[0])
         a.move(from: IndexSet(integer: 2), to: 0)
@@ -333,13 +462,13 @@ struct FavoritesStoreTests {
     @Test("A fresh install's seed gives way to the iCloud copy when it arrives")
     func seedYieldsToCloud() throws {
         let aCloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: aCloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: aCloud, seedIDs: seedIDs, reloadWidgets: {})
         a.remove(seedIDs[1])
         a.move(from: IndexSet(integer: 2), to: 0)
 
         // B's iCloud has not synced yet, so B seeds; then A's copy arrives.
         let bCloud = MemoryCloudStore()
-        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: bCloud, seedIDs: seedIDs, isExistingInstall: false, reloadWidgets: {})
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: bCloud, seedIDs: seedIDs, reloadWidgets: {})
         #expect(b.teamIDs == seedIDs)
         bCloud.values = aCloud.values
         receive(b, reason: NSUbiquitousKeyValueStoreInitialSyncChange)
@@ -384,7 +513,6 @@ struct FavoritesStoreTests {
             defaults: defaults,
             cloud: cloud,
             seedIDs: seedIDs,
-            isExistingInstall: true,
             reloadWidgets: { reloads += 1 },
             now: { now }
         )
@@ -411,7 +539,7 @@ struct FavoritesStoreTests {
         #expect(cloud.writes == writes)
         #expect(!store.notify(for: "football/nfl:99"))
 
-        let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
         #expect(!relaunched.notify(for: team))
         #expect(relaunched.notify(for: seedIDs[0]))
 
@@ -424,7 +552,7 @@ struct FavoritesStoreTests {
     @Test("An alerts setting is stamped after the follow, even with the clock behind")
     func setNotifyAfterFollow() throws {
         let t = Date(timeIntervalSince1970: 1_800_000_000)
-        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [], isExistingInstall: true, reloadWidgets: {}, now: { t })
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [], reloadWidgets: {}, now: { t })
         store.add(try #require(TeamCatalog.team(id: seedIDs[1])))
         store.setNotify(false, for: seedIDs[1])
         let entry = try #require(store.favorites.first)
@@ -435,10 +563,10 @@ struct FavoritesStoreTests {
     @Test("Alerts turned off on one device stay off on another, and are not undone")
     func notifySyncs() throws {
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
         let bDefaults = try scratchDefaults()
         var bReloads = 0
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: { bReloads += 1 })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: { bReloads += 1 })
         let team = seedIDs[2]
 
         a.setNotify(false, for: team)
@@ -472,8 +600,8 @@ struct FavoritesStoreTests {
         let bDefaults = try scratchDefaults()
         FavoritesCodec.save(start, defaults: bDefaults, cloud: nil)
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { onAt })
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { offAt })
+        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { onAt })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { offAt })
 
         // Offline, A turns X's alerts on; B turns them on and off again.
         // B's write reaches iCloud last.
@@ -521,7 +649,7 @@ struct FavoritesStoreTests {
     @MainActor
     @Test("A favorite the catalog misses the deadline for stays, as a placeholder, and a link to it still lands")
     func unresolvedFavoriteKept() async throws {
-        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [seedIDs[1], blues], isExistingInstall: true, reloadWidgets: {})
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [seedIDs[1], blues], reloadWidgets: {})
         let teams = await store.teamRefs(within: .milliseconds(20)) { _ in
             try? await Task.sleep(for: .seconds(5))
             return nil
@@ -550,7 +678,7 @@ struct FavoritesStoreTests {
     @MainActor
     @Test("The deadline holds even when the lookup ignores cancellation, and the late answer is announced", .timeLimit(.minutes(1)))
     func lateLookupResolves() async throws {
-        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], isExistingInstall: true, reloadWidgets: {})
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], reloadWidgets: {})
         let key = store.resolutionKey
         let gate = Gate()
         // As the catalog's shared load does: an unstructured task's value,
@@ -581,7 +709,7 @@ struct FavoritesStoreTests {
     @MainActor
     @Test("A late lookup for a team unfollowed meanwhile changes nothing")
     func lateLookupForUnfollowedTeam() async throws {
-        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], isExistingInstall: true, reloadWidgets: {})
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], reloadWidgets: {})
         _ = await store.teamRefs(within: .milliseconds(20)) { id in
             try? await Task.sleep(for: .milliseconds(200))
             return resolvedTeam(id)
@@ -625,10 +753,10 @@ struct FavoritesStoreTests {
     func reorderSyncs() throws {
         let cloud = MemoryCloudStore()
         let t = Date(timeIntervalSince1970: 1_800_000_000)
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t })
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { t })
         let bDefaults = try scratchDefaults()
         var bReloads = 0
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: { bReloads += 1 })
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: { bReloads += 1 })
 
         a.move(from: IndexSet(integer: 3), to: 0)
         #expect(a.teamIDs.first == seedIDs[3])
@@ -655,8 +783,8 @@ struct FavoritesStoreTests {
     func concurrentReorders(aIsLater: Bool) throws {
         let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { aIsLater ? t0 + 200 : t0 + 100 })
-        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { aIsLater ? t0 + 100 : t0 + 200 })
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { aIsLater ? t0 + 200 : t0 + 100 })
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { aIsLater ? t0 + 100 : t0 + 200 })
 
         // Offline, A moves the last team to the front, B the first to the
         // back. B's write reaches iCloud last.
@@ -679,8 +807,8 @@ struct FavoritesStoreTests {
     func reorderStampedAfterAdoptedOrder() throws {
         let t = Date(timeIntervalSince1970: 1_800_000_000)
         let cloud = MemoryCloudStore()
-        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t + 500 })
-        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t })
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { t + 500 })
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { t })
         a.move(from: IndexSet(integer: 3), to: 0)
         receive(b)
 
@@ -702,8 +830,8 @@ struct FavoritesStoreTests {
         let cloud = MemoryCloudStore()
         cloud.set(FavoritesCodec.encode(start), forKey: FavoritesCodec.key)
 
-        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
-        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
         let writes = cloud.writes
         receive(a)
         receive(b)

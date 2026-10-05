@@ -95,7 +95,8 @@ struct SelectTeamIntent: WidgetConfigurationIntent {
     static let title: LocalizedStringResource = "Select Team"
     static let description = IntentDescription("Choose the team whose next game the widget shows.")
 
-    /// The team to show. When unset, the widget shows the first favorite.
+    /// The team to show. When unset, the widget shows the first favorite,
+    /// or, with none followed, asks for one (`WidgetTimelines.noTeam`).
     @Parameter(title: "Team")
     var team: TeamEntity?
 
@@ -107,8 +108,9 @@ struct SelectTeamIntent: WidgetConfigurationIntent {
 /// Turns stored team ids into teams inside the widget process, which has no
 /// `FavoritesStore`: favorites come from `SharedPaths.favoriteTeamIDs()`.
 enum WidgetTeams {
-    /// The team a widget shows when nothing else resolves: the Jayhawks, the
-    /// original widget's team.
+    /// The team a widget shows when a favorite does not resolve, and the
+    /// gallery's sample: the Jayhawks, the original widget's team. Never
+    /// shown for a reader who follows no team (`team(for:)`).
     static let fallback = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
 
     /// A team by `TeamRef.id`. Seed teams resolve from the bundle without
@@ -122,8 +124,9 @@ enum WidgetTeams {
         return await RemoteTeamCatalog.shared.team(id: id)
     }
 
-    /// The favorites, in order, dropping any that do not resolve. The seed
-    /// teams when the app has stored none.
+    /// The favorites, in order, dropping any that do not resolve. The
+    /// bundled teams when none are followed, so the configuration still has
+    /// teams to offer before any league's catalog is cached.
     static func favorites() async -> [TeamRef] {
         let ids = SharedPaths.favoriteTeamIDs()
         guard !ids.isEmpty else { return FavoriteTeams.teams }
@@ -143,14 +146,15 @@ enum WidgetTeams {
     }
 
     /// The team a configured widget shows: the chosen one, else the first
-    /// favorite, else `fallback`.
-    static func team(for configuration: SelectTeamIntent) async -> TeamRef {
+    /// favorite (`fallback` if it does not resolve). `nil` with no team
+    /// chosen and none followed: a fresh install (t_afe5c297).
+    static func team(for configuration: SelectTeamIntent) async -> TeamRef? {
         if let chosen = configuration.team?.team {
             return chosen
         }
-        if let first = SharedPaths.favoriteTeamIDs().first, let team = await resolve(first) {
-            return team
+        guard let first = SharedPaths.favoriteTeamIDs().first else {
+            return nil
         }
-        return fallback
+        return await resolve(first) ?? fallback
     }
 }

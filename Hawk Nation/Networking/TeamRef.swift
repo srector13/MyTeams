@@ -573,16 +573,15 @@ enum TeamCatalog {
 
 /// The four teams the app followed before favorites were editable.
 ///
-/// Now only the seed: `FavoritesCodec.loadOrSeed` writes them as the first
-/// favorites of an install that has none, and the widget falls back to them.
-/// The live, user-edited list is `FavoritesStore` in the app and
+/// No longer followed by default: a fresh install starts with no favorites
+/// and the home screen's "Add Teams" (t_afe5c297). Installs seeded with them
+/// by earlier builds keep them, as stored favorites. They remain the widget
+/// configuration's suggestions while nothing is followed. The live,
+/// user-edited list is `FavoritesStore` in the app and
 /// `SharedPaths.favoriteTeamIDs()` in the widget.
 enum FavoriteTeams {
-    /// The seed teams, in their original tab order.
+    /// The bundled teams, in their original tab order.
     static var teams: [TeamRef] { TeamCatalog.all }
-
-    /// The seed teams' `TeamRef.id`s, in order.
-    static var seedIDs: [TeamRef.ID] { teams.map(\.id) }
 
     /// Turns stored identifiers into teams, in order, dropping unknown and
     /// repeated ones. Accepts both `TeamRef.id` values and the retired `Team`
@@ -665,7 +664,7 @@ enum FavoritesCodec {
     /// predates the v2 shape and is kept so stored lists carry over.
     static let key = "favorites.v1"
     /// Set once the favorites have been seeded or restored, so the seed never
-    /// runs twice.
+    /// runs twice. Set on a fresh install too, whose seed is empty.
     static let seededKey = "favorites.v1.seeded"
     /// The seed teams' `addedAt`: older than any edit, so a device's seed
     /// never outweighs a removal synced from another device.
@@ -678,8 +677,10 @@ enum FavoritesCodec {
         /// The shared defaults had none; iCloud did.
         case restoredFromCloud
         /// Neither store had any and the seed had not run: the seed teams.
+        /// Never in the app, whose seed is empty (t_afe5c297).
         case seeded
-        /// The seed has run before but no list is stored. Empty.
+        /// No list is stored: a fresh install, or the seed has run before.
+        /// Empty.
         case empty
     }
 
@@ -732,6 +733,11 @@ enum FavoritesCodec {
     /// copy, written back to `defaults`; else, unless `seededKey` is set, the
     /// `seedIDs`, written to both stores. Seeding and restoring set
     /// `seededKey`; nothing here overwrites a stored list.
+    ///
+    /// An empty seed — the app's, since t_afe5c297 — writes no list at all:
+    /// an empty one in iCloud ahead of its first sync could stand in for the
+    /// reader's favorites there, and with none stored locally a later
+    /// launch still restores them.
     static func loadOrSeed(
         defaults: UserDefaults,
         cloud: (any FavoritesCloudStore)?,
@@ -746,6 +752,10 @@ enum FavoritesCodec {
             return (restored, .restoredFromCloud)
         }
         guard !defaults.bool(forKey: seededKey) else {
+            return ([], .empty)
+        }
+        guard !seedIDs.isEmpty else {
+            defaults.set(true, forKey: seededKey)
             return ([], .empty)
         }
         let seeded = seedIDs.map { FavoriteTeam(teamID: $0, addedAt: seedDate) }

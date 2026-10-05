@@ -29,11 +29,12 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
   system's apps (never under VoiceOver or Switch Control). Favorites are stored in the App Group's defaults
   (which the widget reads) and mirrored to iCloud key-value storage, so they
   sync between devices.
-- **Onboarding.** A fresh install opens on the "Pick Your Teams" sheet with
-  the seed teams — the Kansas Jayhawks, Kansas City Chiefs, Kansas City
-  Royals and Sporting Kansas City, from `Resources/teams.json` — already
-  checked. Dismissing it finishes onboarding. Installs restored from iCloud
-  or upgraded from an earlier build skip it.
+- **First launch.** A fresh install follows no teams: the home screen shows
+  "No Teams Yet" with an "Add Teams" button that opens the picker, and no
+  sheet opens at launch. Favorites already in iCloud are restored, at launch
+  or when the first sync arrives. Installs that earlier builds seeded with
+  the four bundled teams (`Resources/teams.json`) keep them as stored
+  favorites.
 - **Live scores and alerts.** One scoreboard poll per league covers every
   favorite in it (`LeagueScoreboardCenter`). Favorites post local alerts
   for the start, each score, each period's end and the final
@@ -48,7 +49,7 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
 - **Widget.** One configurable "Team Schedule" widget, in small and medium
   home-screen sizes and rectangular and circular Lock Screen sizes. It
   shows the next game of the team chosen in its settings, or else the first
-  favorite. Tapping it opens the app on that team's page (see below).
+  favorite; with neither, it asks the reader to add teams. Tapping it opens the app on that team's page (see below).
 
 ## URL scheme
 

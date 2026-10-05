@@ -148,6 +148,14 @@ final class GlassUIScreenshotTests: XCTestCase {
     @MainActor
     private func launch(_ configuration: Configuration) -> XCUIApplication {
         let app = XCUIApplication()
+        // The four bundled teams: a fresh install follows none (t_afe5c297).
+        // Read by Debug builds' `FavoritesStore.launchFavoritesKey`.
+        app.launchEnvironment["MYTEAMS_FAVORITES"] = [
+            "basketball/mens-college-basketball:2305",
+            "football/nfl:12",
+            "baseball/mlb:7",
+            "soccer/usa.1:186",
+        ].joined(separator: ",")
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", configuration.typeSize.rawValue]
         // Read by the app's `Theme.LaunchAccessibility`.
         if configuration.increaseContrast {
@@ -164,14 +172,9 @@ final class GlassUIScreenshotTests: XCTestCase {
     }
 
     /// The main screens only: the first team page, and its player and game
-    /// sheets. Onboarding, if it shows, is dismissed unrecorded.
+    /// sheets.
     @MainActor
     private func captureMainScreens(_ app: XCUIApplication, _ configuration: Configuration) {
-        let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            done.tap()
-        }
-
         guard app.tabBars.buttons.firstMatch.waitForExistence(timeout: 10) else {
             XCTFail("\(configuration.name): the crest bar never appeared")
             return
@@ -190,17 +193,12 @@ final class GlassUIScreenshotTests: XCTestCase {
         captureScheduleCards(app, configuration)
     }
 
-    /// Walks the screens reachable by identifier: onboarding, the first team
+    /// Walks the screens reachable by identifier: the first team
     /// page and its player, game, leaders and news sheets, a second team
     /// page, the team browser, a sport and a league in it, and Alerts.
     @MainActor
     private func captureScreens(_ app: XCUIApplication, _ configuration: Configuration) {
-        // A fresh install opens on the "Pick Your Teams" sheet.
         let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            snapshot("onboarding", configuration)
-            done.tap()
-        }
 
         guard app.tabBars.buttons.firstMatch.waitForExistence(timeout: 10) else {
             XCTFail("\(configuration.name): the crest bar never appeared")

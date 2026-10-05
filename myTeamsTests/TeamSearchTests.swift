@@ -153,7 +153,7 @@ struct ClubSearchTests {
     /// A store holding only `ids`, writing nowhere shared.
     @MainActor
     private func makeStore(following ids: [TeamRef.ID]) throws -> FavoritesStore {
-        FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: ids, isExistingInstall: true, reloadWidgets: {})
+        FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: ids, reloadWidgets: {})
     }
 
     @Test("1. \"bayern\" is one row, the Bundesliga's, with the UCL as its other league")

@@ -20,14 +20,6 @@ final class myTeamsUITests: XCTestCase {
     func testCrestBarSwitchesTeams() throws {
         let app = launchWithFixtures()
 
-        // A fresh install opens on the "Pick Your Teams" sheet with the seed
-        // teams already followed; Done finishes onboarding. Later launches
-        // skip the sheet.
-        let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            done.tap()
-        }
-
         // The system tab bar: a tab per favorite and nothing else; teams
         // are added from Settings (t_fa6748f4).
         let crests = teamTabs(app)
@@ -35,7 +27,7 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["teamPicker.edit"].exists, "The tab bar still has a Teams tab.")
         XCTAssertTrue(
             crests.element(boundBy: 1).waitForExistence(timeout: 10),
-            "Needs two followed teams; a fresh install follows four."
+            "Needs two followed teams; the launch follows four."
         )
         let first = pinnedTab(crests.element(boundBy: 0), in: app)
         let second = pinnedTab(crests.element(boundBy: 1), in: app)
@@ -55,8 +47,7 @@ final class myTeamsUITests: XCTestCase {
     /// back, keyed on row identifiers. Basketball lists the NBA.
     @MainActor
     func testBrowserDrillsDownSportToLeague() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launch()
         openTeamBrowser(app)
 
         let basketball = app.buttons["teamBrowser.sport.basketball"]
@@ -110,6 +101,52 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["teamBrowser.sport.basketball"].exists)
     }
 
+    /// A first launch shows no teams, only "Add Teams" (t_afe5c297): no
+    /// favorites are followed by default, and no sheet opens over the home
+    /// screen. Its button opens the team browser.
+    @MainActor
+    func testFreshLaunchShowsAddTeams() throws {
+        let app = launch(following: Self.noTeams)
+
+        let addTeams = app.buttons["home.addTeams"]
+        XCTAssertTrue(addTeams.waitForExistence(timeout: 10), "No Add Teams on the empty home screen.")
+        XCTAssertFalse(app.buttons["teamBrowser.done"].exists, "A sheet opened over the home screen at launch.")
+        XCTAssertEqual(teamTabs(app).count, 0, "A fresh launch follows a team.")
+
+        // On a cold launch the screen can redraw under the first tap.
+        for _ in 0..<3 where !app.buttons["teamBrowser.done"].exists {
+            addTeams.tap()
+            _ = app.buttons["teamBrowser.done"].waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(app.buttons["teamBrowser.done"].exists, "Add Teams never opened the team browser.")
+        XCTAssertTrue(app.buttons["teamBrowser.sport.basketball"].waitForExistence(timeout: 5))
+    }
+
+    /// The four bundled teams, as `TeamRef.id`s: they resolve from the app
+    /// bundle, with no catalog to load. A fresh install follows none, so
+    /// launches that need teams name them.
+    private static let bundledTeams = [
+        "basketball/mens-college-basketball:2305",
+        "football/nfl:12",
+        "baseball/mlb:7",
+        "soccer/usa.1:186",
+    ].joined(separator: ",")
+
+    /// A favorites value naming no team: a launch following none.
+    private static let noTeams = "none"
+
+    /// The app, following `favorites` in place of whatever an earlier test
+    /// left stored (`FavoritesStore.launchFavoritesKey`, read by Debug
+    /// builds; iCloud is left out of the run).
+    @MainActor
+    private func launch(following favorites: String = bundledTeams, environment: [String: String] = [:]) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["MYTEAMS_FAVORITES"] = favorites
+        app.launchEnvironment.merge(environment) { _, new in new }
+        app.launch()
+        return app
+    }
+
     /// The app, serving its ESPN requests from the unit tests' captured
     /// documents (`FixtureTransport`) instead of the network, so the tests
     /// that read feeds assert rather than skip when ESPN doesn't answer
@@ -127,11 +164,8 @@ final class myTeamsUITests: XCTestCase {
             .appendingPathComponent("Fixtures")
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixtures.path), "No fixtures at \(fixtures.path)")
 
-        let app = XCUIApplication()
         // `FixtureTransport.directoryKey`, read by Debug builds of the app.
-        app.launchEnvironment["MYTEAMS_FIXTURES_DIR"] = fixtures.path
-        app.launch()
-        return app
+        return launch(environment: ["MYTEAMS_FIXTURES_DIR": fixtures.path])
     }
 
     /// Declines the notification prompt a first follow raises on a fresh
@@ -144,9 +178,8 @@ final class myTeamsUITests: XCTestCase {
         alert.buttons.element(boundBy: 0).tap()
     }
 
-    /// Opens the team browser: the onboarding sheet on a fresh install,
-    /// past onboarding Settings' "Add Teams" row, the tab bar holding teams
-    /// only (t_fa6748f4).
+    /// Opens the team browser from Settings' "Add Teams" row, the tab bar
+    /// holding teams only (t_fa6748f4).
     ///
     /// On a cold launch the page redraws as the favorites and their crests
     /// resolve, and a tap located before a redraw can miss. So each step is
@@ -154,7 +187,6 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     private func openTeamBrowser(_ app: XCUIApplication) {
         let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) { return }
         let gear = app.buttons["home.settings"]
         let addTeams = app.buttons["settings.addTeams"]
         XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button on the team page.")
@@ -203,13 +235,7 @@ final class myTeamsUITests: XCTestCase {
     /// bar, so never drawn over the cards scrolling beneath it.
     @MainActor
     func testTeamPageHeaderPinnedInBar() throws {
-        let app = XCUIApplication()
-        app.launch()
-
-        let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            done.tap()
-        }
+        let app = launch()
 
         let header = app.descendants(matching: .any)["teamPage.header"]
         XCTAssertTrue(header.waitForExistence(timeout: 10))
@@ -252,13 +278,7 @@ final class myTeamsUITests: XCTestCase {
     /// bar (t_829bb3cc), alongside the pinned crest and name.
     @MainActor
     func testBrandLogoInTeamPageBar() throws {
-        let app = XCUIApplication()
-        app.launch()
-
-        let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            done.tap()
-        }
+        let app = launch()
 
         let header = app.descendants(matching: .any)["teamPage.header"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 10))
@@ -276,11 +296,6 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     func testScheduleCardsReadWithoutPlaceholders() throws {
         let app = launchWithFixtures()
-
-        let done = app.buttons["teamBrowser.done"]
-        if done.waitForExistence(timeout: 5) {
-            done.tap()
-        }
 
         let cards = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.game."))
@@ -301,8 +316,7 @@ final class myTeamsUITests: XCTestCase {
     /// first frame came.
     @MainActor
     func testSplashLogoOnLaunch() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launch()
 
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "splash-launch"
@@ -310,13 +324,11 @@ final class myTeamsUITests: XCTestCase {
         add(attachment)
         XCTAssertEqual(app.state, .runningForeground)
 
-        // Gone, and the app under it reachable: onboarding on a fresh
-        // install, the tab bar after.
+        // Gone, and the app under it reachable: the tab bar.
         let splash = app.images["splash.logo"]
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: splash)
         waitForExpectations(timeout: 5)
-        let done = app.buttons["teamBrowser.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5) || teamTabs(app).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(teamTabs(app).firstMatch.waitForExistence(timeout: 10))
     }
 
     @MainActor

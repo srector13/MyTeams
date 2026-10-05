@@ -104,7 +104,6 @@ struct FavoritesStoreNotificationTests {
             defaults: try scratchDefaults(),
             cloud: cloud,
             seedIDs: seedIDs,
-            isExistingInstall: true,
             reloadWidgets: { counter.reload() }
         )
         // Written after launch, as a change from elsewhere would be.
