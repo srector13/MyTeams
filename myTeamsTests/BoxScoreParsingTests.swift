@@ -420,6 +420,120 @@ struct BoxScoreParsingTests {
         #expect(parseGamePhase(from: summary(name: "STATUS_IN_PROGRESS")) == .live)
         #expect(parseGamePhase(from: summary(name: "STATUS_END_PERIOD")) == .live)
     }
+
+    // MARK: - Game sheet status (A-2)
+
+    @Test("The sheet's status line reads the summary header's period, clock and detail")
+    func gameStatusFromHeader() throws {
+        let live = try #require(parseGameStatus(from: try Fixture.json("chiefs_summary_live_401872952")))
+        #expect(live == GameStatus(
+            completed: false, halftime: false, period: "2", clock: "13:49", detail: "13:49 - 2nd Quarter"
+        ))
+
+        let final = JSON(data: Data("""
+        {"header": {"competitions": [{"status": {
+          "displayClock": "90'+5'", "period": 2,
+          "type": {"name": "STATUS_FULL_TIME", "state": "post", "completed": true,
+                   "description": "Full Time", "detail": "FT"}
+        }}]}}
+        """.utf8))
+        #expect(parseGameStatus(from: final) == GameStatus(
+            completed: true, halftime: false, period: "2", clock: "90'+5'", detail: "FT"
+        ))
+
+        let halftime = JSON(data: Data("""
+        {"header": {"competitions": [{"status": {
+          "displayClock": "45'", "period": 1,
+          "type": {"name": "STATUS_HALFTIME", "state": "in", "completed": false,
+                   "description": "Halftime", "detail": "HT"}
+        }}]}}
+        """.utf8))
+        #expect(parseGameStatus(from: halftime)?.halftime == true)
+    }
+
+    @Test("A summary with no status gives none, so the sheet keeps what it shows")
+    func gameStatusMissing() {
+        #expect(parseGameStatus(from: JSON(data: Data())) == nil)
+        #expect(parseGameStatus(from: JSON(data: Data(#"{"header": {"competitions": [{}]}}"#.utf8))) == nil)
+    }
+
+    @Test("The game sheet carries the refreshed status")
+    func gameSheetCarriesStatus() throws {
+        let sheet = LeagueDescriptor.nfl.gameSheet(
+            from: try Fixture.json("chiefs_summary_live_401872952"), team: .chiefs, followedIsHome: false
+        )
+        #expect(sheet.status?.period == "2")
+        #expect(sheet.status?.clock == "13:49")
+    }
+
+    @Test("The tapped game's status stands in only until a summary gives one")
+    func gameStatusFallback() {
+        let tapped = DetailSheetHeaderTests.game(
+            completed: false, gameClock: "67'", gamePeriod: "2", gameHalftime: false
+        )
+        // Loading: the status the schedule gave at the tap.
+        #expect(GameStatus.shown(refreshed: nil, tapped: tapped)
+            == GameStatus(completed: false, halftime: false, period: "2", clock: "67'"))
+
+        // Refreshed after the final whistle: "Final", not the frozen clock.
+        let refreshed = GameStatus(completed: true, halftime: false, period: "2", clock: "90'+5'", detail: "FT")
+        #expect(GameStatus.shown(refreshed: refreshed, tapped: tapped) == refreshed)
+    }
+}
+
+/// The game sheet's venue header: its copy (A-19) and the wash behind it
+/// (B-2).
+@Suite("Detail-sheet header")
+struct DetailSheetHeaderTests {
+    static func game(
+        channel: String = "",
+        location: String = "",
+        completed: Bool = false,
+        gameClock: String = "",
+        gamePeriod: String = "",
+        gameHalftime: Bool = false
+    ) -> Game {
+        Game(
+            team: "Sporting KC", opponent: "Philadelphia", score: "", opponentScore: "",
+            time: "", date: "", dateAsDate: .now, opponentLogo: "", channel: channel,
+            location: location, gameHome: true, gameID: "1", pointer: 0,
+            gameWin: false, completed: completed, competitionName: "",
+            cancelled: false, postponed: false, gameClock: gameClock,
+            gamePeriod: gamePeriod, gameHalftime: gameHalftime
+        )
+    }
+
+    @Test("The parser's TBD placeholder is no broadcast")
+    func broadcastHidesTBD() {
+        #expect(GameCardContent.broadcast(of: Self.game(channel: "TBD")) == nil)
+        #expect(GameCardContent.broadcast(of: Self.game(channel: "")) == nil)
+        #expect(GameCardContent.broadcast(of: Self.game(channel: "ESPN+")) == "ESPN+")
+    }
+
+    @Test("The venue line joins only the parts it has")
+    func venueLineSkipsEmptyParts() {
+        func line(_ location: String, _ city: String, _ state: String, showsAddress: Bool = true) -> String {
+            GameDetailView.formatVenueLine(location: location, city: city, state: state, showsAddress: showsAddress)
+        }
+        #expect(line("Children's Mercy Park", "Kansas City", "KS") == "Children's Mercy Park | Kansas City, KS")
+        // A failed summary leaves the address empty: no dangling "| , ".
+        #expect(line("Allianz Arena", "", "") == "Allianz Arena")
+        #expect(line("Allianz Arena", "Munich", "") == "Allianz Arena | Munich")
+        #expect(line("Allianz Arena", "", "Bavaria") == "Allianz Arena | Bavaria")
+        #expect(line("", "Munich", "") == "Munich")
+        #expect(line("", "", "") == "")
+        #expect(line("Allianz Arena", "Munich", "Bavaria", showsAddress: false) == "Allianz Arena")
+    }
+
+    @Test("Even a white host's wash over the black scrim keeps white text at 4.5:1")
+    func scrimClearsContrastOnWhite() throws {
+        // The wash blends the host colour into black: white at the wash's
+        // opacity is the lightest the scrim gets.
+        let channel = Int((255 * GameDetailView.teamWashOpacity).rounded())
+        let lightest = String(format: "%02X%02X%02X", channel, channel, channel)
+        let ratio = try #require(TeamColors.contrastRatio("FFFFFF", lightest))
+        #expect(ratio >= TeamColors.minimumInkContrast)
+    }
 }
 
 /// The game sheet draws every sport from one `BoxScore`: home score on the
