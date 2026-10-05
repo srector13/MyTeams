@@ -39,7 +39,7 @@ struct NewsDetailView: View {
                     Image("myTeamsLogo")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 120)
+                        .frame(width: BrandLogo.inline)
                         .accessibilityHidden(true)
                 }
             } description: {

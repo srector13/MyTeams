@@ -8,6 +8,7 @@
 
 import Foundation
 import Testing
+import UIKit
 
 @testable import myTeams
 
@@ -39,6 +40,121 @@ struct TabBarTests {
         // A team's id is "<leaguePath>:<espnID>".
         #expect(!HomeTabs.edit.contains(":"))
         #expect(HomeTabs.edit == "teamPicker.edit")
+    }
+}
+
+/// Settings belongs to `Home`, not to a team's page, so it outlives the
+/// page (A-5): `HomeRouting` moves the selection but never closes it.
+@Suite("Settings sheet lifecycle")
+struct SettingsSheetLifecycleTests {
+    private let chiefs = "football/nfl:12"
+    private let royals = "baseball/mlb:7"
+    private let sporting = "soccer/usa.1:186"
+
+    @Test("Removing the team on screen in Manage Teams leaves Settings open")
+    func survivesRemovingTheCurrentTeam() {
+        let open = HomeRouting.State(selection: chiefs, pendingLink: nil, showsSettings: true)
+        // Settings → Manage Teams unfollows the Chiefs; the favorites resolve
+        // without them and the selection moves to the next team.
+        let next = HomeRouting.favoritesResolved(open, teams: [royals, sporting])
+        #expect(next.selection == royals)
+        #expect(next.showsSettings)
+    }
+
+    @Test("Removing every team leaves Settings open")
+    func survivesRemovingEveryTeam() {
+        let open = HomeRouting.State(selection: chiefs, pendingLink: nil, showsSettings: true)
+        let next = HomeRouting.favoritesResolved(open, teams: [])
+        #expect(next.selection == "")
+        #expect(next.showsSettings)
+    }
+
+    @Test("A widget link arriving while Settings is open leaves it open")
+    func survivesALink() {
+        let open = HomeRouting.State(selection: chiefs, pendingLink: royals, showsSettings: true)
+        let linked = HomeRouting.linkChanged(open, teams: [chiefs, royals], favoriteIDs: [chiefs, royals])
+        #expect(linked.selection == royals)
+        #expect(linked.showsSettings)
+        // And one that resolves later, with the favorites.
+        let pending = HomeRouting.State(selection: chiefs, pendingLink: sporting, showsSettings: true)
+        let resolved = HomeRouting.favoritesResolved(pending, teams: [chiefs, sporting])
+        #expect(resolved.selection == sporting)
+        #expect(resolved.showsSettings)
+    }
+
+    @Test("Routing never opens Settings by itself")
+    func closedStaysClosed() {
+        let closed = HomeRouting.State(selection: chiefs, pendingLink: nil)
+        #expect(!closed.showsSettings)
+        #expect(!HomeRouting.favoritesResolved(closed, teams: [royals]).showsSettings)
+    }
+}
+
+/// The tab crests' cache key (A-17) and the bar crest's contrast badge
+/// (B-4).
+@Suite("Tab and bar crests")
+@MainActor
+struct CrestTests {
+    @Test("A stored crest's key changes with its file's modification date")
+    func sourceKeyFollowsTheFile() {
+        let path = "/Logos/favorites/football.nfl_12.default.png"
+        let before = Date(timeIntervalSinceReferenceDate: 1_000)
+        let after = Date(timeIntervalSinceReferenceDate: 2_000)
+        #expect(TabCrest.sourceKey(path: path, modified: before) == TabCrest.sourceKey(path: path, modified: before))
+        #expect(TabCrest.sourceKey(path: path, modified: before) != TabCrest.sourceKey(path: path, modified: after))
+        #expect(TabCrest.sourceKey(path: path, modified: before)
+            != TabCrest.sourceKey(path: "/Logos/catalog/football.nfl_12.default.png", modified: before))
+    }
+
+    @Test("A crest close to the bar's colour gets a badge; one that stands out doesn't")
+    func badgeOnLowContrast() throws {
+        let red = try #require(TeamColors.relativeLuminance(hex: "E31837"))
+        // A red crest on its own red bar.
+        #expect(BarCrest.crestNeedsBadge(dominantLuminance: red, heroHex: "E31837"))
+        // A white crest on a pale yellow bar.
+        #expect(BarCrest.crestNeedsBadge(dominantLuminance: 1, heroHex: "FFF2A8"))
+        // A navy crest on black.
+        let navy = try #require(TeamColors.relativeLuminance(hex: "0B1F3A"))
+        #expect(BarCrest.crestNeedsBadge(dominantLuminance: navy, heroHex: "000000"))
+        // White on navy, black on gold: no badge.
+        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 1, heroHex: "0B1F3A"))
+        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0, heroHex: "FFB612"))
+    }
+
+    @Test("The badge goes on below the minimum contrast and off above it")
+    func badgeThreshold() {
+        // On black (luminance 0) the contrast is (L + 0.05) / 0.05, so the
+        // minimum falls at this luminance.
+        let atMinimum = BarCrest.minimumContrast * 0.05 - 0.05
+        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: atMinimum + 0.01, heroHex: "000000"))
+        #expect(BarCrest.crestNeedsBadge(dominantLuminance: atMinimum - 0.01, heroHex: "000000"))
+        #expect(BarCrest.crestNeedsBadge(dominantLuminance: 0, heroHex: "000000"))
+    }
+
+    @Test("A bar colour that isn't hex never badges")
+    func badgeNeedsAHex() {
+        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0.5, heroHex: ""))
+        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0.5, heroHex: "red"))
+    }
+
+    @Test("A crest's dominant shade is its biggest opaque area, not the transparency around it")
+    func dominantLuminance() throws {
+        let size = CGSize(width: 48, height: 48)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        // Three quarters white, a quarter black, on a transparent corner.
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 48, height: 36))
+            UIColor.black.setFill()
+            context.fill(CGRect(x: 0, y: 36, width: 36, height: 12))
+        }
+        let luminance = try #require(BarCrest.dominantLuminance(of: image))
+        #expect(luminance > 0.9)
+
+        let clear = UIGraphicsImageRenderer(size: size, format: format).image { _ in }
+        #expect(BarCrest.dominantLuminance(of: clear) == nil)
     }
 }
 

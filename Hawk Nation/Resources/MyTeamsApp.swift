@@ -32,11 +32,13 @@ struct MyTeamsApp: App {
     var body: some Scene {
         WindowGroup {
             Home(deepLinkedTeamID: $deepLinkedTeamID)
-                .preferredColorScheme(appearance.colorScheme)
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
-                .splashOverlay()
+                // Outside the reader's appearance (B-6): the splash keeps the
+                // system's, as the launch screen before it does, and applies
+                // `appearance` once it has gone.
+                .splashOverlay(preferredColorScheme: appearance.colorScheme)
                 .onOpenURL { url in
                     if let teamID = WidgetDeepLink.teamID(from: url) {
                         deepLinkedTeamID = teamID

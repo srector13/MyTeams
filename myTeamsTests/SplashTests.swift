@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 import UIKit
 
@@ -27,6 +28,30 @@ struct SplashTests {
     @Test("The logo the launch screen and splash name is in the asset catalog")
     func logoResolves() {
         #expect(UIImage(named: "myTeamsLogo") != nil)
+    }
+
+    @Test("The splash draws the logo at the launch screen's size, the asset's point width")
+    func splashMatchesLaunchScreen() throws {
+        // The launch screen draws the image at its natural point size; the
+        // splash must match it or the logo jumps at the hand-off (B-5).
+        let logo = try #require(UIImage(named: "myTeamsLogo"))
+        #expect(abs(logo.size.width - BrandLogo.launch) < 1)
+    }
+
+    @Test("One set of brand logo sizes")
+    func brandLogoSizes() {
+        #expect(BrandLogo.bar == 20)
+        #expect(BrandLogo.inline == 120)
+        #expect(BrandLogo.hero == 160)
+        #expect(BrandLogo.bar < BrandLogo.inline && BrandLogo.inline < BrandLogo.hero)
+    }
+
+    @Test("The reader's appearance waits for the splash to go; the splash keeps the system's")
+    func appearanceAfterSplash() {
+        for preferred in [nil, ColorScheme.light, .dark] {
+            #expect(SplashCoordinator.colorScheme(preferred: preferred, splashVisible: true) == nil)
+            #expect(SplashCoordinator.colorScheme(preferred: preferred, splashVisible: false) == preferred)
+        }
     }
 
     @Test("The splash starts up and goes for good on dismiss, with or without Reduce Motion")

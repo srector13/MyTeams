@@ -54,7 +54,8 @@ enum AboutInfo {
 /// what build this is.
 ///
 /// Opened from the gear in a team page's navigation bar, as a sheet with
-/// its own stack.
+/// its own stack. `Home` presents it, not the page: removing the page's
+/// team in Manage Teams unmounts the page, and Settings stays up (A-5).
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -78,6 +79,8 @@ struct SettingsView: View {
                     Text("Appearance")
                 }
 
+                // No header: the row says what it is, and a header repeating
+                // it would be the section's only content (B-9).
                 Section {
                     // The existing alerts screen: the permission, Live
                     // Activities and each team's toggle.
@@ -89,8 +92,6 @@ struct SettingsView: View {
                     .accessibilityLabel("Alerts")
                     .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
                     .accessibilityIdentifier("settings.alerts")
-                } header: {
-                    Text("Alerts")
                 }
 
                 Section {
@@ -118,10 +119,12 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .confirm) {
+                    // Every change applies at once: nothing to confirm, so
+                    // it closes, as the system's glass xmark (B-9, X-8).
+                    Button(role: .close) {
                         dismiss()
                     } label: {
-                        Label("Done", systemImage: "checkmark")
+                        Label("Close", systemImage: "xmark")
                     }
                     .accessibilityIdentifier("settings.done")
                 }
@@ -137,7 +140,7 @@ struct SettingsView: View {
         Image(colorScheme == .dark ? "myTeamsLogoOnDark" : "myTeamsLogoOnLight")
             .resizable()
             .scaledToFit()
-            .frame(maxWidth: 160, maxHeight: 64)
+            .frame(width: BrandLogo.inline)
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
             .accessibilityLabel("myTeams")
