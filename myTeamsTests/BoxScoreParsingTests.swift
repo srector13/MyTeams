@@ -652,3 +652,75 @@ struct DetailSheetBoxScoreTests {
         #expect(backoff.delay(after: FetchResponse(result: .failure(.httpError(status: 429)))) == .seconds(120))
     }
 }
+
+/// A lineup or box-score row resolves to the player sheet a tap opens (C-6).
+@Suite("Game sheet player rows")
+struct GameSheetPlayerTests {
+    @Test("A soccer lineup row opens the athlete's sheet, loading stats by id")
+    func soccerRow() throws {
+        // epl_summary_final_401879301.json: Arsenal 3–0 Coventry.
+        let lineups = try #require(SoccerLineups(summary: Fixture.json("epl_summary_final_401879301")))
+        let raya = try #require(lineups.home.starters.first { $0.name == "David Raya" })
+        #expect(raya.athleteID == "196176")
+
+        guard case .soccer(let player) = try #require(GameSheetPlayer(lineupRow: raya)) else {
+            Issue.record("A soccer row resolved to another sport")
+            return
+        }
+        #expect(player.playerID == "196176")
+        #expect(player.id == "196176")
+        #expect(player.name == "David Raya")
+        #expect(player.number == "1")
+        #expect(player.numberInt == 1)
+        #expect(player.lastName == "Raya")
+        // "G" spelled the way the sheet picks the keeper's statistics.
+        #expect(player.position == "Goalkeeper")
+        // No totals claimed: the sheet reads the athlete document instead.
+        #expect(!player.hasSeasonStats)
+        #expect(player.placeholderStatistics.sections.isEmpty)
+
+        // Every row the fixture lists carries an id, so every row opens.
+        let rows = lineups.lineups.flatMap { $0.starters + $0.substitutes }
+        #expect(rows.allSatisfy { GameSheetPlayer(lineupRow: $0) != nil })
+    }
+
+    @Test("Hockey skater and goalie rows open the athlete's sheet")
+    func hockeyRows() throws {
+        // nhl_summary_final_401881922.json: Montreal (away) won 4–1 at Toronto.
+        let boxScore = try #require(HockeyBoxScore(summary: Fixture.json("nhl_summary_final_401881922")))
+
+        let anderson = try #require(boxScore.away.forwards.first { $0.athleteID == "3069687" })
+        guard case .hockey(let skater) = try #require(GameSheetPlayer(skater: anderson)) else {
+            Issue.record("A hockey row resolved to another sport")
+            return
+        }
+        #expect(skater.playerID == "3069687")
+        #expect(skater.name == "Josh Anderson")
+        #expect(skater.number == "17")
+        #expect(skater.numberInt == 17)
+
+        let stolarz = try #require(boxScore.home.goalies.first { $0.athleteID == "3067313" })
+        let goalie = try #require(GameSheetPlayer(goalie: stolarz))
+        #expect(goalie.id == "3067313")
+        guard case .hockey(let player) = goalie else {
+            Issue.record("A hockey row resolved to another sport")
+            return
+        }
+        #expect(player.name == "Anthony Stolarz")
+        #expect(player.number == "41")
+    }
+
+    @Test("A row the feed gave no athlete id opens nothing")
+    func rowWithoutID() {
+        let row = SoccerLineups.Player(
+            athleteID: "", name: "No Id", jersey: "4", position: "CD",
+            starter: true, substitutedAt: "", subbedOut: false,
+            goals: 0, yellowCards: 0, redCards: 0
+        )
+        #expect(GameSheetPlayer(lineupRow: row) == nil)
+
+        var withID = row
+        withID.athleteID = "42"
+        #expect(GameSheetPlayer(lineupRow: withID)?.id == "42")
+    }
+}
