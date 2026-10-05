@@ -178,8 +178,8 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
         snapshot("team-page-1", configuration)
 
-        // The cards over the receded header, the team's name in the bar
-        // (UI-1); then back to the top for the sheets.
+        // The cards scrolled under the bar, the crest and name pinned in
+        // it (t_5478d64e); then back to the top for the sheets.
         app.swipeUp()
         snapshot("team-page-1-scrolled", configuration)
         app.swipeDown()
@@ -209,8 +209,8 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
         snapshot("team-page-1", configuration)
 
-        // The cards over the receded header, the team's name in the bar
-        // (UI-1); then back to the top for the sheets.
+        // The cards scrolled under the bar, the crest and name pinned in
+        // it (t_5478d64e); then back to the top for the sheets.
         app.swipeUp()
         snapshot("team-page-1-scrolled", configuration)
         app.swipeDown()

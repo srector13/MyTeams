@@ -738,73 +738,47 @@ struct TeamHeaderSummary: Equatable, Sendable {
     }
 }
 
-/// The top of a team page, over the team colour: the team's crest — the
-/// page's only one — its name, and its record, standing and next game.
-/// Text and crest are drawn for the team colour (`teamInk(on:)`,
-/// `TeamColors.logoVariant`). At accessibility text sizes the crest sits
-/// above the name rather than beside it.
+/// The top of a team page, over the team colour, under the bar's crest and
+/// name (`TeamBarTitle`): the team's record, standing and next game. Drawn
+/// in the ink for the team colour (`teamInk(on:)`). Plain scrolling
+/// content: it scrolls under the bar with the cards, never over them.
 struct TeamPageHeader: View {
     let team: TeamRef
     let summary: TeamHeaderSummary
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
-    @ScaledMetric(relativeTo: .largeTitle) private var crestSize: CGFloat = 64
-
     var body: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.m))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.l))
-
-        layout {
-            TeamLogo(
-                team: team,
-                // Capped: past this the crest crowds out the name.
-                size: min(crestSize, 112),
-                forceVariant: TeamColors.logoVariant(for: team, onBackground: TeamColors.fillHex(for: team))
-            )
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(team.displayName)
-                    .font(.largeTitle.bold())
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-
-                if let recordLine = summary.recordLine {
-                    Text(recordLine)
-                        .font(.headline)
-                        .monospacedDigit()
-                }
-
-                if let nextGame = summary.nextGame {
-                    Label(nextGame, systemImage: "calendar")
-                        .font(Theme.Typography.footnote.weight(.semibold))
-                }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if let recordLine = summary.recordLine {
+                Text(recordLine)
+                    .font(.headline)
+                    .monospacedDigit()
             }
-            .teamInk(on: team)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let nextGame = summary.nextGame {
+                Label(nextGame, systemImage: "calendar")
+                    .font(Theme.Typography.footnote.weight(.semibold))
+            }
         }
+        .teamInk(on: team)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.top, Theme.Spacing.s)
         .padding(.bottom, Theme.Spacing.xl)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
-        .accessibilityIdentifier("teamPage.header")
+        .accessibilityIdentifier("teamPage.summary")
     }
 }
 
-/// The body of every team page: its header over the team colour, then the
+/// The body of every team page: its summary over the team colour, then the
 /// sections as inset rounded cards on the grouped background, which rounds
 /// its top corners where it meets the team-colour hero (T-4). No glass:
 /// this is scrolling content (B1).
 ///
 /// Lays the page out only. The page scrolls in `TeamPage`'s scroll view,
-/// which draws the team colour behind the header and carries the bottom
-/// edge effect under the tab bar. As the page scrolls, the cards slide up
-/// over the header, which recedes beneath them (`recedingHeader(below:)`),
-/// and the page tells `TeamPage` once they reach the navigation bar
-/// (`TeamPageChrome`).
+/// which draws the team colour behind the summary, pins the crest and name
+/// in the bar, and carries the bottom edge effect under the tab bar. The
+/// summary and the cards scroll together, one after the other, so neither
+/// is ever drawn over the other.
 struct TeamHomeLayout<Header: View, Content: View>: View {
     let content: Content
     let header: Header
@@ -818,11 +792,8 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
     @Environment(TeamPageChrome.self) private var chrome: TeamPageChrome?
 
     var body: some View {
-        let barBottom = chrome?.barBottom ?? 0
-
         VStack(spacing: 0) {
             header
-                .recedingHeader(below: barBottom)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { height in
@@ -837,13 +808,6 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
             // rather than leaving it showing beneath a short page.
             .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)
             .background(Theme.Surface.content, in: Theme.Radius.pageShape)
-            // Drawn after the header, so over it as it recedes.
-            .zIndex(1)
-            .onGeometryChange(for: Bool.self) { proxy in
-                proxy.frame(in: .global).minY < barBottom
-            } action: { covered in
-                chrome?.cardsUnderBar = covered
-            }
         }
     }
 }

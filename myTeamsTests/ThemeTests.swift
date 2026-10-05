@@ -130,37 +130,6 @@ struct ThemeTests {
         #expect(ratio >= TeamColors.minimumInkContrast)
     }
 
-    @Test("A team page's header is at rest until the cards scroll over it, or when pulled down")
-    func recedeAtRest() {
-        let rest = Theme.Motion.Recede(offset: 0, scale: 1, opacity: 1)
-        #expect(Theme.Motion.recede(scrolled: 0, height: 200, reduceMotion: false) == rest)
-        #expect(Theme.Motion.recede(scrolled: -80, height: 200, reduceMotion: false) == rest)
-        // Not yet measured.
-        #expect(Theme.Motion.recede(scrolled: 50, height: 0, reduceMotion: false) == rest)
-    }
-
-    @Test("The header drifts, shrinks and fades as the cards cover it, then holds")
-    func recedeProgress() {
-        let half = Theme.Motion.recede(scrolled: 100, height: 200, reduceMotion: false)
-        #expect(half.offset == 100 * Theme.Motion.recedeParallax)
-        #expect(abs(half.scale - (1 - Theme.Motion.recedeScale / 2)) < 0.0001)
-        #expect(abs(half.opacity - 0.5) < 0.0001)
-
-        let covered = Theme.Motion.recede(scrolled: 200, height: 200, reduceMotion: false)
-        #expect(covered.opacity == 0)
-        #expect(abs(covered.scale - (1 - Theme.Motion.recedeScale)) < 0.0001)
-        // Past the header's height nothing moves on: no jump at the boundary.
-        #expect(Theme.Motion.recede(scrolled: 900, height: 200, reduceMotion: false) == covered)
-    }
-
-    @Test("Under Reduce Motion the header only fades")
-    func recedeReduceMotion() {
-        let recede = Theme.Motion.recede(scrolled: 50, height: 200, reduceMotion: true)
-        #expect(recede.offset == 0)
-        #expect(recede.scale == 1)
-        #expect(abs(recede.opacity - 0.75) < 0.0001)
-    }
-
     @Test("Ink prefers the alternate colour only when it reads")
     func inkAlternate() {
         // Gold on navy reads; gold on white doesn't.
