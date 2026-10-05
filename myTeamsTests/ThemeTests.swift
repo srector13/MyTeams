@@ -137,4 +137,42 @@ struct ThemeTests {
         #expect(TeamColors.inkHex(on: "FFFFFF", alternate: "FFB612") == "000000")
         #expect(TeamColors.inkHex(on: "0051BA", alternate: "not a colour") == "FFFFFF")
     }
+
+    /// A team with `color` and no alternate, for the team-level ink cases.
+    private func makeTeam(color: String) -> TeamRef {
+        TeamRef(
+            league: .nfl,
+            espnID: "999",
+            displayName: "Test Team",
+            shortName: "Test",
+            abbreviation: "TST",
+            location: "Test",
+            colorHex: color,
+            alternateColorHex: "",
+            logoURL: nil,
+            logoDarkURL: nil,
+            logoAsset: nil
+        )
+    }
+
+    @Test("A team's ink reads on its fill, colourless teams included (B-1)", arguments: [
+        ("FFE033", "000000"), ("1E3A8A", "FFFFFF"), ("", nil),
+    ] as [(String, String?)])
+    func teamInk(color: String, expected: String?) throws {
+        let team = makeTeam(color: color)
+        // What `TeamColors.ink(on:)` and `.teamInk(on:)` draw in.
+        let fill = TeamColors.fillHex(for: team)
+        let ink = TeamColors.inkHex(on: fill, alternate: team.alternateColorHex)
+        let ratio = try #require(TeamColors.contrastRatio(ink, fill))
+        #expect(ratio >= TeamColors.minimumInkContrast)
+        if let expected { #expect(ink == expected) }
+        #expect(TeamColors.ink(on: team) != .clear)
+    }
+
+    @Test("A colourless team's fill is a fallback colour, never clear (B-1)")
+    func colourlessFill() {
+        let fill = TeamColors.fillHex(for: makeTeam(color: ""))
+        #expect(TeamColors.fallbackFills.contains(fill))
+        #expect(Color(hexString: fill) != .clear)
+    }
 }

@@ -23,6 +23,10 @@ struct PlayerCard<Player: RosterPlayer>: View {
     /// (B-3).
     @ScaledMetric(relativeTo: .caption) private var headshotSize: CGFloat = 60
 
+    /// The caption's width in the carousel: a little wider than the
+    /// headshot, so a long name wraps rather than widening the card (B-17).
+    @ScaledMetric(relativeTo: .caption2) private var captionWidth: CGFloat = 80
+
     var body: some View {
         // At accessibility text sizes the roster is a vertical list, so the
         // detail sits beside the headshot rather than under it.
@@ -41,22 +45,33 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
             switch state {
             case .name:
-                Text(player.name)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                caption(player.name)
             case .number:
-                caption(player.number, font: .caption)
+                caption(player.number)
             case .position:
-                caption(player.position, font: .caption2)
+                caption(player.position)
             }
         }
     }
 
-    /// A bold caption, falling back to "N/A" when the feed left the field out.
-    private func caption(_ text: String, font: Font) -> some View {
-        Text(text.isEmpty ? "N/A" : text)
-            .font(font.bold())
+    /// The card's caption, in one style whatever the sort (B-17), falling
+    /// back to "N/A" when the feed left the field out. In the carousel it
+    /// keeps two lines' room, centred, so every card is the same height; in
+    /// the accessibility-size list it wraps freely beside the headshot.
+    @ViewBuilder
+    private func caption(_ text: String) -> some View {
+        let label = Text(text.isEmpty ? "N/A" : text)
+            .font(.caption2)
             .foregroundStyle(.secondary)
+
+        if dynamicTypeSize.isAccessibilitySize {
+            label
+        } else {
+            label
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.center)
+                .frame(width: captionWidth)
+        }
     }
 }
 
