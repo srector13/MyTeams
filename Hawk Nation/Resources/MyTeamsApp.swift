@@ -36,6 +36,7 @@ struct MyTeamsApp: App {
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
+                .splashOverlay()
                 .onOpenURL { url in
                     if let teamID = WidgetDeepLink.teamID(from: url) {
                         deepLinkedTeamID = teamID
