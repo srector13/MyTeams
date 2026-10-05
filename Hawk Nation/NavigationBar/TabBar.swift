@@ -13,8 +13,8 @@ import UIKit
 // resolved through `RemoteTeamCatalog` and shown in favorites order.
 
 /// The app's root screen: the system tab bar, one tab per favorite team, each
-/// showing that team's scrolling page, and a "Teams" tab that opens the team
-/// picker.
+/// showing that team's scrolling page. Teams are added from Settings
+/// (t_fa6748f4).
 ///
 /// A standard `TabView`, so the platform draws the bar: its Liquid Glass,
 /// selection indicator and animation, the large content viewer, minimizing
@@ -80,19 +80,19 @@ struct Home: View {
         }
     }
 
-    /// The tab view's selection. The "Teams" tab is a button, not a page: a
-    /// tap on it opens the picker and the team on screen stays selected, so
-    /// the bar goes back to that team's tab.
+    /// The tab view's selection: a tap on a team's tab chooses that team,
+    /// as a pick from the "More" list does (`teamPage`).
     private var tabSelection: Binding<TeamRef.ID> {
         Binding {
             selection
         } set: { tab in
-            if tab == HomeTabs.edit {
-                showsBrowser = true
-            } else {
-                selection = tab
-            }
+            choose(tab)
         }
+    }
+
+    /// The reader chose `team`, from its tab in the bar or from "More".
+    private func choose(_ team: TeamRef.ID) {
+        apply(HomeRouting.teamChosen(routing, team: team, teams: teams.map(\.id)))
     }
 
     /// Restarts the crest prefetch when the favorites or the colour scheme
@@ -159,50 +159,40 @@ struct Home: View {
         }
     }
 
-    /// The favorites' tabs with the "Teams" tab among them: last while the
-    /// bar holds them all, otherwise in the bar's last slot before "More"
-    /// (`HomeTabs.editIndex`), so it is always in the bar.
+    /// The favorites' tabs, and nothing else: the bar holds teams only,
+    /// those past its room under the system's "More" (`HomeTabs.barCount`).
+    /// Teams are added from Settings (t_fa6748f4).
     @ViewBuilder
     private var tabs: some View {
         let _ = crestRevision
-        let editIndex = HomeTabs.editIndex(
+        let barCount = HomeTabs.barCount(
             teamCount: teams.count,
             barCapacity: sizeClass == .compact ? HomeTabs.compactCapacity : nil
         )
         TabView(selection: tabSelection) {
-            ForEach(Array(teams.prefix(editIndex))) { team in
-                teamTab(team)
+            ForEach(Array(teams.prefix(barCount))) { team in
+                teamTab(team, inMore: false)
             }
 
-            Tab("Teams", systemImage: "plus.circle", value: HomeTabs.edit) {
-                // Never shown: selecting the tab opens the picker instead.
-                Color.clear
-            }
-            .accessibilityLabel(Text("Add or Edit Teams"))
-            .accessibilityIdentifier(HomeTabs.edit)
-            // Left visible in every placement: hiding it for the sidebar
-            // (`defaultVisibility`) coincided with it missing from the
-            // phone's bar in UI tests. The iPad sidebar adds a footer
-            // entry as well (B-14).
-
-            ForEach(Array(teams.dropFirst(editIndex))) { team in
-                teamTab(team)
+            ForEach(Array(teams.dropFirst(barCount))) { team in
+                teamTab(team, inMore: true)
             }
         }
         // The bar shrinks to the selected tab as the page scrolls down and
         // comes back on scrolling up or a tap, as the system's apps do.
         .tabBarMinimizeBehavior(voiceOver || switchControl ? .never : .onScrollDown)
-        .modifier(HomeSidebar(isRegularWidth: sizeClass == .regular) { showsBrowser = true })
+        .modifier(HomeSidebar(isRegularWidth: sizeClass == .regular))
         // A tick as the team changes (C-4).
         .sensoryFeedback(.selection, trigger: selection)
         // The alerts presenter skips the banner for the team on screen (C-8).
         .onChange(of: selection, initial: true) { ScoreAlertForeground.shared.teamID = $1 }
     }
 
-    /// A favorite's tab: its crest over its short name.
-    private func teamTab(_ team: TeamRef) -> some TabContent<TeamRef.ID> {
+    /// A favorite's tab: its crest over its short name. `inMore` for a tab
+    /// past the bar's room, listed under "More".
+    private func teamTab(_ team: TeamRef, inMore: Bool) -> some TabContent<TeamRef.ID> {
         Tab(value: team.id) {
-            teamPage(team)
+            teamPage(team, inMore: inMore)
         } label: {
             Label {
                 Text(team.shortName)
@@ -219,9 +209,18 @@ struct Home: View {
     /// leaving the page cancels its task. Every page used to stay mounted,
     /// each polling on its own. `pages` keeps each team's loaded data and
     /// scroll offset for when the reader comes back.
+    ///
+    /// Except under "More" (`inMore`). Picking a team from the More list
+    /// pushes its tab on UIKit's More navigation controller without the
+    /// tab view's selection ever hearing of it, so a page gated on the
+    /// selection stayed the blank placeholder and never loaded
+    /// (t_fa6748f4). A More tab's page is always mounted instead — its
+    /// task still runs only while it's on screen — and coming on screen
+    /// chooses its team, the same change a tap on a bar tab makes
+    /// (`HomeRouting.teamChosen`).
     @ViewBuilder
-    private func teamPage(_ team: TeamRef) -> some View {
-        if team.id == selection {
+    private func teamPage(_ team: TeamRef, inMore: Bool) -> some View {
+        if inMore || team.id == selection {
             TeamPage(
                 team: team,
                 savedOffset: pages.scrollOffset(for: team.id),
@@ -231,6 +230,7 @@ struct Home: View {
                 TeamHomeView(team: team, pages: pages)
             }
             .id(team.id)
+            .onAppear { choose(team.id) }
         } else {
             Theme.Surface.content
                 .ignoresSafeArea()
@@ -267,6 +267,17 @@ enum HomeRouting {
                 next.selection = id
             }
         }
+        return next
+    }
+
+    /// The reader chose `team`: tapped its tab in the bar, or picked it
+    /// from the bar's "More" list, whose page coming on screen reports it
+    /// (`Home.teamPage`). Either way the same change: the team is selected
+    /// if it's one of `teams`. Settings and a pending link are left alone.
+    static func teamChosen(_ state: State, team: TeamRef.ID, teams: [TeamRef.ID]) -> State {
+        guard teams.contains(team) else { return state }
+        var next = state
+        next.selection = team
         return next
     }
 
@@ -476,18 +487,13 @@ private struct TeamBarTitle: View {
         // Capped: the bar doesn't grow with the text.
         let size = min(crestSize, 36)
         let variant = TeamColors.logoVariant(for: team, onBackground: backgroundHex)
-        // A crest that would vanish into the bar sits on a disc in the
-        // bar's ink, as a badge (B-4).
-        let badged = BarCrest.needsBadge(team: team, variant: variant, onHex: backgroundHex)
+        // A crest that would vanish into the bar is traced in the bar's
+        // ink, at full size and with nothing behind it (B-4, t_fa6748f4).
+        let outlined = BarCrest.needsOutline(team: team, variant: variant, onHex: backgroundHex)
         HStack(spacing: Theme.Spacing.s) {
-            TeamLogo(team: team, size: badged ? size * BarCrest.badgeInset : size, forceVariant: variant)
+            TeamLogo(team: team, size: size, forceVariant: variant)
                 .frame(width: size, height: size)
-                .background {
-                    if badged {
-                        Circle()
-                            .fill(Color(hexString: TeamColors.inkHex(on: backgroundHex)))
-                    }
-                }
+                .modifier(CrestOutline(isOn: outlined, inkHex: TeamColors.inkHex(on: backgroundHex)))
                 .accessibilityHidden(true)
 
             Text(team.displayName)
@@ -499,6 +505,35 @@ private struct TeamBarTitle: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("teamPage.header")
+    }
+}
+
+/// A bar crest that would blend into the bar (`BarCrest.needsOutline`),
+/// set off from it without a shape behind it: a hairline in the bar's ink
+/// traced around the crest's own silhouette — its alpha shadowed a point
+/// each way, so the line follows the artwork's edge — and a soft shadow in
+/// the same ink beneath. The ink is white or black against the team colour,
+/// whatever the app's appearance, so the crest reads in light and dark.
+private struct CrestOutline: ViewModifier {
+    let isOn: Bool
+    let inkHex: String
+
+    private var ink: Color { Color(hexString: inkHex) }
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                // One layer, so the outline traces the whole crest rather
+                // than each piece of it.
+                .compositingGroup()
+                .shadow(color: ink, radius: 0, x: BarCrest.outlineWidth, y: 0)
+                .shadow(color: ink, radius: 0, x: -BarCrest.outlineWidth, y: 0)
+                .shadow(color: ink, radius: 0, x: 0, y: BarCrest.outlineWidth)
+                .shadow(color: ink, radius: 0, x: 0, y: -BarCrest.outlineWidth)
+                .shadow(color: ink.opacity(0.35), radius: 2, x: 0, y: 1)
+        } else {
+            content
+        }
     }
 }
 
@@ -522,22 +557,20 @@ private struct BrandBarLogo: View {
     }
 }
 
-/// Where the "Teams" tab goes among the favorites' tabs.
+/// How the favorites' tabs fit the system tab bar, which holds teams only:
+/// adding teams is in Settings (t_fa6748f4).
 enum HomeTabs {
-    /// The "Teams" tab's value, and its accessibility identifier. Never a
-    /// team's id, which is `"<leaguePath>:<espnID>"`.
-    static let edit = "teamPicker.edit"
-
     /// The most items a compact-width tab bar shows. With more tabs it
     /// shows one fewer and a "More" item listing the rest.
     static let compactCapacity = 5
 
-    /// The "Teams" tab's index among `teamCount` favorites' tabs: last while
-    /// every tab fits a bar of `barCapacity` (no limit for `nil`), otherwise
-    /// the last slot before "More", so the button never ends up in its list.
-    static func editIndex(teamCount: Int, barCapacity: Int?) -> Int {
-        guard let barCapacity, teamCount + 1 > barCapacity else { return teamCount }
-        return min(teamCount, max(0, barCapacity - 2))
+    /// How many of `teamCount` favorites' tabs the bar itself shows, in
+    /// order, for a bar of `barCapacity` (no limit for `nil`): all of them
+    /// while they fit, otherwise one fewer than the capacity, the last slot
+    /// going to "More". The rest are listed under "More".
+    static func barCount(teamCount: Int, barCapacity: Int?) -> Int {
+        guard let barCapacity, teamCount > barCapacity else { return teamCount }
+        return max(0, barCapacity - 1)
     }
 }
 
@@ -655,17 +688,19 @@ enum TabCrest {
 /// The crest in a team page's bar against the opaque team colour behind it
 /// (B-4). `logoVariant` swaps in the dark crest on a dark bar only when the
 /// feed has one, so a crest in the team's own colour, or a light crest on a
-/// light bar, can blend into the bar. Such a crest is drawn on a small disc
-/// in the bar's ink, like `MonogramTeam`'s badge.
+/// light bar, can blend into the bar. Such a crest is outlined in the bar's
+/// ink (`CrestOutline`); it used to sit on a disc, which read as a badge
+/// rather than the team's crest (t_fa6748f4).
 @MainActor
 enum BarCrest {
     /// Below this contrast between the crest's dominant colour and the bar,
-    /// the crest gets its disc. Low on purpose: a crest is artwork with
+    /// the crest gets its outline. Low on purpose: a crest is artwork with
     /// edges and detail of its own, not text, so only a near match fails.
     nonisolated static let minimumContrast = 2.0
 
-    /// The crest's size on its disc, as a share of the disc.
-    static let badgeInset: CGFloat = 0.72
+    /// The outline's width, in points: a hairline, enough to draw the
+    /// crest's edge without becoming a border.
+    static let outlineWidth: CGFloat = 1
 
     /// Dominant luminances measured so far, by `TabCrest.sourceKey`, so a
     /// changed file is measured again.
@@ -678,16 +713,16 @@ enum BarCrest {
     /// Whether a crest whose dominant colour has `dominantLuminance` (WCAG
     /// relative luminance, 0 to 1) is too close to the bar's `heroHex` to
     /// read on it. Never for a colour that isn't a hex colour.
-    nonisolated static func crestNeedsBadge(dominantLuminance: Double, heroHex: String) -> Bool {
+    nonisolated static func crestNeedsOutline(dominantLuminance: Double, heroHex: String) -> Bool {
         guard let bar = TeamColors.relativeLuminance(hex: heroHex) else { return false }
         let ratio = (max(dominantLuminance, bar) + 0.05) / (min(dominantLuminance, bar) + 0.05)
         return ratio < minimumContrast
     }
 
     /// Whether the stored crest `TeamLogo` draws for `team` in `variant`
-    /// needs the disc on `heroHex`. No for a crest not stored yet: the
+    /// needs the outline on `heroHex`. No for a crest not stored yet: the
     /// monogram it falls back to is a badge already.
-    static func needsBadge(team: TeamRef, variant: LogoVariant, onHex heroHex: String) -> Bool {
+    static func needsOutline(team: TeamRef, variant: LogoVariant, onHex heroHex: String) -> Bool {
         guard let file = LogoStore.url(for: team, variant: variant) else { return false }
         let key = TabCrest.sourceKey(of: file) as NSString
         let luminance: Double
@@ -700,7 +735,7 @@ enum BarCrest {
             measured.setObject(NSNumber(value: dominant), forKey: key)
             luminance = dominant
         }
-        return crestNeedsBadge(dominantLuminance: luminance, heroHex: heroHex)
+        return crestNeedsOutline(dominantLuminance: luminance, heroHex: heroHex)
     }
 
     /// The relative luminance of the image's most common shade: its opaque
@@ -753,25 +788,16 @@ enum BarCrest {
 }
 
 /// iPad (B-14): on regular width the tab bar can become a sidebar, which
-/// lists every favorite rather than a stretched phone bar, with "Teams" at
-/// its foot. Compact width keeps the plain tab bar and its "More" item.
+/// lists every favorite rather than a stretched phone bar. Compact width
+/// keeps the plain tab bar and its "More" item. Like the bar, it lists
+/// teams only: adding teams is in Settings (t_fa6748f4).
 private struct HomeSidebar: ViewModifier {
     let isRegularWidth: Bool
-    let openBrowser: @MainActor () -> Void
 
     func body(content: Content) -> some View {
         if isRegularWidth {
             content
                 .tabViewStyle(.sidebarAdaptable)
-                .tabViewSidebarFooter {
-                    Button {
-                        openBrowser()
-                    } label: {
-                        Label("Teams", systemImage: "plus.circle")
-                    }
-                    .accessibilityLabel(Text("Add or Edit Teams"))
-                    .accessibilityIdentifier("teamPicker.sidebarEdit")
-                }
         } else {
             content
         }

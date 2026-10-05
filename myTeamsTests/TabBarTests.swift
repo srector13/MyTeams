@@ -12,34 +12,88 @@ import UIKit
 
 @testable import myTeams
 
-/// Where the "Teams" tab sits among the favorites' tabs in the system tab
-/// bar (`HomeTabs.editIndex`).
+/// How many favorites the system tab bar shows before "More"
+/// (`HomeTabs.barCount`). The bar holds teams only: adding teams is in
+/// Settings (t_fa6748f4).
 @Suite("Tab bar")
 struct TabBarTests {
-    @Test("The Teams tab comes last while every tab fits the bar")
-    func editLastWhileTheBarHoldsAll() {
-        #expect(HomeTabs.editIndex(teamCount: 0, barCapacity: HomeTabs.compactCapacity) == 0)
-        #expect(HomeTabs.editIndex(teamCount: 1, barCapacity: HomeTabs.compactCapacity) == 1)
-        #expect(HomeTabs.editIndex(teamCount: 4, barCapacity: HomeTabs.compactCapacity) == 4)
+    @Test("Every team is in the bar while they all fit")
+    func allInTheBarWhileTheyFit() {
+        #expect(HomeTabs.barCount(teamCount: 0, barCapacity: HomeTabs.compactCapacity) == 0)
+        #expect(HomeTabs.barCount(teamCount: 1, barCapacity: HomeTabs.compactCapacity) == 1)
+        // No Teams tab taking a slot: five teams fill the bar.
+        #expect(HomeTabs.barCount(teamCount: 5, barCapacity: HomeTabs.compactCapacity) == 5)
     }
 
-    @Test("Past the bar's capacity the Teams tab takes the last slot before More")
-    func editBeforeMoreOnceTheyOverflow() {
-        // Five favorites and Teams make six: the bar shows four and More.
-        #expect(HomeTabs.editIndex(teamCount: 5, barCapacity: HomeTabs.compactCapacity) == 3)
-        #expect(HomeTabs.editIndex(teamCount: 12, barCapacity: HomeTabs.compactCapacity) == 3)
+    @Test("Past the bar's capacity the bar shows one fewer and More lists the rest")
+    func restUnderMoreOnceTheyOverflow() {
+        // Six favorites: four in the bar, then More with the other two.
+        #expect(HomeTabs.barCount(teamCount: 6, barCapacity: HomeTabs.compactCapacity) == 4)
+        #expect(HomeTabs.barCount(teamCount: 12, barCapacity: HomeTabs.compactCapacity) == 4)
     }
 
-    @Test("With no limit on the bar the Teams tab comes last")
-    func editLastWithoutALimit() {
-        #expect(HomeTabs.editIndex(teamCount: 12, barCapacity: nil) == 12)
+    @Test("With no limit on the bar every team is in it")
+    func allInTheBarWithoutALimit() {
+        #expect(HomeTabs.barCount(teamCount: 12, barCapacity: nil) == 12)
+    }
+}
+
+/// Choosing a team from the bar's "More" list loads its page, as a tap on
+/// its tab would (t_fa6748f4): both go through `HomeRouting.teamChosen`.
+@Suite("Choosing a team")
+struct TeamChosenTests {
+    private let teams = [
+        "football/nfl:12", "baseball/mlb:7", "soccer/usa.1:186",
+        "basketball/mens-college-basketball:2305", "hockey/nhl:24", "football/nfl:13",
+    ]
+
+    /// A team the compact bar lists under "More".
+    private var moreTeam: String {
+        let barCount = HomeTabs.barCount(teamCount: teams.count, barCapacity: HomeTabs.compactCapacity)
+        return teams[barCount]
     }
 
-    @Test("The Teams tab's value can't be a team's")
-    func editValueIsNotATeamID() {
-        // A team's id is "<leaguePath>:<espnID>".
-        #expect(!HomeTabs.edit.contains(":"))
-        #expect(HomeTabs.edit == "teamPicker.edit")
+    @Test("A team picked from More is selected")
+    func morePickSelectsTheTeam() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        let next = HomeRouting.teamChosen(start, team: moreTeam, teams: teams)
+        #expect(next.selection == moreTeam)
+    }
+
+    @Test("A pick from More makes the same change as a tap on a bar tab")
+    func morePickMatchesATabTap() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: nil, showsSettings: false)
+        let fromMore = HomeRouting.teamChosen(start, team: moreTeam, teams: teams)
+        // What the tab view's selection would have been set to by a tap.
+        var tapped = start
+        tapped.selection = moreTeam
+        #expect(fromMore == tapped)
+        // And a bar tab goes the same way.
+        let barTap = HomeRouting.teamChosen(start, team: teams[1], teams: teams)
+        #expect(barTap.selection == teams[1])
+        #expect(barTap.pendingLink == start.pendingLink)
+        #expect(barTap.showsSettings == start.showsSettings)
+    }
+
+    @Test("Choosing the team already selected changes nothing")
+    func choosingTheSelectedTeamIsANoOp() {
+        let start = HomeRouting.State(selection: moreTeam, pendingLink: nil)
+        #expect(HomeRouting.teamChosen(start, team: moreTeam, teams: teams) == start)
+    }
+
+    @Test("A team no longer followed isn't selected")
+    func unknownTeamIsIgnored() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        #expect(HomeRouting.teamChosen(start, team: "football/nfl:99", teams: teams) == start)
+    }
+
+    @Test("Choosing a team leaves Settings and a pending link alone")
+    func leavesTheRestAlone() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: teams[2], showsSettings: true)
+        let next = HomeRouting.teamChosen(start, team: moreTeam, teams: teams)
+        #expect(next.selection == moreTeam)
+        #expect(next.pendingLink == teams[2])
+        #expect(next.showsSettings)
     }
 }
 
@@ -90,8 +144,8 @@ struct SettingsSheetLifecycleTests {
     }
 }
 
-/// The tab crests' cache key (A-17) and the bar crest's contrast badge
-/// (B-4).
+/// The tab crests' cache key (A-17) and the bar crest's contrast outline
+/// (B-4, t_fa6748f4).
 @Suite("Tab and bar crests")
 @MainActor
 struct CrestTests {
@@ -106,35 +160,35 @@ struct CrestTests {
             != TabCrest.sourceKey(path: "/Logos/catalog/football.nfl_12.default.png", modified: before))
     }
 
-    @Test("A crest close to the bar's colour gets a badge; one that stands out doesn't")
-    func badgeOnLowContrast() throws {
+    @Test("A crest close to the bar's colour gets an outline; one that stands out doesn't")
+    func outlineOnLowContrast() throws {
         let red = try #require(TeamColors.relativeLuminance(hex: "E31837"))
         // A red crest on its own red bar.
-        #expect(BarCrest.crestNeedsBadge(dominantLuminance: red, heroHex: "E31837"))
+        #expect(BarCrest.crestNeedsOutline(dominantLuminance: red, heroHex: "E31837"))
         // A white crest on a pale yellow bar.
-        #expect(BarCrest.crestNeedsBadge(dominantLuminance: 1, heroHex: "FFF2A8"))
+        #expect(BarCrest.crestNeedsOutline(dominantLuminance: 1, heroHex: "FFF2A8"))
         // A navy crest on black.
         let navy = try #require(TeamColors.relativeLuminance(hex: "0B1F3A"))
-        #expect(BarCrest.crestNeedsBadge(dominantLuminance: navy, heroHex: "000000"))
-        // White on navy, black on gold: no badge.
-        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 1, heroHex: "0B1F3A"))
-        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0, heroHex: "FFB612"))
+        #expect(BarCrest.crestNeedsOutline(dominantLuminance: navy, heroHex: "000000"))
+        // White on navy, black on gold: no outline.
+        #expect(!BarCrest.crestNeedsOutline(dominantLuminance: 1, heroHex: "0B1F3A"))
+        #expect(!BarCrest.crestNeedsOutline(dominantLuminance: 0, heroHex: "FFB612"))
     }
 
-    @Test("The badge goes on below the minimum contrast and off above it")
-    func badgeThreshold() {
+    @Test("The outline goes on below the minimum contrast and off above it")
+    func outlineThreshold() {
         // On black (luminance 0) the contrast is (L + 0.05) / 0.05, so the
         // minimum falls at this luminance.
         let atMinimum = BarCrest.minimumContrast * 0.05 - 0.05
-        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: atMinimum + 0.01, heroHex: "000000"))
-        #expect(BarCrest.crestNeedsBadge(dominantLuminance: atMinimum - 0.01, heroHex: "000000"))
-        #expect(BarCrest.crestNeedsBadge(dominantLuminance: 0, heroHex: "000000"))
+        #expect(!BarCrest.crestNeedsOutline(dominantLuminance: atMinimum + 0.01, heroHex: "000000"))
+        #expect(BarCrest.crestNeedsOutline(dominantLuminance: atMinimum - 0.01, heroHex: "000000"))
+        #expect(BarCrest.crestNeedsOutline(dominantLuminance: 0, heroHex: "000000"))
     }
 
-    @Test("A bar colour that isn't hex never badges")
-    func badgeNeedsAHex() {
-        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0.5, heroHex: ""))
-        #expect(!BarCrest.crestNeedsBadge(dominantLuminance: 0.5, heroHex: "red"))
+    @Test("A bar colour that isn't hex never outlines")
+    func outlineNeedsAHex() {
+        #expect(!BarCrest.crestNeedsOutline(dominantLuminance: 0.5, heroHex: ""))
+        #expect(!BarCrest.crestNeedsOutline(dominantLuminance: 0.5, heroHex: "red"))
     }
 
     @Test("A crest's dominant shade is its biggest opaque area, not the transparency around it")

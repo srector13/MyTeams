@@ -23,8 +23,9 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
   news feed.
 - **Favorites.** The system tab bar at the foot of the screen has a tab per
   followed team (its crest and short name), with those past the bar's room
-  under "More"; its "Teams" tab opens the picker, where teams are followed,
-  reordered and removed. The bar minimizes on scrolling down, as in the
+  under "More"; the bar holds teams only. Settings' "Add Teams" and
+  "Manage Teams" open the picker, where teams are followed, reordered and
+  removed. The bar minimizes on scrolling down, as in the
   system's apps (never under VoiceOver or Switch Control). Favorites are stored in the App Group's defaults
   (which the widget reads) and mirrored to iCloud key-value storage, so they
   sync between devices.
