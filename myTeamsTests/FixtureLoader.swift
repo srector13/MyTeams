@@ -51,6 +51,12 @@ enum Fixture {
         return source
     }
 
+    /// The folder the fixtures are read from, bundled or in the source tree,
+    /// for a `FixtureTransport` to serve.
+    static func directory() throws -> URL {
+        try url("chiefs_schedule").deletingLastPathComponent()
+    }
+
     /// The fixture parsed as a `JSON` document, e.g. `Fixture.json("chiefs_schedule")`.
     static func json(_ name: String) throws -> JSON {
         let json = JSON(data: try Data(contentsOf: url(name)))

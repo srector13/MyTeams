@@ -18,8 +18,7 @@ final class myTeamsUITests: XCTestCase {
     /// holds whichever teams are followed, as long as there are two.
     @MainActor
     func testCrestBarSwitchesTeams() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchWithFixtures()
 
         // A fresh install opens on the "Pick Your Teams" sheet with the seed
         // teams already followed; Done finishes onboarding. Later launches
@@ -32,9 +31,10 @@ final class myTeamsUITests: XCTestCase {
         // The system tab bar: a tab per favorite, and the Teams (add/edit) tab.
         XCTAssertTrue(app.buttons["teamPicker.edit"].waitForExistence(timeout: 10))
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
-        guard crests.element(boundBy: 1).waitForExistence(timeout: 10) else {
-            throw XCTSkip("Needs two followed teams; a fresh install follows four.")
-        }
+        XCTAssertTrue(
+            crests.element(boundBy: 1).waitForExistence(timeout: 10),
+            "Needs two followed teams; a fresh install follows four."
+        )
         let first = app.buttons[crests.element(boundBy: 0).identifier]
         let second = app.buttons[crests.element(boundBy: 1).identifier]
 
@@ -89,27 +89,47 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["teamBrowser.done"].exists)
     }
 
-    /// Searches every sport from the browser's first page. Results need a
-    /// catalog or ESPN, so an empty search is skipped rather than failed.
+    /// Searches every sport from the browser's first page. The league
+    /// catalogs are served from fixtures, so the NBA's always lists the
+    /// Lakers.
     @MainActor
     func testBrowserSearchFindsTeams() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchWithFixtures()
         openTeamBrowser(app)
 
         let field = app.searchFields.firstMatch
-        guard field.waitForExistence(timeout: 5) else {
-            throw XCTSkip("No search field on screen.")
-        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "No search field on screen.")
         field.tap()
         field.typeText("Lakers")
 
         // Search replaces the sports list.
-        let hits = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
-        guard hits.firstMatch.waitForExistence(timeout: 20) else {
-            throw XCTSkip("No team catalog or ESPN search available.")
-        }
+        let lakers = app.buttons["teamBrowser.team.basketball/nba:13"].firstMatch
+        XCTAssertTrue(lakers.waitForExistence(timeout: 20), "The NBA catalog fixture's Lakers never showed.")
         XCTAssertFalse(app.buttons["teamBrowser.sport.basketball"].exists)
+    }
+
+    /// The app, serving its ESPN requests from the unit tests' captured
+    /// documents (`FixtureTransport`) instead of the network, so the tests
+    /// that read feeds assert rather than skip when ESPN doesn't answer
+    /// (A-20). Crests still load from the network.
+    ///
+    /// The simulator shares the Mac's file system, so the app reads
+    /// `myTeamsTests/Fixtures` straight from the checkout, found from this
+    /// file's path.
+    @MainActor
+    private func launchWithFixtures() -> XCUIApplication {
+        let fixtures = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("myTeamsTests")
+            .appendingPathComponent("Fixtures")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixtures.path), "No fixtures at \(fixtures.path)")
+
+        let app = XCUIApplication()
+        // `FixtureTransport.directoryKey`, read by Debug builds of the app.
+        app.launchEnvironment["MYTEAMS_FIXTURES_DIR"] = fixtures.path
+        app.launch()
+        return app
     }
 
     /// Declines the notification prompt a first follow raises on a fresh
@@ -216,12 +236,11 @@ final class myTeamsUITests: XCTestCase {
     }
 
     /// The schedule cards (UI-3) speak a whole game, never a placeholder
-    /// such as "nil" or "Optional(…)" for a field the feed left out.
-    /// Skipped if the schedule never loads (no network).
+    /// such as "nil" or "Optional(…)" for a field the feed left out. The
+    /// first team's schedule is served from fixtures, so cards always load.
     @MainActor
     func testScheduleCardsReadWithoutPlaceholders() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchWithFixtures()
 
         let done = app.buttons["teamBrowser.done"]
         if done.waitForExistence(timeout: 5) {
@@ -230,9 +249,7 @@ final class myTeamsUITests: XCTestCase {
 
         let cards = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.game."))
-        guard cards.firstMatch.waitForExistence(timeout: 15) else {
-            throw XCTSkip("The schedule never loaded.")
-        }
+        XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 15), "The schedule fixture never loaded.")
         for card in cards.allElementsBoundByIndex.prefix(8) {
             let label = card.label
             XCTAssertFalse(label.isEmpty, card.identifier)

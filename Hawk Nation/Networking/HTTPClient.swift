@@ -141,14 +141,98 @@ extension URLSession: HTTPTransport {
     }
 }
 
+#if DEBUG
+/// Answers requests from the captured ESPN documents in
+/// `myTeamsTests/Fixtures` instead of the network, for UI-test launches that
+/// set `MYTEAMS_FIXTURES_DIR` (see `HTTPClient.launchTransport`).
+///
+/// Each route maps an exact request URL to a fixture file; anything else is
+/// a 404, so a fixture run never reaches the network and the screens see
+/// the same failure a missing feed gives them. The URLs are written out
+/// rather than built from `LeagueID`, so this file stays free of app-only
+/// helpers for the widget target; `HTTPClientTests` checks the app's URL
+/// builders still produce them.
+struct FixtureTransport: HTTPTransport {
+    /// The launch-environment key naming the fixtures folder.
+    static let directoryKey = "MYTEAMS_FIXTURES_DIR"
+
+    /// Request URL → fixture name, without `.json`.
+    static let routes: [String: String] = {
+        let site = "https://site.api.espn.com/apis/site/v2/sports"
+        return [
+            // League catalogs (`LeagueID.teamsURL`), each trimmed to 15 teams.
+            "\(site)/football/nfl/teams?limit=1000": "nfl_teams",
+            "\(site)/basketball/nba/teams?limit=1000": "nba_teams",
+            "\(site)/hockey/nhl/teams?limit=1000": "nhl_teams",
+            "\(site)/basketball/wnba/teams?limit=1000": "wnba_teams",
+            "\(site)/football/college-football/teams?limit=1000&groups=50": "ncaaf_teams",
+            "\(site)/basketball/womens-college-basketball/teams?limit=1000&groups=50": "ncaaw_teams",
+            "\(site)/soccer/eng.1/teams?limit=1000": "epl_teams",
+            "\(site)/soccer/esp.1/teams?limit=1000": "laliga_teams",
+            "\(site)/soccer/mex.1/teams?limit=1000": "ligamx_teams",
+            "\(site)/soccer/usa.nwsl/teams?limit=1000": "nwsl_teams",
+            "\(site)/soccer/ger.1/teams?limit=1000": "bundes_teams",
+            "\(site)/soccer/ita.1/teams?limit=1000": "seriea_teams",
+            "\(site)/soccer/fra.1/teams?limit=1000": "ligue1_teams",
+            "\(site)/soccer/uefa.champions/teams?limit=1000": "uclleague_teams",
+            // The seed teams. Kansas's live feed is between seasons and lists
+            // no games, so it is served the 2025-26 season.
+            "\(site)/basketball/mens-college-basketball/teams/2305/schedule": "jayhawks_schedule_2026",
+            "\(site)/basketball/mens-college-basketball/teams/2305/roster": "jayhawks_roster",
+            "\(site)/football/nfl/teams/12/schedule": "chiefs_schedule",
+            "\(site)/football/nfl/teams/12/roster": "chiefs_roster",
+            "\(site)/football/nfl/news?team=12&limit=25": "chiefs_news",
+            "\(site)/baseball/mlb/teams/7/schedule": "royals_schedule",
+            "\(site)/baseball/mlb/teams/7/roster": "royals_roster",
+            "\(site)/soccer/usa.1/teams/186/schedule": "sporting_schedule",
+            "\(site)/soccer/usa.1/teams/186/schedule?fixture=true": "sporting_schedule_fixtures",
+            "\(site)/soccer/usa.1/teams/186/roster": "sporting_roster",
+        ]
+    }()
+
+    /// The folder holding the fixtures, `<name>.json` each.
+    let directory: URL
+
+    func load(_ url: URL) async throws -> (Data, URLResponse) {
+        var status = 404
+        var body = Data()
+        if let name = Self.routes[url.absoluteString],
+           let data = try? Data(contentsOf: directory.appendingPathComponent("\(name).json")) {
+            status = 200
+            body = data
+        }
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: [:]) else {
+            throw URLError(.badServerResponse)
+        }
+        return (body, response)
+    }
+}
+#endif
+
 /// Fetches and decodes the JSON documents the app is built on.
 ///
 /// Every call returns a `FetchResult` rather than throwing, so callers can
 /// show an empty state, an error with a retry, or keep what they already
 /// have, as suits each screen.
 struct HTTPClient: Sendable {
-    /// The client every loader uses.
-    static let shared = HTTPClient()
+    /// The client every loader uses: the network, unless a Debug build was
+    /// launched to serve fixtures (`launchTransport(environment:)`).
+    static let shared = HTTPClient(transport: HTTPClient.launchTransport(environment: ProcessInfo.processInfo.environment))
+
+    /// The transport a launch environment asks for: `FixtureTransport` over
+    /// the folder named by `MYTEAMS_FIXTURES_DIR`, else `defaultSession`.
+    ///
+    /// UI tests set the key so the schedule and search assert on captured
+    /// documents instead of skipping when ESPN doesn't answer (A-20). Read
+    /// only in Debug builds; a Release build always uses the network.
+    static func launchTransport(environment: [String: String]) -> any HTTPTransport {
+        #if DEBUG
+        if let path = environment[FixtureTransport.directoryKey], !path.isEmpty {
+            return FixtureTransport(directory: URL(fileURLWithPath: path, isDirectory: true))
+        }
+        #endif
+        return defaultSession
+    }
 
     /// A session that keeps responses in the shared URL cache, so the
     /// once-a-minute score refresh is cheap when nothing has changed upstream.

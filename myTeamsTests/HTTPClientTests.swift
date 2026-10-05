@@ -160,6 +160,88 @@ struct HTTPClientTests {
     }
 }
 
+/// Covers the launch switch that serves the UI tests' requests from fixtures
+/// (`MYTEAMS_FIXTURES_DIR`, A-20), and the routes it serves.
+@Suite("Fixture transport")
+struct FixtureTransportTests {
+    @Test("With no fixtures key the client uses the network")
+    func noKeyUsesNetwork() {
+        let transport = HTTPClient.launchTransport(environment: [:])
+        #expect((transport as? URLSession) === HTTPClient.defaultSession)
+        let empty = HTTPClient.launchTransport(environment: [FixtureTransport.directoryKey: ""])
+        #expect((empty as? URLSession) === HTTPClient.defaultSession)
+    }
+
+    @Test("With the fixtures key the client serves fixtures from that folder")
+    func keyUsesFixtures() {
+        let transport = HTTPClient.launchTransport(environment: [FixtureTransport.directoryKey: "/tmp/Fixtures"])
+        let fixtures = transport as? FixtureTransport
+        #expect(fixtures?.directory == URL(fileURLWithPath: "/tmp/Fixtures", isDirectory: true))
+    }
+
+    @Test("A routed URL answers with its fixture")
+    func routedURL() async throws {
+        let client = HTTPClient(transport: FixtureTransport(directory: try Fixture.directory()))
+        let team = TeamCatalog.seeded(league: .nfl, espnID: "12")
+        let result = await client.fetch(team.scheduleURL)
+
+        let events = result.document?["events"].arrayValue ?? []
+        #expect(!events.isEmpty)
+    }
+
+    @Test("An unrouted URL is a 404, never a network request")
+    func unroutedURL() async throws {
+        let client = HTTPClient(transport: FixtureTransport(directory: try Fixture.directory()))
+        let result = await client.fetch(LeagueID.nfl.scoreboardURL(day: "20260927"))
+
+        guard case .failure(.httpError(let status)) = result else {
+            Issue.record("Expected a 404, got \(result)")
+            return
+        }
+        #expect(status == 404)
+    }
+
+    @Test("Every route names a fixture that exists")
+    func routesNameFixtures() {
+        for (url, name) in FixtureTransport.routes {
+            #expect((try? Fixture.url(name)) != nil, "\(url) routes to missing fixture \(name).json")
+        }
+    }
+
+    /// The routes are written out, so this catches a URL builder drifting
+    /// away from them.
+    @Test("The app's URL builders produce the routed URLs")
+    func routesMatchURLBuilders() {
+        let catalogs: [LeagueID] = [
+            .nfl, .nba, .nhl, .wnba, .collegeFootball, .womensCollegeBasketball,
+            .premierLeague, .laLiga, .ligaMX, .nwsl,
+            .bundesliga, .serieA, .ligue1, .championsLeague,
+        ]
+        for league in catalogs {
+            #expect(FixtureTransport.routes[league.teamsURL] != nil, "No route for \(league.teamsURL)")
+        }
+
+        let seeds = [
+            TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305"),
+            TeamCatalog.seeded(league: .nfl, espnID: "12"),
+            TeamCatalog.seeded(league: .mlb, espnID: "7"),
+            TeamCatalog.seeded(league: .mls, espnID: "186"),
+        ]
+        for team in seeds {
+            #expect(FixtureTransport.routes[team.scheduleURL] != nil, "No route for \(team.scheduleURL)")
+            #expect(FixtureTransport.routes[team.rosterURL] != nil, "No route for \(team.rosterURL)")
+        }
+
+        let chiefs = seeds[1]
+        let sporting = seeds[3]
+        #expect(FixtureTransport.routes[chiefs.newsURL] == "chiefs_news")
+        #expect(FixtureTransport.routes[scheduleFixturesURL(sporting.scheduleURL)] == "sporting_schedule_fixtures")
+        // Kansas's live feed is between seasons; the routed one has games.
+        #expect(FixtureTransport.routes[seeds[0].scheduleURL] == "jayhawks_schedule_2026")
+        #expect(FixtureTransport.routes.count == catalogs.count + 2 * seeds.count + 2)
+    }
+}
+
 /// Covers the headers a poller paces itself by, and the schedule
 /// `PollBackoff` builds from them.
 @Suite("Poll backoff")
