@@ -84,9 +84,9 @@ final class myTeamsUITests: XCTestCase {
         }
 
         // Back to the leagues, then the sports.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.teamBrowserBackButton.tap()
         XCTAssertTrue(nba.waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.teamBrowserBackButton.tap()
         XCTAssertTrue(basketball.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["teamBrowser.done"].exists)
     }
@@ -324,5 +324,19 @@ final class myTeamsUITests: XCTestCase {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+}
+
+extension XCUIApplication {
+    /// The team browser's back button: the first button of the navigation
+    /// bar holding the browser's Done. Opened from Settings, the browser is
+    /// a sheet over the Settings sheet, whose bar is still in the tree, so
+    /// the app's first bar button can be Settings' Done (t_fa6748f4).
+    var teamBrowserBackButton: XCUIElement {
+        navigationBars
+            .containing(.button, identifier: "teamBrowser.done")
+            .firstMatch
+            .buttons
+            .element(boundBy: 0)
     }
 }

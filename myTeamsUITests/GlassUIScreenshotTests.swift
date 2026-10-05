@@ -259,9 +259,9 @@ final class GlassUIScreenshotTests: XCTestCase {
                 let teams = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
                 _ = teams.firstMatch.waitForExistence(timeout: 10)
                 snapshot("team-browser-league", configuration)
-                app.navigationBars.buttons.element(boundBy: 0).tap()
+                app.teamBrowserBackButton.tap()
             }
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.teamBrowserBackButton.tap()
         }
 
         let alerts = app.buttons["teamBrowser.alerts"]
