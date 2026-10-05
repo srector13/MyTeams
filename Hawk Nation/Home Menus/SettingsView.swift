@@ -64,6 +64,10 @@ struct SettingsView: View {
 
     @State private var showsBrowser = false
 
+    /// The team picker opened to add teams: the tab bar holds teams only,
+    /// so this is the way to follow another (t_fa6748f4).
+    @State private var showsAddTeams = false
+
     var body: some View {
         NavigationStack {
             Form {
@@ -95,6 +99,14 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button {
+                        showsAddTeams = true
+                    } label: {
+                        Label("Add Teams", systemImage: "plus.circle")
+                    }
+                    .accessibilityHint("Find a team by sport, league or name, and follow it.")
+                    .accessibilityIdentifier("settings.addTeams")
+
                     Button {
                         showsBrowser = true
                     } label: {
@@ -132,6 +144,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showsBrowser) {
             TeamBrowserView()
+        }
+        .sheet(isPresented: $showsAddTeams) {
+            TeamBrowserView(title: "Add Teams")
         }
     }
 

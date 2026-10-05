@@ -172,7 +172,7 @@ final class GlassUIScreenshotTests: XCTestCase {
             done.tap()
         }
 
-        guard app.buttons["teamPicker.edit"].waitForExistence(timeout: 10) else {
+        guard app.tabBars.buttons.firstMatch.waitForExistence(timeout: 10) else {
             XCTFail("\(configuration.name): the crest bar never appeared")
             return
         }
@@ -202,8 +202,7 @@ final class GlassUIScreenshotTests: XCTestCase {
             done.tap()
         }
 
-        let edit = app.buttons["teamPicker.edit"]
-        guard edit.waitForExistence(timeout: 10) else {
+        guard app.tabBars.buttons.firstMatch.waitForExistence(timeout: 10) else {
             XCTFail("\(configuration.name): the crest bar never appeared")
             return
         }
@@ -227,7 +226,19 @@ final class GlassUIScreenshotTests: XCTestCase {
             snapshot("team-page-2", configuration)
         }
 
-        edit.tap()
+        // Teams are added from Settings, not the tab bar (t_fa6748f4).
+        let gear = app.buttons["home.settings"]
+        let addTeams = app.buttons["settings.addTeams"]
+        guard gear.waitForExistence(timeout: 5) else {
+            XCTFail("\(configuration.name): no Settings button on the team page")
+            return
+        }
+        gear.tap()
+        guard addTeams.waitForExistence(timeout: 5) else {
+            XCTFail("\(configuration.name): Settings never opened")
+            return
+        }
+        addTeams.tap()
         guard done.waitForExistence(timeout: 5) else {
             XCTFail("\(configuration.name): the team browser never opened")
             return
@@ -248,9 +259,9 @@ final class GlassUIScreenshotTests: XCTestCase {
                 let teams = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamBrowser.team."))
                 _ = teams.firstMatch.waitForExistence(timeout: 10)
                 snapshot("team-browser-league", configuration)
-                app.navigationBars.buttons.element(boundBy: 0).tap()
+                app.teamBrowserBackButton.tap()
             }
-            app.navigationBars.buttons.element(boundBy: 0).tap()
+            app.teamBrowserBackButton.tap()
         }
 
         let alerts = app.buttons["teamBrowser.alerts"]
@@ -349,8 +360,10 @@ final class GlassUIScreenshotTests: XCTestCase {
     /// page minimized it: scrolling back up does, as in the system's apps.
     @MainActor
     private func expandTabBar(_ app: XCUIApplication) {
-        let edit = app.buttons["teamPicker.edit"]
-        for _ in 0..<3 where !edit.isHittable {
+        // A minimized bar keeps only the selected tab, the first team's:
+        // the second team's is back once the bar is.
+        let secondTab = app.tabBars.buttons.element(boundBy: 1)
+        for _ in 0..<3 where !secondTab.isHittable {
             app.swipeDown()
         }
     }

@@ -209,8 +209,9 @@ struct BrowsableSport: Identifiable, Hashable, Sendable {
 /// league, searchable throughout, with the reader's own teams pinned at the
 /// top for reordering and removal.
 ///
-/// Opened from the crest bar's "+" button and, on a fresh install, as the
-/// "Pick your teams" onboarding sheet. Alerts live in Settings (B-9).
+/// Opened from Settings' "Add Teams" and "Manage Teams" rows (t_fa6748f4),
+/// from the empty home screen's "Pick Your Teams", and, on a fresh install,
+/// as the "Pick your teams" onboarding sheet. Alerts live in Settings (B-9).
 ///
 /// With the search field focused and empty, the teams last followed from a
 /// search are offered under "Recent" (`RecentSearches`, C-7).

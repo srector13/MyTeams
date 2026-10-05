@@ -28,9 +28,11 @@ final class myTeamsUITests: XCTestCase {
             done.tap()
         }
 
-        // The system tab bar: a tab per favorite, and the Teams (add/edit) tab.
-        XCTAssertTrue(teamsTab(app).waitForExistence(timeout: 10))
+        // The system tab bar: a tab per favorite and nothing else; teams
+        // are added from Settings (t_fa6748f4).
         let crests = teamTabs(app)
+        XCTAssertTrue(crests.firstMatch.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["teamPicker.edit"].exists, "The tab bar still has a Teams tab.")
         XCTAssertTrue(
             crests.element(boundBy: 1).waitForExistence(timeout: 10),
             "Needs two followed teams; a fresh install follows four."
@@ -82,9 +84,9 @@ final class myTeamsUITests: XCTestCase {
         }
 
         // Back to the leagues, then the sports.
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.teamBrowserBackButton.tap()
         XCTAssertTrue(nba.waitForExistence(timeout: 5))
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.teamBrowserBackButton.tap()
         XCTAssertTrue(basketball.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["teamBrowser.done"].exists)
     }
@@ -143,54 +145,48 @@ final class myTeamsUITests: XCTestCase {
     }
 
     /// Opens the team browser: the onboarding sheet on a fresh install,
-    /// past onboarding the tab bar's "Teams" tab.
+    /// past onboarding Settings' "Add Teams" row, the tab bar holding teams
+    /// only (t_fa6748f4).
     ///
-    /// On a cold launch the tab bar redraws as the favorites and their
-    /// crests resolve, and a tap located before a redraw can land on a
-    /// team's tab instead, which opens nothing. So the tap is retried until
-    /// the browser shows.
+    /// On a cold launch the page redraws as the favorites and their crests
+    /// resolve, and a tap located before a redraw can miss. So each step is
+    /// retried until the next screen shows.
     @MainActor
     private func openTeamBrowser(_ app: XCUIApplication) {
         let done = app.buttons["teamBrowser.done"]
         if done.waitForExistence(timeout: 5) { return }
-        let edit = teamsTab(app)
-        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        let gear = app.buttons["home.settings"]
+        let addTeams = app.buttons["settings.addTeams"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button on the team page.")
+        for _ in 0..<3 where !addTeams.exists {
+            gear.tap()
+            _ = addTeams.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(addTeams.exists, "Settings never opened.")
         for _ in 0..<3 {
-            edit.tap()
+            addTeams.tap()
             if done.waitForExistence(timeout: 5) { return }
         }
-        XCTFail("The team browser never opened from the Teams tab.")
+        XCTFail("The team browser never opened from Settings' Add Teams.")
     }
 
-    /// The "Teams" tab's accessibility label, as `Home` gives it.
-    private static let teamsTabLabel = "Add or Edit Teams"
+    /// The system's "More" tab, which lists the favorites past the bar's
+    /// room; not a team's tab.
+    private static let moreTabLabel = "More"
 
-    /// The tab bar's "Teams" tab: by its identifier, `teamPicker.edit`, or
-    /// by its accessibility label when the bar's button doesn't carry it.
+    /// The favorites' tabs, in bar order: those with a `teamPicker.team.`
+    /// identifier, or, on a launch whose bar lost its identifiers, every
+    /// tab but "More".
     ///
     /// SwiftUI copies a `Tab`'s accessibility identifier onto the system tab
     /// bar's button only some of the time on the iOS 26 simulator: on the
     /// launches that miss it, every tab still has its label but none has an
-    /// identifier, for as long as the test waits. The label is the app's own
-    /// (`.accessibilityLabel` on the tab), not the tab's title.
-    @MainActor
-    private func teamsTab(_ app: XCUIApplication) -> XCUIElement {
-        let byIdentifier = app.buttons["teamPicker.edit"]
-        if byIdentifier.waitForExistence(timeout: 5) {
-            return byIdentifier
-        }
-        print("No \"teamPicker.edit\" identifier after 5 s; finding the tab by its label. The bar:\n\(app.tabBars.firstMatch.debugDescription)")
-        return app.tabBars.buttons.matching(NSPredicate(format: "label == %@", Self.teamsTabLabel)).firstMatch
-    }
-
-    /// The favorites' tabs, in bar order: those with a `teamPicker.team.`
-    /// identifier, or, on a launch whose bar lost its identifiers (see
-    /// `teamsTab(_:)`), every tab but "Teams".
+    /// identifier, for as long as the test waits.
     @MainActor
     private func teamTabs(_ app: XCUIApplication) -> XCUIElementQuery {
         app.tabBars.buttons.matching(NSPredicate(
             format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@)",
-            "teamPicker.team.", Self.teamsTabLabel
+            "teamPicker.team.", Self.moreTabLabel
         ))
     }
 
@@ -320,7 +316,7 @@ final class myTeamsUITests: XCTestCase {
         expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: splash)
         waitForExpectations(timeout: 5)
         let done = app.buttons["teamBrowser.done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5) || teamsTab(app).waitForExistence(timeout: 10))
+        XCTAssertTrue(done.waitForExistence(timeout: 5) || teamTabs(app).firstMatch.waitForExistence(timeout: 10))
     }
 
     @MainActor
@@ -328,5 +324,19 @@ final class myTeamsUITests: XCTestCase {
         measure(metrics: [XCTApplicationLaunchMetric()]) {
             XCUIApplication().launch()
         }
+    }
+}
+
+extension XCUIApplication {
+    /// The team browser's back button: the first button of the navigation
+    /// bar holding the browser's Done. Opened from Settings, the browser is
+    /// a sheet over the Settings sheet, whose bar is still in the tree, so
+    /// the app's first bar button can be Settings' Done (t_fa6748f4).
+    var teamBrowserBackButton: XCUIElement {
+        navigationBars
+            .containing(.button, identifier: "teamBrowser.done")
+            .firstMatch
+            .buttons
+            .element(boundBy: 0)
     }
 }
