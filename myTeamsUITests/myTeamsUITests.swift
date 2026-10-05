@@ -205,9 +205,9 @@ final class myTeamsUITests: XCTestCase {
             done.tap()
         }
 
-        let header = app.descendants(matching: .any)["teamPage.header"]
+        let header = app.descendants(matching: .any)["teamPage.header"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 10))
-        let logo = app.descendants(matching: .any)["home.brandLogo"]
+        let logo = app.descendants(matching: .any)["home.brandLogo"].firstMatch
         XCTAssertTrue(logo.waitForExistence(timeout: 5))
         let bar = app.navigationBars.firstMatch
         XCTAssertGreaterThanOrEqual(logo.frame.minY, bar.frame.minY - 1, "Logo above the bar.")
