@@ -227,6 +227,8 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
             }
         }
         .contentCard()
+        // The cards' headshots sit on the team's colour.
+        .environment(\.rosterTeam, model.team)
         .sheet(item: $selectedPlayer) { player in
             detail(player)
                 .zoomTransition(sourceID: player.id, in: cardZoom)
