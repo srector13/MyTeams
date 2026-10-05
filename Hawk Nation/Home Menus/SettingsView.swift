@@ -1,0 +1,149 @@
+//
+//  SettingsView.swift
+//  myTeams
+//
+//  Created by Stephen Rector on 10/4/26.
+//  Copyright © 2026 Stephen Rector. All rights reserved.
+//
+
+import SwiftUI
+
+/// The reader's choice of light or dark, or the system's. Stored in
+/// `UserDefaults` under `storageKey` and applied to the whole app at the
+/// root (`MyTeamsApp`).
+enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
+    case system
+    case light
+    case dark
+
+    /// The `UserDefaults` key the choice is stored under.
+    static let storageKey = "settings.appearance"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+
+    /// The scheme to force, or `nil` to follow the system.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
+/// What the About section says about this build.
+enum AboutInfo {
+    /// "2.0.0 (1)": the marketing version and the build number from an
+    /// Info.plist, or a dash for whichever is missing.
+    static func versionText(info: [String: Any]?) -> String {
+        let version = info?["CFBundleShortVersionString"] as? String ?? "–"
+        let build = info?["CFBundleVersion"] as? String ?? "–"
+        return "\(version) (\(build))"
+    }
+}
+
+/// The app's settings: appearance, game alerts, the reader's teams and
+/// what build this is.
+///
+/// Opened from the gear in a team page's navigation bar, as a sheet with
+/// its own stack.
+struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
+
+    @State private var showsBrowser = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Appearance", selection: $appearance) {
+                        ForEach(AppAppearance.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .accessibilityHint("Choose light, dark, or the system's appearance.")
+                    .accessibilityIdentifier("settings.appearance")
+                } header: {
+                    Text("Appearance")
+                }
+
+                Section {
+                    // The existing alerts screen: the permission, Live
+                    // Activities and each team's toggle.
+                    NavigationLink {
+                        AlertsSettingsView()
+                    } label: {
+                        Label("Alerts", systemImage: "bell.badge")
+                    }
+                    .accessibilityLabel("Alerts")
+                    .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
+                    .accessibilityIdentifier("settings.alerts")
+                } header: {
+                    Text("Alerts")
+                }
+
+                Section {
+                    Button {
+                        showsBrowser = true
+                    } label: {
+                        Label("Manage Teams", systemImage: "list.star")
+                    }
+                    .accessibilityHint("Add, remove or reorder the teams you follow.")
+                    .accessibilityIdentifier("settings.teams")
+                } header: {
+                    Text("Teams")
+                }
+
+                Section {
+                    LabeledContent("Version", value: AboutInfo.versionText(info: Bundle.main.infoDictionary))
+                        .accessibilityIdentifier("settings.version")
+                } header: {
+                    Text("About")
+                } footer: {
+                    logo
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(role: .confirm) {
+                        dismiss()
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                    }
+                    .accessibilityIdentifier("settings.done")
+                }
+            }
+        }
+        .sheet(isPresented: $showsBrowser) {
+            TeamBrowserView()
+        }
+    }
+
+    /// The brand logo, in the art drawn for the scheme on screen.
+    private var logo: some View {
+        Image(colorScheme == .dark ? "myTeamsLogoOnDark" : "myTeamsLogoOnLight")
+            .resizable()
+            .scaledToFit()
+            .frame(maxWidth: 160, maxHeight: 64)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 24)
+            .accessibilityLabel("myTeams")
+    }
+}
+
+#Preview {
+    SettingsView()
+}

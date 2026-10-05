@@ -302,6 +302,8 @@ private struct TeamPage<Content: View>: View {
 
     @State private var chrome = TeamPageChrome()
 
+    @State private var showsSettings = false
+
     @Environment(\.containerSize) private var containerSize
 
     /// The team colour, or the fallback its badge takes when the feed has
@@ -387,6 +389,19 @@ private struct TeamPage<Content: View>: View {
                 }
                 // A title, not a button: no glass behind it.
                 .sharedBackgroundVisibility(.hidden)
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showsSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+                    .accessibilityIdentifier("home.settings")
+                }
+            }
+            .sheet(isPresented: $showsSettings) {
+                SettingsView()
             }
             // Over the team colour the bar takes the scheme that reads on
             // it; once the page's cards are behind it, the system's.
