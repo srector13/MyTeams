@@ -33,6 +33,13 @@ struct Home: View {
 
     @State private var showsBrowser = false
 
+    /// Settings, opened from a team page's gear. Here rather than on the
+    /// page, which is mounted only while its team is selected: removing
+    /// that team in Settings → Manage Teams, or a widget link arriving,
+    /// moves the selection and unmounts the page, and Settings with it
+    /// (A-5).
+    @State private var showsSettings = false
+
     /// Each team's model and scroll offset, kept while its page is not
     /// mounted.
     @State private var pages = TeamPages()
@@ -58,7 +65,7 @@ struct Home: View {
     }
 
     private var routing: HomeRouting.State {
-        HomeRouting.State(selection: selection, pendingLink: deepLinkedTeamID)
+        HomeRouting.State(selection: selection, pendingLink: deepLinkedTeamID, showsSettings: showsSettings)
     }
 
     private func apply(_ routed: HomeRouting.State) {
@@ -67,6 +74,9 @@ struct Home: View {
         }
         if deepLinkedTeamID != routed.pendingLink {
             deepLinkedTeamID = routed.pendingLink
+        }
+        if showsSettings != routed.showsSettings {
+            showsSettings = routed.showsSettings
         }
     }
 
@@ -103,7 +113,7 @@ struct Home: View {
                             Image("myTeamsLogo")
                                 .resizable()
                                 .scaledToFit()
-                                .frame(width: 160)
+                                .frame(width: BrandLogo.hero)
                                 .accessibilityHidden(true)
                         }
                     } description: {
@@ -138,6 +148,10 @@ struct Home: View {
         .sheet(isPresented: $showsBrowser) {
             TeamBrowserView()
         }
+        // Outlives any one team's page (A-5).
+        .sheet(isPresented: $showsSettings) {
+            SettingsView()
+        }
         // A fresh install opens on "Pick your teams", the seed teams already
         // checked. Dismissing it, however, finishes onboarding.
         .sheet(isPresented: $store.needsOnboarding, onDismiss: { store.completeOnboarding() }) {
@@ -166,6 +180,8 @@ struct Home: View {
             }
             .accessibilityLabel(Text("Add or Edit Teams"))
             .accessibilityIdentifier(HomeTabs.edit)
+            // In the iPad sidebar it's the footer instead (B-14).
+            .defaultVisibility(.hidden, for: .sidebar)
 
             ForEach(Array(teams.dropFirst(editIndex))) { team in
                 teamTab(team)
@@ -174,6 +190,11 @@ struct Home: View {
         // The bar shrinks to the selected tab as the page scrolls down and
         // comes back on scrolling up or a tap, as the system's apps do.
         .tabBarMinimizeBehavior(voiceOver || switchControl ? .never : .onScrollDown)
+        .modifier(HomeSidebar(isRegularWidth: sizeClass == .regular) { showsBrowser = true })
+        // A tick as the team changes (C-4).
+        .sensoryFeedback(.selection, trigger: selection)
+        // The alerts presenter skips the banner for the team on screen (C-8).
+        .onChange(of: selection, initial: true) { ScoreAlertForeground.shared.teamID = $1 }
     }
 
     /// A favorite's tab: its crest over its short name.
@@ -202,7 +223,8 @@ struct Home: View {
             TeamPage(
                 team: team,
                 savedOffset: pages.scrollOffset(for: team.id),
-                saveOffset: { pages.setScrollOffset($0, for: team.id) }
+                saveOffset: { pages.setScrollOffset($0, for: team.id) },
+                showSettings: { showsSettings = true }
             ) {
                 TeamHomeView(team: team, pages: pages)
             }
@@ -222,6 +244,10 @@ enum HomeRouting {
         var selection: TeamRef.ID
         /// A widget link not yet handled (`Home.deepLinkedTeamID`).
         var pendingLink: TeamRef.ID?
+        /// Whether Settings is open (`Home.showsSettings`). Nothing here
+        /// closes it: not the selection moving off a removed team, not a
+        /// link (A-5).
+        var showsSettings = false
     }
 
     /// The favorites have been resolved to `teams`, in order. A selection
@@ -268,6 +294,11 @@ final class TeamPageChrome {
     /// The summary's height (`TeamPageHeader`), which the team colour
     /// behind it must cover.
     var headerHeight: CGFloat = 0
+
+    /// What pulling the page down does: set by the content, which owns the
+    /// team's model (`TeamModel.refreshAll()`, C-1). Not drawn, so not
+    /// observed.
+    @ObservationIgnored var refresh: (@MainActor @Sendable () async -> Void)?
 }
 
 /// One team's scrolling page: the team's crest and name pinned in the
@@ -291,13 +322,14 @@ private struct TeamPage<Content: View>: View {
     /// How far down the reader last left this team's page, in points.
     let savedOffset: CGFloat
     let saveOffset: @MainActor (CGFloat) -> Void
+    /// Opens Settings, which `Home` presents so that it outlives the page
+    /// (A-5).
+    let showSettings: @MainActor () -> Void
     @ViewBuilder var content: Content
 
     @State private var position = ScrollPosition(edge: .top)
 
     @State private var chrome = TeamPageChrome()
-
-    @State private var showsSettings = false
 
     @Environment(\.containerSize) private var containerSize
 
@@ -357,6 +389,12 @@ private struct TeamPage<Content: View>: View {
                     content
                 }
                 .scrollIndicators(.hidden)
+                // Pull to refresh every feed, whatever its age (C-1). The
+                // content sets what that does; the spinner shows until
+                // every feed has answered.
+                .refreshable { [chrome] in
+                    await chrome.refresh?()
+                }
                 // The page scrolls under the tab bar; the soft edge fades it
                 // there, so neither the tabs nor the cards fight for
                 // legibility (T-5, B5).
@@ -406,16 +444,13 @@ private struct TeamPage<Content: View>: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showsSettings = true
+                        showSettings()
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }
                     .accessibilityLabel("Settings")
                     .accessibilityIdentifier("home.settings")
                 }
-            }
-            .sheet(isPresented: $showsSettings) {
-                SettingsView()
             }
             // The system bar in the team colour too, and the scheme that
             // reads on it whatever is scrolled beneath.
@@ -436,14 +471,22 @@ private struct TeamBarTitle: View {
     @ScaledMetric(relativeTo: .headline) private var crestSize: CGFloat = 28
 
     var body: some View {
+        // Capped: the bar doesn't grow with the text.
+        let size = min(crestSize, 36)
+        let variant = TeamColors.logoVariant(for: team, onBackground: backgroundHex)
+        // A crest that would vanish into the bar sits on a disc in the
+        // bar's ink, as a badge (B-4).
+        let badged = BarCrest.needsBadge(team: team, variant: variant, onHex: backgroundHex)
         HStack(spacing: Theme.Spacing.s) {
-            TeamLogo(
-                team: team,
-                // Capped: the bar doesn't grow with the text.
-                size: min(crestSize, 36),
-                forceVariant: TeamColors.logoVariant(for: team, onBackground: backgroundHex)
-            )
-            .accessibilityHidden(true)
+            TeamLogo(team: team, size: badged ? size * BarCrest.badgeInset : size, forceVariant: variant)
+                .frame(width: size, height: size)
+                .background {
+                    if badged {
+                        Circle()
+                            .fill(Color(hexString: TeamColors.inkHex(on: backgroundHex)))
+                    }
+                }
+                .accessibilityHidden(true)
 
             Text(team.displayName)
                 .font(.headline)
@@ -469,7 +512,7 @@ private struct BrandBarLogo: View {
             .resizable()
             .scaledToFit()
             // Fixed: brand presence, not a control that grows with text.
-            .frame(height: 20)
+            .frame(height: BrandLogo.bar)
             .teamInk(onHex: backgroundHex)
             .accessibilityLabel("myTeams")
             .accessibilityAddTraits(.isImage)
@@ -515,8 +558,13 @@ enum TabCrest {
     /// About a standard tab bar icon.
     static let size: CGFloat = 28
 
-    /// Crests already drawn, by team, scale and source image.
-    private static var drawn: [String: UIImage] = [:]
+    /// Crests already drawn, by team, scale and source (`sourceKey`). An
+    /// `NSCache`, so it gives memory back under pressure (A-17).
+    private static let drawn: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 100
+        return cache
+    }()
 
     /// The variant for the colour scheme, as `TeamLogo` picks it.
     static func variant(for team: TeamRef, dark: Bool) -> LogoVariant {
@@ -524,16 +572,45 @@ enum TabCrest {
     }
 
     static func image(for team: TeamRef, dark: Bool, scale: CGFloat) -> UIImage {
-        let source = LogoStore.image(for: team, variant: variant(for: team, dark: dark))
-            ?? LogoStore.image(for: team, variant: .default)
-            ?? team.logoAsset.flatMap { UIImage(named: $0) }
-        let key = "\(team.id)|\(scale)|" + (source.map { "\(ObjectIdentifier($0).hashValue)" } ?? "monogram")
-        if let image = drawn[key] {
+        let source = source(for: team, dark: dark)
+        let key = "\(team.id)|\(scale)|\(source.key)" as NSString
+        if let image = drawn.object(forKey: key) {
             return image
         }
-        let image = draw(source ?? monogram(team, scale: scale), scale: scale)
-        drawn[key] = image
+        let image = draw(source.image ?? monogram(team, scale: scale), scale: scale)
+        drawn.setObject(image, forKey: key)
         return image
+    }
+
+    /// A key for a stored crest that changes whenever the file does: its
+    /// path and modification date. Never the decoded image's identity,
+    /// which `LogoStore`'s cache may evict and reallocate at the same
+    /// address for another crest (A-17).
+    nonisolated static func sourceKey(path: String, modified: Date?) -> String {
+        "file:\(path)@\(modified?.timeIntervalSinceReferenceDate ?? 0)"
+    }
+
+    /// The stored crest's `sourceKey`.
+    static func sourceKey(of file: URL) -> String {
+        let modified = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        return sourceKey(path: file.path(percentEncoded: false), modified: modified)
+    }
+
+    /// What the tab item is drawn from — the stored crest for the scheme's
+    /// variant, else the default one, else the bundled asset — and a key
+    /// naming it. `nil` with `"monogram"` when there's none.
+    private static func source(for team: TeamRef, dark: Bool) -> (image: UIImage?, key: String) {
+        let wanted = variant(for: team, dark: dark)
+        for candidate in [wanted, LogoVariant.default] {
+            if let file = LogoStore.url(for: team, variant: candidate),
+               let image = LogoStore.image(for: team, variant: candidate) {
+                return (image, sourceKey(of: file))
+            }
+        }
+        if let asset = team.logoAsset, let image = UIImage(named: asset) {
+            return (image, "asset:\(asset)")
+        }
+        return (nil, "monogram")
     }
 
     /// Fetches the team's crest into `LogoStore` if it isn't there.
@@ -570,6 +647,132 @@ enum TabCrest {
         renderer.scale = scale
         return renderer.uiImage
             ?? UIImage(systemName: TeamColors.symbolName(for: team.league.descriptor.kind))
+    }
+}
+
+/// The crest in a team page's bar against the opaque team colour behind it
+/// (B-4). `logoVariant` swaps in the dark crest on a dark bar only when the
+/// feed has one, so a crest in the team's own colour, or a light crest on a
+/// light bar, can blend into the bar. Such a crest is drawn on a small disc
+/// in the bar's ink, like `MonogramTeam`'s badge.
+@MainActor
+enum BarCrest {
+    /// Below this contrast between the crest's dominant colour and the bar,
+    /// the crest gets its disc. Low on purpose: a crest is artwork with
+    /// edges and detail of its own, not text, so only a near match fails.
+    nonisolated static let minimumContrast = 2.0
+
+    /// The crest's size on its disc, as a share of the disc.
+    static let badgeInset: CGFloat = 0.72
+
+    /// Dominant luminances measured so far, by `TabCrest.sourceKey`, so a
+    /// changed file is measured again.
+    private static let measured: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 100
+        return cache
+    }()
+
+    /// Whether a crest whose dominant colour has `dominantLuminance` (WCAG
+    /// relative luminance, 0 to 1) is too close to the bar's `heroHex` to
+    /// read on it. Never for a colour that isn't a hex colour.
+    nonisolated static func crestNeedsBadge(dominantLuminance: Double, heroHex: String) -> Bool {
+        guard let bar = TeamColors.relativeLuminance(hex: heroHex) else { return false }
+        let ratio = (max(dominantLuminance, bar) + 0.05) / (min(dominantLuminance, bar) + 0.05)
+        return ratio < minimumContrast
+    }
+
+    /// Whether the stored crest `TeamLogo` draws for `team` in `variant`
+    /// needs the disc on `heroHex`. No for a crest not stored yet: the
+    /// monogram it falls back to is a badge already.
+    static func needsBadge(team: TeamRef, variant: LogoVariant, onHex heroHex: String) -> Bool {
+        guard let file = LogoStore.url(for: team, variant: variant) else { return false }
+        let key = TabCrest.sourceKey(of: file) as NSString
+        let luminance: Double
+        if let cached = measured.object(forKey: key) {
+            luminance = cached.doubleValue
+        } else {
+            guard let image = LogoStore.image(for: team, variant: variant),
+                  let dominant = dominantLuminance(of: image)
+            else { return false }
+            measured.setObject(NSNumber(value: dominant), forKey: key)
+            luminance = dominant
+        }
+        return crestNeedsBadge(dominantLuminance: luminance, heroHex: heroHex)
+    }
+
+    /// The relative luminance of the image's most common shade: its opaque
+    /// pixels, sampled on a small grid, sorted into luminance bands, and
+    /// the busiest band's mean. `nil` for an image with no opaque pixels.
+    nonisolated static func dominantLuminance(of image: UIImage) -> Double? {
+        guard let cgImage = image.cgImage else { return nil }
+        let side = 24
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress,
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bytesPerRow: side * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+            return true
+        }
+        guard drawn else { return nil }
+
+        let bands = 8
+        var counts = [Int](repeating: 0, count: bands)
+        var sums = [Double](repeating: 0, count: bands)
+        for offset in stride(from: 0, to: pixels.count, by: 4) {
+            let alpha = Double(pixels[offset + 3]) / 255
+            // Edges and shadows are mostly transparent: only the crest.
+            guard alpha >= 0.5 else { continue }
+            func channel(_ value: UInt8) -> Double {
+                // Un-premultiplied, then linearized as WCAG does.
+                let c = min(Double(value) / 255 / alpha, 1)
+                return c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+            }
+            let luminance = 0.2126 * channel(pixels[offset])
+                + 0.7152 * channel(pixels[offset + 1])
+                + 0.0722 * channel(pixels[offset + 2])
+            let band = min(Int(luminance * Double(bands)), bands - 1)
+            counts[band] += 1
+            sums[band] += luminance
+        }
+        guard let busiest = counts.indices.max(by: { counts[$0] < counts[$1] }), counts[busiest] > 0 else {
+            return nil
+        }
+        return sums[busiest] / Double(counts[busiest])
+    }
+}
+
+/// iPad (B-14): on regular width the tab bar can become a sidebar, which
+/// lists every favorite rather than a stretched phone bar, with "Teams" at
+/// its foot. Compact width keeps the plain tab bar and its "More" item.
+private struct HomeSidebar: ViewModifier {
+    let isRegularWidth: Bool
+    let openBrowser: @MainActor () -> Void
+
+    func body(content: Content) -> some View {
+        if isRegularWidth {
+            content
+                .tabViewStyle(.sidebarAdaptable)
+                .tabViewSidebarFooter {
+                    Button {
+                        openBrowser()
+                    } label: {
+                        Label("Teams", systemImage: "plus.circle")
+                    }
+                    .accessibilityLabel(Text("Add or Edit Teams"))
+                    .accessibilityIdentifier("teamPicker.sidebarEdit")
+                }
+        } else {
+            content
+        }
     }
 }
 

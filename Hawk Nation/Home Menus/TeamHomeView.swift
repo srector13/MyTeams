@@ -81,6 +81,9 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
     /// Owned by `TeamPages`, so it outlives this view.
     let model: TeamModel<Player>
 
+    /// The page around this content (`TeamPage`); absent in previews.
+    @Environment(TeamPageChrome.self) private var chrome: TeamPageChrome?
+
     var body: some View {
         TeamHomeLayout {
             RosterSection(model: model) { player in
@@ -127,6 +130,11 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         // also refetches whichever feed has gone stale (A-3); a forced
         // refresh of every feed is `model.refreshAll()` (C-1).
         .task(id: team.id) { await model.load() }
+        // Pulling the page down refreshes every feed (C-1): the page's
+        // scroll view is `TeamPage`'s, so it calls back through the chrome.
+        .onAppear {
+            chrome?.refresh = { [model] in await model.refreshAll() }
+        }
     }
 }
 
