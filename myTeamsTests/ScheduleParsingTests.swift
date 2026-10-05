@@ -450,8 +450,8 @@ struct ScheduleCompetitionTests {
         #expect(games.dropLast().allSatisfy { $0.competition == .premierLeague })
 
         // The cup tie is a copy of the Brighton loss; the league record
-        // leaves it out.
-        #expect(scheduleRecord(games: games, league: .premierLeague).summary == "4-1-0")
+        // leaves it out. Soccer shows wins, draws, losses (B-8).
+        #expect(scheduleRecord(games: games, league: .premierLeague).summary == "4-0-1")
     }
 
     @Test("With no cup fixtures the league's games are kept, in kick-off order")
