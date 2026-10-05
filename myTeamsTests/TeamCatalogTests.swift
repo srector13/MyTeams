@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import myTeams
@@ -197,5 +198,20 @@ struct TeamCatalogTests {
             .filter(RosterFilter(label: "Midfield", position: "Midfielder")),
             .filter(RosterFilter(label: "Attacker", position: "Forward")),
         ])
+    }
+
+    // MARK: Colour
+
+    @Test("A team with no colour gets the badge's fallback, never clear (A-6)")
+    func colourlessTeamColor() throws {
+        var colourless = TeamRef.chiefs
+        colourless.colorHex = ""
+        #expect(colourless.color != Color.clear)
+        #expect(colourless.color == Color(hexString: TeamColors.fillHex(for: colourless)))
+        // A team with a colour keeps it.
+        #expect(TeamRef.chiefs.color == Color(hexString: "E31837"))
+        // A placeholder, which has none, gets one too.
+        let placeholder = try #require(TeamRef.placeholder(id: "hockey/nhl:25"))
+        #expect(placeholder.color != Color.clear)
     }
 }

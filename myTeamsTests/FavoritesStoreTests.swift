@@ -515,4 +515,217 @@ struct FavoritesStoreTests {
             #expect(entry.notifyChangedAt == setAt)
         }
     }
+
+    // MARK: Unresolved favorites (A-4)
+
+    @MainActor
+    @Test("A favorite the catalog misses the deadline for stays, as a placeholder, and a link to it still lands")
+    func unresolvedFavoriteKept() async throws {
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [seedIDs[1], blues], isExistingInstall: true, reloadWidgets: {})
+        let teams = await store.teamRefs(within: .milliseconds(20)) { _ in
+            try? await Task.sleep(for: .seconds(5))
+            return nil
+        }
+        #expect(teams.map(\.id) == [seedIDs[1], blues])
+        let placeholder = try #require(teams.last)
+        #expect(placeholder == TeamRef.placeholder(id: blues))
+        #expect(placeholder.league == .nhl)
+        #expect(placeholder.espnID == "19")
+        #expect(placeholder.logoURL == nil)
+
+        // Home's routing: a link held while the favorites resolved lands.
+        let routed = HomeRouting.favoritesResolved(
+            HomeRouting.State(selection: seedIDs[1], pendingLink: blues),
+            teams: teams.map(\.id)
+        )
+        #expect(routed == HomeRouting.State(selection: blues, pendingLink: nil))
+    }
+
+    @MainActor
+    @Test("The deadline holds even when the lookup ignores cancellation, and the late answer is announced")
+    func lateLookupResolves() async throws {
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], isExistingInstall: true, reloadWidgets: {})
+        let key = store.resolutionKey
+        // As the catalog's shared load does: an unstructured task's value,
+        // which cancelling the waiter does not cut short.
+        let slowLookup: @Sendable (TeamRef.ID) async -> TeamRef? = { id in
+            await Task {
+                try? await Task.sleep(for: .seconds(2))
+                return resolvedTeam(id)
+            }.value
+        }
+
+        let placeholder = try #require(TeamRef.placeholder(id: blues))
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let first = await store.teamRefs(within: .milliseconds(50), lookup: slowLookup)
+        #expect(clock.now - start < .milliseconds(1500))
+        #expect(first == [placeholder])
+        #expect(store.lateResolutions == 0)
+
+        // The lookup lands: the key changes, so views ask again.
+        await waitUntil { store.lateResolutions > 0 }
+        #expect(store.lateResolutions == 1)
+        #expect(store.resolutionKey != key)
+        let second = await store.teamRefs(within: .seconds(5)) { resolvedTeam($0) }
+        #expect(second.map(\.displayName) == ["St. Louis Blues"])
+    }
+
+    @MainActor
+    @Test("A late lookup for a team unfollowed meanwhile changes nothing")
+    func lateLookupForUnfollowedTeam() async throws {
+        let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], isExistingInstall: true, reloadWidgets: {})
+        _ = await store.teamRefs(within: .milliseconds(20)) { id in
+            try? await Task.sleep(for: .milliseconds(200))
+            return resolvedTeam(id)
+        }
+        store.remove(blues)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(store.lateResolutions == 0)
+    }
+
+    // MARK: Order sync (A-8)
+
+    @Test("The order's stamp round-trips, and lists without one read as never reordered")
+    func orderStampRoundTrip() throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let entries = [FavoriteTeam(teamID: "football/nfl:12", addedAt: t)]
+        let stamped = try #require(FavoritesCodec.encode(entries, orderChangedAt: t + 60))
+        #expect(FavoritesCodec.decodeOrderChangedAt(stamped) == t + 60)
+        #expect(FavoritesCodec.decodeEntries(stamped) == entries)
+
+        let unstamped = try #require(FavoritesCodec.encode(entries))
+        #expect(FavoritesCodec.decodeOrderChangedAt(unstamped) == nil)
+        let object = try #require(try JSONSerialization.jsonObject(with: unstamped) as? [String: Any])
+        #expect(object["orderChangedAt"] == nil)
+        #expect(FavoritesCodec.decodeOrderChangedAt(nil) == nil)
+    }
+
+    @Test("Only the followed teams' order makes two lists differ")
+    func sameListIsOrdered() {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let a = FavoriteTeam(teamID: "a", addedAt: t)
+        let b = FavoriteTeam(teamID: "b", addedAt: t)
+        let gone = FavoriteTeam(teamID: "gone", addedAt: t, removedAt: t + 1)
+        let gone2 = FavoriteTeam(teamID: "gone2", addedAt: t, removedAt: t + 1)
+        #expect(FavoritesCodec.sameEntries([a, b], [b, a]))
+        #expect(!FavoritesCodec.sameList([a, b], [b, a]))
+        #expect(FavoritesCodec.sameList([a, b, gone, gone2], [a, b, gone2, gone]))
+    }
+
+    @MainActor
+    @Test("A reorder on one device reaches another, and is not echoed back")
+    func reorderSyncs() throws {
+        let cloud = MemoryCloudStore()
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t })
+        let bDefaults = try scratchDefaults()
+        var bReloads = 0
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: { bReloads += 1 })
+
+        a.move(from: IndexSet(integer: 3), to: 0)
+        #expect(a.teamIDs.first == seedIDs[3])
+        #expect(FavoritesCodec.decodeOrderChangedAt(cloud.data(forKey: FavoritesCodec.key)) == t)
+        let writes = cloud.writes
+
+        receive(b)
+        #expect(b.teamIDs == a.teamIDs)
+        #expect(FavoritesCodec.storedIDs(in: bDefaults) == a.teamIDs)
+        #expect(FavoritesCodec.decodeOrderChangedAt(bDefaults.data(forKey: FavoritesCodec.key)) == t)
+        #expect(bReloads == 1)
+        #expect(cloud.writes == writes)
+
+        // Nor again, or on coming back to the foreground.
+        receive(b)
+        b.synchronize()
+        a.synchronize()
+        #expect(cloud.writes == writes)
+        #expect(bReloads == 1)
+    }
+
+    @MainActor
+    @Test("Reorders made apart resolve to the later one on both devices", arguments: [true, false])
+    func concurrentReorders(aIsLater: Bool) throws {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let cloud = MemoryCloudStore()
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { aIsLater ? t0 + 200 : t0 + 100 })
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { aIsLater ? t0 + 100 : t0 + 200 })
+
+        // Offline, A moves the last team to the front, B the first to the
+        // back. B's write reaches iCloud last.
+        a.move(from: IndexSet(integer: 3), to: 0)
+        b.move(from: IndexSet(integer: 0), to: 4)
+        let aOrder = a.teamIDs
+        let bOrder = b.teamIDs
+        #expect(aOrder != bOrder)
+        receive(a)
+        receive(b)
+
+        let winner = aIsLater ? aOrder : bOrder
+        #expect(a.teamIDs == winner)
+        #expect(b.teamIDs == winner)
+        #expect(FavoritesCodec.decode(cloud.data(forKey: FavoritesCodec.key))?.map(\.teamID) == winner)
+    }
+
+    @MainActor
+    @Test("A reorder is stamped after the order it replaces, even with the clock behind")
+    func reorderStampedAfterAdoptedOrder() throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let cloud = MemoryCloudStore()
+        let a = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t + 500 })
+        let b = FavoritesStore(defaults: try scratchDefaults(), cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {}, now: { t })
+        a.move(from: IndexSet(integer: 3), to: 0)
+        receive(b)
+
+        // B's clock is behind A's, yet B's later reorder still wins.
+        b.move(from: IndexSet(integer: 0), to: 4)
+        receive(a)
+        #expect(a.teamIDs == b.teamIDs)
+        #expect(a.teamIDs.last == seedIDs[3])
+    }
+
+    @MainActor
+    @Test("Lists never reordered keep each device's own order, without writing back and forth")
+    func unstampedOrdersStayPut() throws {
+        let start = seedIDs.map { FavoriteTeam(teamID: $0, addedAt: FavoritesCodec.seedDate) }
+        let aDefaults = try scratchDefaults()
+        FavoritesCodec.save(start, defaults: aDefaults, cloud: nil)
+        let bDefaults = try scratchDefaults()
+        FavoritesCodec.save(start.reversed(), defaults: bDefaults, cloud: nil)
+        let cloud = MemoryCloudStore()
+        cloud.set(FavoritesCodec.encode(start), forKey: FavoritesCodec.key)
+
+        let a = FavoritesStore(defaults: aDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let b = FavoritesStore(defaults: bDefaults, cloud: cloud, seedIDs: seedIDs, isExistingInstall: true, reloadWidgets: {})
+        let writes = cloud.writes
+        receive(a)
+        receive(b)
+        #expect(a.teamIDs == seedIDs)
+        #expect(b.teamIDs == seedIDs.reversed())
+        #expect(cloud.writes == writes)
+    }
+}
+
+// MARK: - Helpers for unresolved favorites
+
+/// A favorite the bundled catalog does not know.
+private let blues = "hockey/nhl:19"
+
+/// `id` as the catalog would resolve it once loaded.
+private func resolvedTeam(_ id: TeamRef.ID) -> TeamRef? {
+    guard var team = TeamRef.placeholder(id: id) else { return nil }
+    team.displayName = "St. Louis Blues"
+    team.shortName = "Blues"
+    team.abbreviation = "STL"
+    team.colorHex = "002F87"
+    return team
+}
+
+/// Polls `condition` for up to ten seconds.
+@MainActor
+private func waitUntil(_ condition: @MainActor () -> Bool) async {
+    for _ in 0..<1000 where !condition() {
+        try? await Task.sleep(for: .milliseconds(10))
+    }
 }

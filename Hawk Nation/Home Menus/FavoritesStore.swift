@@ -21,7 +21,8 @@ import WidgetKit
 /// `NSUbiquitousKeyValueStore.didChangeExternallyNotification` and are merged
 /// in with `FavoritesCodec.merge`: the union of both lists, with each team's
 /// last add or remove winning. Removed teams are kept as tombstones so their
-/// removal syncs too.
+/// removal syncs too. The order is stamped when the reader reorders, and the
+/// newer order wins.
 @MainActor
 @Observable
 final class FavoritesStore {
@@ -38,9 +39,22 @@ final class FavoritesStore {
     /// other devices.
     private var tombstones: [FavoriteTeam]
 
+    /// When the reader last reordered `favorites`, here or on another
+    /// device. `nil` until anyone has. The newer order wins a merge (A-8).
+    private var orderChangedAt: Date?
+
     /// Whether `favorites` is this install's seed, not yet edited. The first
     /// iCloud copy to arrive then sets the order, as a restore would have.
     private var seedIsProvisional: Bool
+
+    /// Counts the favorites `teamRefs()` stood a placeholder in for that
+    /// have since resolved. Views can key their lookup on it, alongside
+    /// `teamIDs`, to swap the placeholder for the real team (A-4).
+    private(set) var lateResolutions = 0
+
+    /// Favorites whose lookup outlived `teamRefs()`'s deadline and is still
+    /// running, so each is waited on once.
+    @ObservationIgnored private var pendingLookups: Set<TeamRef.ID> = []
 
     /// Whether to open the "Pick your teams" sheet at launch: a fresh install
     /// that has never finished onboarding. Installs whose favorites were
@@ -67,6 +81,7 @@ final class FavoritesStore {
         let loaded = FavoritesCodec.loadOrSeed(defaults: defaults, cloud: cloud, seedIDs: seedIDs)
         favorites = loaded.favorites
         tombstones = FavoritesCodec.decodeEntries(defaults.data(forKey: FavoritesCodec.key))?.filter(\.isRemoved) ?? []
+        orderChangedAt = FavoritesCodec.decodeOrderChangedAt(defaults.data(forKey: FavoritesCodec.key))
         seedIsProvisional = loaded.source == .seeded
         needsOnboarding = loaded.source == .seeded
             && !isExistingInstall
@@ -78,6 +93,20 @@ final class FavoritesStore {
     // MARK: Queries
 
     var teamIDs: [TeamRef.ID] { favorites.map(\.teamID) }
+
+    /// What `teamRefs()` answers from: the favorites, and how many
+    /// placeholders have resolved since. See `resolutionKey`.
+    struct ResolutionKey: Equatable, Sendable {
+        let teamIDs: [TeamRef.ID]
+        let lateResolutions: Int
+    }
+
+    /// Changes whenever `teamRefs()` could answer differently: the favorites
+    /// change, or a favorite it stood a placeholder in for resolves. A view
+    /// keys its `.task(id:)` on it to swap placeholders for teams (A-4).
+    var resolutionKey: ResolutionKey {
+        ResolutionKey(teamIDs: teamIDs, lateResolutions: lateResolutions)
+    }
 
     func isFavorite(_ id: TeamRef.ID) -> Bool {
         favorites.contains { $0.teamID == id }
@@ -93,15 +122,25 @@ final class FavoritesStore {
         }
     }
 
-    /// The favorites as teams, in order. Ids the catalog cannot resolve
-    /// within a couple of seconds are left out rather than holding up the
-    /// crest bar.
+    /// The favorites as teams, in order. A favorite the catalog cannot
+    /// resolve within a couple of seconds is not held up for, nor left out
+    /// (A-4): it stands as `TeamRef.placeholder(id:)`, its sport's monogram,
+    /// so its tab and the deep links to it still work. When its lookup
+    /// lands, `lateResolutions` goes up.
     func teamRefs() async -> [TeamRef] {
+        await teamRefs(within: .seconds(2)) { await RemoteTeamCatalog.shared.team(id: $0) }
+    }
+
+    /// `teamRefs()` with its deadline and catalog lookup given, for tests.
+    func teamRefs(
+        within deadline: Duration,
+        lookup: @escaping @Sendable (TeamRef.ID) async -> TeamRef?
+    ) async -> [TeamRef] {
         let ids = teamIDs
         let resolved = await withTaskGroup(of: (Int, TeamRef?).self) { group in
             for (index, id) in ids.enumerated() {
                 group.addTask {
-                    (index, await FavoritesStore.resolve(id, within: .seconds(2)))
+                    (index, await FavoritesStore.resolve(id, within: deadline, lookup: lookup))
                 }
             }
             var teams: [Int: TeamRef] = [:]
@@ -110,25 +149,60 @@ final class FavoritesStore {
             }
             return teams
         }
-        return ids.indices.compactMap { resolved[$0] }
+        return ids.indices.compactMap { index -> TeamRef? in
+            if let team = resolved[index] { return team }
+            awaitLateLookup(ids[index], lookup: lookup)
+            return TeamRef.placeholder(id: ids[index])
+        }
+    }
+
+    /// Waits out a lookup that missed `teamRefs()`'s deadline, and counts
+    /// it in `lateResolutions` if it finds the team still followed.
+    private func awaitLateLookup(_ id: TeamRef.ID, lookup: @escaping @Sendable (TeamRef.ID) async -> TeamRef?) {
+        guard pendingLookups.insert(id).inserted else { return }
+        Task {
+            let team = await lookup(id)
+            pendingLookups.remove(id)
+            if team != nil, isFavorite(id) {
+                lateResolutions += 1
+            }
+        }
     }
 
     /// One team from the catalog, or `nil` after `deadline`. The seed teams
     /// resolve from the bundle without waiting.
-    nonisolated static func resolve(_ id: TeamRef.ID, within deadline: Duration) async -> TeamRef? {
+    ///
+    /// Not a task group: a group waits for its losing child, and the
+    /// catalog's lookup awaits a shared load that ignores cancellation, so
+    /// a fetch in flight would hold the answer well past the deadline. The
+    /// lookup carries on after `nil` is returned, and the catalog keeps
+    /// what it loads.
+    nonisolated static func resolve(
+        _ id: TeamRef.ID,
+        within deadline: Duration,
+        lookup: @escaping @Sendable (TeamRef.ID) async -> TeamRef? = { await RemoteTeamCatalog.shared.team(id: $0) }
+    ) async -> TeamRef? {
         if let seed = TeamCatalog.team(id: id) {
             return await RemoteTeamCatalog.shared.refreshedSeed(seed)
         }
-        return await withTaskGroup(of: TeamRef?.self) { group in
-            group.addTask { await RemoteTeamCatalog.shared.team(id: id) }
-            group.addTask {
-                try? await Task.sleep(for: deadline)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+        let (answers, continuation) = AsyncStream.makeStream(of: TeamRef?.self)
+        let lookupTask = Task {
+            continuation.yield(await lookup(id))
+            continuation.finish()
         }
+        let timer = Task {
+            try? await Task.sleep(for: deadline)
+            continuation.yield(nil)
+            continuation.finish()
+        }
+        defer {
+            lookupTask.cancel()
+            timer.cancel()
+        }
+        for await answer in answers {
+            return answer
+        }
+        return nil
     }
 
     // MARK: Editing
@@ -187,9 +261,13 @@ final class FavoritesStore {
         didChange()
     }
 
-    /// Reorders the favorites, as `List`'s `.onMove` reports it.
+    /// Reorders the favorites, as `List`'s `.onMove` reports it, and stamps
+    /// the order so it reaches the reader's other devices (A-8).
     func move(from source: IndexSet, to destination: Int) {
         favorites.move(fromOffsets: source, toOffset: destination)
+        // A whole second past the order it replaces at least (the JSON keeps
+        // no fractions), so it wins on every device, however close behind.
+        orderChangedAt = max(now(), orderChangedAt.map { $0 + 1 } ?? .distantPast)
         didChange()
     }
 
@@ -201,7 +279,7 @@ final class FavoritesStore {
 
     private func didChange() {
         seedIsProvisional = false
-        FavoritesCodec.save(favorites + tombstones, defaults: defaults, cloud: cloud)
+        FavoritesCodec.save(favorites + tombstones, orderChangedAt: orderChangedAt, defaults: defaults, cloud: cloud)
         reloadWidgets()
     }
 
@@ -246,28 +324,40 @@ final class FavoritesStore {
     /// Merges iCloud's copy with the local one. The result is written to the
     /// shared defaults if it differs from them, and back to iCloud only if it
     /// differs from iCloud's copy, so receiving a change never echoes it.
+    ///
+    /// The order is the local one unless iCloud's was set later (or this is
+    /// a provisional seed): then the reorder made on another device is
+    /// adopted. Lists whose orders were never set keep their own (A-8).
     private func mergeFromCloud() {
         guard let cloud,
-              let remote = FavoritesCodec.decodeEntries(cloud.data(forKey: FavoritesCodec.key))
+              let remoteData = cloud.data(forKey: FavoritesCodec.key),
+              let remote = FavoritesCodec.decodeEntries(remoteData)
         else { return }
         // The stored copy rather than `favorites`: its dates have been
         // through the same JSON as `remote`'s.
-        let local = FavoritesCodec.decodeEntries(defaults.data(forKey: FavoritesCodec.key))
-            ?? favorites + tombstones
-        let merged = seedIsProvisional
+        let localData = defaults.data(forKey: FavoritesCodec.key)
+        let local = FavoritesCodec.decodeEntries(localData) ?? favorites + tombstones
+        let localOrderAt = FavoritesCodec.decodeOrderChangedAt(localData)
+        let remoteOrderAt = FavoritesCodec.decodeOrderChangedAt(remoteData)
+        let remoteOrderIsNewer = (remoteOrderAt ?? .distantPast) > (localOrderAt ?? .distantPast)
+        let merged = seedIsProvisional || remoteOrderIsNewer
             ? FavoritesCodec.merge(remote, local)
             : FavoritesCodec.merge(local, remote)
-        let followed = merged.filter { !$0.isRemoved }
-        // The tombstones' order means nothing; the followed teams' does.
-        if followed != local.filter({ !$0.isRemoved }) || !FavoritesCodec.sameEntries(merged, local) {
-            FavoritesCodec.save(merged, defaults: defaults, cloud: nil)
-            favorites = followed
+        let mergedOrderAt = remoteOrderIsNewer ? remoteOrderAt : localOrderAt
+        // An order-only difference is a change too.
+        if !FavoritesCodec.sameList(merged, local) || mergedOrderAt != localOrderAt {
+            FavoritesCodec.save(merged, orderChangedAt: mergedOrderAt, defaults: defaults, cloud: nil)
+            favorites = merged.filter { !$0.isRemoved }
             tombstones = merged.filter(\.isRemoved)
+            orderChangedAt = mergedOrderAt
             seedIsProvisional = false
             reloadWidgets()
         }
-        if !FavoritesCodec.sameEntries(merged, remote) {
-            cloud.set(FavoritesCodec.encode(merged), forKey: FavoritesCodec.key)
+        // Orders of the same age are each device's own, so only an order
+        // set later than iCloud's is sent; anything else would echo back
+        // and forth.
+        if !FavoritesCodec.sameEntries(merged, remote) || mergedOrderAt != remoteOrderAt {
+            cloud.set(FavoritesCodec.encode(merged, orderChangedAt: mergedOrderAt), forKey: FavoritesCodec.key)
         }
     }
 }

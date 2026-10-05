@@ -304,3 +304,62 @@ struct ClubSearchTests {
         #expect(cups.first?.otherLeagues == [LeagueID.championsLeague])
     }
 }
+
+// MARK: - Recent searches
+
+@Suite("Recent searches")
+struct RecentSearchesTests {
+    @Test("A team followed from a search goes to the front, once, with its trimmed query")
+    func recordsNewestFirst() {
+        var recents = RecentSearches.recording("kansas", team: chiefs, in: [])
+        recents = RecentSearches.recording("  salt  ", team: realSaltLake, in: recents)
+        #expect(recents.map(\.id) == [realSaltLake.id, chiefs.id])
+        #expect(recents.first?.query == "salt")
+
+        // Found again by another query: moved up, the query updated.
+        recents = RecentSearches.recording("chiefs", team: chiefs, in: recents)
+        #expect(recents.map(\.id) == [chiefs.id, realSaltLake.id])
+        #expect(recents.first?.query == "chiefs")
+    }
+
+    @Test("A blank query records nothing")
+    func blankQuery() {
+        let recents = RecentSearches.recording("kansas", team: chiefs, in: [])
+        #expect(RecentSearches.recording("   ", team: dodgers, in: recents) == recents)
+        #expect(RecentSearches.recording("", team: dodgers, in: []).isEmpty)
+    }
+
+    @Test("Only the last eight are kept")
+    func keepsEight() {
+        var recents: [RecentSearch] = []
+        for espnID in 1...10 {
+            let followed = team(.nfl, "\(espnID)", displayName: "Team \(espnID)", shortName: "", abbreviation: "", location: "")
+            recents = RecentSearches.recording("team \(espnID)", team: followed, in: recents)
+        }
+        #expect(RecentSearches.limit == 8)
+        #expect(recents.count == 8)
+        #expect(recents.map(\.team.espnID) == (3...10).reversed().map { String($0) })
+    }
+
+    @Test("Recent searches persist in UserDefaults, and clear")
+    func persists() throws {
+        let defaults = try #require(UserDefaults(suiteName: "RecentSearchesTests.\(UUID().uuidString)"))
+        #expect(RecentSearches.load(from: defaults).isEmpty)
+
+        RecentSearches.record("kansas", team: chiefs, defaults: defaults)
+        let returned = RecentSearches.record("malmo", team: malmo, defaults: defaults)
+        let loaded = RecentSearches.load(from: defaults)
+        #expect(loaded == returned)
+        #expect(loaded.map(\.id) == [malmo.id, chiefs.id])
+        // The whole team is kept, so the row draws before any catalog loads.
+        #expect(loaded.first?.team == malmo)
+        #expect(loaded.last?.query == "kansas")
+
+        RecentSearches.clear(defaults: defaults)
+        #expect(RecentSearches.load(from: defaults).isEmpty)
+
+        // Unreadable data reads as none.
+        defaults.set(Data("not json".utf8), forKey: RecentSearches.key)
+        #expect(RecentSearches.load(from: defaults).isEmpty)
+    }
+}

@@ -101,6 +101,56 @@ extension TeamSearch {
     }
 }
 
+// MARK: - Recent searches
+
+/// A team the reader followed from a search, and the query that found it.
+/// The whole team is kept, so the row draws before any catalog loads.
+struct RecentSearch: Codable, Hashable, Identifiable, Sendable {
+    var query: String
+    var team: TeamRef
+
+    var id: TeamRef.ID { team.id }
+}
+
+/// The picker's recent searches (C-7): the last `limit` teams followed from
+/// a search, newest first, each once, in this device's `UserDefaults`.
+enum RecentSearches {
+    static let key = "teamBrowser.recentSearches.v1"
+    static let limit = 8
+
+    /// The stored recent searches, newest first. Empty for none, or for
+    /// unreadable data.
+    static func load(from defaults: UserDefaults = .standard) -> [RecentSearch] {
+        guard let data = defaults.data(forKey: key),
+              let recents = try? JSONDecoder().decode([RecentSearch].self, from: data)
+        else { return [] }
+        return Array(recents.prefix(limit))
+    }
+
+    /// `recents` with `team`, found by `query`, moved or added to the front
+    /// and the oldest past `limit` dropped. A blank query records nothing.
+    static func recording(_ query: String, team: TeamRef, in recents: [RecentSearch]) -> [RecentSearch] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return recents }
+        let rest = recents.filter { $0.id != team.id }
+        return Array(([RecentSearch(query: trimmed, team: team)] + rest).prefix(limit))
+    }
+
+    /// Records a team followed from a search and returns the new list.
+    @discardableResult
+    static func record(_ query: String, team: TeamRef, defaults: UserDefaults = .standard) -> [RecentSearch] {
+        let recents = recording(query, team: team, in: load(from: defaults))
+        if let data = try? JSONEncoder().encode(recents) {
+            defaults.set(data, forKey: key)
+        }
+        return recents
+    }
+
+    static func clear(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: key)
+    }
+}
+
 // MARK: - Sports
 
 /// How the picker names and draws a sport.
@@ -160,8 +210,10 @@ struct BrowsableSport: Identifiable, Hashable, Sendable {
 /// top for reordering and removal.
 ///
 /// Opened from the crest bar's "+" button and, on a fresh install, as the
-/// "Pick your teams" onboarding sheet. Leads to the Alerts settings
-/// (`AlertsSettingsView`).
+/// "Pick your teams" onboarding sheet. Alerts live in Settings (B-9).
+///
+/// With the search field focused and empty, the teams last followed from a
+/// search are offered under "Recent" (`RecentSearches`, C-7).
 struct TeamBrowserView: View {
     var title = "Teams"
 
@@ -179,6 +231,9 @@ struct TeamBrowserView: View {
     @State private var query = ""
     @State private var remoteHits: [TeamRef] = []
     @State private var isSearchingRemotely = false
+    /// Whether the search field is active, focused or not yet dismissed.
+    @State private var isSearchPresented = false
+    @State private var recents: [RecentSearch] = []
 
     /// A row's crest, which scales with the team name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
@@ -217,17 +272,6 @@ struct TeamBrowserView: View {
     var body: some View {
         NavigationStack(path: $path) {
             page(title, showsEditButton: true) {
-                Section {
-                    NavigationLink {
-                        AlertsSettingsView()
-                    } label: {
-                        Label("Alerts", systemImage: "bell.badge")
-                    }
-                    .accessibilityLabel("Alerts")
-                    .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
-                    .accessibilityIdentifier("teamBrowser.alerts")
-                }
-
                 if !myTeams.isEmpty {
                     Section("My Teams") {
                         ForEach(myTeams) { team in
@@ -263,13 +307,15 @@ struct TeamBrowserView: View {
         // On the stack rather than a page, so a search typed on any page,
         // and the reader's teams, outlive the push or pop that hides it.
         .task {
+            recents = RecentSearches.load()
             // Every browsable league, for the rows' team counts and so
             // search finds teams in leagues not yet opened.
             for item in LeagueID.browsable {
                 await load(item.league)
             }
         }
-        .task(id: store.teamIDs) {
+        // Again when a placeholder's team resolves late (A-4).
+        .task(id: store.resolutionKey) {
             myTeams = await store.teamRefs()
         }
         .task(id: query) {
@@ -287,7 +333,8 @@ struct TeamBrowserView: View {
     // MARK: Pages
 
     /// One page of the picker: `content`, or the search results while there
-    /// is a query, under the shared search field and Done button.
+    /// is a query, under the shared search field and Done button. With the
+    /// field focused and still empty, recent searches come first.
     private func page<Content: View>(
         _ title: String,
         showsEditButton: Bool = false,
@@ -298,10 +345,13 @@ struct TeamBrowserView: View {
             if isSearching {
                 searchResults
             } else {
+                if isSearchPresented && !recents.isEmpty {
+                    recentSearches
+                }
                 rows
             }
         }
-        .searchable(text: $query, prompt: "Search all teams")
+        .searchable(text: $query, isPresented: $isSearchPresented, prompt: "Search all teams")
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -472,13 +522,13 @@ struct TeamBrowserView: View {
         if !local.isEmpty {
             Section("Results") {
                 ForEach(local) { club in
-                    row(club.canonical, club: club)
+                    row(club.canonical, club: club, fromSearch: true)
                 }
             }
         } else if !remoteHits.isEmpty {
             Section("From ESPN") {
                 ForEach(remoteHits) { team in
-                    row(team)
+                    row(team, fromSearch: true)
                 }
             }
         } else if isSearchingRemotely {
@@ -489,10 +539,63 @@ struct TeamBrowserView: View {
         }
     }
 
+    /// The teams last followed from a search, newest first. A tap runs the
+    /// search that found the team again.
+    private var recentSearches: some View {
+        Section {
+            ForEach(recents) { recent in
+                recentRow(recent)
+            }
+        } header: {
+            HStack {
+                Text("Recent")
+                Spacer()
+                Button("Clear") {
+                    RecentSearches.clear()
+                    recents = []
+                }
+                .font(.subheadline)
+                .accessibilityLabel("Clear recent searches")
+                .accessibilityIdentifier("teamBrowser.recent.clear")
+            }
+        }
+    }
+
+    private func recentRow(_ recent: RecentSearch) -> some View {
+        Button {
+            query = recent.query
+        } label: {
+            HStack(spacing: Theme.Spacing.m) {
+                TeamLogo(team: recent.team, size: crestSize)
+                    .frame(width: crestSize, height: crestSize)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(recent.team.displayName)
+                        .foregroundStyle(.primary)
+                    Text("“\(recent.query)”")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "arrow.up.left")
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 2)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(recent.team.displayName), searched \(recent.query)")
+        .accessibilityHint("Searches again.")
+        .accessibilityIdentifier("teamBrowser.recent.\(recent.team.id)")
+    }
+
     /// A team to follow or unfollow. Given its `club`, as search results are,
     /// the row stands for the club in every league it was found in: it is
     /// followed under any of them, and the other leagues show as chips.
-    private func row(_ team: TeamRef, club: ClubGroup? = nil) -> some View {
+    /// Following one from a search records it in `recents`.
+    private func row(_ team: TeamRef, club: ClubGroup? = nil, fromSearch: Bool = false) -> some View {
         let followed = club == nil ? store.isFavorite(team.id) : !store.followedClubIDs(of: team).isEmpty
         let otherBadges = club?.otherLeagues.map(\.badge) ?? []
         // One element per club: "Bayern Munich, Bundesliga, also in UCL".
@@ -509,6 +612,9 @@ struct TeamBrowserView: View {
             // first follow is where the reader is asked for them.
             if !followed {
                 Task { await ScoreAlertsPermissions.requestIfNeeded() }
+                if fromSearch {
+                    recents = RecentSearches.record(query, team: team)
+                }
             }
         } label: {
             HStack(spacing: Theme.Spacing.m) {
@@ -594,9 +700,8 @@ struct TeamBrowserView: View {
         remoteHits = hits
     }
 
-    /// Applies a move in the My Teams section to the store. Favorites the
-    /// catalog could not resolve are not shown, so rows are mapped to the
-    /// store's positions by id.
+    /// Applies a move in the My Teams section to the store. Rows are mapped
+    /// to the store's positions by id, in case a favorite is not shown.
     private func moveMyTeams(from source: IndexSet, to destination: Int) {
         let ids = store.teamIDs
         let storeSource = IndexSet(source.compactMap { ids.firstIndex(of: myTeams[$0].id) })

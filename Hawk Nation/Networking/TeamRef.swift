@@ -259,8 +259,31 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
 
     // MARK: Display
 
-    /// The team's colour for SwiftUI views.
-    var color: Color { Color(hexString: colorHex) }
+    /// The team's colour for SwiftUI views. A team without one (remote
+    /// search hits, many college teams) gets the crest badge's hash-picked
+    /// fallback rather than `.clear` (A-6).
+    var color: Color { Color(hexString: TeamColors.fillHex(for: self)) }
+
+    /// A stand-in for a team known only by its id, such as a favorite the
+    /// catalog has not resolved yet: no names but its league's, no colour
+    /// and no crest, so it draws as the sport's monogram badge. `nil` for
+    /// anything `parse(id:)` rejects.
+    static func placeholder(id: TeamRef.ID) -> TeamRef? {
+        guard let parsed = parse(id: id) else { return nil }
+        return TeamRef(
+            league: parsed.league,
+            espnID: parsed.espnID,
+            displayName: "\(parsed.league.descriptor.displayName) team",
+            shortName: parsed.league.badge,
+            abbreviation: "",
+            location: "",
+            colorHex: "",
+            alternateColorHex: "",
+            logoURL: nil,
+            logoDarkURL: nil,
+            logoAsset: nil
+        )
+    }
 
     /// The label for one of this team's game periods. See
     /// `LeagueDescriptor.periodName`.
@@ -663,11 +686,23 @@ enum FavoritesCodec {
     /// The v2 shape.
     private struct Stored: Codable {
         var favorites: [FavoriteTeam]
+        /// When the reader last reordered the list, so the newest order
+        /// wins on every device (A-8). Left out until they do, so builds
+        /// that predate it read the same JSON.
+        var orderChangedAt: Date?
     }
 
-    /// Encodes the entries, tombstones included, in the v2 shape.
-    static func encode(_ entries: [FavoriteTeam]) -> Data? {
-        try? encoder.encode(Stored(favorites: entries))
+    /// Encodes the entries, tombstones included, in the v2 shape, with the
+    /// time the order was last set.
+    static func encode(_ entries: [FavoriteTeam], orderChangedAt: Date? = nil) -> Data? {
+        try? encoder.encode(Stored(favorites: entries, orderChangedAt: orderChangedAt))
+    }
+
+    /// When the stored list was last reordered. `nil` for a list never
+    /// reordered, a v1 list, or missing or unreadable data.
+    static func decodeOrderChangedAt(_ data: Data?) -> Date? {
+        guard let data else { return nil }
+        return (try? decoder.decode(Stored.self, from: data))?.orderChangedAt
     }
 
     /// Every stored entry, tombstones included, from a v2 or v1 list. `nil`
@@ -720,8 +755,13 @@ enum FavoritesCodec {
     }
 
     /// Writes the entries to `defaults` and mirrors the same JSON to `cloud`.
-    static func save(_ entries: [FavoriteTeam], defaults: UserDefaults, cloud: (any FavoritesCloudStore)?) {
-        guard let data = encode(entries) else { return }
+    static func save(
+        _ entries: [FavoriteTeam],
+        orderChangedAt: Date? = nil,
+        defaults: UserDefaults,
+        cloud: (any FavoritesCloudStore)?
+    ) {
+        guard let data = encode(entries, orderChangedAt: orderChangedAt) else { return }
         defaults.set(data, forKey: key)
         cloud?.set(data, forKey: key)
     }
@@ -774,6 +814,14 @@ enum FavoritesCodec {
             Dictionary(entries.map { ($0.teamID, $0) }, uniquingKeysWith: { $1 })
         }
         return a.count == b.count && byID(a) == byID(b)
+    }
+
+    /// Whether two lists are the same favorites in the same display order:
+    /// the same entries, the followed teams in the same order. The
+    /// tombstones' order means nothing.
+    static func sameList(_ a: [FavoriteTeam], _ b: [FavoriteTeam]) -> Bool {
+        sameEntries(a, b)
+            && a.filter { !$0.isRemoved }.map(\.teamID) == b.filter { !$0.isRemoved }.map(\.teamID)
     }
 
     /// The later-edited of two entries for one team. Ties go to the removal,
