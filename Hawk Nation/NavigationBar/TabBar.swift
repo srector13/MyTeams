@@ -44,6 +44,14 @@ struct Home: View {
     /// mounted.
     @State private var pages = TeamPages()
 
+    /// Other teams' pages opened over each favorite's page, by tab
+    /// (`HomeRouting.teamOpened`).
+    @State private var visits: [TeamRef.ID: [TeamVisit]] = [:]
+
+    /// How a page asks for another team's page, or for a player's sheet
+    /// on one (t_8d15e070).
+    @State private var navigator = TeamNavigator()
+
     /// Bumped when a favorite's crest lands in `LogoStore`, so the tab items
     /// read it again (`TabCrest`).
     @State private var crestRevision = 0
@@ -65,7 +73,12 @@ struct Home: View {
     }
 
     private var routing: HomeRouting.State {
-        HomeRouting.State(selection: selection, pendingLink: deepLinkedTeamID, showsSettings: showsSettings)
+        HomeRouting.State(
+            selection: selection,
+            pendingLink: deepLinkedTeamID,
+            showsSettings: showsSettings,
+            visits: visits
+        )
     }
 
     private func apply(_ routed: HomeRouting.State) {
@@ -78,6 +91,24 @@ struct Home: View {
         if showsSettings != routed.showsSettings {
             showsSettings = routed.showsSettings
         }
+        if visits != routed.visits {
+            visits = routed.visits
+        }
+    }
+
+    /// The other teams' pages pushed over `teamID`'s page.
+    private func visitPath(for teamID: TeamRef.ID) -> Binding<[TeamVisit]> {
+        Binding {
+            visits[teamID] ?? []
+        } set: { path in
+            visits[teamID] = path.isEmpty ? nil : path
+        }
+    }
+
+    /// The teams whose pages are open as visits, whose models `pages`
+    /// keeps alongside the favorites'.
+    private var visitedIDs: [TeamRef.ID] {
+        visits.values.flatMap { $0.map(\.team.id) }
     }
 
     /// The tab view's selection: a tap on a team's tab chooses that team,
@@ -127,10 +158,17 @@ struct Home: View {
             }
             .environment(\.containerSize, proxy.size)
         }
+        .environment(navigator)
         .task(id: store.teamIDs) {
-            pages.retain(store.teamIDs)
+            pages.retain(store.teamIDs + visitedIDs)
             teams = await store.teamRefs()
             apply(HomeRouting.favoritesResolved(routing, teams: teams.map(\.id)))
+        }
+        // A page asked for a team's page: a favorite's tab, or the team's
+        // page pushed over the one on screen (t_8d15e070).
+        .onChange(of: navigator.request) { _, _ in
+            guard let team = navigator.takeRequest() else { return }
+            apply(HomeRouting.teamOpened(routing, team: team, teams: teams.map(\.id)))
         }
         .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
             apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
@@ -223,12 +261,10 @@ struct Home: View {
         if inMore || team.id == selection {
             TeamPage(
                 team: team,
-                savedOffset: pages.scrollOffset(for: team.id),
-                saveOffset: { pages.setScrollOffset($0, for: team.id) },
+                pages: pages,
+                path: visitPath(for: team.id),
                 showSettings: { showsSettings = true }
-            ) {
-                TeamHomeView(team: team, pages: pages)
-            }
+            )
             .id(team.id)
             .onAppear { choose(team.id) }
         } else {
@@ -250,6 +286,9 @@ enum HomeRouting {
         /// closes it: not the selection moving off a removed team, not a
         /// link (A-5).
         var showsSettings = false
+        /// Other teams' pages pushed over each favorite's page, by the
+        /// favorite's id (`teamOpened`); none for most.
+        var visits: [TeamRef.ID: [TeamVisit]] = [:]
     }
 
     /// The favorites have been resolved to `teams`, in order. A selection
@@ -261,6 +300,8 @@ enum HomeRouting {
         if !teams.contains(next.selection) {
             next.selection = teams.first ?? ""
         }
+        // A tab that's gone takes the pages pushed over it along.
+        next.visits = next.visits.filter { teams.contains($0.key) }
         if let id = next.pendingLink {
             next.pendingLink = nil
             if teams.contains(id) {
@@ -281,6 +322,31 @@ enum HomeRouting {
         return next
     }
 
+    /// Something on a page asked for `team`'s page (`TeamNavigator`), such
+    /// as a leader tapped on a leaderboard.
+    ///
+    /// A favorite is selected, as a tap on its tab would, and shown at its
+    /// own page: anything pushed over it is popped, so a player sheet asked
+    /// for with it opens on the page on screen. Any other team's page is
+    /// pushed over the selected tab's page, unless it's the one on top
+    /// already. Settings and a pending link are left alone.
+    static func teamOpened(_ state: State, team: TeamRef, teams: [TeamRef.ID]) -> State {
+        var next = state
+        if teams.contains(team.id) {
+            next.selection = team.id
+            next.visits[team.id] = nil
+            return next
+        }
+        // No tab to push it over.
+        guard teams.contains(next.selection) else { return state }
+        var path = next.visits[next.selection] ?? []
+        if path.last?.team.id != team.id {
+            path.append(TeamVisit(team: team))
+        }
+        next.visits[next.selection] = path
+        return next
+    }
+
     /// A widget link arrived (or `Home` appeared with one). A resolved
     /// team is selected at once and a team that is not a favorite is
     /// dropped; a favorite still resolving stays pending for
@@ -295,6 +361,101 @@ enum HomeRouting {
             next.pendingLink = nil
         }
         return next
+    }
+}
+
+/// Another team's page pushed over a favorite's (`HomeRouting.teamOpened`):
+/// a team that isn't followed, opened from something on a page.
+struct TeamVisit: Hashable, Sendable {
+    let team: TeamRef
+}
+
+/// A player whose sheet a team page is to open once it's on screen: asked
+/// for with the team's page (`TeamNavigator.open`), as when a leader is
+/// tapped on a leaderboard (t_8d15e070).
+struct PendingPlayer: Equatable, Sendable {
+    let teamID: TeamRef.ID
+    /// The player's `id` on the team's roster: the ESPN athlete id.
+    let playerID: String
+
+    enum Outcome: Equatable, Sendable {
+        /// Not for this page, or its roster is still loading: keep it.
+        case wait
+        /// Open this player's sheet, and forget the request.
+        case present(String)
+        /// The roster has answered without the player: forget it.
+        case drop
+    }
+
+    /// What `teamID`'s page, its roster holding `rosterIDs` and in
+    /// `rosterState`, does with the request.
+    func outcome(teamID: TeamRef.ID, rosterIDs: [String], rosterState: SectionLoadState) -> Outcome {
+        guard teamID == self.teamID else { return .wait }
+        if rosterIDs.contains(playerID) { return .present(playerID) }
+        return rosterState == .loading ? .wait : .drop
+    }
+}
+
+/// How anything on a team page opens another team's page, and a player's
+/// sheet on it (t_8d15e070). `Home` puts one in the environment, handles
+/// each `request` (`HomeRouting.teamOpened`), and the team page on screen
+/// takes the `pendingPlayer` meant for it.
+@MainActor
+@Observable
+final class TeamNavigator {
+    /// A team's page asked for and not yet handled by `Home`.
+    private(set) var request: TeamRef?
+
+    /// A player sheet asked for with `request`, until the team's page has
+    /// opened it (`takePlayer`), so it opens once.
+    private(set) var pendingPlayer: PendingPlayer?
+
+    /// The lookup behind `open(teamID:playerID:)`, so a later tap wins.
+    @ObservationIgnored private var resolving: Task<Void, Never>?
+
+    /// Opens `team`'s page — its tab if it's a favorite, else pushed over
+    /// the page on screen — and then, given `playerID`, that player's
+    /// sheet on it. A request without a player clears any earlier one.
+    func open(_ team: TeamRef, playerID: String? = nil) {
+        resolving?.cancel()
+        resolving = nil
+        pendingPlayer = playerID.map { PendingPlayer(teamID: team.id, playerID: $0) }
+        request = team
+    }
+
+    /// `open(_:playerID:)` for a team known only by its id, such as a
+    /// leader's: looked up in the catalog first, else its placeholder.
+    func open(teamID: TeamRef.ID, playerID: String? = nil) {
+        resolving?.cancel()
+        resolving = Task {
+            let found = await FavoritesStore.resolve(teamID, within: .seconds(2))
+            guard !Task.isCancelled, let team = found ?? TeamRef.placeholder(id: teamID) else { return }
+            open(team, playerID: playerID)
+        }
+    }
+
+    /// The request, handed to `Home` once.
+    func takeRequest() -> TeamRef? {
+        defer { request = nil }
+        return request
+    }
+
+    /// The player whose sheet `teamID`'s page opens now, if any: the
+    /// pending one when the page's roster lists them. Cleared once taken,
+    /// or once the roster has answered without them, so it never opens
+    /// twice.
+    func takePlayer(for teamID: TeamRef.ID, rosterIDs: [String], rosterState: SectionLoadState) -> String? {
+        guard let pending = pendingPlayer else { return nil }
+        switch pending.outcome(teamID: teamID, rosterIDs: rosterIDs, rosterState: rosterState) {
+        case .wait:
+            return nil
+        case .present(let id):
+            pendingPlayer = nil
+            return id
+        case .drop:
+            pendingPlayer = nil
+            return nil
+        }
     }
 }
 
@@ -327,18 +488,41 @@ final class TeamPageChrome {
 /// depends on the scroll offset, so it's the same at rest, scrolled and
 /// pulled past the top. The crest is drawn once, in the bar.
 ///
-/// The page is mounted only while its team is selected, so it reports its
-/// scroll offset as it moves (`saveOffset`) and opens where it was left
-/// (`savedOffset`) through a `ScrollPosition`.
-private struct TeamPage<Content: View>: View {
+/// A favorite's tab holds its page in a navigation stack, over which
+/// other teams' pages are pushed (`TeamVisit`, t_8d15e070): each the same
+/// page (`TeamPageBody`), with a back button and the follow button.
+private struct TeamPage: View {
     let team: TeamRef
-    /// How far down the reader last left this team's page, in points.
-    let savedOffset: CGFloat
-    let saveOffset: @MainActor (CGFloat) -> Void
+    let pages: TeamPages
+    /// The other teams' pages pushed over this one.
+    @Binding var path: [TeamVisit]
     /// Opens Settings, which `Home` presents so that it outlives the page
     /// (A-5).
     let showSettings: @MainActor () -> Void
-    @ViewBuilder var content: Content
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            TeamPageBody(team: team, pages: pages, isVisit: false, showSettings: showSettings)
+                .navigationDestination(for: TeamVisit.self) { visit in
+                    TeamPageBody(team: visit.team, pages: pages, isVisit: true, showSettings: showSettings)
+                }
+        }
+    }
+}
+
+/// The page is mounted only while it's on screen, so it reports its scroll
+/// offset to `pages` as it moves and opens where it was left through a
+/// `ScrollPosition`.
+private struct TeamPageBody: View {
+    let team: TeamRef
+    /// Keeps the team's model and scroll offset while the page is not
+    /// mounted.
+    let pages: TeamPages
+    /// Pushed over a favorite's page for a team that wasn't followed
+    /// (`TeamVisit`): the bar has the follow button and a back button
+    /// where the app's mark sits.
+    let isVisit: Bool
+    let showSettings: @MainActor () -> Void
 
     @State private var position = ScrollPosition(edge: .top)
 
@@ -381,96 +565,140 @@ private struct TeamPage<Content: View>: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .top) {
-                // The team colour. It never scrolls: the cards cover it.
-                // It extends under the navigation bar, the status bar and
-                // any landscape side insets (H-5, B5). Flat, so it meets
-                // `barBackdrop` without a seam.
-                Rectangle()
-                    .fill(Color(hexString: heroHex))
-                    .frame(height: heroHeight)
-                    .backgroundExtensionEffect()
-                    .accessibilityHidden(true)
+        ZStack(alignment: .top) {
+            // The team colour. It never scrolls: the cards cover it. It
+            // extends under the navigation bar, the status bar and any
+            // landscape side insets (H-5, B5). Flat, so it meets
+            // `barBackdrop` without a seam.
+            Rectangle()
+                .fill(Color(hexString: heroHex))
+                .frame(height: heroHeight)
+                .backgroundExtensionEffect()
+                .accessibilityHidden(true)
 
-                // Not ignoring the top safe area: the scroll view starts its
-                // content — the summary, then the cards — below the
-                // navigation bar and scrolls it under `barBackdrop`. Full
-                // width: `TeamHomeLayout` insets its own section cards on
-                // the grouped background (T-4).
-                ScrollView(.vertical) {
-                    content
-                }
-                .scrollIndicators(.hidden)
-                // Pull to refresh every feed, whatever its age (C-1). The
-                // content sets what that does; the spinner shows until
-                // every feed has answered.
-                .refreshable { [chrome] in
-                    await chrome.refresh?()
-                }
-                // The page scrolls under the tab bar; the soft edge fades it
-                // there, so neither the tabs nor the cards fight for
-                // legibility (T-5, B5).
-                .scrollEdgeEffectStyle(.soft, for: .bottom)
-                // The bar is opaque team colour: nothing to soften there.
-                .scrollEdgeEffectHidden(true, for: .top)
-                .scrollBounceBehavior(.basedOnSize)
-                .scrollPosition($position)
-                .onScrollGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.contentOffset.y + geometry.contentInsets.top
-                } action: { _, offset in
-                    saveOffset(max(offset, 0))
-                }
-                .onAppear {
-                    // The team's model outlives the page, so its content is
-                    // already laid out at full height here.
-                    if savedOffset > 0 {
-                        position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
-                    }
-                }
-
-                // Drawn after the scroll view, so over the page.
-                barBackdrop
+            // Not ignoring the top safe area: the scroll view starts its
+            // content — the summary, then the cards — below the navigation
+            // bar and scrolls it under `barBackdrop`. Full width:
+            // `TeamHomeLayout` insets its own section cards on the grouped
+            // background (T-4).
+            ScrollView(.vertical) {
+                TeamHomeView(team: team, pages: pages)
             }
-            // The grouped page behind the hero, showing past the foot of
-            // the page and under the tab bar, the colour of the page.
-            .background(Theme.Surface.content)
-            .environment(chrome)
-            .navigationTitle(team.displayName)
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                // The crest and name, always: pinned in the bar, at every
-                // scroll offset (H-3).
-                ToolbarItem(placement: .principal) {
-                    TeamBarTitle(team: team, backgroundHex: heroHex)
+            .scrollIndicators(.hidden)
+            // Pull to refresh every feed, whatever its age (C-1). The
+            // content sets what that does; the spinner shows until every
+            // feed has answered.
+            .refreshable { [chrome] in
+                await chrome.refresh?()
+            }
+            // The page scrolls under the tab bar; the soft edge fades it
+            // there, so neither the tabs nor the cards fight for legibility
+            // (T-5, B5).
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            // The bar is opaque team colour: nothing to soften there.
+            .scrollEdgeEffectHidden(true, for: .top)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollPosition($position)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, offset in
+                pages.setScrollOffset(max(offset, 0), for: team.id)
+            }
+            .onAppear {
+                // The team's model outlives the page, so its content is
+                // already laid out at full height here.
+                let savedOffset = pages.scrollOffset(for: team.id)
+                if savedOffset > 0 {
+                    position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
                 }
-                // A title, not a button: no glass behind it.
-                .sharedBackgroundVisibility(.hidden)
+            }
 
-                // The app's mark, small, in the bar's ink: the white
-                // silhouette as a template, so it reads on any team colour.
+            // Drawn after the scroll view, so over the page.
+            barBackdrop
+        }
+        // The grouped page behind the hero, showing past the foot of the
+        // page and under the tab bar, the colour of the page.
+        .background(Theme.Surface.content)
+        .environment(chrome)
+        .navigationTitle(team.displayName)
+        .toolbarTitleDisplayMode(.inline)
+        .toolbar {
+            // The crest and name, always: pinned in the bar, at every
+            // scroll offset (H-3).
+            ToolbarItem(placement: .principal) {
+                TeamBarTitle(team: team, backgroundHex: heroHex)
+            }
+            // A title, not a button: no glass behind it.
+            .sharedBackgroundVisibility(.hidden)
+
+            // The app's mark, small, in the bar's ink: the white silhouette
+            // as a template, so it reads on any team colour. A visit has its
+            // back button there instead.
+            if !isVisit {
                 ToolbarItem(placement: .topBarLeading) {
                     BrandBarLogo(backgroundHex: heroHex)
                 }
                 // A mark, not a button: no glass behind it.
                 .sharedBackgroundVisibility(.hidden)
+            }
 
+            // Beside the gear on a team that wasn't followed when its page
+            // opened; never on a favorite's own page (t_8d15e070).
+            if isVisit {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings()
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-                    .accessibilityLabel("Settings")
-                    .accessibilityIdentifier("home.settings")
+                    FollowTeamButton(team: team)
                 }
             }
-            // The system bar in the team colour too, and the scheme that
-            // reads on it whatever is scrolled beneath.
-            .toolbarBackground(Color(hexString: heroHex), for: .navigationBar)
-            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
-            .toolbarColorScheme(heroBarScheme, for: .navigationBar)
+
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showSettings()
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .accessibilityLabel("Settings")
+                .accessibilityIdentifier("home.settings")
+            }
         }
+        // The system bar in the team colour too, and the scheme that reads
+        // on it whatever is scrolled beneath.
+        .toolbarBackground(Color(hexString: heroHex), for: .navigationBar)
+        .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+        .toolbarColorScheme(heroBarScheme, for: .navigationBar)
+    }
+}
+
+/// The follow button in a visited team's bar (`TeamVisit`, t_8d15e070): a
+/// plus that follows the team (`FavoritesStore.toggle`, which adds it), so
+/// its tab joins the bar.
+///
+/// Undo is the same button: once followed it stays in the bar as a filled
+/// checkmark, and a second tap unfollows the team and turns it back into
+/// the plus. A toggle rather than a timed "Added — Undo" banner, so undoing
+/// is never a race against a timer and reads the same to VoiceOver. A
+/// favorite's own page has no button: it's followed already, and Settings
+/// is where teams are unfollowed.
+private struct FollowTeamButton: View {
+    let team: TeamRef
+
+    private var store: FavoritesStore { .shared }
+
+    var body: some View {
+        let followed = store.isFavorite(team.id)
+        Button {
+            store.toggle(team)
+        } label: {
+            Label(
+                followed ? "Following" : "Follow",
+                systemImage: followed ? "checkmark.circle.fill" : "plus.circle"
+            )
+            .contentTransition(.symbolEffect(.replace))
+        }
+        .accessibilityLabel(followed ? "Following \(team.displayName)" : "Follow \(team.displayName)")
+        .accessibilityHint(followed ? "Unfollows the team." : "Adds the team to your teams.")
+        .accessibilityAddTraits(followed ? .isSelected : [])
+        .accessibilityIdentifier("teamPage.follow")
+        .sensoryFeedback(.selection, trigger: followed)
     }
 }
 

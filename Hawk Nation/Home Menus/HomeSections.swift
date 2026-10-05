@@ -319,6 +319,9 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// Opens the opponent's page (t_8d15e070); absent in previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
+
     /// The carousel's height: a game card's, scaled with the text in it.
     @ScaledMetric(relativeTo: GameView.metricsTextStyle) private var cardHeight = GameView.baseHeight
 
@@ -421,6 +424,18 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             )
         )
         .accessibilityIdentifier("schedule.game.\(game.id)")
+        // A tap opens the game; the opponent's page is a long press away,
+        // and a VoiceOver action through the menu (t_8d15e070).
+        .contextMenu {
+            if let navigator, !game.opponentID.isEmpty {
+                Button {
+                    navigator.open(teamID: TeamRef.id(league: model.team.league, espnID: game.opponentID))
+                } label: {
+                    Label(game.opponent.isEmpty ? "Opponent's Page" : game.opponent, systemImage: "person.3")
+                }
+                .accessibilityIdentifier("schedule.opponent.\(game.opponentID)")
+            }
+        }
     }
 }
 
@@ -509,6 +524,9 @@ private struct StandingsTable: View {
     let teamColor: Color
 
     @Environment(\.colorSchemeContrast) private var contrast
+
+    /// Opens a row's team page (t_8d15e070); absent in previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
 
     /// A row's crest, which scales with the footnote team name beside it
     /// (B-3).
@@ -634,8 +652,10 @@ private struct StandingsTable: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityElement(children: .combine)
                     .accessibilityAddTraits(followed ? .isSelected : [])
+                    .accessibilityAddTraits(opensPage(entry) ? .isButton : [])
                     // The zone the bar shows by colour alone.
                     .accessibilityValue(entry.zone?.note ?? "")
+                    .accessibilityIdentifier("standings.team.\(entry.teamID)")
                     ForEach(columns.indices, id: \.self) { index in
                         Text(columns[index].value(entry))
                             .monospacedDigit()
@@ -645,8 +665,24 @@ private struct StandingsTable: View {
                 .fontWeight(followed ? .bold : .regular)
                 .padding(.vertical, 2)
                 .background(followed ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast)) : Color.clear)
+                // Another team's row opens its page (t_8d15e070).
+                .contentShape(.rect)
+                .onTapGesture {
+                    open(entry)
+                }
             }
         }
+    }
+
+    /// Whether a tap on the row opens its team's page: any team but the
+    /// one whose page this is.
+    private func opensPage(_ entry: StandingsEntry) -> Bool {
+        navigator != nil && !entry.teamID.isEmpty && entry.teamID != followedID
+    }
+
+    private func open(_ entry: StandingsEntry) {
+        guard opensPage(entry), let navigator else { return }
+        navigator.open(teamID: TeamRef.id(league: league, espnID: entry.teamID))
     }
 
     /// A stand-in `TeamRef` for drawing a row's crest through `TeamLogo`,
@@ -717,6 +753,9 @@ struct NewsSection<Player: RosterPlayer>: View {
 
     @State private var selectedArticle: News?
 
+    /// Opens a team a story is about (t_8d15e070); absent in previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
+
     /// Where an article's sheet zooms from: its card (X-13).
     @Namespace private var cardZoom
 
@@ -749,6 +788,20 @@ struct NewsSection<Player: RosterPlayer>: View {
                         .buttonStyle(.plain)
                         .zoomSource(id: article.id, in: cardZoom)
                         .accessibilityIdentifier("news.article")
+                        // A tap opens the story; the teams it's about are
+                        // a long press away, and VoiceOver actions through
+                        // the menu (t_8d15e070).
+                        .contextMenu {
+                            if let navigator {
+                                ForEach(article.teams) { team in
+                                    Button {
+                                        navigator.open(teamID: TeamRef.id(league: model.team.league, espnID: team.espnID))
+                                    } label: {
+                                        Label(team.name, systemImage: "person.3")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -187,6 +187,10 @@ struct FixtureTransport: HTTPTransport {
             "\(site)/soccer/usa.1/teams/186/schedule": "sporting_schedule",
             "\(site)/soccer/usa.1/teams/186/schedule?fixture=true": "sporting_schedule_fixtures",
             "\(site)/soccer/usa.1/teams/186/roster": "sporting_roster",
+            // Kansas's league leaders (`LeagueLeadersView`), which list a
+            // Jayhawk the roster above has, for the leaders → team page →
+            // player sheet path (t_8d15e070).
+            "https://site.api.espn.com/apis/site/v3/sports/basketball/mens-college-basketball/leaders?limit=10": "ncaam_leaders",
         ]
     }()
 

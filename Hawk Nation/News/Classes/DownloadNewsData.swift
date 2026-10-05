@@ -17,10 +17,39 @@ struct News: Identifiable, Equatable, Hashable, Sendable {
     let publishedAt: Date
     let content: String?
     let source: String
+    /// The teams the story is tagged with, in the feed's order, so the
+    /// page can open theirs (t_8d15e070).
+    var teams: [NewsTeam] = []
 
     /// An article is identified by its link, which stays the same however
     /// often the feed is fetched.
     var id: String { url.absoluteString }
+}
+
+/// A team a story is tagged with: one of the feed's `categories` of type
+/// `"team"`.
+struct NewsTeam: Identifiable, Hashable, Sendable {
+    /// The team's ESPN id, in the feed's league.
+    let espnID: String
+    /// `"Cardinals"`, else the full `"Arizona Cardinals"`.
+    let name: String
+
+    var id: String { espnID }
+}
+
+/// The teams in an article's `categories`, each once, in order.
+func parseNewsTeams(from categories: JSON) -> [NewsTeam] {
+    var teams: [NewsTeam] = []
+    for (_, category): (String, JSON) in categories where category["type"].stringValue == "team" {
+        let team = category["team"]
+        let espnID = team["id"].stringValue.isEmpty ? category["teamId"].stringValue : team["id"].stringValue
+        let name = nonEmpty(team["shortDisplayName"].string)
+            ?? nonEmpty(team["description"].string)
+            ?? nonEmpty(category["description"].string)
+        guard !espnID.isEmpty, let name, !teams.contains(where: { $0.espnID == espnID }) else { continue }
+        teams.append(NewsTeam(espnID: espnID, name: name))
+    }
+    return teams
 }
 
 /// Parses ESPN's `published` timestamps, e.g. `2026-09-27T18:50:54Z`.
@@ -65,7 +94,8 @@ func parseNews(from json: JSON) -> [News] {
             urlToImage: URL(string: subJson["images"][0]["url"].stringValue),
             publishedAt: publishedAt,
             content: nil,
-            source: "ESPN"
+            source: "ESPN",
+            teams: parseNewsTeams(from: subJson["categories"])
         )
 
         // Matching links are dropped too: the link is the article's `id`.

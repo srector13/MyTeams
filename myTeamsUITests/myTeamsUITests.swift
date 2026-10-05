@@ -319,6 +319,105 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertTrue(done.waitForExistence(timeout: 5) || teamTabs(app).firstMatch.waitForExistence(timeout: 10))
     }
 
+    /// Tapping a leader on the league's boards opens their team's page and
+    /// their player sheet on it (t_8d15e070). Flory Bidunga leads in blocks
+    /// in the served men's college basketball leaders and is on the served
+    /// Kansas roster, so from Kansas's page the boards close and his sheet
+    /// opens over the same page.
+    @MainActor
+    func testLeaderOpensPlayerSheetOnTeamPage() throws {
+        let app = launchWithFixtures()
+        openKansasLeagueLeaders(app)
+
+        let bidunga = app.buttons["leagueLeaders.row.5044426"].firstMatch
+        for _ in 0..<12 where !(bidunga.exists && bidunga.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(bidunga.isHittable, "Bidunga's row never showed on the leaders fixture's boards.")
+        bidunga.tap()
+
+        // The boards close, then the player sheet opens on Kansas's page.
+        let sheetClose = app.descendants(matching: .any)["playerDetail.close"].firstMatch
+        XCTAssertTrue(sheetClose.waitForExistence(timeout: 15), "The player sheet never opened.")
+        XCTAssertFalse(app.buttons["leagueLeaders.close"].exists, "The leaders sheet is still up.")
+        XCTAssertTrue(app.descendants(matching: .any)["playerDetail.section"].exists)
+        // A favorite's own page: no follow button behind the sheet.
+        XCTAssertFalse(app.buttons["teamPage.follow"].exists)
+
+        // Closed, it stays closed: the request was used up.
+        sheetClose.tap()
+        XCTAssertTrue(sheetClose.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(sheetClose.waitForExistence(timeout: 2), "The player sheet opened again.")
+    }
+
+    /// A leader on a team nobody follows opens that team's page over the
+    /// favorite's, with the follow button beside the gear (t_8d15e070). The
+    /// button follows the team and, tapped again, undoes it; back returns
+    /// to the favorite's page.
+    @MainActor
+    func testLeaderOfAnotherTeamOpensTheirTeamPage() throws {
+        let app = launchWithFixtures()
+        openKansasLeagueLeaders(app)
+
+        // AJ Dybantsa, BYU: first on the points board.
+        let dybantsa = app.buttons["leagueLeaders.row.5142718"].firstMatch
+        for _ in 0..<6 where !(dybantsa.exists && dybantsa.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(dybantsa.isHittable, "Dybantsa's row never showed on the leaders fixture's boards.")
+        dybantsa.tap()
+
+        let follow = app.buttons["teamPage.follow"]
+        XCTAssertTrue(follow.waitForExistence(timeout: 15), "BYU's page never opened with a follow button.")
+        XCTAssertFalse(follow.isSelected)
+        XCTAssertTrue(app.buttons["home.settings"].exists, "No Settings beside the follow button.")
+
+        follow.tap()
+        XCTAssertTrue(follow.wait(for: \.isSelected, toEqual: true, timeout: 5), "Following didn't flip the button.")
+        // Undo: the same button unfollows.
+        follow.tap()
+        XCTAssertTrue(follow.wait(for: \.isSelected, toEqual: false, timeout: 5), "A second tap didn't undo the follow.")
+
+        // Back to Kansas's page, which has no follow button.
+        app.navigationBars.containing(.button, identifier: "teamPage.follow")
+            .firstMatch.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(follow.waitForNonExistence(timeout: 5), "Still on BYU's page.")
+        XCTAssertTrue(app.descendants(matching: .any)["home.brandLogo"].firstMatch.waitForExistence(timeout: 5))
+    }
+
+    /// Past onboarding, on Kansas's page, opens the league's leaderboards
+    /// from the leaders card's button.
+    @MainActor
+    private func openKansasLeagueLeaders(_ app: XCUIApplication) {
+        let done = app.buttons["teamBrowser.done"]
+        if done.waitForExistence(timeout: 5) {
+            done.tap()
+        }
+
+        // Kansas, the first seed team: its tab by identifier, or by label
+        // on a launch whose bar lost its identifiers (`teamTabs`).
+        XCTAssertTrue(teamTabs(app).firstMatch.waitForExistence(timeout: 10))
+        let byID = app.tabBars.buttons["teamPicker.team.basketball/mens-college-basketball:2305"]
+        let kansas = byID.exists
+            ? byID
+            : app.tabBars.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Jayhawks")).firstMatch
+        XCTAssertTrue(kansas.waitForExistence(timeout: 5), "Kansas isn't followed.")
+        if !kansas.isSelected {
+            kansas.tap()
+        }
+
+        // Down the page to the leaders card, which may not be laid out
+        // until it's near the screen.
+        XCTAssertTrue(app.descendants(matching: .any)["teamPage.header"].firstMatch.waitForExistence(timeout: 10))
+        let league = app.buttons["leaders.league"].firstMatch
+        for _ in 0..<12 where !(league.exists && league.isHittable) {
+            app.swipeUp()
+        }
+        XCTAssertTrue(league.exists && league.isHittable, "Couldn't scroll to the leaders card on Kansas's page.")
+        league.tap()
+        XCTAssertTrue(app.buttons["leagueLeaders.close"].waitForExistence(timeout: 5), "The league's leaders never opened.")
+    }
+
     @MainActor
     func testLaunchPerformance() throws {
         measure(metrics: [XCTApplicationLaunchMetric()]) {

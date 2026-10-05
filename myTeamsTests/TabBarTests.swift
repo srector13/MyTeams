@@ -291,3 +291,237 @@ struct TeamHeaderSummaryTests {
         #expect(TeamHeaderSummary.upcoming(games: [], nextGame: 0) == nil)
     }
 }
+
+/// Any team's page opens from what's on a page (t_8d15e070): a favorite's
+/// tab is selected, any other team's page is pushed over the selected
+/// tab's (`HomeRouting.teamOpened`).
+@Suite("Opening a team's page")
+struct TeamOpenedTests {
+    private let teams = [TeamRef.jayhawks.id, TeamRef.chiefs.id, TeamRef.royals.id]
+
+    /// Duke, which nobody here follows.
+    private var duke: TeamRef {
+        TeamRef.placeholder(id: "basketball/mens-college-basketball:150")!
+    }
+
+    /// Michigan State, also not followed.
+    private var michiganState: TeamRef {
+        TeamRef.placeholder(id: "basketball/mens-college-basketball:127")!
+    }
+
+    @Test("A team that isn't followed is pushed over the selected tab's page")
+    func nonFavoriteIsPushed() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        let next = HomeRouting.teamOpened(start, team: duke, teams: teams)
+        // Still on the favorite's tab, with the visit over its page.
+        #expect(next.selection == teams[0])
+        #expect(next.visits[teams[0]] == [TeamVisit(team: duke)])
+        #expect(next.visits[teams[1]] == nil)
+    }
+
+    @Test("Visits stack, and the page on top is not pushed again")
+    func visitsStack() {
+        var state = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        state = HomeRouting.teamOpened(state, team: duke, teams: teams)
+        // A leader on Duke's own page asks for Duke: nothing to push.
+        state = HomeRouting.teamOpened(state, team: duke, teams: teams)
+        #expect(state.visits[teams[0]] == [TeamVisit(team: duke)])
+        state = HomeRouting.teamOpened(state, team: michiganState, teams: teams)
+        #expect(state.visits[teams[0]] == [TeamVisit(team: duke), TeamVisit(team: michiganState)])
+    }
+
+    @Test("A favorite is selected and shown at its own page")
+    func favoriteIsSelected() {
+        var state = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        state.visits[teams[1]] = [TeamVisit(team: duke)]
+        let next = HomeRouting.teamOpened(state, team: .chiefs, teams: teams)
+        #expect(next.selection == TeamRef.chiefs.id)
+        // Anything pushed over the Chiefs' page is popped, so a player
+        // sheet asked for with it opens on the page on screen.
+        #expect(next.visits[TeamRef.chiefs.id] == nil)
+    }
+
+    @Test("Opening the favorite on screen pops the visits over it")
+    func favoriteOnScreenPopsVisits() {
+        var state = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        state = HomeRouting.teamOpened(state, team: duke, teams: teams)
+        let next = HomeRouting.teamOpened(state, team: .jayhawks, teams: teams)
+        #expect(next.selection == teams[0])
+        #expect(next.visits.isEmpty)
+    }
+
+    @Test("Settings and a pending link are left alone")
+    func settingsAndLinkUntouched() {
+        let start = HomeRouting.State(selection: teams[0], pendingLink: teams[2], showsSettings: true)
+        for team in [duke, TeamRef.chiefs] {
+            let next = HomeRouting.teamOpened(start, team: team, teams: teams)
+            #expect(next.showsSettings)
+            #expect(next.pendingLink == teams[2])
+        }
+    }
+
+    @Test("With no tab to push over, nothing happens")
+    func noTabNoVisit() {
+        let start = HomeRouting.State(selection: "", pendingLink: nil)
+        #expect(HomeRouting.teamOpened(start, team: duke, teams: []) == start)
+    }
+
+    @Test("A tab that's unfollowed takes its visits with it")
+    func unfollowedTabDropsVisits() {
+        var state = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        state.visits[teams[0]] = [TeamVisit(team: duke)]
+        state.visits[teams[1]] = [TeamVisit(team: michiganState)]
+        let next = HomeRouting.favoritesResolved(state, teams: [teams[0], teams[2]])
+        #expect(next.visits[teams[0]] == [TeamVisit(team: duke)])
+        #expect(next.visits[teams[1]] == nil)
+    }
+
+    @Test("A visit followed from its page joins the tabs; opening it again selects its tab")
+    func followedVisitBecomesATab() {
+        var state = HomeRouting.State(selection: teams[0], pendingLink: nil)
+        state = HomeRouting.teamOpened(state, team: duke, teams: teams)
+        let followed = teams + [duke.id]
+        state = HomeRouting.favoritesResolved(state, teams: followed)
+        // The page stays where the reader followed it from.
+        #expect(state.visits[teams[0]] == [TeamVisit(team: duke)])
+        let next = HomeRouting.teamOpened(state, team: duke, teams: followed)
+        #expect(next.selection == duke.id)
+    }
+}
+
+/// The follow button on a visited team's page (t_8d15e070) follows the team
+/// and, tapped again, undoes it: `FavoritesStore.toggle`.
+@Suite("Following from a team's page")
+@MainActor
+struct FollowFromTeamPageTests {
+    private func store() throws -> FavoritesStore {
+        let defaults = try #require(UserDefaults(suiteName: "FollowFromTeamPageTests.\(UUID().uuidString)"))
+        return FavoritesStore(
+            defaults: defaults,
+            cloud: nil,
+            seedIDs: [TeamRef.jayhawks.id],
+            isExistingInstall: true,
+            reloadWidgets: {}
+        )
+    }
+
+    @Test("A tap follows the team, at the end of the tabs; a second tap undoes it")
+    func toggleFollowsAndUndoes() throws {
+        let store = try store()
+        let duke = try #require(TeamRef.placeholder(id: "basketball/mens-college-basketball:150"))
+        #expect(!store.isFavorite(duke.id))
+
+        store.toggle(duke)
+        #expect(store.isFavorite(duke.id))
+        #expect(store.teamIDs == [TeamRef.jayhawks.id, duke.id])
+
+        store.toggle(duke)
+        #expect(!store.isFavorite(duke.id))
+        #expect(store.teamIDs == [TeamRef.jayhawks.id])
+    }
+}
+
+/// A player asked for with a team's page (`TeamNavigator`, t_8d15e070):
+/// held until that team's page is on screen with the player on its roster,
+/// opened once, then forgotten.
+@Suite("Opening a player on their team's page")
+@MainActor
+struct TeamNavigatorTests {
+    private let bidunga = "5044426"
+
+    @Test("Opening a team hands Home the request once, with the player pending")
+    func requestHandedOnce() {
+        let navigator = TeamNavigator()
+        navigator.open(.jayhawks, playerID: bidunga)
+        #expect(navigator.request == TeamRef.jayhawks)
+        #expect(navigator.pendingPlayer == PendingPlayer(teamID: TeamRef.jayhawks.id, playerID: bidunga))
+
+        #expect(navigator.takeRequest() == TeamRef.jayhawks)
+        #expect(navigator.request == nil)
+        #expect(navigator.takeRequest() == nil)
+        // The player waits for the page, not for Home.
+        #expect(navigator.pendingPlayer != nil)
+    }
+
+    @Test("Opening a team without a player forgets an earlier player")
+    func plainOpenClearsPlayer() {
+        let navigator = TeamNavigator()
+        navigator.open(.jayhawks, playerID: bidunga)
+        navigator.open(.chiefs)
+        #expect(navigator.pendingPlayer == nil)
+        #expect(navigator.request == TeamRef.chiefs)
+    }
+
+    @Test("Another team's page leaves the player for the right one")
+    func otherTeamsPageWaits() {
+        let navigator = TeamNavigator()
+        navigator.open(.jayhawks, playerID: bidunga)
+        #expect(navigator.takePlayer(for: TeamRef.chiefs.id, rosterIDs: [bidunga], rosterState: .loaded) == nil)
+        #expect(navigator.pendingPlayer != nil)
+    }
+
+    @Test("The player waits for the roster, then opens once")
+    func opensOnceTheRosterLoads() {
+        let navigator = TeamNavigator()
+        navigator.open(.jayhawks, playerID: bidunga)
+        let team = TeamRef.jayhawks.id
+
+        // The page came on screen before its roster.
+        #expect(navigator.takePlayer(for: team, rosterIDs: [], rosterState: .loading) == nil)
+        #expect(navigator.pendingPlayer != nil)
+
+        #expect(navigator.takePlayer(for: team, rosterIDs: ["1", bidunga], rosterState: .loaded) == bidunga)
+        // Consumed: the page coming back, or the roster reloading, doesn't
+        // open the sheet again.
+        #expect(navigator.pendingPlayer == nil)
+        #expect(navigator.takePlayer(for: team, rosterIDs: ["1", bidunga], rosterState: .loaded) == nil)
+    }
+
+    @Test("Already on the team's page with its roster, the sheet opens at once")
+    func alreadyOnThePage() {
+        let navigator = TeamNavigator()
+        navigator.open(.jayhawks, playerID: bidunga)
+        #expect(navigator.takePlayer(for: TeamRef.jayhawks.id, rosterIDs: [bidunga], rosterState: .loaded) == bidunga)
+    }
+
+    @Test("A roster that answers without the player drops the request")
+    func missingPlayerIsDropped() {
+        for state in [SectionLoadState.loaded, .failed] {
+            let navigator = TeamNavigator()
+            navigator.open(.jayhawks, playerID: bidunga)
+            #expect(navigator.takePlayer(for: TeamRef.jayhawks.id, rosterIDs: ["1"], rosterState: state) == nil)
+            #expect(navigator.pendingPlayer == nil)
+        }
+    }
+
+    @Test("A roster still refreshing that already lists the player opens them")
+    func refreshingRosterWithThePlayer() {
+        let pending = PendingPlayer(teamID: TeamRef.jayhawks.id, playerID: bidunga)
+        #expect(pending.outcome(teamID: TeamRef.jayhawks.id, rosterIDs: [bidunga], rosterState: .loading) == .present(bidunga))
+        #expect(pending.outcome(teamID: TeamRef.chiefs.id, rosterIDs: [bidunga], rosterState: .loaded) == .wait)
+    }
+}
+
+/// The teams a story is tagged with, which its news card offers to open
+/// (t_8d15e070).
+@Suite("Teams in a story")
+struct NewsTeamsTests {
+    @Test("A story's team categories become its teams, each once, by short name")
+    func storyTeams() throws {
+        let articles = parseNews(from: try Fixture.json("chiefs_news"))
+        let first = try #require(articles.first)
+        #expect(first.teams.first == NewsTeam(espnID: "22", name: "Cardinals"))
+        #expect(Set(first.teams.map(\.espnID)).count == first.teams.count)
+    }
+
+    @Test("Only team categories count, and a name falls back to the description")
+    func onlyTeams() {
+        let categories = JSON.array([
+            .object(["type": .string("league"), "description": .string("NFL")]),
+            .object(["type": .string("team"), "teamId": .number(12), "description": .string("Kansas City Chiefs")]),
+            .object(["type": .string("team"), "team": .object(["id": .number(12)]), "description": .string("Chiefs again")]),
+            .object(["type": .string("athlete"), "description": .string("Patrick Mahomes")]),
+        ])
+        #expect(parseNewsTeams(from: categories) == [NewsTeam(espnID: "12", name: "Kansas City Chiefs")])
+    }
+}

@@ -238,7 +238,10 @@ struct FixtureTransportTests {
         #expect(FixtureTransport.routes[scheduleFixturesURL(sporting.scheduleURL)] == "sporting_schedule_fixtures")
         // Kansas's live feed is between seasons; the routed one has games.
         #expect(FixtureTransport.routes[seeds[0].scheduleURL] == "jayhawks_schedule_2026")
-        #expect(FixtureTransport.routes.count == catalogs.count + 2 * seeds.count + 2)
+        // The league boards `LeagueLeadersView` loads, for the leaders →
+        // team page → player sheet UI test (t_8d15e070).
+        #expect(FixtureTransport.routes[LeagueID.mensCollegeBasketball.leadersURL(limit: 10)] == "ncaam_leaders")
+        #expect(FixtureTransport.routes.count == catalogs.count + 2 * seeds.count + 3)
     }
 }
 
