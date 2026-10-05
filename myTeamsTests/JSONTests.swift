@@ -121,6 +121,25 @@ struct JSONTests {
         #expect(statistics[0]["displayValue"].stringValue == "28-55")
     }
 
+    @Test("A number beyond Int's range reads as no int rather than trapping")
+    func outOfRangeInt() {
+        let json = JSON(data: Data("""
+        {"huge": 9223372036854775808, "negative": -9223372036854775808,
+         "exponent": "1e30", "fraction": -7.9}
+        """.utf8))
+
+        // 2^63 is one past Int.max; Int(_:) traps on it.
+        #expect(json["huge"].int == nil)
+        #expect(json["huge"].intValue == 0)
+        #expect(json["exponent"].int == nil)
+        #expect(JSON.number(0x1p63).int == nil)
+        #expect(JSON.number(-0x1p64).int == nil)
+        // -2^63 is Int.min exactly, which does fit.
+        #expect(json["negative"].int == Int.min)
+        // In range, a fraction still truncates toward zero.
+        #expect(json["fraction"].int == -7)
+    }
+
     @Test("Booleans and the numbers 0 and 1 stay distinct")
     func booleansAreNotNumbers() {
         let json = JSON(data: Data(#"{"t":true,"f":false,"one":1,"zero":0}"#.utf8))

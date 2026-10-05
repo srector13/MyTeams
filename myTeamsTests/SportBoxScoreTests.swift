@@ -516,6 +516,38 @@ struct SoccerLineupsTests {
         #expect(substitute.accessibilitySummary == "Sam Sub, number 9, 2 goals, yellow card, came on, minute 67")
     }
 
+    @Test("Goal and card counts are clamped to 0...9 as they are read")
+    func clampsCounts() throws {
+        // The rows draw `ForEach(0 ..< count)`: a negative count traps, a
+        // huge one builds thousands of icons (A-9).
+        let summary = JSON(data: Data("""
+        {"rosters": [
+          {"homeAway": "home", "roster": [
+            {"starter": true, "athlete": {"id": "1", "displayName": "Bad Feed"},
+             "stats": [{"name": "totalGoals", "value": -3},
+                       {"name": "yellowCards", "value": 1000000000},
+                       {"name": "redCards", "displayValue": "-1"}]},
+            {"starter": true, "athlete": {"id": "2", "displayName": "Good Feed"},
+             "stats": [{"name": "totalGoals", "value": 2},
+                       {"name": "yellowCards", "value": 1},
+                       {"name": "redCards", "value": 0}]}
+          ]},
+          {"homeAway": "away", "roster": []}
+        ]}
+        """.utf8))
+        let starters = try #require(SoccerLineups(summary: summary)).home.starters
+
+        let bad = try #require(starters.first { $0.name == "Bad Feed" })
+        #expect(bad.goals == 0)
+        #expect(bad.yellowCards == 9)
+        #expect(bad.redCards == 0)
+
+        let good = try #require(starters.first { $0.name == "Good Feed" })
+        #expect(good.goals == 2)
+        #expect(good.yellowCards == 1)
+        #expect(good.redCards == 0)
+    }
+
     @Test("A summary with no rosters has no lineups")
     func noRosters() {
         #expect(SoccerLineups(summary: JSON(data: Data())) == nil)

@@ -239,3 +239,73 @@ struct NewLeagueAthleteStatsTests {
         #expect(stats.groups[1].stats.map(\.display) == ["40", "124", "3.1", "13", "0"])
     }
 }
+
+// MARK: - Baseball
+
+@Suite("Player stats: baseball season lines", .tags(.golden))
+struct BaseballSeasonStatsTests {
+    @Test("A pitcher's figures follow their names when ESPN reorders and inserts columns")
+    func pitcherByName() throws {
+        // royals_splits_5136077.json: a reliever's ERA "9.39", 6 games,
+        // "7.2" innings, 12 strikeouts, ".371" against. The variant moves ERA
+        // to the end and puts a column the parser does not know first (A-16).
+        let splits = try Fixture.json("royals_splits_5136077")
+        let names = splits["names"].arrayValue
+        let values = splits["splitCategories", 0, "splits", 0, "stats"].arrayValue
+        #expect(names.first?.stringValue == "ERA")
+
+        let reordered = splits
+            .setting(["names"], to: .array([JSON.string("WHIP")] + names.dropFirst() + [names[0]]))
+            .setting(
+                ["splitCategories", 0, "splits", 0, "stats"],
+                to: .array([JSON.string("2.48")] + values.dropFirst() + [values[0]])
+            )
+
+        for document in [splits, reordered] {
+            let stats = parseBaseballPlayerStats(from: document, playerPosition: "Relief Pitcher")
+            #expect(approx(stats.EarnedRunAverage, 9.39))
+            #expect(stats.gamesPlayed == 6)
+            #expect(approx(stats.innings, 7.2))
+            #expect(stats.hits == 13)
+            #expect(stats.earnedRuns == 8)
+            #expect(stats.strikeouts == 12)
+            #expect(approx(stats.opponentAvg, 0.371))
+        }
+    }
+
+    @Test("A batter's figures are read by name")
+    func batterByName() {
+        // The batting names are the fixture's
+        // extraPlayerPageAthleteSplits.batting.names, here listed backwards.
+        let document = JSON(data: Data("""
+        {"names": ["OPS", "slugAvg", "onBasePct", "avg", "caughtStealing",
+                   "stolenBases", "strikeouts", "hitByPitch", "walks", "RBIs",
+                   "homeRuns", "triples", "doubles", "hits", "runs", "atBats"],
+         "splitCategories": [{"splits": [{"stats": [
+           ".812", ".455", ".357", ".281", "2", "11", "98", "4", "51", "77",
+           "24", "3", "28", "142", "80", "505"]}]}]}
+        """.utf8))
+        let stats = parseBaseballPlayerStats(from: document, playerPosition: "Shortstop")
+        #expect(stats.AtBats == 505)
+        #expect(stats.Hits == 142)
+        #expect(stats.HomeRuns == 24)
+        #expect(stats.RBIs == 77)
+        #expect(stats.StolenBases == 11)
+        #expect(approx(stats.Avg, 0.281))
+        #expect(approx(stats.OPS, 0.812))
+        // The pitching half is untouched.
+        #expect(stats.EarnedRunAverage == 0 && stats.wins == 0)
+    }
+
+    @Test("A document without names is still read by position")
+    func positionalFallback() {
+        let document = JSON(data: Data("""
+        {"splitCategories": [{"splits": [{"stats": ["3.45", "12", "8"]}]}]}
+        """.utf8))
+        let stats = parseBaseballPlayerStats(from: document, playerPosition: "Starting Pitcher")
+        #expect(approx(stats.EarnedRunAverage, 3.45))
+        #expect(stats.wins == 12)
+        #expect(stats.losses == 8)
+        #expect(stats.saves == 0)
+    }
+}
