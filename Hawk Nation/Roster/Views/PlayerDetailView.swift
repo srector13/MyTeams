@@ -430,7 +430,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         _statistics = State(initialValue: player.placeholderStatistics)
     }
 
-    private var teamColor: Color { team.color }
+    /// The team colour as a fill: the header, the rate rings, the section
+    /// titles' accent bars. `fillHex` stands in a fallback for a team the
+    /// feed gave no colour, which would otherwise draw clear (B-1).
+    private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
 
     var body: some View {
         ScrollView(.vertical) {
@@ -471,11 +474,13 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                             Text(player.name)
                                 .font(.largeTitle.bold())
                                 .multilineTextAlignment(.center)
-                                .foregroundStyle(Color.white)
+                                // The ink that reads on this team's fill,
+                                // not always white (B-1, G-3).
+                                .teamInk(on: team)
 
                             Text(player.number)
                                 .font(.largeTitle.bold().monospacedDigit())
-                                .foregroundStyle(Color.white)
+                                .teamInk(on: team)
                                 // Half-strength ink on the team colour,
                                 // firmer under Increase Contrast and Reduce
                                 // Transparency (X-5).
@@ -546,13 +551,19 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     /// A tab's grid on a rounded card that sizes to its content (P-5).
     private func card(_ grid: PlayerSheetGrid) -> some View {
-        VStack(alignment: .leading, spacing: 15) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             ForEach(Array(grid.sections.enumerated()), id: \.offset) { _, section in
                 if let title = section.title {
-                    Text(title)
-                        .font(Theme.Typography.cardTitle)
-                        .foregroundStyle(teamColor)
-                        .padding(.top, 5)
+                    // Label ink on the card, the team colour as an accent
+                    // bar beside it: no team colour reads on every surface
+                    // in both appearances (B-3).
+                    HStack(spacing: Theme.Spacing.s) {
+                        TeamAccentBar(color: teamColor)
+                        Text(title)
+                            .font(Theme.Typography.cardTitle)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Theme.Spacing.xs)
                 }
 
                 LazyVGrid(
@@ -570,13 +581,14 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                     .font(.subheadline.bold())
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 30)
+                    .padding(.horizontal, Theme.Spacing.xl)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding(Theme.Spacing.xl)
         .frame(maxWidth: .infinity)
-        .background(Color(uiColor: .systemBackground), in: Theme.Radius.cardShape)
+        // The page cards' surface, so the sheet's cards match them (B-7).
+        .contentCard()
         .padding(.horizontal, Theme.Spacing.m)
     }
 

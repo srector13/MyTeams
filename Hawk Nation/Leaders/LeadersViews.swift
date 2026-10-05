@@ -19,6 +19,10 @@ struct LeadersSection<Player: RosterPlayer>: View {
 
     @State private var showingLeague = false
 
+    /// The team colour as a fill, with a fallback for a team the feed gave
+    /// no colour, which would otherwise draw clear (B-3).
+    private var teamFill: Color { Color(hexString: TeamColors.fillHex(for: team)) }
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The team's leaders, one card per board that has one.
@@ -72,13 +76,13 @@ struct LeadersSection<Player: RosterPlayer>: View {
             } else if dynamicTypeSize.isAccessibilitySize {
                 // At accessibility text sizes the carousel becomes a list.
                 StackedCarousel(items: leaderCards) { leader in
-                    TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
+                    TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
                 }
             } else {
                 ScrollView(.horizontal) {
                     LazyHStack(spacing: Theme.Spacing.m) {
                         ForEach(leaderCards) { leader in
-                            TeamLeaderCard(board: leader.board, row: leader.row, teamColor: team.color)
+                            TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
                         }
                     }
                     .scrollTargetLayout()
@@ -93,7 +97,7 @@ struct LeadersSection<Player: RosterPlayer>: View {
         }
         .contentCard()
         .sheet(isPresented: $showingLeague) {
-            LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: team.color)
+            LeagueLeadersView(league: team.league, followedTeamID: team.espnID, teamColor: teamFill)
         }
     }
 }
@@ -128,9 +132,15 @@ private struct TeamLeaderCard: View {
         VStack(spacing: 4) {
             LeaderHeadshot(url: row.leader.headshotURL, size: headshotSize)
 
-            Text(row.value)
-                .font(Theme.Typography.statFigure)
-                .foregroundStyle(teamColor)
+            // Label ink on the inset card, the team colour as an accent
+            // bar beside it: a navy or gold figure vanished in one
+            // appearance or the other (B-3).
+            HStack(spacing: Theme.Spacing.s) {
+                TeamAccentBar(color: teamColor)
+                Text(row.value)
+                    .font(Theme.Typography.statFigure)
+            }
+            .fixedSize(horizontal: false, vertical: true)
 
             Text(board.label)
                 .font(Theme.Typography.statLabel)
@@ -148,6 +158,22 @@ private struct TeamLeaderCard: View {
         // Nested in the leaders section's card: the inner radius (X-4, T-6)
         // on the nested surface rather than a fixed gray.
         .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+    }
+}
+
+/// The team colour beside a figure or title drawn in label ink: a thin
+/// capsule as tall as the text, for the leader cards and the player
+/// sheet's section titles (B-3). Put it in an `HStack` sized to its text
+/// (`fixedSize(horizontal: false, vertical: true)`). Decorative, so
+/// VoiceOver skips it.
+struct TeamAccentBar: View {
+    let color: Color
+
+    var body: some View {
+        Capsule()
+            .fill(color)
+            .frame(width: Theme.Spacing.xs)
+            .accessibilityHidden(true)
     }
 }
 
