@@ -125,3 +125,186 @@ struct WidgetDeepLinkTests {
         #expect(try teamID("myteams://team/football/nfl:12/extra") == nil)
     }
 }
+
+/// The scoreboard snapshot the app writes for the widget, and the game the
+/// widget features from it: the one under way, else today's result, else
+/// the next fixture (C-5).
+@Suite("Widget scoreboard snapshot")
+struct WidgetScoreboardSnapshotTests {
+    static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }()
+
+    /// Sunday, Oct 4, 2026, 18:00 UTC.
+    static let now = Date(timeIntervalSince1970: 1_791_136_800)
+
+    private var now: Date { Self.now }
+    private let chiefs = TeamRef.id(league: .nfl, espnID: "12")
+
+    private func snapshot(
+        gameID: String = "401",
+        teamID: String? = nil,
+        state: WidgetScoreboardSnapshot.State = .inProgress,
+        start: Date = WidgetScoreboardSnapshotTests.now.addingTimeInterval(-3_600),
+        updated: Date = WidgetScoreboardSnapshotTests.now.addingTimeInterval(-60)
+    ) -> WidgetScoreboardSnapshot {
+        WidgetScoreboardSnapshot(
+            gameID: gameID, league: "football/nfl", teamID: teamID ?? chiefs,
+            homeTeamID: "12", awayTeamID: "13", homeName: "Chiefs", awayName: "Raiders",
+            homeScore: 17, awayScore: 24, state: state, clock: "4:12", period: 3,
+            gameDate: start, updated: updated
+        )
+    }
+
+    private func game(
+        id: String,
+        start: Date,
+        completed: Bool = false,
+        cancelled: Bool = false
+    ) -> Game {
+        Game(
+            team: "Chiefs", opponent: "Raiders", score: completed ? "21" : "", opponentScore: completed ? "20" : "",
+            time: "", date: "Oct 04, 2026", dateAsDate: start, opponentLogo: "", channel: "CBS",
+            location: "", gameHome: true, gameID: id, pointer: 0,
+            gameWin: completed, completed: completed, competitionName: "",
+            cancelled: cancelled, postponed: false, gameClock: "",
+            gamePeriod: "", gameHalftime: false
+        )
+    }
+
+    private func pick(_ snapshots: [WidgetScoreboardSnapshot], _ schedule: [Game]) -> WidgetFeaturedGame {
+        WidgetFeaturedGame.pick(teamID: chiefs, snapshots: snapshots, schedule: schedule, now: now, calendar: Self.calendar)
+    }
+
+    // MARK: Codec
+
+    @Test("Snapshots survive the round trip through the App Group defaults")
+    func roundTrip() throws {
+        let snapshots = [snapshot(), snapshot(gameID: "402", state: .final)]
+        let data = try #require(WidgetScoreboardCodec.encode(snapshots))
+        #expect(WidgetScoreboardCodec.decode(data) == snapshots)
+
+        let suite = "WidgetScoreboardSnapshotTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(WidgetScoreboardCodec.read(from: defaults).isEmpty)
+        WidgetScoreboardCodec.write(snapshots, to: defaults)
+        #expect(WidgetScoreboardCodec.read(from: defaults) == snapshots)
+    }
+
+    @Test("Missing or unreadable data decodes to no snapshots")
+    func unreadable() {
+        #expect(WidgetScoreboardCodec.decode(nil).isEmpty)
+        #expect(WidgetScoreboardCodec.decode(Data("not json".utf8)).isEmpty)
+        #expect(WidgetScoreboardCodec.decode(Data("[{\"gameID\":\"1\"}]".utf8)).isEmpty)
+    }
+
+    @Test("A snapshot is fresh for 30 minutes, and never from the future")
+    func staleness() {
+        #expect(WidgetScoreboardCodec.isFresh(snapshot(updated: now), now: now))
+        #expect(WidgetScoreboardCodec.isFresh(snapshot(updated: now.addingTimeInterval(-29 * 60)), now: now))
+        #expect(!WidgetScoreboardCodec.isFresh(snapshot(updated: now.addingTimeInterval(-31 * 60)), now: now))
+        #expect(!WidgetScoreboardCodec.isFresh(snapshot(updated: now.addingTimeInterval(10 * 60)), now: now))
+    }
+
+    @Test("The score and status read from the followed team's side")
+    func display() {
+        let live = snapshot()
+        #expect(live.score(for: "12") == "17–24")
+        #expect(live.score(for: "13") == "24–17")
+        #expect(live.opponentName(of: "12") == "Raiders")
+        #expect(live.opponentName(of: "13") == "Chiefs")
+        #expect(live.opponentID(of: "12") == "13")
+        #expect(live.statusText == "Live · 4:12")
+        #expect(snapshot(state: .final).statusText == "Final")
+        var noClock = live
+        noClock.clock = "0:00"
+        #expect(noClock.statusText == "Live")
+    }
+
+    // MARK: Selection
+
+    @Test("A game under way beats today's result and the next game")
+    func liveFirst() {
+        let live = snapshot(gameID: "live")
+        let final = snapshot(gameID: "early", state: .final, start: now.addingTimeInterval(-6 * 3_600))
+        let schedule = [game(id: "next", start: now.addingTimeInterval(86_400))]
+        #expect(pick([final, live], schedule) == .live(live))
+    }
+
+    @Test("Without a game under way, today's result beats the next game")
+    func resultBeforeNext() {
+        let final = snapshot(state: .final)
+        let next = game(id: "next", start: now.addingTimeInterval(3_600))
+        #expect(pick([final], [next]) == .result(final))
+
+        // The schedule alone: today's finished game.
+        let played = game(id: "401", start: now.addingTimeInterval(-4 * 3_600), completed: true)
+        #expect(pick([], [played, next]) == .scheduleResult(played))
+        // The board's look at the same game wins over the schedule's.
+        #expect(pick([final], [played, next]) == .result(final))
+    }
+
+    @Test("A result from before today gives way to the next game")
+    func yesterdaysResult() {
+        let yesterday = now.addingTimeInterval(-86_400)
+        let played = game(id: "1", start: yesterday, completed: true)
+        let next = game(id: "2", start: now.addingTimeInterval(3 * 86_400))
+        #expect(pick([], [played, next]) == .next(next))
+    }
+
+    @Test("Stale snapshots and other teams' snapshots fall back to the schedule")
+    func fallback() {
+        let stale = snapshot(updated: now.addingTimeInterval(-45 * 60))
+        let otherTeam = snapshot(teamID: TeamRef.id(league: .nfl, espnID: "13"))
+        let called = game(id: "1", start: now.addingTimeInterval(3_600), cancelled: true)
+        let next = game(id: "2", start: now.addingTimeInterval(2 * 86_400))
+        #expect(pick([stale, otherTeam], [called, next]) == .next(next))
+        #expect(pick([stale], []) == WidgetFeaturedGame.none)
+    }
+
+    // MARK: Writing
+
+    @Test("The app writes favorites' games under way or played out, in their league and cups")
+    func writerSnapshots() {
+        func board(_ id: String, _ state: String, completed: Bool = false, home: String, away: String) -> ScoreboardGame {
+            ScoreboardGame(
+                gameID: id, state: state, completed: completed,
+                competitors: [
+                    ScoreboardCompetitor(teamID: home, homeAway: "home", score: 2),
+                    ScoreboardCompetitor(teamID: away, homeAway: "away", score: 1),
+                ],
+                period: 2, teamNames: [home: "Home \(home)", away: "Away \(away)"], clock: "67'", startDate: now
+            )
+        }
+        let arsenal = TeamRef.id(league: .premierLeague, espnID: "359")
+        let games: [LeagueID: [ScoreboardGame]] = [
+            .premierLeague: [
+                board("live", "in", home: "359", away: "360"),
+                board("pre", "pre", home: "382", away: "359"),
+                board("off", "post", home: "359", away: "361"),       // called off
+                board("other", "in", home: "1", away: "2"),            // no favorite
+            ],
+            .soccer("uefa.champions"): [board("cup", "post", completed: true, home: "111", away: "359")],
+        ]
+        let written = WidgetScoreboardWriter.snapshots(in: games, favoriteIDs: [arsenal, "not-a-team"], updated: now)
+        #expect(written.map(\.gameID).sorted() == ["cup", "live"])
+        let live = written.first { $0.gameID == "live" }
+        #expect(live?.state == .inProgress)
+        #expect(live?.league == "soccer/eng.1")
+        #expect(live?.teamID == arsenal)
+        #expect(live?.score(for: "359") == "2–1")
+        #expect(live?.clock == "67'")
+        #expect(live?.updated == now)
+        let cup = written.first { $0.gameID == "cup" }
+        #expect(cup?.state == .final)
+        #expect(cup?.league == "soccer/uefa.champions")
+        #expect(cup?.opponentName(of: "359") == "Home 111")
+
+        // What the app writes, the widget features.
+        let featured = WidgetFeaturedGame.pick(teamID: arsenal, snapshots: written, schedule: [], now: now, calendar: Self.calendar)
+        #expect(featured == live.map(WidgetFeaturedGame.live))
+    }
+}

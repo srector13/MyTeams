@@ -30,8 +30,8 @@ enum WidgetTimelines {
     /// A fixture starting sooner than that reloads at its kickoff instead.
     static let refreshInterval: TimeInterval = 60 * 60
 
-    /// How soon a failed load is retried. Showing "N/A" for a whole hour
-    /// after one dropped request was the old behaviour.
+    /// How soon a failed load is retried. Showing a failure for a whole
+    /// hour after one dropped request was the old behaviour.
     static let retryInterval: TimeInterval = 5 * 60
 
     /// How long a snapshot waits for real data before settling for the
@@ -44,20 +44,25 @@ enum WidgetTimelines {
         WidgetEntry(date: .now, tempGame: .placeholder(for: team), followedTeam: team.shortName, teamID: team.id)
     }
 
-    /// Renders the real next fixture — in the widget gallery too, where it
+    /// The one line a tile shows when there is no game to show (B-16).
+    static let seasonOverMessage = "No upcoming games"
+    static let failedMessage = "Couldn't update"
+
+    /// Renders the real featured game — in the widget gallery too, where it
     /// waits only briefly before falling back to the placeholder.
     static func snapshot(for team: TeamRef, isPreview: Bool) async -> WidgetEntry {
         let deadline = isPreview ? previewDeadline : snapshotDeadline
-        let result = await WidgetScheduleLoader.nextGame(for: team, within: deadline)
+        let result = await WidgetScheduleLoader.featuredGame(for: team, within: deadline)
 
         let game: WidgetGame
         switch result {
-        case .game(let next, _):
-            game = next
+        case .game(let featured, _):
+            game = featured
         case .seasonOver:
-            game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+            game = .notice(seasonOverMessage, for: team)
         case .failed:
-            game = .placeholder(for: team)
+            // The gallery shows sample data rather than a failure.
+            game = isPreview ? .placeholder(for: team) : .notice(failedMessage, for: team)
         }
         return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
     }
@@ -67,19 +72,19 @@ enum WidgetTimelines {
         let game: WidgetGame
         let reload: Date
 
-        let result = await WidgetScheduleLoader.nextGame(for: team)
+        let result = await WidgetScheduleLoader.featuredGame(for: team, now: now)
         switch result {
-        case .game(let next, let kickoff):
-            game = next
-            // Once the game starts it is no longer the next one; reload
-            // then (but never sooner than a minute) so the widget moves
-            // on to the following fixture.
-            reload = min(now + refreshInterval, max(kickoff, now + 60))
+        case .game(let featured, let refresh):
+            game = featured
+            // A fixture reloads at its kickoff, to show it under way; a game
+            // under way, every few minutes; a result, at midnight. Never
+            // sooner than a minute, nor later than the hourly refresh.
+            reload = min(now + refreshInterval, max(refresh, now + 60))
         case .seasonOver:
-            game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+            game = .notice(seasonOverMessage, for: team)
             reload = now + refreshInterval
         case .failed:
-            game = .placeholder(for: team, teamName: "N/A", detail: "N/A")
+            game = .notice(failedMessage, for: team)
             reload = now + retryInterval
         }
 
@@ -162,7 +167,10 @@ struct ScheduleTile: View {
                 .widgetAccentable()
                 .padding(.horizontal, Theme.Spacing.l)
 
-            if let data = game.teamLogo, let image = UIImage(data: data) {
+            // With no game to show, the followed team's own crest stands
+            // with the one-line notice (B-16).
+            if let data = (game.message == nil ? game.teamLogo : game.backgroundLogo),
+               let image = UIImage(data: data) {
                 Image(uiImage: image)
                     .resizable()
                     .renderingMode(.original)
@@ -172,9 +180,15 @@ struct ScheduleTile: View {
             }
 
             Group {
-                Text(game.gameDate)
-                Text(game.gameTime)
-                Text(game.gameChannel)
+                if let message = game.message {
+                    Text(message)
+                } else {
+                    Text(game.gameDate)
+                    Text(game.gameTime)
+                    if let channel = game.gameChannel {
+                        Text(channel)
+                    }
+                }
             }
             .font(Theme.Typography.caption)
             .lineLimit(1)
@@ -207,19 +221,30 @@ struct MediumScheduleTile: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 // The matchup, as the Lock Screen's rectangular widget
                 // reads it: the followed team, then "vs" the opponent.
-                VStack(alignment: .leading, spacing: 0) {
+                if let message = game.message {
+                    // No game to show: the followed team, and one line.
                     Text(game.team.shortName)
-                        .font(Theme.Typography.statLabel)
-                    Text("vs \(game.teamName)")
                         .font(Theme.Typography.cardTitle)
                         .widgetAccentable()
+                    Text(message)
+                        .font(Theme.Typography.footnote)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(game.team.shortName)
+                            .font(Theme.Typography.statLabel)
+                        Text("vs \(game.teamName)")
+                            .font(Theme.Typography.cardTitle)
+                            .widgetAccentable()
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(game.gameDate)
+                        Text(game.gameTime)
+                        if let channel = game.gameChannel {
+                            Text(channel)
+                        }
+                    }
+                    .font(Theme.Typography.footnote)
                 }
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(game.gameDate)
-                    Text(game.gameTime)
-                    Text(game.gameChannel)
-                }
-                .font(Theme.Typography.footnote)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -332,9 +357,14 @@ private struct AccessoryEntryView: View {
                         Text(entry.tempGame.teamName)
                             .font(.caption2.weight(.semibold))
                             .widgetAccentable()
-                        Text(entry.tempGame.gameTime)
-                            .font(.footnote.weight(.bold))
-                            .monospacedDigit()
+                        if let message = entry.tempGame.message {
+                            Text(message)
+                                .font(.caption2)
+                        } else {
+                            Text(entry.tempGame.gameTime)
+                                .font(.footnote.weight(.bold))
+                                .monospacedDigit()
+                        }
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
@@ -348,9 +378,14 @@ private struct AccessoryEntryView: View {
                     Text(entry.followedTeam)
                         .font(.headline)
                         .widgetAccentable()
-                    Text("vs \(entry.tempGame.teamName)")
-                    Text("\(entry.tempGame.gameDate) \(entry.tempGame.gameTime)")
-                        .foregroundStyle(.secondary)
+                    if let message = entry.tempGame.message {
+                        Text(message)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("vs \(entry.tempGame.teamName)")
+                        Text("\(entry.tempGame.gameDate) \(entry.tempGame.gameTime)")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -384,7 +419,7 @@ struct TeamScheduleWidget: Widget {
             WidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Team Schedule")
-        .description("Shows the next game of the team you choose, or your first favorite.")
+        .description("Shows the live score, latest result or next game of the team you choose, or your first favorite.")
         .supportedFamilies(families)
     }
 }
@@ -424,6 +459,14 @@ extension WidgetEntry {
         )
         return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
     }
+
+    /// The off-season tile: the crest and one line.
+    fileprivate static var notice: WidgetEntry {
+        let team = WidgetTeams.fallback
+        var game = WidgetGame.notice(WidgetTimelines.seasonOverMessage, for: team)
+        game.backgroundLogo = UIImage(systemName: "shield.fill")?.pngData()
+        return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
+    }
 }
 
 #Preview("Small · full colour", as: .systemSmall) {
@@ -431,12 +474,14 @@ extension WidgetEntry {
 } timeline: {
     WidgetEntry.preview
     WidgetTimelines.placeholder(for: WidgetTeams.fallback)
+    WidgetEntry.notice
 }
 
 #Preview("Medium · full colour", as: .systemMedium) {
     TeamScheduleWidget()
 } timeline: {
     WidgetEntry.preview
+    WidgetEntry.notice
 }
 
 #Preview("Small · Clear/Tinted (accented)", traits: .fixedLayout(width: 170, height: 170)) {
