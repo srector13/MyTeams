@@ -162,3 +162,40 @@ Each card **owns** the files listed. No two cards that may run in parallel share
 | 13 | **App icon tinted appearance** | B-15 | `Resources/Assets.xcassets/AppIcon.appiconset/**` | Design asset |
 
 Unowned and untouched by any card: `Classes/Theme.swift`, `Classes/LoadingView.swift`, `Classes/ConvertColor.swift`, `Classes/RepeatingTask.swift`, `Networking/LogoStore.swift`, `Networking/RemoteImage.swift`, `Networking/RemoteTeamCatalog.swift`, `Networking/TeamLogo.swift`, `Leaders/StatLeaders.swift`, `Home Menus/LeagueScoreboardCenter.swift`, `Home Menus/ScoreAlertsPermissions.swift`, `Schedule/Classes/HockeyBoxScore.swift`, `Schedule/Classes/Linescore.swift`, `Schedule/Views/StatRowView.swift`, `Schedule/Views/GetNextGame.swift`, `News/**` (except `NewsDetailView.swift`, card 5), `Roster/Classes/DownloadRosterData.swift`, `Roster/Views/{BioViews,StatView,StatPercentageView}.swift`, `Resources/AppDelegate.swift`. A card that finds it must edit one of these should claim it on the board first. The likely case is A-11 moving `liveCardPeriodLabel` out of `Linescore.swift` into card 9's files: copy it rather than move it, so the two cards don't collide.
+
+---
+
+## Follow-up: the UI-test launch stall (t_2cab5bf3, 2026-10-05)
+
+*After A-20 (`e3ec7ad`), `testCrestBarSwitchesTeams` failed on main, and later greens only just passed: `testBrowserSearchFindsTeams` took 180 s at `f0cec8f`, 55 s of it before the app idled.*
+
+**Root cause: the simulator, not the app.** XCUITest's launch steps ("Launch", "Setting up automation session") were waiting on a simulator still busy with the work iOS does after a fresh boot. `xcodebuild test` booted it only minutes before the UI tests ran. Diagnostic gate runs logged the app's own launch callbacks and a main-thread heartbeat to settle it:
+
+- Run 37347991951: XCUITest logged "Launch" at 17:30:27, but `willFinishLaunching` ran at 17:32:23. For 110 s the app process did not exist yet.
+- Run 37347962897: the main thread was blocked for 36.6 s while serving an accessibility snapshot. A background thread that should log every 5 s logged every 12 to 16 s, so the whole process was CPU-starved, not deadlocked.
+- A host-side CPU monitor (run 37353417043) showed several iOS-runtime daemons, a few seconds to a minute old, each using 50 to 90 % CPU.
+
+Fixtures only moved the stall around. It hit the first UI test before A-20 too (56 s at `b23f25d`), and live-network launches as well as fixture ones.
+
+Two leads in the brief did not hold:
+
+- The `[network] … HTTP 429/503` lines come from the unit-test host running the stubbed `HTTPClientTests`. They are not a fixture launch reaching ESPN.
+- No app loop keeps the app busy. Every poller sleeps between requests.
+
+**The failing assertion was a second problem.** On some launches every tab-bar button keeps its accessibility label but loses its identifier (the hierarchy is in run 37345407532). So `teamPicker.edit` never matches, even though the Teams tab is on screen. The bar was not minimized; the identifier simply wasn't there.
+
+**Fixes:**
+
+- `.github/workflows/ios-gate.yml` boots the test simulator right after checkout. Its post-boot work then finishes during the build, and the Test step targets that device by UDID.
+- `myTeamsUITests.swift`: `teamsTab(_:)`, `teamTabs(_:)` and `pinnedTab(_:in:)` still prefer the identifiers. When the bar has dropped them, they fall back to the app's own tab labels inside the tab bar ("Add or Edit Teams", the team names) and print the bar.
+- Fixture launches are hermetic (`HTTPClient.servesFixtures`, Debug only). They no longer fetch crests or headshots from the CDN, and they cache the team catalog under `TeamCatalog-Fixtures`. Before this, the trimmed fixture catalogs were written into the live launches' week-long catalog cache, and the live catalogs into theirs. Release builds are unchanged.
+
+**Result:** gate runs 37351771337 (attempts 1 and 2) and 37353952069 were green. Every UI test's first idle came within 14 s of launch, and the fixture tests' within 10.2 s:
+
+| Fixture test | First idle (three runs) |
+|---|---|
+| `testBrowserSearchFindsTeams` | 4.8 s, 5.0 s, 3.3 s |
+| `testCrestBarSwitchesTeams` | 10.2 s, 6.0 s, 4.3 s |
+| `testScheduleCardsReadWithoutPlaceholders` | 3.1 s, 4.5 s, 2.5 s |
+
+The same day without the early boot, launches stalled 15 to 116 s.
