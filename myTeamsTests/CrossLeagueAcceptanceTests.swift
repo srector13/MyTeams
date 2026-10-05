@@ -681,7 +681,7 @@ struct EuropeanSoccerLeagueTests {
         // The cup the EPL and LALIGA list is now the registered league.
         #expect(LeagueID.soccer("uefa.champions") == .championsLeague)
         // Every UEFA competition is a cup, and its ties name it on the card.
-        #expect(uefa.allSatisfy(\.isCup))
+        #expect(uefa.allSatisfy { $0.isCup })
         #expect(uefa.map(\.cupDisplayName) == ["Champions League", "Europa League", "Conference League"])
     }
 
