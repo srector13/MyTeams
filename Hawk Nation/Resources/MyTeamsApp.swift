@@ -26,10 +26,13 @@ struct MyTeamsApp: App {
     /// Taps on score alerts, which arrive through the notification center
     /// rather than as a URL.
     @State private var alertTaps = ScoreAlertTaps.shared
+    /// Light, dark or the system's, from Settings (`SettingsView`).
+    @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
     var body: some Scene {
         WindowGroup {
             Home(deepLinkedTeamID: $deepLinkedTeamID)
+                .preferredColorScheme(appearance.colorScheme)
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
