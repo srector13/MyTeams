@@ -148,6 +148,83 @@ struct ScoreDiffTests {
     }
 }
 
+@Suite("Score stage labels")
+struct ScoreStageLabelTests {
+    private func label(_ league: LeagueID, _ period: Int) -> String {
+        PeriodNaming(league: league).label(period)
+    }
+
+    @Test("Regulation periods are named as the league names them")
+    func regulation() {
+        #expect(label(.nfl, 4) == "4th Quarter")
+        #expect(label(.collegeFootball, 2) == "2nd Quarter")
+        #expect(label(.nba, 3) == "3rd Quarter")
+        #expect(label(.mensCollegeBasketball, 2) == "2nd Half")
+        #expect(label(.nhl, 3) == "3rd Period")
+        #expect(label(.premierLeague, 1) == "1st Half")
+    }
+
+    @Test("Past regulation: overtimes, or soccer's extra time and penalties")
+    func pastRegulation() {
+        #expect(label(.nhl, 4) == "OT")
+        #expect(label(.nhl, 5) == "2OT")
+        #expect(label(.nfl, 5) == "OT")
+        #expect(label(.nba, 6) == "2OT")
+        #expect(label(.mensCollegeBasketball, 3) == "OT")
+        #expect(label(.premierLeague, 3) == "Extra Time")
+        #expect(label(.premierLeague, 4) == "Extra Time")
+        #expect(label(.championsLeague, 5) == "Penalties")
+    }
+
+    @Test("Innings, and a league with no names, read as ordinals")
+    func ordinalFallback() {
+        #expect(label(.mlb, 7) == "7th")
+        #expect(label(.mlb, 11) == "11th")
+        #expect(PeriodNaming.ordinal.label(4) == "4th")
+        #expect(label(LeagueID(sport: "lacrosse", league: "pll"), 2) == "2nd")
+    }
+
+    @Test("A cup without a descriptor of its own takes its sport's periods")
+    func undescribedCup() {
+        let faCup = LeagueID.soccer("eng.fa")
+        #expect(label(faCup, 2) == "2nd Half")
+        #expect(label(faCup, 3) == "Extra Time")
+    }
+
+    @Test("Alerts after an overtime say so: \"End of OT\", not \"End of 4th\"")
+    func overtimeAlert() {
+        let naming = PeriodNaming(league: .nhl)
+        let shootout = ScoreSnapshot(
+            homeName: "Blues", awayName: "Jets", homeScore: 2, awayScore: 2,
+            period: 5, state: .inProgress, periodNaming: naming
+        )
+        #expect(ScoreEvent.periodEnd(gameID: "1", period: 4, snapshot: shootout).title == "End of OT")
+        #expect(ScoreEvent.periodEnd(gameID: "1", period: 3, snapshot: shootout).title == "End of 3rd Period")
+        #expect(shootout.summary == "Jets 2 – Blues 2 (2OT)")
+
+        var extraTime = shootout
+        extraTime.periodNaming = PeriodNaming(league: .premierLeague)
+        extraTime.period = 3
+        #expect(extraTime.stageLabel == "Extra Time")
+        #expect(extraTime.summary == "Jets 2 – Blues 2 (Extra Time)")
+    }
+
+    @Test("Before a period, before the start, and played out")
+    func otherStages() {
+        let naming = PeriodNaming(league: .nfl)
+        var snapshot = ScoreSnapshot(
+            homeName: "Kansas", awayName: "K-State", homeScore: 0, awayScore: 0,
+            period: 0, state: .inProgress, periodNaming: naming
+        )
+        #expect(snapshot.stageLabel == "Live")
+        snapshot.state = .scheduled
+        #expect(snapshot.stageLabel == "Pregame")
+        snapshot.state = .final
+        snapshot.period = 5
+        #expect(snapshot.stageLabel == "Final")
+    }
+}
+
 @Suite("Score alert debounce")
 struct ScoreAlertDebounceTests {
     private let start = Date(timeIntervalSince1970: 1_790_000_000)
@@ -201,5 +278,96 @@ struct ScoreAlertDebounceTests {
         ]
         let admitted = debounce.admit(events, at: start)
         #expect(admitted.map(\.gameID) == ["1", "2"])
+        // The period's end is held, not dropped.
+        #expect(debounce.held["1"] == .periodEnd(gameID: "1", period: 1, snapshot: snapshot))
+    }
+
+    @Test("Two goals in two minutes: the second is held, and posted with the latest score once the window ends")
+    func heldGoalPostsLater() {
+        var debounce = ScoreAlertDebounce(window: 120)
+        let kickoff = game(.inProgress, period: 1)
+        let one = game(.inProgress, home: 1, period: 1)
+        let two = game(.inProgress, home: 2, period: 1)
+        let three = game(.inProgress, home: 2, away: 1, period: 1)
+
+        let firstGoal = ScoreEvent.scoreChange(gameID: "1", previous: kickoff, snapshot: one)
+        let posted = debounce.admit([firstGoal], at: start)
+        #expect(posted == [firstGoal])
+
+        // A minute on, a second goal: inside the window, so held.
+        let secondGoal = debounce.admit(
+            [.scoreChange(gameID: "1", previous: one, snapshot: two)], at: start.addingTimeInterval(60)
+        )
+        #expect(secondGoal.isEmpty)
+        // Then a reply: still inside, coalesced with the goal held — from
+        // the score last told to the score now.
+        let reply = debounce.admit(
+            [.scoreChange(gameID: "1", previous: two, snapshot: three)], at: start.addingTimeInterval(90)
+        )
+        #expect(reply.isEmpty)
+        let coalesced = ScoreEvent.scoreChange(gameID: "1", previous: one, snapshot: three)
+        #expect(debounce.held["1"] == coalesced)
+
+        // A look with no news before the window ends posts nothing.
+        let early = debounce.admit([], at: start.addingTimeInterval(119))
+        #expect(early.isEmpty)
+
+        // The first look past it posts the held event, and restarts the
+        // window.
+        let followUp = debounce.admit([], at: start.addingTimeInterval(125))
+        #expect(followUp == [coalesced])
+        #expect(debounce.held.isEmpty)
+        #expect(debounce.lastPosted["1"] == start.addingTimeInterval(125))
+        let later = debounce.admit([], at: start.addingTimeInterval(400))
+        #expect(later.isEmpty)
+    }
+
+    @Test("Past the window, a held score folds into the game's new event and stays a score update")
+    func heldScoreFoldsIntoNews() {
+        var debounce = ScoreAlertDebounce(window: 120)
+        let before = game(.inProgress, home: 7, period: 1)
+        let scored = game(.inProgress, home: 14, period: 1)
+        let nextPeriod = game(.inProgress, home: 14, period: 2)
+
+        let first = debounce.admit(score("1"), at: start)
+        #expect(first)
+        let held = ScoreEvent.scoreChange(gameID: "1", previous: before, snapshot: scored)
+        let holding = debounce.admit([held], at: start.addingTimeInterval(30))
+        #expect(holding.isEmpty)
+
+        let posted = debounce.admit(
+            [.periodEnd(gameID: "1", period: 1, snapshot: nextPeriod)], at: start.addingTimeInterval(150)
+        )
+        #expect(posted == [.scoreChange(gameID: "1", previous: before, snapshot: nextPeriod)])
+        #expect(debounce.held.isEmpty)
+    }
+
+    @Test("A final clears what its game was holding: it carries the latest score")
+    func finalClearsHeld() {
+        var debounce = ScoreAlertDebounce(window: 120)
+        let first = debounce.admit(score("1"), at: start)
+        #expect(first)
+        let early = debounce.admit(score("1"), at: start.addingTimeInterval(30))
+        #expect(!early)
+        #expect(debounce.held["1"] != nil)
+
+        let over = ScoreEvent.final(gameID: "1", snapshot: game(.final, home: 7, period: 4))
+        let fullTime = debounce.admit([over], at: start.addingTimeInterval(40))
+        #expect(fullTime == [over])
+        #expect(debounce.held.isEmpty)
+        let later = debounce.admit([], at: start.addingTimeInterval(300))
+        #expect(later.isEmpty)
+    }
+
+    @Test("A game's held event goes out on a look that only brings another game's news")
+    func releasedAlongsideOtherGames() {
+        var debounce = ScoreAlertDebounce(window: 120)
+        let first = debounce.admit(score("1"), at: start)
+        #expect(first)
+        let early = debounce.admit(score("1"), at: start.addingTimeInterval(60))
+        #expect(!early)
+
+        let posted = debounce.admit([score("2")], at: start.addingTimeInterval(130))
+        #expect(posted == [score("1"), score("2")])
     }
 }

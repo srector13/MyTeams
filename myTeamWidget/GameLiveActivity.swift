@@ -79,9 +79,10 @@ struct GameLiveActivity: Widget {
                     .islandTextSize()
                     .accessibilityLabel(state.spokenScore(game) + ", " + state.stage)
             }
-            // The followed team's colour on the island's rim (DI-2), or the
-            // system's own where the bundle doesn't know the team.
-            .keylineTint(game.followedTeam.map { Color(hexString: TeamColors.fillHex(for: $0)) })
+            // The followed team's colour on the island's rim (DI-2): the
+            // bundle's, else the one the app stored at the start (B-13),
+            // else the system's own.
+            .keylineTint(game.followedKeylineHex.map { Color(hexString: $0) })
             .widgetURL(game.deepLink)
         }
     }
@@ -211,26 +212,36 @@ private struct GameActivityTeamScore: View {
 /// (DI-1), so the island says whose game it is, as the HIG asks of the
 /// leading side.
 ///
-/// The payload carries no abbreviation or colour (it stays within the Live
-/// Activity's size budget, §5.4), so the team is looked up in the bundled
-/// catalog. A team the bundle doesn't know gets its sport's symbol instead:
-/// the payload doesn't say whether the followed team is home or away, and
-/// a guessed name would be the opponent's half the time.
+/// The bundled catalog wins where it knows the team. Any other team is
+/// marked with the abbreviation the app stored in the static attributes
+/// when it started the activity (`GameActivityInfo.favoriteAbbreviation`,
+/// B-13). Without either — an activity started before the team resolved,
+/// or by an older build — the mark is its sport's symbol: the payload
+/// doesn't say whether the followed team is home or away, and a guessed
+/// name would be the opponent's half the time.
 private struct FollowedTeamMark: View {
     var game: GameActivityInfo
 
     var body: some View {
         if let team = game.followedTeam, !team.abbreviation.isEmpty {
-            Text(team.abbreviation)
-                .font(.caption.weight(.heavy))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+            abbreviation(team.abbreviation)
                 .accessibilityLabel(team.displayName)
+        } else if let stored = game.followedAbbreviation {
+            // The stored mark names no team in full; the matchup does.
+            abbreviation(stored)
+                .accessibilityLabel(game.matchup)
         } else {
             Image(systemName: game.sportSymbol)
                 .font(.caption.weight(.semibold))
                 .accessibilityLabel(game.matchup)
         }
+    }
+
+    private func abbreviation(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.weight(.heavy))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 }
 
@@ -241,6 +252,28 @@ extension GameActivityInfo {
     /// team's own outside cup ties.
     fileprivate var followedTeam: TeamRef? {
         followedTeamID.flatMap(TeamCatalog.team(id:))
+    }
+
+    /// The abbreviation the app stored for the followed team, if any and
+    /// not blank. Only read where the bundle doesn't know the team.
+    fileprivate var followedAbbreviation: String? {
+        guard let stored = favoriteAbbreviation?.trimmingCharacters(in: .whitespaces),
+              !stored.isEmpty
+        else { return nil }
+        return stored
+    }
+
+    /// The island's keyline colour, as hex: the bundled team's fill, else
+    /// the colour the app stored at the start when it reads as one, else
+    /// `nil` for the system's own.
+    fileprivate var followedKeylineHex: String? {
+        if let team = followedTeam {
+            return TeamColors.fillHex(for: team)
+        }
+        guard let stored = favoriteColorHex,
+              TeamColors.relativeLuminance(hex: stored) != nil
+        else { return nil }
+        return stored
     }
 
     /// The followed team's `TeamRef.id`: `favoriteID`, or else the board's
@@ -321,6 +354,15 @@ extension GameActivityAttributes {
         homeName: "Broncos", awayName: "Chiefs", matchup: "Chiefs at Broncos",
         kickoff: nil, favoriteID: "football/nfl:12"
     ))
+
+    /// A followed team the bundle doesn't know (Arsenal), marked by the
+    /// abbreviation and colour the app stored at the start (B-13).
+    fileprivate static let storedIdentityPreview = GameActivityAttributes(game: GameActivityInfo(
+        gameID: "401915423", teamID: "359", league: "soccer/uefa.champions",
+        homeName: "Napoli", awayName: "Arsenal", matchup: "Arsenal at Napoli",
+        kickoff: nil, favoriteID: "soccer/eng.1:359",
+        favoriteAbbreviation: "ARS", favoriteColorHex: "E20520"
+    ))
 }
 
 // Previews (GlassUI step 0.7). Check the Lock Screen banner in the canvas's
@@ -351,6 +393,12 @@ extension GameActivityAttributes {
     GameLiveActivity()
 } contentStates: {
     GameActivityState(homeScore: 23, awayScore: 26, period: 4, clock: "0:48", phase: .live)
+}
+
+#Preview("Dynamic Island · compact, stored identity", as: .dynamicIsland(.compact), using: GameActivityAttributes.storedIdentityPreview) {
+    GameLiveActivity()
+} contentStates: {
+    GameActivityState(homeScore: 1, awayScore: 2, period: 3, clock: "97'", phase: .live, periodLabel: "Extra Time")
 }
 
 #Preview("Dynamic Island · minimal", as: .dynamicIsland(.minimal), using: GameActivityAttributes.preview) {

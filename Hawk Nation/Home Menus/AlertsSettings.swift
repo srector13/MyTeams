@@ -134,6 +134,152 @@ struct AlertsStatusRow: Equatable, Sendable {
     }
 }
 
+/// The kinds of score alert a reader can turn off (C-3).
+enum ScoreAlertKind: String, CaseIterable, Sendable {
+    /// "Game started".
+    case starts
+    /// Each score, and each period's end, which reads as one.
+    case scores
+    case finals
+
+    /// The kind of `event`.
+    init(_ event: ScoreEvent) {
+        switch event {
+        case .gameStart: self = .starts
+        case .scoreChange, .periodEnd: self = .scores
+        case .final: self = .finals
+        }
+    }
+
+    /// The toggle's title in the Alerts settings.
+    var title: String {
+        switch self {
+        case .starts: "Game Starts"
+        case .scores: "Score Updates"
+        case .finals: "Finals"
+        }
+    }
+}
+
+/// The reader's choices for score alerts beyond each team's toggle (C-3):
+/// which kinds go out, and quiet hours, when they still arrive in
+/// Notification Center but without a sound or a banner.
+///
+/// Persisted as JSON (`AlertPreferencesStore`). Every field decodes to its
+/// default when missing, so nothing stored, or a payload from an older
+/// build, reads as every kind on and no quiet hours.
+struct AlertPreferences: Codable, Equatable, Sendable {
+    static let minutesPerDay = 24 * 60
+
+    var sendsStarts = true
+    var sendsScores = true
+    var sendsFinals = true
+
+    var quietHoursEnabled = false
+    /// When quiet hours begin and end, in minutes after local midnight. The
+    /// window runs across midnight when the end is earlier than the start;
+    /// a window that ends where it starts is empty.
+    var quietStart = 22 * 60
+    var quietEnd = 7 * 60
+
+    /// Whether alerts of `kind` go out.
+    func sends(_ kind: ScoreAlertKind) -> Bool {
+        switch kind {
+        case .starts: sendsStarts
+        case .scores: sendsScores
+        case .finals: sendsFinals
+        }
+    }
+
+    /// Whether `event`'s kind goes out.
+    func sends(_ event: ScoreEvent) -> Bool {
+        sends(ScoreAlertKind(event))
+    }
+
+    mutating func setSends(_ sends: Bool, for kind: ScoreAlertKind) {
+        switch kind {
+        case .starts: sendsStarts = sends
+        case .scores: sendsScores = sends
+        case .finals: sendsFinals = sends
+        }
+    }
+
+    /// Whether `date` falls in quiet hours, read on `calendar`'s clock.
+    func isQuiet(at date: Date, calendar: Calendar = .current) -> Bool {
+        guard quietHoursEnabled else { return false }
+        let start = Self.normalized(quietStart)
+        let end = Self.normalized(quietEnd)
+        guard start != end else { return false }
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        if start < end {
+            return minute >= start && minute < end
+        }
+        // Across midnight: 22:00 to 07:00.
+        return minute >= start || minute < end
+    }
+
+    /// `minutes` as a time of day, 0 to 1439.
+    static func normalized(_ minutes: Int) -> Int {
+        let remainder = minutes % minutesPerDay
+        return remainder < 0 ? remainder + minutesPerDay : remainder
+    }
+}
+
+extension AlertPreferences {
+    // In an extension, so the memberwise initializer stays.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AlertPreferences()
+        sendsStarts = try container.decodeIfPresent(Bool.self, forKey: .sendsStarts) ?? defaults.sendsStarts
+        sendsScores = try container.decodeIfPresent(Bool.self, forKey: .sendsScores) ?? defaults.sendsScores
+        sendsFinals = try container.decodeIfPresent(Bool.self, forKey: .sendsFinals) ?? defaults.sendsFinals
+        quietHoursEnabled = try container.decodeIfPresent(Bool.self, forKey: .quietHoursEnabled) ?? defaults.quietHoursEnabled
+        quietStart = Self.normalized(try container.decodeIfPresent(Int.self, forKey: .quietStart) ?? defaults.quietStart)
+        quietEnd = Self.normalized(try container.decodeIfPresent(Int.self, forKey: .quietEnd) ?? defaults.quietEnd)
+    }
+}
+
+/// Keeps `AlertPreferences` in `defaults`, for the Alerts settings to edit
+/// and `ScoreAlertEngine` to read before each batch.
+@MainActor
+@Observable
+final class AlertPreferencesStore {
+    static let shared = AlertPreferencesStore()
+    static let defaultsKey = "alerts.preferences"
+
+    private(set) var preferences: AlertPreferences
+
+    private let defaults: UserDefaults
+
+    /// Kept in `defaults`: the standard ones in the app, a scratch suite in
+    /// tests.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        preferences = Self.load(from: defaults)
+    }
+
+    /// What `defaults` holds; the defaults for nothing stored, or for a
+    /// payload that does not read.
+    static func load(from defaults: UserDefaults) -> AlertPreferences {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let stored = try? JSONDecoder().decode(AlertPreferences.self, from: data)
+        else { return AlertPreferences() }
+        return stored
+    }
+
+    /// Changes the preferences and writes them through.
+    func update(_ change: (inout AlertPreferences) -> Void) {
+        var next = preferences
+        change(&next)
+        guard next != preferences else { return }
+        preferences = next
+        if let data = try? JSONEncoder().encode(next) {
+            defaults.set(data, forKey: Self.defaultsKey)
+        }
+    }
+}
+
 /// The state behind the Alerts settings, with the system behind closures so
 /// tests can stand in for it.
 @MainActor
