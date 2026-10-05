@@ -541,30 +541,36 @@ struct FavoritesStoreTests {
         #expect(routed == HomeRouting.State(selection: blues, pendingLink: nil))
     }
 
+    // Not timed by the wall clock: hosted tests share the main actor and the
+    // thread pool with the app's launch and with each other, which on CI
+    // held a 50 ms answer back for over nine seconds. The lookup instead
+    // waits on a gate opened only after the answer: were the deadline not
+    // to hold, `teamRefs` would wait on the gate for good, and the time
+    // limit fail the test.
     @MainActor
-    @Test("The deadline holds even when the lookup ignores cancellation, and the late answer is announced")
+    @Test("The deadline holds even when the lookup ignores cancellation, and the late answer is announced", .timeLimit(.minutes(1)))
     func lateLookupResolves() async throws {
         let store = FavoritesStore(defaults: try scratchDefaults(), cloud: nil, seedIDs: [blues], isExistingInstall: true, reloadWidgets: {})
         let key = store.resolutionKey
+        let gate = Gate()
         // As the catalog's shared load does: an unstructured task's value,
         // which cancelling the waiter does not cut short.
         let slowLookup: @Sendable (TeamRef.ID) async -> TeamRef? = { id in
             await Task {
-                try? await Task.sleep(for: .seconds(2))
+                await gate.wait()
                 return resolvedTeam(id)
             }.value
         }
 
         let placeholder = try #require(TeamRef.placeholder(id: blues))
 
-        let clock = ContinuousClock()
-        let start = clock.now
         let first = await store.teamRefs(within: .milliseconds(50), lookup: slowLookup)
-        #expect(clock.now - start < .milliseconds(1500))
         #expect(first == [placeholder])
         #expect(store.lateResolutions == 0)
+        #expect(store.resolutionKey == key)
 
         // The lookup lands: the key changes, so views ask again.
+        await gate.open()
         await waitUntil { store.lateResolutions > 0 }
         #expect(store.lateResolutions == 1)
         #expect(store.resolutionKey != key)
@@ -722,10 +728,30 @@ private func resolvedTeam(_ id: TeamRef.ID) -> TeamRef? {
     return team
 }
 
-/// Polls `condition` for up to ten seconds.
+/// Holds lookups back until opened, then lets every one through.
+private actor Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters {
+            waiter.resume()
+        }
+        waiters = []
+    }
+}
+
+/// Polls `condition` for up to thirty seconds: generous, as a busy CI
+/// simulator can hold the main actor for seconds at a time.
 @MainActor
 private func waitUntil(_ condition: @MainActor () -> Bool) async {
-    for _ in 0..<1000 where !condition() {
+    for _ in 0..<3000 where !condition() {
         try? await Task.sleep(for: .milliseconds(10))
     }
 }
