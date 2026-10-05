@@ -29,7 +29,7 @@ final class myTeamsUITests: XCTestCase {
         }
 
         // The system tab bar: a tab per favorite, and the Teams (add/edit) tab.
-        XCTAssertTrue(app.buttons["teamPicker.edit"].waitForExistence(timeout: 10))
+        XCTAssertTrue(teamsTab(app).waitForExistence(timeout: 10))
         let crests = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
         XCTAssertTrue(
             crests.element(boundBy: 1).waitForExistence(timeout: 10),
@@ -153,13 +153,31 @@ final class myTeamsUITests: XCTestCase {
     private func openTeamBrowser(_ app: XCUIApplication) {
         let done = app.buttons["teamBrowser.done"]
         if done.waitForExistence(timeout: 5) { return }
-        let edit = app.buttons["teamPicker.edit"]
+        let edit = teamsTab(app)
         XCTAssertTrue(edit.waitForExistence(timeout: 10))
         for _ in 0..<3 {
             edit.tap()
             if done.waitForExistence(timeout: 5) { return }
         }
         XCTFail("The team browser never opened from the Teams tab.")
+    }
+
+    /// The tab bar's "Teams" tab, with the bar at full size.
+    ///
+    /// The bar minimizes to the selected tab as the page scrolls down
+    /// (`tabBarMinimizeBehavior(.onScrollDown)`), and the other tabs leave
+    /// the accessibility tree with it. A page whose cards all land at once,
+    /// as fixtures make them, can move its offset enough to do that at
+    /// launch, so a missing tab is brought back the way a reader would:
+    /// by scrolling up.
+    @MainActor
+    private func teamsTab(_ app: XCUIApplication) -> XCUIElement {
+        let edit = app.buttons["teamPicker.edit"]
+        if !edit.waitForExistence(timeout: 5) {
+            print("No \"teamPicker.edit\" after 5 s; scrolling up. The app:\n\(app.debugDescription)")
+            app.swipeDown()
+        }
+        return edit
     }
 
     /// The team page's crest and name are pinned in the navigation bar
