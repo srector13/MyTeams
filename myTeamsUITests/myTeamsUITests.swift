@@ -142,11 +142,12 @@ final class myTeamsUITests: XCTestCase {
         XCTFail("The team browser never opened from the Teams tab.")
     }
 
-    /// The team page's header — its crest, name and record — sits at the
-    /// top of the page, goes under the cards as the page scrolls down and
-    /// comes back on scrolling up (UI-1).
+    /// The team page's crest and name are pinned in the navigation bar
+    /// (t_5478d64e): visible at rest with no pull needed, still there with
+    /// the page scrolled down and pulled past the top, and always inside the
+    /// bar, so never drawn over the cards scrolling beneath it.
     @MainActor
-    func testTeamPageHeaderRecedesAndReturns() throws {
+    func testTeamPageHeaderPinnedInBar() throws {
         let app = XCUIApplication()
         app.launch()
 
@@ -157,19 +158,39 @@ final class myTeamsUITests: XCTestCase {
 
         let header = app.descendants(matching: .any)["teamPage.header"]
         XCTAssertTrue(header.waitForExistence(timeout: 10))
-        XCTAssertTrue(header.isHittable)
+        let bar = app.navigationBars.firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 5))
+
+        func assertPinned(_ moment: String) {
+            XCTAssertTrue(header.exists && header.isHittable, "Header not visible \(moment).")
+            XCTAssertFalse(header.frame.isEmpty, "Header not laid out \(moment).")
+            XCTAssertGreaterThanOrEqual(header.frame.minY, bar.frame.minY - 1, "Header above the bar \(moment).")
+            XCTAssertLessThanOrEqual(header.frame.maxY, bar.frame.maxY + 1, "Header below the bar, over the cards, \(moment).")
+        }
+
+        assertPinned("at rest")
+        let resting = header.frame
 
         // The cards are at least a screen tall, so the page always scrolls
-        // far enough to cover the header.
+        // well past the summary, down towards the news.
         app.swipeUp()
         app.swipeUp()
-        XCTAssertFalse(header.exists && header.isHittable)
+        assertPinned("scrolled down")
+        XCTAssertEqual(header.frame.minY, resting.minY, accuracy: 1, "Header moved with the scroll.")
+        // The record and next game scroll with the page, under the bar.
+        let summary = app.descendants(matching: .any)["teamPage.summary"]
+        XCTAssertFalse(summary.exists && summary.isHittable)
 
-        for _ in 0..<4 where !(header.exists && header.isHittable) {
+        // Back to the top and pulled past it: the header doesn't ride the
+        // overscroll.
+        for _ in 0..<4 {
             app.swipeDown()
         }
-        expectation(for: NSPredicate(format: "exists == true AND hittable == true"), evaluatedWith: header)
-        waitForExpectations(timeout: 5)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.5)
+        assertPinned("after pulling past the top")
+        XCTAssertEqual(header.frame.minY, resting.minY, accuracy: 1, "Header moved with the overscroll.")
     }
 
     /// The schedule cards (UI-3) speak a whole game, never a placeholder

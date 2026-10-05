@@ -259,34 +259,29 @@ enum HomeRouting {
     }
 }
 
-/// What a team page's scrolling content and the page around it
-/// (`TeamPage`) tell each other: where the navigation bar ends, how tall the
-/// header is, and whether the cards have reached the bar. Set only as those
-/// change, never per scrolled frame.
+/// What a team page's scrolling content tells the page around it
+/// (`TeamPage`): how tall the summary at the top of the page is. Set only
+/// as that changes, never per scrolled frame.
 @MainActor
 @Observable
 final class TeamPageChrome {
-    /// The bottom of the navigation bar, in global coordinates: where the
-    /// page's header rests.
-    var barBottom: CGFloat = 0
-    /// The header's height (`TeamPageHeader`), which the team colour
+    /// The summary's height (`TeamPageHeader`), which the team colour
     /// behind it must cover.
     var headerHeight: CGFloat = 0
-    /// Whether the page's cards, rather than the team colour, are behind
-    /// the navigation bar.
-    var cardsUnderBar = false
 }
 
-/// One team's scrolling page: a header with the team's crest, name, record
-/// and next game over the team colour, and the page of cards that slides
-/// up over it (UI-1).
+/// One team's scrolling page: the team's crest and name pinned in the
+/// navigation bar over the team colour, and below it the page — the
+/// record and next game over the team colour, then the page of cards
+/// (UI-1, t_5478d64e).
 ///
-/// The team colour stays put behind the scroll view. The header scrolls
-/// with the page but recedes as it goes, drifting, shrinking and fading
-/// beneath the cards (`recedingHeader(below:)`), and comes back the same
-/// way on scrolling up. Once the cards reach the system navigation bar it
-/// shows the team's name, which until then the header carries (H-3). The
-/// crest is drawn once, in the header.
+/// Layered back to front, so the bar's content is never drawn under or
+/// over the cards by construction: the team colour; the scroll view; an
+/// opaque team-colour layer exactly covering the status bar and the
+/// navigation bar (`barBackdrop`), which the page scrolls beneath; then the
+/// system bar with the crest and name (`TeamBarTitle`). Nothing in the bar
+/// depends on the scroll offset, so it's the same at rest, scrolled and
+/// pulled past the top. The crest is drawn once, in the bar.
 ///
 /// The page is mounted only while its team is selected, so it reports its
 /// scroll offset as it moves (`saveOffset`) and opens where it was left
@@ -307,41 +302,57 @@ private struct TeamPage<Content: View>: View {
     @Environment(\.containerSize) private var containerSize
 
     /// The team colour, or the fallback its badge takes when the feed has
-    /// none, so the header's ink and crest variant are picked against what
-    /// is drawn.
+    /// none, so the bar's ink and crest variant are picked against what is
+    /// drawn.
     private var heroHex: String { TeamColors.fillHex(for: team) }
 
     /// The bar's colour scheme over the team colour (H-6): dark, for a white
-    /// title and status bar, when white reads better on it than black.
+    /// status bar and controls, when white reads better on it than black.
     private var heroBarScheme: ColorScheme {
         TeamColors.inkHex(on: heroHex) == "FFFFFF" ? .dark : .light
     }
 
-    /// Tall enough to sit behind the header and the page's rounded top
+    /// Tall enough to sit behind the summary and the page's rounded top
     /// with room to spare for pulling the page down, on any device and at
     /// any text size.
     private var heroHeight: CGFloat {
         max(containerSize.height / 2, chrome.headerHeight + containerSize.height / 4)
     }
 
+    /// The team colour behind the status bar and the navigation bar, and
+    /// only there: a zero-height view at the top of the safe area whose
+    /// background takes the top safe area, which is exactly the two bars.
+    /// Opaque and above the scroll view, so the page scrolls under it and
+    /// never shows behind the bar's crest and name.
+    private var barBackdrop: some View {
+        Color.clear
+            .frame(height: 0)
+            .background(alignment: .bottom) {
+                Color(hexString: heroHex)
+                    .ignoresSafeArea(edges: .top)
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
-                // The team colour, as the system's gradient of it. It never
-                // scrolls: the header recedes over it and the cards cover
-                // it. It extends under the navigation bar, the status bar
-                // and any landscape side insets (H-5, B5).
+                // The team colour. It never scrolls: the cards cover it.
+                // It extends under the navigation bar, the status bar and
+                // any landscape side insets (H-5, B5). Flat, so it meets
+                // `barBackdrop` without a seam.
                 Rectangle()
-                    .fill(Color(hexString: heroHex).gradient)
+                    .fill(Color(hexString: heroHex))
                     .frame(height: heroHeight)
                     .backgroundExtensionEffect()
                     .accessibilityHidden(true)
 
                 // Not ignoring the top safe area: the scroll view starts its
-                // content — the header, then the cards — below the
-                // navigation bar and scrolls it under. Full width:
-                // `TeamHomeLayout` insets its own section cards on the
-                // grouped background (T-4).
+                // content — the summary, then the cards — below the
+                // navigation bar and scrolls it under `barBackdrop`. Full
+                // width: `TeamHomeLayout` insets its own section cards on
+                // the grouped background (T-4).
                 ScrollView(.vertical) {
                     content
                 }
@@ -350,6 +361,8 @@ private struct TeamPage<Content: View>: View {
                 // there, so neither the tabs nor the cards fight for
                 // legibility (T-5, B5).
                 .scrollEdgeEffectStyle(.soft, for: .bottom)
+                // The bar is opaque team colour: nothing to soften there.
+                .scrollEdgeEffectHidden(true, for: .top)
                 .scrollBounceBehavior(.basedOnSize)
                 .scrollPosition($position)
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -364,28 +377,21 @@ private struct TeamPage<Content: View>: View {
                         position.scrollTo(point: CGPoint(x: 0, y: savedOffset))
                     }
                 }
+
+                // Drawn after the scroll view, so over the page.
+                barBackdrop
             }
             // The grouped page behind the hero, showing past the foot of
             // the page and under the tab bar, the colour of the page.
             .background(Theme.Surface.content)
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.frame(in: .global).minY + proxy.safeAreaInsets.top
-            } action: { bottom in
-                chrome.barBottom = bottom
-            }
             .environment(chrome)
             .navigationTitle(team.displayName)
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                // The name comes into the bar as the header goes under the
-                // cards; until then the header carries it.
+                // The crest and name, always: pinned in the bar, at every
+                // scroll offset (H-3).
                 ToolbarItem(placement: .principal) {
-                    Text(team.displayName)
-                        .font(.headline)
-                        .lineLimit(1)
-                        .opacity(chrome.cardsUnderBar ? 1 : 0)
-                        .motionAnimation(Theme.Motion.stateChange, value: chrome.cardsUnderBar)
-                        .accessibilityAddTraits(.isHeader)
+                    TeamBarTitle(team: team, backgroundHex: heroHex)
                 }
                 // A title, not a button: no glass behind it.
                 .sharedBackgroundVisibility(.hidden)
@@ -403,10 +409,43 @@ private struct TeamPage<Content: View>: View {
             .sheet(isPresented: $showsSettings) {
                 SettingsView()
             }
-            // Over the team colour the bar takes the scheme that reads on
-            // it; once the page's cards are behind it, the system's.
-            .toolbarColorScheme(chrome.cardsUnderBar ? nil : heroBarScheme, for: .navigationBar)
+            // The system bar in the team colour too, and the scheme that
+            // reads on it whatever is scrolled beneath.
+            .toolbarBackground(Color(hexString: heroHex), for: .navigationBar)
+            .toolbarBackgroundVisibility(.visible, for: .navigationBar)
+            .toolbarColorScheme(heroBarScheme, for: .navigationBar)
         }
+    }
+}
+
+/// A team page's bar title: the team's crest — the page's only one — and
+/// its name, in the ink and crest variant for the team colour behind the
+/// bar (`teamInk(onHex:)`, `TeamColors.logoVariant`).
+private struct TeamBarTitle: View {
+    let team: TeamRef
+    let backgroundHex: String
+
+    @ScaledMetric(relativeTo: .headline) private var crestSize: CGFloat = 28
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            TeamLogo(
+                team: team,
+                // Capped: the bar doesn't grow with the text.
+                size: min(crestSize, 36),
+                forceVariant: TeamColors.logoVariant(for: team, onBackground: backgroundHex)
+            )
+            .accessibilityHidden(true)
+
+            Text(team.displayName)
+                .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .teamInk(onHex: backgroundHex)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("teamPage.header")
     }
 }
 
