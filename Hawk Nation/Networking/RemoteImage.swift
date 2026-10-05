@@ -42,6 +42,8 @@ private actor ImageCache {
     private var loads: [URL: Task<UIImage?, Never>] = [:]
 
     func image(for url: URL, reloading: Bool = false) async -> UIImage? {
+        // A fixture launch draws placeholders rather than wait on the CDN.
+        if HTTPClient.servesFixtures { return nil }
         if !reloading, let cached = memory.object(forKey: url as NSURL) {
             return cached
         }
