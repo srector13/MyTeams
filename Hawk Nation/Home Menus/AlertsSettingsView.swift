@@ -28,7 +28,8 @@ extension AlertsSettingsModel {
 
 /// Which followed teams send game alerts, and whether the system lets them:
 /// the notification permission, with a way to grant it from here, and Live
-/// Activities.
+/// Activities; then which kinds of alert go out, and quiet hours
+/// (`AlertPreferences`).
 ///
 /// Reached from the team browser, so readers who never followed a new team
 /// (whose seeded teams never prompted) can still turn alerts on.
@@ -42,6 +43,7 @@ struct AlertsSettingsView: View {
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
 
     private var store: FavoritesStore { .shared }
+    private var preferences: AlertPreferencesStore { .shared }
 
     var body: some View {
         List {
@@ -63,6 +65,32 @@ struct AlertsSettingsView: View {
                 Text("Game Alerts")
             } footer: {
                 Text("Starts, scores, period ends and finals for each team turned on.")
+            }
+
+            Section {
+                ForEach(ScoreAlertKind.allCases, id: \.self) { kind in
+                    kindToggle(kind)
+                }
+            } header: {
+                Text("Alert Types")
+            } footer: {
+                Text("Score updates include the end of each period.")
+            }
+
+            Section {
+                Toggle("Quiet Hours", isOn: preference(\.quietHoursEnabled))
+                    .accessibilityHint("Delivers alerts silently, without a banner, during the hours below.")
+                    .accessibilityIdentifier("alerts.quietHours")
+                if preferences.preferences.quietHoursEnabled {
+                    DatePicker("From", selection: quietTime(\.quietStart), displayedComponents: .hourAndMinute)
+                        .accessibilityIdentifier("alerts.quietHours.start")
+                    DatePicker("To", selection: quietTime(\.quietEnd), displayedComponents: .hourAndMinute)
+                        .accessibilityIdentifier("alerts.quietHours.end")
+                }
+            } header: {
+                Text("Quiet Hours")
+            } footer: {
+                Text("Alerts still arrive in Notification Center during quiet hours, without a sound or a banner.")
             }
         }
         .navigationTitle("Alerts")
@@ -133,6 +161,44 @@ struct AlertsSettingsView: View {
         .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge)")
         .accessibilityHint("Turns notifications for this team's games on or off.")
         .accessibilityIdentifier("alerts.toggle.\(team.id)")
+    }
+
+    private func kindToggle(_ kind: ScoreAlertKind) -> some View {
+        Toggle(kind.title, isOn: Binding(
+            get: { preferences.preferences.sends(kind) },
+            set: { sends in preferences.update { $0.setSends(sends, for: kind) } }
+        ))
+        .accessibilityHint("Turns \(kind.title.lowercased()) on or off for every team.")
+        .accessibilityIdentifier("alerts.kind.\(kind.rawValue)")
+    }
+
+    /// A binding to one of the alert preferences, written through to the
+    /// store.
+    private func preference<Value>(_ keyPath: WritableKeyPath<AlertPreferences, Value> & Sendable) -> Binding<Value> {
+        Binding(
+            get: { preferences.preferences[keyPath: keyPath] },
+            set: { value in preferences.update { $0[keyPath: keyPath] = value } }
+        )
+    }
+
+    /// A time picker's binding to a quiet-hours bound, kept in minutes after
+    /// midnight: shown as that time today, and read back as its hour and
+    /// minute.
+    private func quietTime(_ keyPath: WritableKeyPath<AlertPreferences, Int> & Sendable) -> Binding<Date> {
+        let calendar = Calendar.current
+        return Binding(
+            get: {
+                let minutes = AlertPreferences.normalized(preferences.preferences[keyPath: keyPath])
+                return calendar.date(
+                    bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: Date()
+                ) ?? Date()
+            },
+            set: { date in
+                let parts = calendar.dateComponents([.hour, .minute], from: date)
+                let minutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+                preferences.update { $0[keyPath: keyPath] = minutes }
+            }
+        )
     }
 
     private func accessibilityHint(for action: AlertsSettingsAction) -> String {

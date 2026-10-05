@@ -19,10 +19,14 @@ enum LiveActivityStateMapper {
     /// it (`ScoreAlertEngine.snapshot(of:)`), so an activity and an alert
     /// never disagree; `nil` for a game that is not two teams, home and away.
     ///
+    /// The period is named as the alerts name it (`ScoreSnapshot.stageLabel`,
+    /// A-11): "OT" after a hockey overtime, "Extra Time" in a cup tie.
+    ///
     /// - Parameter league: the league or cup whose scoreboard lists the
-    ///   game. Baseball keeps no clock, so its `"0:00"` is never shown.
+    ///   game, whose rules name its periods. Baseball keeps no clock, so its
+    ///   `"0:00"` is never shown.
     static func state(of game: ScoreboardGame, league: LeagueID) -> GameActivityState? {
-        guard let snapshot = ScoreAlertEngine.snapshot(of: game) else { return nil }
+        guard let snapshot = ScoreAlertEngine.snapshot(of: game, league: league) else { return nil }
 
         let phase: GameActivityState.Phase
         switch snapshot.state {
@@ -38,7 +42,10 @@ enum LiveActivityStateMapper {
             awayScore: snapshot.awayScore,
             period: snapshot.period,
             clock: phase == .live ? shownClock(game.clock, league: league) : "",
-            phase: phase
+            phase: phase,
+            // Only shown while live; left out otherwise, so a state that
+            // shows the same reads the same.
+            periodLabel: phase == .live ? snapshot.stageLabel : nil
         )
     }
 
@@ -50,8 +57,19 @@ enum LiveActivityStateMapper {
     ///     the activity's link (`GameActivityInfo.favoriteID`) are filed
     ///     under.
     ///   - league: the league or cup whose scoreboard lists the game.
-    static func info(of game: ScoreboardGame, teamID: String, homeLeague: LeagueID, league: LeagueID) -> GameActivityInfo? {
-        guard let snapshot = ScoreAlertEngine.snapshot(of: game) else { return nil }
+    ///   - favorite: the followed team as the catalog knows it, whose
+    ///     abbreviation and colour mark the Dynamic Island (B-13). Ignored
+    ///     unless it is `teamID` in `homeLeague`.
+    static func info(
+        of game: ScoreboardGame,
+        teamID: String,
+        homeLeague: LeagueID,
+        league: LeagueID,
+        favorite: TeamRef? = nil
+    ) -> GameActivityInfo? {
+        guard let snapshot = ScoreAlertEngine.snapshot(of: game, league: league) else { return nil }
+        let favoriteID = TeamRef.id(league: homeLeague, espnID: teamID)
+        let identity = favorite.flatMap { $0.id == favoriteID ? $0 : nil }
         return GameActivityInfo(
             gameID: game.gameID,
             teamID: teamID,
@@ -60,8 +78,24 @@ enum LiveActivityStateMapper {
             awayName: snapshot.awayName,
             matchup: "\(snapshot.awayName) at \(snapshot.homeName)",
             kickoff: game.startDate,
-            favoriteID: TeamRef.id(league: homeLeague, espnID: teamID)
+            favoriteID: favoriteID,
+            favoriteAbbreviation: identity.flatMap { abbreviation(of: $0) },
+            favoriteColorHex: identity.flatMap { colorHex(of: $0) }
         )
+    }
+
+    /// `team`'s abbreviation, or `nil` for a blank one.
+    static func abbreviation(of team: TeamRef) -> String? {
+        let abbreviation = team.abbreviation.trimmingCharacters(in: .whitespaces)
+        return abbreviation.isEmpty ? nil : abbreviation
+    }
+
+    /// `team`'s primary colour as six hex digits, or `nil` for one that is
+    /// empty or unreadable (remote search hits and many college teams have
+    /// none), which leaves the island its system keyline.
+    static func colorHex(of team: TeamRef) -> String? {
+        let hex = team.colorHex.trimmingCharacters(in: .whitespaces)
+        return TeamColors.relativeLuminance(hex: hex) == nil ? nil : hex
     }
 
     /// The clock worth showing: none for baseball, nor one run out (`"0:00"`,
@@ -78,9 +112,10 @@ enum LiveActivityStateMapper {
         for game: ScoreboardGame,
         teamID: String,
         homeLeague: LeagueID,
-        league: LeagueID
+        league: LeagueID,
+        favorite: TeamRef? = nil
     ) -> LiveActivityCandidate? {
-        guard let info = info(of: game, teamID: teamID, homeLeague: homeLeague, league: league),
+        guard let info = info(of: game, teamID: teamID, homeLeague: homeLeague, league: league, favorite: favorite),
               let state = state(of: game, league: league)
         else { return nil }
         return LiveActivityCandidate(info: info, state: state)

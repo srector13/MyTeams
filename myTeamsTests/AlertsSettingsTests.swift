@@ -165,3 +165,154 @@ struct AlertsSettingsTests {
         #expect(system.prompts == 0)
     }
 }
+
+@Suite("Alert preferences: kinds and quiet hours")
+struct AlertPreferencesTests {
+    /// A clock on UTC, so times of day don't depend on the machine's zone.
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        return calendar
+    }
+
+    /// `hour`:`minute` UTC on 1 January 1970.
+    private func time(_ hour: Int, _ minute: Int = 0) -> Date {
+        Date(timeIntervalSince1970: TimeInterval((hour * 60 + minute) * 60))
+    }
+
+    private let snapshot = ScoreSnapshot(
+        homeName: "Kansas", awayName: "K-State", homeScore: 7, awayScore: 3, period: 2, state: .inProgress
+    )
+
+    @Test("By default every kind goes out and there are no quiet hours")
+    func defaults() {
+        let preferences = AlertPreferences()
+        for kind in ScoreAlertKind.allCases {
+            #expect(preferences.sends(kind))
+        }
+        #expect(!preferences.quietHoursEnabled)
+        #expect(!preferences.isQuiet(at: time(23), calendar: utc))
+    }
+
+    @Test("Nothing stored, or an older payload, decodes with the defaults for what it lacks")
+    func backwardCompatibleDecoding() throws {
+        let empty = try JSONDecoder().decode(AlertPreferences.self, from: Data("{}".utf8))
+        #expect(empty == AlertPreferences())
+
+        let partial = try JSONDecoder().decode(
+            AlertPreferences.self, from: Data(#"{"sendsScores":false,"someLaterField":1}"#.utf8)
+        )
+        var expected = AlertPreferences()
+        expected.sendsScores = false
+        #expect(partial == expected)
+
+        // Out-of-range times are read as times of day.
+        let wrapped = try JSONDecoder().decode(
+            AlertPreferences.self, from: Data(#"{"quietStart":1500,"quietEnd":-60}"#.utf8)
+        )
+        #expect(wrapped.quietStart == 60)
+        #expect(wrapped.quietEnd == 23 * 60)
+    }
+
+    @Test("Preferences round-trip through JSON")
+    func roundTrip() throws {
+        let preferences = AlertPreferences(
+            sendsStarts: false, sendsScores: true, sendsFinals: true,
+            quietHoursEnabled: true, quietStart: 23 * 60 + 30, quietEnd: 6 * 60
+        )
+        let decoded = try JSONDecoder().decode(AlertPreferences.self, from: JSONEncoder().encode(preferences))
+        #expect(decoded == preferences)
+    }
+
+    @Test("Each event has its kind; a period's end counts as a score update")
+    func kinds() {
+        #expect(ScoreAlertKind(.gameStart(gameID: "1", snapshot: snapshot)) == .starts)
+        #expect(ScoreAlertKind(.scoreChange(gameID: "1", previous: snapshot, snapshot: snapshot)) == .scores)
+        #expect(ScoreAlertKind(.periodEnd(gameID: "1", period: 1, snapshot: snapshot)) == .scores)
+        #expect(ScoreAlertKind(.final(gameID: "1", snapshot: snapshot)) == .finals)
+    }
+
+    @Test("Finals only: starts and scores are filtered out")
+    func finalsOnly() {
+        var preferences = AlertPreferences()
+        preferences.setSends(false, for: .starts)
+        preferences.setSends(false, for: .scores)
+        let events: [ScoreEvent] = [
+            .gameStart(gameID: "1", snapshot: snapshot),
+            .scoreChange(gameID: "1", previous: snapshot, snapshot: snapshot),
+            .periodEnd(gameID: "1", period: 1, snapshot: snapshot),
+            .final(gameID: "1", snapshot: snapshot),
+        ]
+        let sent = events.filter { preferences.sends($0) }
+        #expect(sent == [.final(gameID: "1", snapshot: snapshot)])
+        #expect(!preferences.sendsStarts)
+        #expect(!preferences.sendsScores)
+        #expect(preferences.sendsFinals)
+    }
+
+    @Test("Quiet hours across midnight: 22:00 to 07:00")
+    func overnight() {
+        var preferences = AlertPreferences()
+        preferences.quietHoursEnabled = true
+        preferences.quietStart = 22 * 60
+        preferences.quietEnd = 7 * 60
+        #expect(preferences.isQuiet(at: time(22), calendar: utc))
+        #expect(preferences.isQuiet(at: time(23, 30), calendar: utc))
+        #expect(preferences.isQuiet(at: time(0), calendar: utc))
+        #expect(preferences.isQuiet(at: time(6, 59), calendar: utc))
+        #expect(!preferences.isQuiet(at: time(7), calendar: utc))
+        #expect(!preferences.isQuiet(at: time(12), calendar: utc))
+        #expect(!preferences.isQuiet(at: time(21, 59), calendar: utc))
+
+        // Off, the window says nothing.
+        preferences.quietHoursEnabled = false
+        #expect(!preferences.isQuiet(at: time(23, 30), calendar: utc))
+    }
+
+    @Test("Quiet hours within a day, and a window that ends where it starts")
+    func sameDay() {
+        var preferences = AlertPreferences()
+        preferences.quietHoursEnabled = true
+        preferences.quietStart = 13 * 60
+        preferences.quietEnd = 14 * 60
+        #expect(!preferences.isQuiet(at: time(12, 59), calendar: utc))
+        #expect(preferences.isQuiet(at: time(13), calendar: utc))
+        #expect(preferences.isQuiet(at: time(13, 59), calendar: utc))
+        #expect(!preferences.isQuiet(at: time(14), calendar: utc))
+
+        preferences.quietEnd = 13 * 60
+        #expect(!preferences.isQuiet(at: time(13), calendar: utc))
+    }
+
+    // MARK: Store
+
+    private func scratchDefaults() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "AlertPreferencesTests.\(UUID().uuidString)"))
+    }
+
+    @MainActor
+    @Test("The store starts at the defaults, writes changes through, and a new store reads them")
+    func store() throws {
+        let defaults = try scratchDefaults()
+        let store = AlertPreferencesStore(defaults: defaults)
+        #expect(store.preferences == AlertPreferences())
+
+        store.update {
+            $0.quietHoursEnabled = true
+            $0.setSends(false, for: .scores)
+        }
+        #expect(store.preferences.quietHoursEnabled)
+        #expect(!store.preferences.sendsScores)
+
+        let relaunched = AlertPreferencesStore(defaults: defaults)
+        #expect(relaunched.preferences == store.preferences)
+    }
+
+    @MainActor
+    @Test("A stored payload that doesn't read falls back to the defaults")
+    func unreadableStore() throws {
+        let defaults = try scratchDefaults()
+        defaults.set(Data("not json".utf8), forKey: AlertPreferencesStore.defaultsKey)
+        #expect(AlertPreferencesStore.load(from: defaults) == AlertPreferences())
+    }
+}

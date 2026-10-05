@@ -68,6 +68,22 @@ final class LiveActivityManager {
     /// When each running activity's game was first missing from the boards,
     /// by game id (`LiveActivityPlanner.offBoard`).
     private var offBoardSince: [String: Date] = [:]
+    /// The favorites as the catalog knows them, by `TeamRef.id`: their
+    /// abbreviation and colour mark a new activity's Dynamic Island (B-13).
+    /// Resolved off the scoreboard's path (`resolveFavorite`), so a look
+    /// never waits on the network; a game that starts before its team has
+    /// resolved gets the generic mark, as the attributes are fixed at start.
+    private var favoriteTeams: [TeamRef.ID: TeamRef] = [:]
+    private var resolvingFavorites: Set<TeamRef.ID> = []
+    /// The last update or end asked of each game's activity, by game id. The
+    /// next waits for it, so they reach ActivityKit in the order asked
+    /// (A-18): two unordered tasks could otherwise land an older score last.
+    private var activityWork: [String: Task<Void, Never>] = [:]
+    /// The number of the latest update asked of each game's activity. An
+    /// update still waiting its turn when a later one is asked is skipped:
+    /// the later one carries the newer state.
+    private var latestUpdate: [String: Int] = [:]
+    private var updateCount = 0
     private var isStarted = false
 
     init(
@@ -160,6 +176,7 @@ final class LiveActivityManager {
         var result: [LiveActivityCandidate] = []
         for favorite in ordered {
             guard let team = TeamRef.parse(id: favorite.teamID) else { continue }
+            let resolved = favoriteTeam(favorite.teamID)
             let competitions = [team.league] + team.league.descriptor.cupCompetitions
             for competition in competitions {
                 for game in games[competition] ?? [] {
@@ -168,7 +185,8 @@ final class LiveActivityManager {
                           // here, where it is known; the competition may be
                           // a cup.
                           let candidate = LiveActivityStateMapper.candidate(
-                            for: game, teamID: team.espnID, homeLeague: team.league, league: competition
+                            for: game, teamID: team.espnID, homeLeague: team.league, league: competition,
+                            favorite: resolved
                           )
                     else { continue }
                     result.append(candidate)
@@ -176,6 +194,30 @@ final class LiveActivityManager {
             }
         }
         return result
+    }
+
+    /// The favorite `id` as the catalog knows it, if it has resolved: the
+    /// bundle's seed teams at once, any other once `FavoritesStore.resolve`
+    /// answers, which this asks for the first time it is missed.
+    private func favoriteTeam(_ id: TeamRef.ID) -> TeamRef? {
+        if let team = favoriteTeams[id] {
+            return team
+        }
+        resolveFavorite(id)
+        return TeamCatalog.team(id: id)
+    }
+
+    /// Looks `id` up in the background; one that cannot be found within
+    /// the deadline is asked for again on a later look.
+    private func resolveFavorite(_ id: TeamRef.ID) {
+        guard resolvingFavorites.insert(id).inserted else { return }
+        Task {
+            let team = await FavoritesStore.resolve(id, within: .seconds(5))
+            self.resolvingFavorites.remove(id)
+            if let team {
+                self.favoriteTeams[id] = team
+            }
+        }
     }
 
     /// Drops the activities that ended outside the app — dismissed from the
@@ -214,7 +256,13 @@ final class LiveActivityManager {
             shown[gameID] = state
             let activityID = activity.id
             let staleDate = now().addingTimeInterval(Self.staleAfter)
-            Task {
+            updateCount += 1
+            let sequence = updateCount
+            latestUpdate[gameID] = sequence
+            enqueue(gameID) {
+                // Superseded while it waited: a later update has the
+                // newer state, and goes next.
+                guard self.latestUpdate[gameID] == sequence else { return }
                 await Self.update(activityID, to: state, staleDate: staleDate)
             }
 
@@ -232,11 +280,24 @@ final class LiveActivityManager {
         guard let activity = activities.removeValue(forKey: gameID) else { return }
         shown[gameID] = nil
         offBoardSince[gameID] = nil
+        // Any update still waiting is older than the end's own state.
+        latestUpdate[gameID] = nil
         retire(gameID)
         let activityID = activity.id
         let dismissAt = now().addingTimeInterval(grace)
-        Task {
+        enqueue(gameID) {
             await Self.end(activityID, with: state, dismissAt: dismissAt)
+        }
+    }
+
+    /// Runs `work` on `gameID`'s activity after everything asked of it
+    /// before (`activityWork`), on the main actor; ActivityKit's own calls
+    /// leave it (`update(_:to:staleDate:)`, `end(_:with:dismissAt:)`).
+    private func enqueue(_ gameID: String, _ work: @escaping @MainActor @Sendable () async -> Void) {
+        let previous = activityWork[gameID]
+        activityWork[gameID] = Task {
+            await previous?.value
+            await work()
         }
     }
 

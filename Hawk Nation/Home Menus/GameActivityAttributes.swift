@@ -40,6 +40,16 @@ struct GameActivityInfo: Codable, Hashable, Sendable {
     /// `"soccer/eng.1:359"`, not `"soccer/uefa.champions:359"`. `nil` for an
     /// activity started before it was kept, which opens the app as it is.
     var favoriteID: String? = nil
+    /// The followed team's abbreviation, e.g. `"ARS"`, for the compact
+    /// Dynamic Island's mark (B-13) where the bundled catalog doesn't know
+    /// the team. `nil` when unknown at the start, or for an activity started
+    /// before it was kept. Static, set once when the activity is asked for:
+    /// a few bytes, well inside the payload budget.
+    var favoriteAbbreviation: String? = nil
+    /// The followed team's primary colour, six hex digits, for the island's
+    /// keyline where the bundled catalog doesn't know the team. `nil` when
+    /// the team has none.
+    var favoriteColorHex: String? = nil
 
     /// The `myteams://team/` link to the followed team's page, if known.
     var deepLink: URL? {
@@ -68,21 +78,27 @@ struct GameActivityState: Codable, Hashable, Sendable {
     /// sport keeps none or it has run out.
     var clock: String
     var phase: Phase
+    /// The period while live, named by the league's rules (A-11): "4th
+    /// Quarter", "OT", "Extra Time", "7th". Formatted by the app
+    /// (`ScoreSnapshot.stageLabel`), which knows the league; `nil` from an
+    /// older build, which falls back to the ordinal.
+    var periodLabel: String? = nil
 
-    /// "4th · 0:48", "2nd", "Final".
+    /// "4th Quarter · 0:48", "OT", "Final".
     var stage: String {
         switch phase {
         case .pending: return "Pregame"
         case .ended: return "Final"
         case .calledOff: return "Called off"
         case .live:
-            let period = self.period > 0 ? Self.ordinal(self.period) : "Live"
+            let period = periodLabel ?? (self.period > 0 ? Self.ordinal(self.period) : "Live")
             return clock.isEmpty ? period : "\(period) · \(clock)"
         }
     }
 
     /// "1st", "2nd", "3rd", "4th", … "11th", "21st". The widget cannot see
-    /// the app's `ScoreSnapshot.ordinal`, so the Live Activity keeps its own.
+    /// the app's `ScoreSnapshot.ordinal`, so the Live Activity keeps its own,
+    /// for a state without a `periodLabel`.
     static func ordinal(_ number: Int) -> String {
         let suffix: String
         switch (number % 10, number % 100) {

@@ -41,9 +41,10 @@ private func state(
     home: Int = 0,
     away: Int = 0,
     period: Int = 0,
-    clock: String = ""
+    clock: String = "",
+    label: String? = nil
 ) -> GameActivityState {
-    GameActivityState(homeScore: home, awayScore: away, period: period, clock: clock, phase: phase)
+    GameActivityState(homeScore: home, awayScore: away, period: period, clock: clock, phase: phase, periodLabel: label)
 }
 
 private func candidate(_ id: String, _ state: GameActivityState) -> LiveActivityCandidate {
@@ -63,8 +64,8 @@ struct LiveActivityMapperTests {
     func live() {
         let game = board("in", home: 14, away: 10, period: 3, clock: "8:21")
         let mapped = LiveActivityStateMapper.state(of: game, league: .collegeFootball)
-        #expect(mapped == state(.live, home: 14, away: 10, period: 3, clock: "8:21"))
-        #expect(mapped?.stage == "3rd · 8:21")
+        #expect(mapped == state(.live, home: 14, away: 10, period: 3, clock: "8:21", label: "3rd Quarter"))
+        #expect(mapped?.stage == "3rd Quarter · 8:21")
     }
 
     @Test("Soccer's running minute is the clock")
@@ -72,13 +73,39 @@ struct LiveActivityMapperTests {
         let game = board("in", home: 1, away: 1, period: 2, clock: "90'+5'")
         let mapped = LiveActivityStateMapper.state(of: game, league: .premierLeague)
         #expect(mapped?.clock == "90'+5'")
-        #expect(mapped?.stage == "2nd · 90'+5'")
+        #expect(mapped?.stage == "2nd Half · 90'+5'")
+    }
+
+    @Test("Past regulation the stage follows the league: overtime, or extra time")
+    func pastRegulation() {
+        let hockey = board("in", home: 2, away: 2, period: 4, clock: "3:12")
+        #expect(LiveActivityStateMapper.state(of: hockey, league: .nhl)?.stage == "OT · 3:12")
+        let shootout = board("in", home: 2, away: 2, period: 5, clock: "0:00")
+        #expect(LiveActivityStateMapper.state(of: shootout, league: .nhl)?.stage == "2OT")
+
+        let football = board("in", home: 20, away: 20, period: 5, clock: "8:00")
+        #expect(LiveActivityStateMapper.state(of: football, league: .nfl)?.stage == "OT · 8:00")
+
+        let cupTie = board("in", home: 1, away: 1, period: 3, clock: "95'")
+        #expect(LiveActivityStateMapper.state(of: cupTie, league: .championsLeague)?.stage == "Extra Time · 95'")
+        #expect(LiveActivityStateMapper.state(of: cupTie, league: .soccer("eng.fa"))?.stage == "Extra Time · 95'")
+        let penalties = board("in", home: 1, away: 1, period: 5, clock: "120'")
+        #expect(LiveActivityStateMapper.state(of: penalties, league: .premierLeague)?.stage == "Penalties · 120'")
+    }
+
+    @Test("The stage and the alerts' summary read the same")
+    func stageMatchesAlerts() throws {
+        let game = board("in", home: 2, away: 2, period: 4, clock: "3:12")
+        let mapped = try #require(LiveActivityStateMapper.state(of: game, league: .nhl))
+        let snapshot = try #require(ScoreAlertEngine.snapshot(of: game, league: .nhl))
+        #expect(mapped.periodLabel == snapshot.stageLabel)
+        #expect(snapshot.summary == "K-State 2 – Kansas 2 (OT)")
     }
 
     @Test("No clock for baseball, nor one run out")
     func noClock() {
         let inning = board("in", home: 2, away: 3, period: 5, clock: "0:00")
-        #expect(LiveActivityStateMapper.state(of: inning, league: .mlb) == state(.live, home: 2, away: 3, period: 5))
+        #expect(LiveActivityStateMapper.state(of: inning, league: .mlb) == state(.live, home: 2, away: 3, period: 5, label: "5th"))
         #expect(LiveActivityStateMapper.state(of: inning, league: .mlb)?.stage == "5th")
 
         let baseballClock = board("in", period: 1, clock: "12:00")
@@ -144,6 +171,9 @@ struct LiveActivityMapperTests {
         #expect(state(.live, period: 2).stage == "2nd")
         #expect(state(.live, period: 4, clock: "0:48").stage == "4th · 0:48")
         #expect(state(.calledOff, period: 2).stage == "Called off")
+        // The app's label wins over the ordinal; only live shows it.
+        #expect(state(.live, period: 4, clock: "3:12", label: "OT").stage == "OT · 3:12")
+        #expect(state(.ended, period: 4, label: "OT").stage == "Final")
         #expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(GameActivityState.ordinal)
             == [1, 2, 3, 4, 11, 12, 13, 21, 22].map(ScoreSnapshot.ordinal))
     }
@@ -162,8 +192,121 @@ struct LiveActivityMapperTests {
         #expect(candidate.info.league == "football/nfl")
         #expect(candidate.info.favoriteID == "football/nfl:7")
         #expect(candidate.info.deepLink == WidgetDeepLink.url(forTeamID: "football/nfl:7"))
-        #expect(candidate.state == state(.live, home: 23, away: 26, period: 4, clock: "0:48"))
-        #expect(candidate.state.stage == "4th · 0:48")
+        #expect(candidate.state == state(.live, home: 23, away: 26, period: 4, clock: "0:48", label: "4th Quarter"))
+        #expect(candidate.state.stage == "4th Quarter · 0:48")
+    }
+
+    // MARK: The followed team's identity (B-13)
+
+    /// K-State as a catalog lookup would give it: not one of the bundle's
+    /// seed teams.
+    private func kState(abbreviation: String = "KSU", colorHex: String = "512888") -> TeamRef {
+        TeamRef(
+            league: .collegeFootball, espnID: "2306",
+            displayName: "Kansas State Wildcats", shortName: "K-State",
+            abbreviation: abbreviation, location: "Kansas State",
+            colorHex: colorHex, alternateColorHex: "FFFFFF",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+    }
+
+    @Test("The followed team's abbreviation and colour ride in the static attributes")
+    func identity() throws {
+        let game = board("in", period: 1, id: "401")
+        let info = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball, favorite: kState()
+        ))
+        #expect(info.favoriteAbbreviation == "KSU")
+        #expect(info.favoriteColorHex == "512888")
+        #expect(info.favoriteID == "football/college-football:2306")
+
+        // Through the candidate as well, as the manager asks.
+        let candidate = try #require(LiveActivityStateMapper.candidate(
+            for: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball, favorite: kState()
+        ))
+        #expect(candidate.info == info)
+    }
+
+    @Test("A blank abbreviation or an unreadable colour is left out")
+    func blankIdentity() throws {
+        let game = board("in", period: 1)
+        let blank = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball,
+            favorite: kState(abbreviation: " ", colorHex: "")
+        ))
+        #expect(blank.favoriteAbbreviation == nil)
+        #expect(blank.favoriteColorHex == nil)
+
+        let odd = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball,
+            favorite: kState(colorHex: "purple")
+        ))
+        #expect(odd.favoriteAbbreviation == "KSU")
+        #expect(odd.favoriteColorHex == nil)
+    }
+
+    @Test("A team that isn't the followed one marks nothing; without one, nothing either")
+    func mismatchedIdentity() throws {
+        let game = board("in", period: 1)
+        // K-State given for a Kansas activity.
+        let other = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "2305", homeLeague: .collegeFootball, league: .collegeFootball, favorite: kState()
+        ))
+        #expect(other.favoriteAbbreviation == nil)
+        #expect(other.favoriteColorHex == nil)
+
+        let unknown = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "2306", homeLeague: .collegeFootball, league: .collegeFootball
+        ))
+        #expect(unknown.favoriteAbbreviation == nil)
+        #expect(unknown.favoriteColorHex == nil)
+    }
+
+    @Test("A cup tie keeps the team's identity from its home league")
+    func cupTieIdentity() throws {
+        let arsenal = TeamRef(
+            league: .premierLeague, espnID: "359",
+            displayName: "Arsenal", shortName: "Arsenal", abbreviation: "ARS", location: "Arsenal",
+            colorHex: "E20520", alternateColorHex: "FFFFFF",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+        var game = board("in", period: 1, id: "401915423")
+        game.competitors = [
+            ScoreboardCompetitor(teamID: "114", homeAway: "home", score: 0),
+            ScoreboardCompetitor(teamID: "359", homeAway: "away", score: 1),
+        ]
+        let info = try #require(LiveActivityStateMapper.info(
+            of: game, teamID: "359", homeLeague: .premierLeague, league: .championsLeague, favorite: arsenal
+        ))
+        #expect(info.league == "soccer/uefa.champions")
+        #expect(info.favoriteAbbreviation == "ARS")
+        #expect(info.favoriteColorHex == "E20520")
+    }
+
+    @Test("Attributes and content from an older build, without the new fields, still decode")
+    func olderPayloads() throws {
+        let info = Data("""
+        {"gameID":"1","teamID":"2305","league":"football/nfl","homeName":"Kansas",\
+        "awayName":"K-State","matchup":"K-State at Kansas","favoriteID":"football/nfl:2305"}
+        """.utf8)
+        let decoded = try JSONDecoder().decode(GameActivityInfo.self, from: info)
+        #expect(decoded.favoriteAbbreviation == nil)
+        #expect(decoded.favoriteColorHex == nil)
+        #expect(decoded.favoriteID == "football/nfl:2305")
+
+        let content = Data("""
+        {"homeScore":2,"awayScore":3,"period":4,"clock":"1:00","phase":"live"}
+        """.utf8)
+        let state = try JSONDecoder().decode(GameActivityState.self, from: content)
+        #expect(state.periodLabel == nil)
+        #expect(state.stage == "4th · 1:00")
+
+        // And the new fields round-trip.
+        var stored = decoded
+        stored.favoriteAbbreviation = "KU"
+        stored.favoriteColorHex = "0051BA"
+        let roundTrip = try JSONDecoder().decode(GameActivityInfo.self, from: JSONEncoder().encode(stored))
+        #expect(roundTrip == stored)
     }
 }
 
