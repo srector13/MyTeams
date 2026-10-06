@@ -216,6 +216,7 @@ struct FixtureTransportTests {
             .nfl, .nba, .nhl, .wnba, .collegeFootball, .womensCollegeBasketball,
             .premierLeague, .laLiga, .ligaMX, .nwsl,
             .bundesliga, .serieA, .ligue1, .championsLeague,
+            .wsl, .premiereLigue,
         ]
         for league in catalogs {
             #expect(FixtureTransport.routes[league.teamsURL] != nil, "No route for \(league.teamsURL)")

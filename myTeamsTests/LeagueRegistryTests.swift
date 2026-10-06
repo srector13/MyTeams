@@ -11,8 +11,9 @@ import Testing
 
 @testable import myTeams
 
-/// One league P3-a or BE-3 registered, with the fixtures captured for it
-/// (see FIXTURES.md, "New leagues (P3-a)" and "European soccer leagues (BE-3)").
+/// One league P3-a, BE-3 or t_67da893e registered, with the fixtures
+/// captured for it (see FIXTURES.md, "New leagues (P3-a)", "European soccer
+/// leagues (BE-3)" and "European women's leagues (t_67da893e)").
 struct CapturedLeague: Sendable, CustomTestStringConvertible {
     let league: LeagueID
     /// The fixture name prefix, e.g. `"nba"`.
@@ -59,6 +60,10 @@ struct CapturedLeague: Sendable, CustomTestStringConvertible {
                        summary: "ligue1_summary_final_401876449"),
         CapturedLeague(league: .championsLeague, prefix: "uclleague", teamID: "359", scoreboardDay: "20260909",
                        summary: "uclleague_summary_final_401915423"),
+        CapturedLeague(league: .wsl, prefix: "wsl", teamID: "19970", scoreboardDay: "20261004",
+                       summary: "wsl_summary_final_401902895"),
+        CapturedLeague(league: .premiereLigue, prefix: "premiere", teamID: "19256", scoreboardDay: "20261003",
+                       summary: "premiere_summary_final_401885704"),
     ]
 }
 
@@ -84,7 +89,7 @@ private func rosterPlayers(_ roster: JSON) -> [JSON] {
 struct LeagueRegistryTests {
     @Test("Every known league has its own descriptor, and nothing else does")
     func knownLeaguesHaveDescriptors() {
-        #expect(LeagueID.knownLeagues.count == 17)
+        #expect(LeagueID.knownLeagues.count == 19)
         #expect(Set(LeagueID.knownLeagues).count == LeagueID.knownLeagues.count)
         #expect(Set(LeagueID.knownLeagues) == Set(LeagueDescriptor.known.keys))
         for league in LeagueID.knownLeagues {
@@ -94,7 +99,7 @@ struct LeagueRegistryTests {
         }
     }
 
-    @Test("The P3-a and BE-3 leagues are the known leagues beyond the original four")
+    @Test("The P3-a, BE-3 and women's European leagues are the known leagues beyond the original four")
     func capturedLeaguesAreTheNewOnes() {
         let original: Set<LeagueID> = [.mensCollegeBasketball, .nfl, .mlb, .mls]
         #expect(Set(CapturedLeague.all.map(\.league)) == Set(LeagueID.knownLeagues).subtracting(original))
@@ -107,7 +112,8 @@ struct LeagueRegistryTests {
         #expect(LeagueID.womensCollegeBasketball.descriptor.kind == .basketball)
         #expect(LeagueID.nhl.descriptor.kind == .hockey)
         #expect(LeagueID.collegeFootball.descriptor.kind == .football)
-        for soccer in [LeagueID.premierLeague, .laLiga, .ligaMX, .nwsl, .bundesliga, .serieA, .ligue1, .championsLeague] {
+        for soccer in [LeagueID.premierLeague, .laLiga, .ligaMX, .nwsl, .bundesliga, .serieA, .ligue1, .championsLeague,
+                       .wsl, .premiereLigue] {
             #expect(soccer.descriptor.kind == .soccer)
             #expect(soccer.descriptor.periodName("2") == "2nd Half")
             #expect(soccer.descriptor.drawLabel == "Draw")
@@ -129,17 +135,24 @@ struct LeagueRegistryTests {
         #expect(LeagueID.collegeFootball.descriptor.liveCardStyle == .scoreFirst)
     }
 
-    @Test("The picker's chips name the registry's constants, European soccer after the EPL")
+    @Test("The picker's chips name the registry's constants, European soccer after the EPL, then women's soccer")
     func browsableLeagues() {
         #expect(LeagueID.browsable.map(\.label) == [
             "NFL", "NBA", "MLB", "NHL", "MLS", "WNBA", "NCAAF", "NCAAM", "NCAAW", "EPL",
             "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UCL",
+            "NWSL", "WSL", "Première Ligue",
         ])
-        #expect(LeagueID.browsable.suffix(5).map(\.league) == [.laLiga, .bundesliga, .serieA, .ligue1, .championsLeague])
+        #expect(LeagueID.browsable.suffix(8).map(\.league) == [
+            .laLiga, .bundesliga, .serieA, .ligue1, .championsLeague,
+            .nwsl, .wsl, .premiereLigue,
+        ])
         #expect(LeagueID.nba.badge == "NBA")
         #expect(LeagueID.premierLeague.badge == "EPL")
         #expect(LeagueID.laLiga.badge == "La Liga")
         #expect(LeagueID.championsLeague.badge == "UCL")
+        #expect(LeagueID.nwsl.badge == "NWSL")
+        #expect(LeagueID.wsl.badge == "WSL")
+        #expect(LeagueID.premiereLigue.badge == "Première Ligue")
         // Not offered in the picker yet: badged by its path component.
         #expect(LeagueID.ligaMX.badge == "MEX.1")
     }
@@ -172,6 +185,21 @@ struct LeagueRegistryTests {
         }
         #expect(LeagueID.soccer("uefa.europa.conf").scheduleURL(teamID: "359")
             == "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.europa.conf/teams/359/schedule")
+    }
+
+    @Test("The women's European leagues roll over in July and play the women's cups")
+    func womensEuropeanLeagues() {
+        // Both feeds start the 2026-27 season on July 1 (wsl_/premiere_scoreboard).
+        for league in [LeagueID.wsl, .premiereLigue] {
+            #expect(league.descriptor.seasonNaming == .startingYear(rolloverMonth: 7))
+            #expect(league.descriptor.cupCompetitions.contains(.soccer("uefa.wchampions")))
+        }
+        #expect(LeagueID.wsl.descriptor.cupCompetitions
+            == [.soccer("eng.w.fa"), .soccer("eng.w.league_cup"), .soccer("uefa.wchampions")])
+        // ESPN serves no French women's cup; never the men's Coupe de France.
+        #expect(LeagueID.premiereLigue.descriptor.cupCompetitions == [.soccer("uefa.wchampions")])
+        #expect(LeagueID.soccer("uefa.wchampions").isCup)
+        #expect(!LeagueID.wsl.isCup && !LeagueID.premiereLigue.isCup)
     }
 
     @Test("Scoreboards: women's college basketball asks for Division I like the men's")
