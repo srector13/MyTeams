@@ -99,8 +99,9 @@ final class LeagueScoreboardCenter {
     @ObservationIgnored private var followLoop: Task<Void, Never>?
     @ObservationIgnored private var followed: [FollowKey: Subscription] = [:]
     /// Kept across stops, so coming back to the foreground reloads only the
-    /// stale ones.
-    @ObservationIgnored private var followedSchedules: [TeamRef.ID: FollowedSchedule] = [:]
+    /// stale ones. Observed, so Home redraws as each season lands
+    /// (`followedSeason(of:)`).
+    private var followedSchedules: [TeamRef.ID: FollowedSchedule] = [:]
     @ObservationIgnored private var scheduleLoads: [TeamRef.ID: Task<[Game]?, Never>] = [:]
     /// Games the scoreboards have shown over, for as long as a favorite's
     /// schedule still has them in the live window: a board no subscription
@@ -351,7 +352,10 @@ final class LeagueScoreboardCenter {
     func refreshFollowedFavorites() async {
         guard isFollowingFavorites else { return }
         let ids = favoriteIDs()
-        followedSchedules = followedSchedules.filter { ids.contains($0.key) }
+        // Only a change is written: an unchanged minute does not redraw Home.
+        if followedSchedules.keys.contains(where: { !ids.contains($0) }) {
+            followedSchedules = followedSchedules.filter { ids.contains($0.key) }
+        }
 
         let current = now()
         for id in ids where scheduleLoads[id] == nil && needsSchedule(id, at: current) {
@@ -465,6 +469,36 @@ final class LeagueScoreboardCenter {
     }
 
     // MARK: Reading
+
+    /// What the center has of a favorite's season while it follows the
+    /// favorites, for readers that show the favorites' games without
+    /// loading them again (`HomeViewModel`).
+    enum FollowedSeason: Equatable, Sendable {
+        /// Not loaded yet: following has not started, or the first load
+        /// has not answered.
+        case loading
+        case loaded([Game])
+        /// The last load failed. It is asked for again after
+        /// `followedScheduleRetry`, or at once by `retryFailedSchedules()`.
+        case failed
+    }
+
+    /// The favorite `id`'s season as last loaded while following the
+    /// favorites.
+    func followedSeason(of id: TeamRef.ID) -> FollowedSeason {
+        guard let schedule = followedSchedules[id] else { return .loading }
+        guard let games = schedule.games else { return .failed }
+        return .loaded(games)
+    }
+
+    /// Asks again at once for the seasons whose last load failed, rather
+    /// than after `followedScheduleRetry`: a reader's retry.
+    func retryFailedSchedules() async {
+        if followedSchedules.values.contains(where: { $0.games == nil }) {
+            followedSchedules = followedSchedules.filter { $0.value.games != nil }
+        }
+        await refreshFollowedFavorites()
+    }
 
     /// `game`'s score for `team` on the latest scoreboard: matched by game
     /// id, or else by the opponent's team id when exactly one game on the

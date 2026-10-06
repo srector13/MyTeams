@@ -20,8 +20,8 @@ final class myTeamsUITests: XCTestCase {
     func testCrestBarSwitchesTeams() throws {
         let app = launchWithFixtures()
 
-        // The system tab bar: a tab per favorite and nothing else; teams
-        // are added from Settings (t_fa6748f4).
+        // The system tab bar: Home, then a tab per favorite; teams are
+        // added from Settings (t_fa6748f4).
         let crests = teamTabs(app)
         XCTAssertTrue(crests.firstMatch.waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["teamPicker.edit"].exists, "The tab bar still has a Teams tab.")
@@ -32,9 +32,15 @@ final class myTeamsUITests: XCTestCase {
         let first = pinnedTab(crests.element(boundBy: 0), in: app)
         let second = pinnedTab(crests.element(boundBy: 1), in: app)
 
-        // The first favorite opens selected.
-        XCTAssertTrue(first.isSelected)
+        // The app opens on Home (t_0b94af11), no team selected.
+        XCTAssertTrue(homeTab(app).isSelected)
+        XCTAssertFalse(first.isSelected)
         XCTAssertFalse(second.isSelected)
+
+        first.tap()
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(first.isSelected)
+        XCTAssertFalse(homeTab(app).isSelected)
 
         second.tap()
 
@@ -101,9 +107,10 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["teamBrowser.sport.basketball"].exists)
     }
 
-    /// A first launch shows no teams, only "Add Teams" (t_afe5c297): no
-    /// favorites are followed by default, and no sheet opens over the home
-    /// screen. Its button opens the team browser.
+    /// A first launch shows no teams, only Home's "Add your first team"
+    /// (t_afe5c297, t_0b94af11): no favorites are followed by default, and
+    /// no sheet opens over the home screen. Its button opens the team
+    /// browser.
     @MainActor
     func testFreshLaunchShowsAddTeams() throws {
         let app = launch(following: Self.noTeams)
@@ -179,7 +186,8 @@ final class myTeamsUITests: XCTestCase {
     }
 
     /// Opens the team browser from Settings' "Add Teams" row, the tab bar
-    /// holding teams only (t_fa6748f4).
+    /// holding Home and teams only (t_fa6748f4). The gear is in Home's bar,
+    /// where the app opens, as in each team page's.
     ///
     /// On a cold launch the page redraws as the favorites and their crests
     /// resolve, and a tap located before a redraw can miss. So each step is
@@ -206,9 +214,35 @@ final class myTeamsUITests: XCTestCase {
     /// room; not a team's tab.
     private static let moreTabLabel = "More"
 
+    /// Home's tab, first in the bar (t_0b94af11); not a team's tab.
+    private static let homeTabLabel = "Home"
+
+    /// Home's tab, by its identifier, or its label on a launch whose bar
+    /// lost its identifiers (`teamTabs`).
+    @MainActor
+    private func homeTab(_ app: XCUIApplication) -> XCUIElement {
+        let byID = app.tabBars.buttons["teamPicker.home"]
+        return byID.exists ? byID : app.tabBars.buttons[Self.homeTabLabel]
+    }
+
+    /// The first favorite's tab chosen, from Home where the app opens
+    /// (t_0b94af11), for the tests of a team's page.
+    @MainActor
+    private func openFirstTeam(_ app: XCUIApplication) {
+        let first = teamTabs(app).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 10), "No team's tab in the bar.")
+        let tab = pinnedTab(first, in: app)
+        // On a cold launch the bar can redraw under the first tap.
+        for _ in 0..<3 where !tab.isSelected {
+            tab.tap()
+            _ = tab.wait(for: \.isSelected, toEqual: true, timeout: 3)
+        }
+        XCTAssertTrue(tab.isSelected, "The first team's tab never opened.")
+    }
+
     /// The favorites' tabs, in bar order: those with a `teamPicker.team.`
     /// identifier, or, on a launch whose bar lost its identifiers, every
-    /// tab but "More".
+    /// tab but Home and "More".
     ///
     /// SwiftUI copies a `Tab`'s accessibility identifier onto the system tab
     /// bar's button only some of the time on the iOS 26 simulator: on the
@@ -217,8 +251,8 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     private func teamTabs(_ app: XCUIApplication) -> XCUIElementQuery {
         app.tabBars.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@)",
-            "teamPicker.team.", Self.moreTabLabel
+            format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@ AND label != %@)",
+            "teamPicker.team.", Self.moreTabLabel, Self.homeTabLabel
         ))
     }
 
@@ -236,6 +270,7 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     func testTeamPageHeaderPinnedInBar() throws {
         let app = launch()
+        openFirstTeam(app)
 
         let header = app.descendants(matching: .any)["teamPage.header"]
         XCTAssertTrue(header.waitForExistence(timeout: 10))
@@ -279,6 +314,7 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     func testBrandLogoInTeamPageBar() throws {
         let app = launch()
+        openFirstTeam(app)
 
         let header = app.descendants(matching: .any)["teamPage.header"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 10))
@@ -296,6 +332,7 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     func testScheduleCardsReadWithoutPlaceholders() throws {
         let app = launchWithFixtures()
+        openFirstTeam(app)
 
         let cards = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.game."))

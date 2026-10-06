@@ -53,9 +53,10 @@ enum AboutInfo {
 /// The app's settings: appearance, game alerts, the reader's teams and
 /// what build this is.
 ///
-/// Opened from the gear in a team page's navigation bar, as a sheet with
-/// its own stack. `Home` presents it, not the page: removing the page's
-/// team in Manage Teams unmounts the page, and Settings stays up (A-5).
+/// Opened from the gear in Home's or a team page's navigation bar, as a
+/// sheet with its own stack. `Home` presents it, not the page: removing
+/// the page's team in Manage Teams unmounts the page, and Settings stays
+/// up (A-5).
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
