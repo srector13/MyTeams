@@ -669,10 +669,19 @@ jobs:
           # without its asset; the tag is created on the built commit when it
           # is published. A new draft's id comes from the create response
           # itself, not from a follow-up list query.
+          #
+          # GitHub resets a draft's tag_name to an "untagged-<hex>" placeholder
+          # on ANY PATCH that omits tag_name (even a name- or
+          # target_commitish-only one), and publishing then creates that
+          # placeholder tag instead of TAG. So: never PATCH a draft without
+          # tag_name, and do not PATCH a draft we just created at all (the
+          # create already set every field).
           TITLE="MyTeams build ${TAG} (sha ${SHORT_SHA})"
           NOTES="Unsigned build of ${GITHUB_SHA} (run ${GITHUB_RUN_NUMBER}) for re-signing in Feather."
+          ADOPTED=false
           RELEASE_ID="$(oldest_draft <<< "$RELEASES")"
           if [ -n "$RELEASE_ID" ]; then
+            ADOPTED=true
             echo "Adopting existing draft release ${RELEASE_ID} for ${TAG}"
           else
             STEP="creating the draft release for ${TAG}"
@@ -698,6 +707,7 @@ jobs:
                 echo "::error::Creating ${TAG} reported 'already exists' but no draft with that tag was found (another run may have published it). Re-run the workflow to take the next build number."
                 exit 1
               fi
+              ADOPTED=true
               echo "Adopting draft release ${RELEASE_ID} for ${TAG}"
             else
               echo "::error::Creating the draft release for ${TAG} failed (exit ${CREATE_RC}): ${CREATE_OUT}"
@@ -705,10 +715,14 @@ jobs:
             fi
           fi
 
-          # Point the (possibly adopted) draft at this build.
-          STEP="updating draft ${RELEASE_ID}"
-          gh api -X PATCH "${REPO_API}/releases/${RELEASE_ID}" \
-            -f target_commitish="$GITHUB_SHA" -f name="$TITLE" -f body="$NOTES" > /dev/null
+          # Adopted drafts only: point them at this build in a single PATCH
+          # that always carries tag_name (see above).
+          if [ "$ADOPTED" = true ]; then
+            STEP="updating adopted draft ${RELEASE_ID}"
+            gh api -X PATCH "${REPO_API}/releases/${RELEASE_ID}" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="$TITLE" -f body="$NOTES" > /dev/null
+          fi
 
           # Drop every existing asset (e.g. from an earlier failed run) so the
           # release ends up with exactly the one .ipa uploaded below.
@@ -739,6 +753,34 @@ jobs:
             exit 1
           fi
 
+          # Pre-publish guard: the release must still be a draft tagged TAG.
+          # Restore the tag (PATCH with tag_name) if it was reset to an
+          # untagged-* placeholder; anything else is fatal.
+          STEP="checking draft ${RELEASE_ID} before publishing"
+          release_state() {
+            gh api "${REPO_API}/releases/${RELEASE_ID}" --jq '"\(.draft) \(.tag_name)"'
+          }
+          read -r CUR_DRAFT CUR_TAG <<< "$(release_state)"
+          if [ "$CUR_DRAFT" != "true" ]; then
+            echo "::error::Release ${RELEASE_ID} (${CUR_TAG}) is no longer a draft: another run published it first. Re-run the workflow to take the next build number."
+            exit 1
+          fi
+          if [ "$CUR_TAG" != "$TAG" ]; then
+            if [[ "$CUR_TAG" != untagged-* ]]; then
+              echo "::error::Draft ${RELEASE_ID} is tagged '${CUR_TAG}', expected '${TAG}'"
+              exit 1
+            fi
+            echo "Draft ${RELEASE_ID} lost its tag (${CUR_TAG}); restoring ${TAG}"
+            STEP="restoring tag ${TAG} on draft ${RELEASE_ID}"
+            gh api -X PATCH "${REPO_API}/releases/${RELEASE_ID}" -f tag_name="$TAG" > /dev/null
+            read -r CUR_DRAFT CUR_TAG <<< "$(release_state)"
+            if [ "$CUR_DRAFT" != "true" ] || [ "$CUR_TAG" != "$TAG" ]; then
+              echo "::error::Could not restore tag ${TAG} on draft ${RELEASE_ID} (draft=${CUR_DRAFT}, tag=${CUR_TAG}); not publishing"
+              exit 1
+            fi
+          fi
+
+          # draft=false alone leaves tag_name untouched.
           STEP="publishing draft ${RELEASE_ID}"
           PUBLISHED="$(gh api -X PATCH "${REPO_API}/releases/${RELEASE_ID}" -F draft=false --jq '"\(.draft) \(.tag_name) \(.html_url)"')"
           read -r IS_DRAFT PUB_TAG PUB_URL <<< "$PUBLISHED"
