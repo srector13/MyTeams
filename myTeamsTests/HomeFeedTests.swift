@@ -60,43 +60,48 @@ struct HomeFeedTests {
         )
     }
 
-    // MARK: Today
+    // MARK: Upcoming
 
-    @Test("Today lists today's games in start order")
-    func todayInStartOrder() {
+    @Test("Upcoming groups the games still to start by day, each day in start order")
+    func upcomingInStartOrder() {
         let late = HomeGame(team: chiefs, game: game(id: "1", start: Self.now.addingTimeInterval(4 * 3600)))
         let early = HomeGame(team: jayhawks, game: game(id: "2", start: Self.now.addingTimeInterval(3600)))
         let tomorrow = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(26 * 3600)))
+        // Under way already: Live Now's, not Upcoming's.
+        let started = HomeGame(team: chiefs, game: game(id: "4", start: Self.now.addingTimeInterval(-3600)))
 
-        let day = HomeFeed.upcomingDay([late, tomorrow, early], now: Self.now, calendar: Self.calendar)
-        #expect(day?.isToday == true)
-        #expect(day?.games.map(\.id) == ["2", "1"])
+        let days = HomeFeed.upcomingDays([late, tomorrow, started, early], now: Self.now, calendar: Self.calendar)
+        #expect(days.map { $0.games.map(\.id) } == [["2", "1"], ["3"]])
+        #expect(days.first?.date == Self.calendar.startOfDay(for: Self.now))
+        #expect(days.last?.date == Self.calendar.startOfDay(for: Self.now.addingTimeInterval(86_400)))
     }
 
-    @Test("A day without games shows tomorrow's, and neither day none")
-    func tomorrowInstead() {
+    @Test("A day without games starts Upcoming at tomorrow, seven days in and eight out")
+    func upcomingWindow() {
         let tomorrow = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(26 * 3600)))
         let nextWeek = HomeGame(team: chiefs, game: game(id: "4", start: Self.now.addingTimeInterval(7 * 86_400)))
+        let eightDays = HomeGame(team: chiefs, game: game(id: "5", start: Self.now.addingTimeInterval(8 * 86_400)))
 
-        let day = HomeFeed.upcomingDay([nextWeek, tomorrow], now: Self.now, calendar: Self.calendar)
-        #expect(day?.isToday == false)
-        #expect(day?.games.map(\.id) == ["3"])
+        let days = HomeFeed.upcomingDays([eightDays, nextWeek, tomorrow], now: Self.now, calendar: Self.calendar)
+        #expect(days.map { $0.games.map(\.id) } == [["3"], ["4"]])
+        #expect(days.first?.date == Self.calendar.startOfDay(for: Self.now.addingTimeInterval(86_400)))
 
-        #expect(HomeFeed.upcomingDay([nextWeek], now: Self.now, calendar: Self.calendar) == nil)
+        #expect(HomeFeed.upcomingDays([eightDays], now: Self.now, calendar: Self.calendar).isEmpty)
     }
 
     // MARK: Results
 
-    @Test("Results are the last 48 hours' finished games, newest first")
+    @Test("Recent Results are the last seven days' finished games, newest first")
     func resultsWindow() {
         let yesterday = HomeGame(team: chiefs, game: game(id: "1", start: Self.now.addingTimeInterval(-20 * 3600), completed: true, win: true))
         let lastNight = HomeGame(team: jayhawks, game: game(id: "2", start: Self.now.addingTimeInterval(-6 * 3600), completed: true))
         let lastWeek = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(-7 * 86_400), completed: true))
+        let eightDays = HomeGame(team: chiefs, game: game(id: "6", start: Self.now.addingTimeInterval(-8 * 86_400), completed: true))
         let calledOff = HomeGame(team: chiefs, game: game(id: "4", start: Self.now.addingTimeInterval(-3 * 3600), completed: true, cancelled: true))
         let upcoming = HomeGame(team: chiefs, game: game(id: "5", start: Self.now.addingTimeInterval(3600)))
 
-        let results = HomeFeed.results([yesterday, lastWeek, calledOff, upcoming, lastNight], now: Self.now)
-        #expect(results.map(\.id) == ["2", "1"])
+        let results = HomeFeed.results([yesterday, eightDays, lastWeek, calledOff, upcoming, lastNight], now: Self.now)
+        #expect(results.map(\.id) == ["2", "1", "3"])
     }
 
     // MARK: Merging
@@ -113,7 +118,7 @@ struct HomeFeedTests {
         #expect(games.first?.team == chiefs)
     }
 
-    @Test("Headlines are the newest five across the favorites, each story once")
+    @Test("The news feed is every story across the favorites, newest first, each once")
     func headlinesMerged() {
         let shared = article("Shared story", hoursAgo: 1)
         let articles = [
@@ -121,8 +126,29 @@ struct HomeFeedTests {
             jayhawks.id: [article("Kansas one", hoursAgo: 2), shared, article("Kansas three", hoursAgo: 3), article("Kansas four", hoursAgo: 30)],
         ]
         let headlines = HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles)
-        #expect(headlines.map(\.article.title) == ["Shared story", "Kansas one", "Kansas three", "Chiefs two", "Chiefs three"])
+        // Uncapped: the day-old "Kansas four" is in too.
+        #expect(headlines.map(\.article.title) == ["Shared story", "Kansas one", "Kansas three", "Chiefs two", "Chiefs three", "Kansas four"])
         #expect(headlines.first?.team == chiefs)
+    }
+
+    @Test("With no game live, upcoming or recent, Home is the news feed alone")
+    func feedWithoutGames() {
+        // A season wholly out of both windows, and no board under way.
+        let seasons = [
+            chiefs.id: [
+                game(id: "1", start: Self.now.addingTimeInterval(-30 * 86_400), completed: true),
+                game(id: "2", start: Self.now.addingTimeInterval(30 * 86_400)),
+            ],
+        ]
+        let games = HomeFeed.games(teams: [chiefs, jayhawks], seasons: seasons)
+
+        #expect(HomeFeed.liveGames(teams: [chiefs, jayhawks], boards: [:], seasons: seasons).isEmpty)
+        #expect(HomeFeed.upcomingDays(games, now: Self.now, calendar: Self.calendar).isEmpty)
+        #expect(HomeFeed.results(games, now: Self.now).isEmpty)
+
+        let articles = [chiefs.id: [article("Chiefs one", hoursAgo: 1)], jayhawks.id: [article("Kansas one", hoursAgo: 2)]]
+        let feed = HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles)
+        #expect(feed.map(\.article.title) == ["Chiefs one", "Kansas one"])
     }
 
     // MARK: Live
