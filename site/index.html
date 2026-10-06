@@ -3,583 +3,175 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="myTeams is an iOS app for following any team across NFL, NBA, MLB, NHL, MLS, WNBA, NCAA, Premier League and more — roster, schedule, standings, news and live scores in one app.">
+<meta name="description" content="myTeams: an iOS sports app for every league. Live scores, no account, no ads, no tracking.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b0b0f">
-<title>myTeams — all leagues, one app</title>
+<title>myTeams: every sport, no account</title>
 <link rel="icon" type="image/png" href="assets/brand/appicon-dark-1024.png">
 <link rel="apple-touch-icon" href="assets/brand/appicon-dark-1024.png">
 <style>
   :root {
-    --bg: #0b0b0f;
-    --surface: #15151c;
-    --surface-2: #1d1d27;
-    --border: #2c2c3a;
-    --text: #e8e8ea;
-    --muted: #a8a8b4;
-    --accent: #5aa2ff;
-    --accent-strong: #8cc0ff;
-    --on-accent: #0b0b0f;
-    --radius: 18px;
-    --max: 1200px;
+    --bg: #0b0b0f; --surface: #15151c; --surface-2: #1d1d27; --border: #2c2c3a;
+    --text: #e8e8ea; --muted: #a8a8b4; --accent: #5aa2ff; --accent-strong: #8cc0ff;
+    --on-accent: #0b0b0f; --radius: 18px; --max: 1100px;
   }
-
   *, *::before, *::after { box-sizing: border-box; }
-
-  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
-
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    margin: 0; background: var(--bg); color: var(--text); line-height: 1.6;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 1.0625rem;
-    line-height: 1.6;
   }
-
   img { max-width: 100%; height: auto; }
-
   a { color: var(--accent-strong); text-underline-offset: 0.18em; }
   a:hover { color: #b5d6ff; }
-
-  :focus-visible {
-    outline: 3px solid var(--accent-strong);
-    outline-offset: 3px;
-    border-radius: 6px;
-  }
-
-  .skip-link {
-    position: absolute;
-    left: 1rem;
-    top: -4rem;
-    z-index: 100;
-    padding: 0.6rem 1rem;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-weight: 700;
-    border-radius: 10px;
-    text-decoration: none;
-  }
-  .skip-link:focus { top: 1rem; }
-
-  .wrap {
-    width: 100%;
-    max-width: var(--max);
-    margin: 0 auto;
-    padding: 0 1.25rem;
-  }
-
-  /* Header / nav */
-  .site-header {
-    border-bottom: 1px solid var(--border);
-    background: rgba(11, 11, 15, 0.92);
-  }
-  .site-header .wrap {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
-  }
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: var(--text);
-    font-weight: 700;
-    text-decoration: none;
-  }
-  .brand img { width: 32px; height: 32px; border-radius: 8px; }
-  .site-nav ul {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem 1.1rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .site-nav a {
-    color: var(--muted);
-    text-decoration: none;
-    font-size: 0.95rem;
-  }
-  .site-nav a:hover { color: var(--text); }
-
-  /* Sections */
-  section { padding: 4rem 0; }
-  section + section { border-top: 1px solid #1a1a22; }
-
-  h1, h2, h3 { line-height: 1.2; margin: 0 0 0.75rem; }
-  h2 { font-size: clamp(1.6rem, 4vw, 2.25rem); letter-spacing: -0.01em; }
-  h3 { font-size: 1.2rem; }
+  :focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 3px; border-radius: 6px; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.25rem; }
+  section { padding: 3rem 0; }
+  h1, h2 { line-height: 1.2; margin: 0 0 0.75rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.5rem; text-align: center; }
   p { margin: 0 0 1rem; }
 
-  .eyebrow {
-    margin: 0 0 0.5rem;
-    color: var(--accent-strong);
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-  .lede { color: var(--muted); max-width: 42rem; }
+  header { border-bottom: 1px solid var(--border); }
+  header .wrap { display: flex; align-items: center; justify-content: space-between; padding-top: 0.75rem; padding-bottom: 0.75rem; }
+  .brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--text); font-weight: 700; text-decoration: none; }
+  .brand img { width: 32px; height: 32px; border-radius: 8px; }
 
-  /* Hero */
   .hero {
-    padding: 3.5rem 0 4.5rem;
-    text-align: center;
-    background:
-      radial-gradient(ellipse 70% 55% at 50% 0%, rgba(90, 162, 255, 0.16), transparent 70%),
-      var(--bg);
+    text-align: center; padding: 3.5rem 0 3rem;
+    background: radial-gradient(ellipse 70% 55% at 50% 0%, rgba(90, 162, 255, 0.16), transparent 70%);
   }
-  .hero-logo {
-    display: block;
-    width: min(360px, 80%);
-    height: auto;
-    margin: 0 auto 1.5rem;
-  }
-  .hero h1 {
-    font-size: clamp(2.25rem, 7vw, 3.75rem);
-    letter-spacing: -0.02em;
-    margin-bottom: 1rem;
-  }
-  .hero .subhead {
-    max-width: 40rem;
-    margin: 0 auto 2rem;
-    color: var(--muted);
-    font-size: 1.15rem;
-  }
-
+  .hero-logo { display: block; width: min(300px, 75%); margin: 0 auto 1.5rem; }
+  .hero h1 { font-size: clamp(2rem, 6.5vw, 3.25rem); letter-spacing: -0.02em; }
+  .hero p { color: var(--muted); font-size: 1.1rem; margin-bottom: 1.75rem; }
   .button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.85rem 1.5rem;
-    border-radius: 999px;
-    background: var(--accent);
-    color: var(--on-accent);
-    font-weight: 700;
-    text-decoration: none;
-    transition: background-color 0.2s ease, transform 0.2s ease;
+    display: inline-block; padding: 0.85rem 1.6rem; border-radius: 999px;
+    background: var(--accent); color: var(--on-accent); font-weight: 700; text-decoration: none;
   }
-  .button:hover { background: var(--accent-strong); color: var(--on-accent); transform: translateY(-1px); }
-  .button-note { margin-top: 0.9rem; color: var(--muted); font-size: 0.9rem; }
+  .button:hover { background: var(--accent-strong); color: var(--on-accent); }
 
-  /* Value props */
-  .cards {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    margin: 2rem 0 0;
-    padding: 0;
-    list-style: none;
+  .features {
+    display: grid; grid-template-columns: 1fr; gap: 0.75rem;
+    max-width: 52rem; margin: 0 auto; padding: 0; list-style: none;
   }
-  .card {
-    padding: 1.5rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
+  .features li {
+    display: flex; gap: 0.75rem; align-items: baseline; padding: 0.9rem 1.1rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px; color: var(--muted);
   }
-  .card .icon {
-    display: inline-grid;
-    place-items: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    margin-bottom: 0.9rem;
-    border-radius: 12px;
-    background: var(--surface-2);
-    color: var(--accent-strong);
-    font-size: 1.25rem;
-  }
-  .card p { color: var(--muted); margin: 0; }
+  .features span { color: var(--accent-strong); flex: none; width: 1.25rem; text-align: center; }
+  .features b { color: var(--text); }
 
-  /* Feature blocks */
-  .feature {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-    align-items: center;
-    padding: 2rem 0;
-  }
-  .feature + .feature { border-top: 1px solid #1a1a22; }
-  .feature ul { margin: 0; padding-left: 1.2rem; color: var(--muted); }
-  .feature li + li { margin-top: 0.4rem; }
-  .feature-art {
-    padding: 1.75rem;
-    background: linear-gradient(160deg, var(--surface-2), var(--surface));
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-  .feature-art dl { margin: 0; display: grid; gap: 0.9rem; }
-  .feature-art dt { font-weight: 700; }
-  .feature-art dd { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.95rem; }
-
-  /* Gallery */
   .gallery {
-    display: flex;
-    gap: 1.25rem;
-    margin: 2rem -1.25rem 0;
-    padding: 0.5rem 1.25rem 1.25rem;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    list-style: none;
+    display: flex; gap: 1.25rem; margin: 1.5rem -1.25rem 0; padding: 0.5rem 1.25rem 1.25rem;
+    overflow-x: auto; scroll-snap-type: x mandatory; list-style: none;
   }
   .gallery li { flex: 0 0 auto; scroll-snap-align: center; }
-  .shot {
-    width: min(70vw, 280px);
-    margin: 0;
-  }
+  .shot { width: min(65vw, 240px); margin: 0; }
   .device {
-    position: relative;
-    aspect-ratio: 390 / 844;
-    padding: 10px;
-    border-radius: 44px;
-    background: #24242e;
-    border: 1px solid #3a3a48;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45), inset 0 0 0 2px #101016;
+    position: relative; aspect-ratio: 390 / 844; padding: 9px; border-radius: 40px;
+    background: #24242e; border: 1px solid #3a3a48; box-shadow: 0 16px 32px rgba(0, 0, 0, 0.45);
   }
-  .device::before {
-    /* Dynamic Island */
-    content: "";
-    position: absolute;
-    top: 20px;
-    left: 50%;
-    width: 30%;
-    height: 22px;
-    transform: translateX(-50%);
-    border-radius: 999px;
-    background: #000;
-    z-index: 2;
+  .device::before { /* Dynamic Island */
+    content: ""; position: absolute; top: 18px; left: 50%; z-index: 2; width: 30%; height: 20px;
+    transform: translateX(-50%); border-radius: 999px; background: #000;
   }
-  .screen {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    border-radius: 34px;
-    background: #000;
-  }
-  .screen img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
+  .screen { width: 100%; height: 100%; overflow: hidden; border-radius: 31px; background: #000; }
+  .screen img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .missing .screen img { display: none; }
   .missing .screen {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3.5rem 1.25rem 1.5rem;
-    background:
-      radial-gradient(ellipse 90% 50% at 50% 0%, rgba(90, 162, 255, 0.18), transparent 70%),
-      repeating-linear-gradient(135deg, #14141b 0 14px, #181820 14px 28px);
+    display: flex; align-items: center; justify-content: center; padding: 3.5rem 1rem 1.5rem;
+    background: repeating-linear-gradient(135deg, #14141b 0 14px, #181820 14px 28px);
   }
   .missing .screen::after {
     content: "Screenshot placeholder — drop " attr(data-file) " into site/screenshots/";
-    padding: 0.9rem 1rem;
-    border: 1px dashed #5a5a70;
-    border-radius: 14px;
-    background: rgba(11, 11, 15, 0.85);
-    color: #d4d4dc;
-    font-size: 0.85rem;
-    line-height: 1.45;
-    text-align: center;
-    overflow-wrap: anywhere;
+    padding: 0.8rem; border: 1px dashed #5a5a70; border-radius: 12px; background: rgba(11, 11, 15, 0.85);
+    color: #d4d4dc; font-size: 0.8rem; line-height: 1.45; text-align: center; overflow-wrap: anywhere;
   }
-  .shot figcaption {
-    margin-top: 0.9rem;
-    text-align: center;
-    color: var(--text);
-    font-weight: 600;
-    font-size: 0.95rem;
-  }
+  .shot figcaption { margin-top: 0.75rem; text-align: center; font-weight: 600; font-size: 0.9rem; }
 
-  /* Download */
-  .download-box {
-    padding: 2rem 1.5rem;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    text-align: center;
-  }
-  .download-box p { color: var(--muted); max-width: 40rem; margin-left: auto; margin-right: auto; }
-  .download-box ol {
-    display: inline-block;
-    margin: 0 0 1.5rem;
-    padding-left: 1.4rem;
-    text-align: left;
-    color: var(--muted);
-  }
+  .download { text-align: center; color: var(--muted); }
+  footer { padding: 2rem 0 2.5rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; text-align: center; }
+  footer p { margin: 0.25rem 0; }
 
-  /* Footer */
-  .site-footer {
-    padding: 2.5rem 0 3rem;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
-  .site-footer .wrap { display: grid; gap: 0.75rem; }
-  .site-footer ul { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0; padding: 0; list-style: none; }
-  .site-footer .name { color: var(--text); font-weight: 700; margin: 0; }
-  .site-footer p { margin: 0; }
-
-  @media (min-width: 640px) {
-    .cards { grid-template-columns: repeat(2, 1fr); }
-    .download-box { padding: 2.5rem; }
-  }
-
-  @media (min-width: 900px) {
-    section { padding: 5.5rem 0; }
-    .hero { padding: 5rem 0 6rem; }
-    .cards { grid-template-columns: repeat(3, 1fr); }
-    .feature { grid-template-columns: 1fr 1fr; gap: 3rem; padding: 3rem 0; }
-    .feature.flip .feature-text { order: 2; }
-    .gallery {
-      flex-wrap: wrap;
-      justify-content: center;
-      overflow: visible;
-      margin-left: 0;
-      margin-right: 0;
-      padding-left: 0;
-      padding-right: 0;
-      gap: 2.5rem 2rem;
-    }
-    .shot { width: 260px; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    *, *::before, *::after {
-      transition-duration: 0.01ms !important;
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-    }
-    .button:hover { transform: none; }
+  @media (min-width: 720px) {
+    .features { grid-template-columns: repeat(2, 1fr); }
+    .gallery { flex-wrap: wrap; justify-content: center; overflow: visible; margin: 1.5rem 0 0; padding: 0.5rem 0; gap: 2rem 1.5rem; }
+    .shot { width: 220px; }
   }
 </style>
 </head>
 <body>
-<a class="skip-link" href="#main">Skip to content</a>
-
-<header class="site-header">
+<header>
   <div class="wrap">
-    <a class="brand" href="#top">
-      <img src="assets/brand/appicon-dark-1024.png" alt="" width="32" height="32">
-      <span>myTeams</span>
-    </a>
-    <nav class="site-nav" aria-label="Primary">
-      <ul>
-        <li><a href="#features">Features</a></li>
-        <li><a href="#screenshots">Screenshots</a></li>
-        <li><a href="#download">Download</a></li>
-        <li><a href="https://github.com/srector13/MyTeams">GitHub</a></li>
-      </ul>
-    </nav>
+    <a class="brand" href="#top"><img src="assets/brand/appicon-dark-1024.png" alt="" width="32" height="32"><span>myTeams</span></a>
+    <a href="https://github.com/srector13/MyTeams/releases">Releases</a>
   </div>
 </header>
 
-<main id="main" tabindex="-1">
-
-  <section class="hero" id="top" aria-labelledby="hero-title">
+<main>
+  <section class="hero" id="top">
     <div class="wrap">
       <img class="hero-logo" src="assets/brand/myteams-logo-on-dark.png" alt="myTeams logo" width="798" height="561">
-      <h1 id="hero-title">All leagues. One app.</h1>
-      <p class="subhead">Follow any team across NFL, NBA, MLB, NHL, MLS, WNBA, NCAA, Premier League and more — roster, schedule, standings, news and live scores.</p>
-      <a class="button" href="https://github.com/srector13/MyTeams/releases">Download for iOS</a>
-      <p class="button-note">Free · iOS 26 · Sideload from GitHub Releases</p>
+      <h1>Every sport. Every score. No account.</h1>
+      <p>A free iOS sports app. No signup, no ads, no tracking.</p>
+      <a class="button" href="https://github.com/srector13/MyTeams/releases">Download</a>
     </div>
   </section>
 
-  <section id="why" aria-labelledby="why-title">
-    <div class="wrap">
-      <p class="eyebrow">Why myTeams</p>
-      <h2 id="why-title">Every team you follow, in one place</h2>
-      <p class="lede">Built with SwiftUI against ESPN's public site API. No account, no API keys, no tracking.</p>
-      <ul class="cards">
-        <li class="card">
-          <span class="icon" aria-hidden="true">◎</span>
-          <h3>All leagues in one app</h3>
-          <p>Pick teams from NFL, NBA, MLB, NHL, MLS, WNBA, NCAA Football, NCAA Men's and Women's Basketball and the Premier League. Search falls back to ESPN's own, so teams elsewhere can be followed too.</p>
-        </li>
-        <li class="card">
-          <span class="icon" aria-hidden="true">●</span>
-          <h3>Live scores + alerts</h3>
-          <p>One scoreboard poll per league covers every favorite in it. Get alerts for the start, each score, each period's end and the final while the app is open.</p>
-        </li>
-        <li class="card">
-          <span class="icon" aria-hidden="true">▣</span>
-          <h3>Widgets + Live Activities</h3>
-          <p>A "Team Schedule" widget for the home screen and Lock Screen shows your team's next game. Games in progress get a Live Activity with score, period and clock on the Lock Screen and in the Dynamic Island.</p>
-        </li>
-        <li class="card">
-          <span class="icon" aria-hidden="true">⚽</span>
-          <h3>European soccer coverage</h3>
-          <p>Premier League, LALIGA and more via ESPN's public API — no account, no API keys.</p>
-        </li>
-        <li class="card">
-          <span class="icon" aria-hidden="true">◇</span>
-          <h3>Private by design</h3>
-          <p>No account needed and no tracking — the app collects no data. It works straight from ESPN's public site.</p>
-        </li>
-        <li class="card">
-          <span class="icon" aria-hidden="true">☁</span>
-          <h3>Favorites that sync</h3>
-          <p>Your followed teams are mirrored to iCloud key-value storage, so they sync between your devices.</p>
-        </li>
-      </ul>
-    </div>
+  <section aria-label="Features">
+    <div class="wrap"><ul class="features">
+      <li><span aria-hidden="true">●</span><div><b>Live scores &amp; alerts</b> for starts, scores, period ends and finals.</div></li>
+      <li><span aria-hidden="true">◎</span><div><b>Every league</b>: NFL, NBA, MLB, NHL, NCAA, MLS and European soccer.</div></li>
+      <li><span aria-hidden="true">▣</span><div><b>Widgets + Live Activities</b> on the Home Screen, Lock Screen and Dynamic Island.</div></li>
+      <li><span aria-hidden="true">≡</span><div><b>Roster, schedule, standings, news</b> on one page per team.</div></li>
+      <li><span aria-hidden="true">☁</span><div><b>iCloud sync</b> keeps your favorite teams in step across devices.</div></li>
+      <li><span aria-hidden="true">◇</span><div><b>Private by design</b>: no account, no data collected.</div></li>
+    </ul></div>
   </section>
 
-  <section id="features" aria-labelledby="features-title">
+  <section aria-labelledby="shots-title">
     <div class="wrap">
-      <p class="eyebrow">Features</p>
-      <h2 id="features-title">What the app does</h2>
-
-      <div class="feature">
-        <div class="feature-text">
-          <h3>A page for every team</h3>
-          <p>One page per followed team, with everything in one scroll:</p>
-          <ul>
-            <li>A roster carousel with filter and sort menus, and a player sheet with season stats.</li>
-            <li>The team's stat leaders and the league's leaderboards.</li>
-            <li>The team's news feed.</li>
-          </ul>
-        </div>
-        <div class="feature-art">
-          <dl>
-            <div><dt>Roster</dt><dd>Filter, sort, tap a player for season stats.</dd></div>
-            <div><dt>Schedule</dt><dd>Opens at the next game.</dd></div>
-            <div><dt>Standings</dt><dd>League table with your team picked out.</dd></div>
-            <div><dt>Leaders &amp; news</dt><dd>Team and league leaders, plus the news feed.</dd></div>
-          </dl>
-        </div>
-      </div>
-
-      <div class="feature flip">
-        <div class="feature-text">
-          <h3>Your favorites in the tab bar</h3>
-          <p>The system tab bar has a tab per followed team, with its crest and short name; those past the bar's room sit under "More". The "Teams" tab opens the picker, where teams are followed, reordered and removed. The bar minimizes as you scroll, like the system's own apps.</p>
-        </div>
-        <div class="feature-art">
-          <dl>
-            <div><dt>Team crests</dt><dd>One tab per team, in your order.</dd></div>
-            <div><dt>Teams tab</dt><dd>Follow, reorder and remove teams.</dd></div>
-            <div><dt>Onboarding</dt><dd>A fresh install opens on "Pick Your Teams".</dd></div>
-          </dl>
-        </div>
-      </div>
-
-      <div class="feature">
-        <div class="feature-text">
-          <h3>Schedule cards, box scores and standings</h3>
-          <p>The schedule carousel opens at the next game. Tap a game for its box score, which refreshes while the game is live. The league standings show the team's row picked out, so you can see where it sits at a glance.</p>
-        </div>
-        <div class="feature-art">
-          <dl>
-            <div><dt>Schedule cards</dt><dd>Swipe through the season from the next game.</dd></div>
-            <div><dt>Live box scores</dt><dd>Refresh while the game is in progress.</dd></div>
-            <div><dt>Standings</dt><dd>Your team's row highlighted in the league table.</dd></div>
-          </dl>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="screenshots" aria-labelledby="screenshots-title">
-    <div class="wrap">
-      <p class="eyebrow">Screenshots</p>
-      <h2 id="screenshots-title">See it on iPhone</h2>
+      <h2 id="shots-title">Screenshots</h2>
       <ul class="gallery">
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="team-page-dark.png">
-              <img src="screenshots/team-page-dark.png" alt="Team page — live" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Team page — live</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="tabbar-glass.png">
-              <img src="screenshots/tabbar-glass.png" alt="Tab bar glass" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Tab bar glass</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="settings.png">
-              <img src="screenshots/settings.png" alt="Settings" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Settings</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="splash.png">
-              <img src="screenshots/splash.png" alt="Splash" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Splash</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="schedule-cards.png">
-              <img src="screenshots/schedule-cards.png" alt="Schedule cards" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Schedule cards</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="standings-zones.png">
-              <img src="screenshots/standings-zones.png" alt="Standings zones" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Standings zones</figcaption>
-          </figure>
-        </li>
-        <li>
-          <figure class="shot">
-            <div class="device"><div class="screen" data-file="widget-lockscreen.png">
-              <img src="screenshots/widget-lockscreen.png" alt="Widget + Live Activity lock screen" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')">
-            </div></div>
-            <figcaption>Widget + Live Activity lock screen</figcaption>
-          </figure>
-        </li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="team-page-dark.png"><img src="screenshots/team-page-dark.png" alt="Team page — live" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Team page — live</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="tabbar-glass.png"><img src="screenshots/tabbar-glass.png" alt="Tab bar glass" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Tab bar glass</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="settings.png"><img src="screenshots/settings.png" alt="Settings" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Settings</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="splash.png"><img src="screenshots/splash.png" alt="Splash" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Splash</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="schedule-cards.png"><img src="screenshots/schedule-cards.png" alt="Schedule cards" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Schedule cards</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="standings-zones.png"><img src="screenshots/standings-zones.png" alt="Standings zones" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Standings zones</figcaption>
+        </figure></li>
+        <li><figure class="shot">
+          <div class="device"><div class="screen" data-file="widget-lockscreen.png"><img src="screenshots/widget-lockscreen.png" alt="Widget + Live Activity lock screen" loading="lazy" width="390" height="844" onerror="this.closest('figure').classList.add('missing')"></div></div>
+          <figcaption>Widget + Live Activity lock screen</figcaption>
+        </figure></li>
       </ul>
     </div>
   </section>
 
-  <section id="download" aria-labelledby="download-title">
-    <div class="wrap">
-      <div class="download-box">
-        <p class="eyebrow">Download</p>
-        <h2 id="download-title">Get myTeams on your iPhone</h2>
-        <p>myTeams is not on the App Store yet. Download the latest .ipa from GitHub Releases and sideload it with AltStore or Feather.</p>
-        <ol>
-          <li>Download the latest <code>.ipa</code> from GitHub Releases.</li>
-          <li>Open it in AltStore or Feather to install it.</li>
-          <li>Requires iOS 26 or later.</li>
-        </ol>
-        <div>
-          <a class="button" href="https://github.com/srector13/MyTeams/releases">Go to GitHub Releases</a>
-        </div>
-      </div>
-    </div>
+  <section class="download">
+    <p class="wrap">Grab the latest .ipa from <a href="https://github.com/srector13/MyTeams/releases">GitHub Releases</a> and sideload it (AltStore or Feather). Requires iOS 26.</p>
   </section>
-
 </main>
 
-<footer class="site-footer">
+<footer>
   <div class="wrap">
-    <p class="name">myTeams</p>
-    <ul>
-      <li><a href="https://github.com/srector13/MyTeams">Source on GitHub</a></li>
-      <li><a href="https://github.com/srector13/MyTeams/releases">Releases</a></li>
-    </ul>
+    <p><a href="https://github.com/srector13/MyTeams">github.com/srector13/MyTeams</a></p>
     <p>Not affiliated with ESPN or any league. Data from ESPN's public site API.</p>
   </div>
 </footer>
