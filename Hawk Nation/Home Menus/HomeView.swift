@@ -93,7 +93,9 @@ private struct HomeEmptyState: View {
             .accessibilityHint("Find a team by sport, league or name, and follow it.")
             .accessibilityIdentifier("home.addTeams")
         }
-        .accessibilityIdentifier("home.empty")
+        // No identifier on the view itself: on a container that isn't an
+        // accessibility element, SwiftUI hands it down to every element
+        // inside, replacing the button's "home.addTeams".
     }
 }
 
