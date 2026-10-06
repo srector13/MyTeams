@@ -67,6 +67,17 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
+    /// Home with no game to show, so the page is its news feed alone
+    /// (t_191edd79): each text size in both appearances, with every setting
+    /// off. `testHomeFeedDominant` pins the clock and serves the fixtures.
+    static var homeFeedVariants: [Configuration] {
+        typeSizes.flatMap { typeSize in
+            darkModes.map { dark in
+                Configuration(typeSize: typeSize, dark: dark, increaseContrast: false, reduceTransparency: false, reduceMotion: false)
+            }
+        }
+    }
+
     struct Configuration {
         var typeSize: TypeSize
         var dark: Bool
@@ -145,8 +156,39 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
+    /// Home's feed-dominant layout (t_191edd79): the Chiefs, whose news the
+    /// fixtures serve, on a day months before their first game
+    /// (`HomeViewModel.launchNowKey`), so Live Now, Upcoming and Recent
+    /// Results take no room and the news feed is the page.
     @MainActor
-    private func launch(_ configuration: Configuration) -> XCUIApplication {
+    func testHomeFeedDominant() throws {
+        let device = XCUIDevice.shared
+        let originalAppearance = device.appearance
+        defer { device.appearance = originalAppearance }
+
+        let fixtures = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("myTeamsTests")
+            .appendingPathComponent("Fixtures")
+
+        for configuration in Self.homeFeedVariants {
+            device.appearance = configuration.dark ? .dark : .light
+            let app = launch(configuration, environment: [
+                "MYTEAMS_FAVORITES": "football/nfl:12",
+                "MYTEAMS_FIXTURES_DIR": fixtures.path,
+                // Mon, Jun 1, 2026, 12:00 UTC.
+                "MYTEAMS_HOME_NOW": "1780315200",
+            ])
+            captureHomeFeed(app, configuration)
+            app.terminate()
+        }
+    }
+
+    /// `environment` is laid over the launch's own keys, so a pass can
+    /// follow other favorites or serve fixtures.
+    @MainActor
+    private func launch(_ configuration: Configuration, environment: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
         // The four bundled teams: a fresh install follows none (t_afe5c297).
         // Read by Debug builds' `FavoritesStore.launchFavoritesKey`.
@@ -156,6 +198,7 @@ final class GlassUIScreenshotTests: XCTestCase {
             "baseball/mlb:7",
             "soccer/usa.1:186",
         ].joined(separator: ",")
+        app.launchEnvironment.merge(environment) { _, new in new }
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", configuration.typeSize.rawValue]
         // Read by the app's `Theme.LaunchAccessibility`.
         if configuration.increaseContrast {
@@ -273,14 +316,17 @@ final class GlassUIScreenshotTests: XCTestCase {
         }
     }
 
-    /// Home, where the app opens (t_0b94af11): Live Now and Today at the
-    /// top, then scrolled to Results and Headlines under the tab bar. At
-    /// AX3 Live Now is a vertical list rather than a carousel. Then the
-    /// first team's tab, for the team page passes after it.
+    /// Home, where the app opens (t_0b94af11): whichever game sections
+    /// have games at the top, then scrolled down the news feed under the
+    /// tab bar (t_191edd79). At AX3 Live Now is a vertical list rather than
+    /// a carousel. Then the first team's tab, for the team page passes
+    /// after it.
     @MainActor
     private func captureHome(_ app: XCUIApplication, _ configuration: Configuration) {
-        let today = app.descendants(matching: .any)["home.section.today"].firstMatch
-        if today.waitForExistence(timeout: 10) {
+        // The feed's header is always there; the game sections only with
+        // games.
+        let news = app.descendants(matching: .any)["home.section.news"].firstMatch
+        if news.waitForExistence(timeout: 10) {
             snapshot("home", configuration)
             app.swipeUp()
             snapshot("home-scrolled", configuration)
@@ -305,6 +351,20 @@ final class GlassUIScreenshotTests: XCTestCase {
             return
         }
         firstTeam.tap()
+    }
+
+    /// Home as its news feed alone: the top, with the feed's stories
+    /// straight under the bar, and scrolled down the feed.
+    @MainActor
+    private func captureHomeFeed(_ app: XCUIApplication, _ configuration: Configuration) {
+        let row = app.buttons["home.news.row"].firstMatch
+        guard row.waitForExistence(timeout: 15) else {
+            XCTFail("\(configuration.name): Home's news feed never showed")
+            return
+        }
+        snapshot("home-feed", configuration)
+        app.swipeUp()
+        snapshot("home-feed-scrolled", configuration)
     }
 
     /// The first team page's player, game and news sheets, each opened from

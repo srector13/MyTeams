@@ -9,17 +9,17 @@
 import SwiftUI
 
 /// The Home tab, first in the bar and where the app opens (t_0b94af11):
-/// every favorite at once, in four sections — the games under way, today's
-/// games (tomorrow's on a day without any), the last two days' results,
-/// and the newest headlines.
+/// every favorite at once. The page is the favorites' news, merged newest
+/// first; above it, only when they have games, the games under way, the
+/// next seven days' games and the last seven days' results (t_191edd79).
 ///
 /// Reads what the app already loads (`HomeViewModel`): the scoreboards the
 /// app polls for every favorite, the seasons it loaded to know which, and
 /// each favorite's news feed. No page of its own to poll.
 ///
 /// Glass is the chrome's alone (§5.2): the navigation bar with its gear,
-/// and the tab bar. The sections are content cards on the grouped page, as
-/// a team page's are (B1).
+/// and the tab bar. The sections and the feed's stories are content cards
+/// on the grouped page, as a team page's are (B1).
 struct HomeView: View {
     /// The favorites, resolved, in favorites order.
     let teams: [TeamRef]
@@ -100,7 +100,7 @@ private struct HomeEmptyState: View {
 }
 
 /// A game Home opens a sheet for, and the card it zooms from (X-13): the
-/// same game can be in Live Now and Today, each its own source.
+/// same game can be in Live Now and Upcoming, each its own source.
 private struct HomeGameSelection: Identifiable {
     let entry: HomeGame
     let sourceID: String
@@ -108,8 +108,10 @@ private struct HomeGameSelection: Identifiable {
     var id: String { sourceID }
 }
 
-/// Home's four sections, each an inset card on the grouped page that
-/// scrolls under the bars (T-4, T-5).
+/// Home's page (t_191edd79): the game sections that have games — Live Now,
+/// Upcoming, Recent Results, each an inset card, none drawn when it has
+/// nothing — over the news feed, every favorite's stories newest first, a
+/// card each. All of it scrolls under the bars (T-4, T-5).
 private struct HomeSections: View {
     let model: HomeViewModel
 
@@ -125,19 +127,27 @@ private struct HomeSections: View {
     /// list, as a team page's carousels do (§5.3).
     private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
-    /// What a failed section retries.
-    private enum Retry {
-        case schedules
-        case news
-    }
-
     var body: some View {
+        let live = model.liveGames
+        let upcoming = model.upcoming
+        let results = model.results
+
         ScrollView(.vertical) {
-            VStack(spacing: Theme.Spacing.m) {
-                liveSection
-                todaySection
-                resultsSection
-                headlinesSection
+            // Lazy, so the feed's rows are drawn as they scroll in. No glass
+            // on any of it: it's scrolling content (§5.2).
+            LazyVStack(spacing: Theme.Spacing.m) {
+                // A game section takes no room without games: with none,
+                // the page is the news feed.
+                if !live.isEmpty {
+                    liveSection(live)
+                }
+                if !upcoming.isEmpty {
+                    upcomingSection(upcoming)
+                }
+                if !results.isEmpty {
+                    resultsSection(results)
+                }
+                newsFeed
             }
             .padding(Theme.Spacing.m)
         }
@@ -162,17 +172,9 @@ private struct HomeSections: View {
 
     // MARK: Live Now
 
-    private var liveSection: some View {
-        let live = model.liveGames
-        return section(systemImage: "dot.radiowaves.left.and.right", title: "Live Now", identifier: "home.section.live") {
-            if live.isEmpty {
-                status(
-                    model.liveState,
-                    empty: "No games live right now.",
-                    failed: "Couldn't load your teams' games",
-                    retry: .schedules
-                )
-            } else if usesStackedLayout {
+    private func liveSection(_ live: [HomeLiveGame]) -> some View {
+        section(systemImage: "dot.radiowaves.left.and.right", title: "Live Now", identifier: "home.section.live") {
+            if usesStackedLayout {
                 StackedCarousel(items: live) { game in
                     liveButton(game)
                 }
@@ -212,100 +214,114 @@ private struct HomeSections: View {
         }
     }
 
-    // MARK: Today
+    // MARK: Upcoming
 
-    private var todaySection: some View {
-        section(systemImage: "calendar", title: "Today", identifier: "home.section.today") {
-            if let day = model.today {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    Text(dayTitle(day))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.secondary)
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilityIdentifier("home.today.date")
+    /// The next seven days' games, under a header for each day.
+    private func upcomingSection(_ days: [HomeDay]) -> some View {
+        section(systemImage: "calendar", title: "Upcoming", identifier: "home.section.upcoming") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                ForEach(days) { day in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                        Text(dayTitle(day.date))
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                            .accessibilityAddTraits(.isHeader)
+                            .accessibilityIdentifier("home.upcoming.date")
 
-                    ForEach(day.games) { entry in
-                        gameRow(entry, source: "today", identifier: "home.today.\(entry.id)")
+                        ForEach(day.games) { entry in
+                            gameRow(entry, source: "upcoming", identifier: "home.upcoming.\(entry.id)")
+                        }
                     }
                 }
-                .padding([.horizontal, .bottom])
-            } else {
-                status(
-                    model.scheduleState,
-                    empty: "No games today.",
-                    failed: "Couldn't load your teams' schedules",
-                    retry: .schedules
-                )
             }
+            .padding([.horizontal, .bottom])
         }
     }
 
-    /// "Today · Tue, Oct 6", or "Tomorrow · Wed, Oct 7".
-    private func dayTitle(_ day: HomeDay) -> String {
-        let date = day.date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        return "\(day.isToday ? "Today" : "Tomorrow") · \(date)"
+    /// "Today · Tue, Oct 6", "Tomorrow · Wed, Oct 7", then "Thu, Oct 8".
+    private func dayTitle(_ day: Date) -> String {
+        let date = day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let calendar = Calendar.autoupdatingCurrent
+        if calendar.isDate(day, inSameDayAs: model.now) {
+            return "Today · \(date)"
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: model.now),
+           calendar.isDate(day, inSameDayAs: tomorrow) {
+            return "Tomorrow · \(date)"
+        }
+        return date
     }
 
-    // MARK: Results
+    // MARK: Recent Results
 
-    private var resultsSection: some View {
-        let results = model.results
-        return section(systemImage: "flag.checkered", title: "Results", identifier: "home.section.results") {
-            if results.isEmpty {
-                status(
-                    model.scheduleState,
-                    empty: "No results in the last two days.",
-                    failed: "Couldn't load your teams' schedules",
-                    retry: .schedules
-                )
-            } else {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    ForEach(results) { entry in
-                        gameRow(entry, source: "result", identifier: "home.result.\(entry.id)", tintsOutcome: true)
-                    }
+    /// The last seven days' results, newest first.
+    private func resultsSection(_ results: [HomeGame]) -> some View {
+        section(systemImage: "flag.checkered", title: "Recent Results", identifier: "home.section.results") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                ForEach(results) { entry in
+                    gameRow(entry, source: "result", identifier: "home.result.\(entry.id)", tintsOutcome: true)
                 }
-                .padding([.horizontal, .bottom])
             }
+            .padding([.horizontal, .bottom])
         }
     }
 
-    // MARK: Headlines
+    // MARK: News
 
-    private var headlinesSection: some View {
+    /// The page's bottom layer: its header, then a card for each of the
+    /// favorites' stories, newest first, uncapped. Children of the page's
+    /// lazy stack, so a long feed costs only the rows on screen.
+    @ViewBuilder
+    private var newsFeed: some View {
+        SectionHeader(systemImage: "newspaper", title: "News")
+            .padding(.horizontal)
+            .padding(.top, Theme.Spacing.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("home.section.news")
+
         let headlines = model.headlines
-        return section(systemImage: "newspaper", title: "Headlines", identifier: "home.section.headlines") {
-            if headlines.isEmpty {
-                switch model.headlinesState {
-                case .loading:
-                    VStack(spacing: Theme.Spacing.m) {
-                        ForEach(0..<3, id: \.self) { _ in
-                            LoadingNewsView()
-                        }
-                    }
-                    .padding([.horizontal, .bottom])
-                case .loaded, .failed:
-                    status(
-                        model.headlinesState,
-                        empty: "No news right now.",
-                        failed: "Couldn't load the news",
-                        retry: .news
-                    )
+        if headlines.isEmpty {
+            newsStatus
+        } else {
+            ForEach(headlines) { headline in
+                Button {
+                    selectedArticle = headline
+                } label: {
+                    HomeNewsRow(headline: headline)
                 }
-            } else {
-                VStack(spacing: Theme.Spacing.m) {
-                    ForEach(headlines) { headline in
-                        Button {
-                            selectedArticle = headline
-                        } label: {
-                            NewsView(article: headline.article)
-                        }
-                        .buttonStyle(.plain)
-                        .zoomSource(id: headline.id, in: cardZoom)
-                        .accessibilityIdentifier("home.headline")
-                    }
-                }
-                .padding([.horizontal, .bottom])
+                .buttonStyle(.plain)
+                .zoomSource(id: headline.id, in: cardZoom)
+                .accessibilityIdentifier("home.news.row")
             }
+        }
+    }
+
+    /// What an empty feed shows, as a team page's news does (P1's
+    /// `SectionLoadState`): placeholder rows while the feeds load, one
+    /// line once they have answered with nothing, or an error with a retry.
+    @ViewBuilder
+    private var newsStatus: some View {
+        switch model.headlinesState {
+        case .loading:
+            ForEach(0..<3, id: \.self) { _ in
+                LoadingNewsView()
+                    .padding(Theme.Spacing.m)
+                    .contentCard()
+            }
+        case .loaded:
+            SectionStatusView(message: "No news right now.")
+                .frame(maxWidth: .infinity)
+                .contentCard()
+        case .failed:
+            SectionStatusView(message: "Couldn't load the news") {
+                Task { [model] in
+                    await model.reloadNews()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .contentCard()
         }
     }
 
@@ -333,33 +349,7 @@ private struct HomeSections: View {
         .accessibilityIdentifier(identifier)
     }
 
-    /// What an empty section says, as a team page's sections do (P1's
-    /// `SectionLoadState`): a spinner while its feeds load, one line once
-    /// they have answered with nothing, or an error with a retry.
-    @ViewBuilder
-    private func status(_ state: SectionLoadState, empty: String, failed: String, retry: Retry) -> some View {
-        switch state {
-        case .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding()
-        case .loaded:
-            SectionStatusView(message: empty)
-                .frame(maxWidth: .infinity)
-        case .failed:
-            SectionStatusView(message: failed) {
-                Task { [model] in
-                    switch retry {
-                    case .schedules: await model.reloadSchedules()
-                    case .news: await model.reloadNews()
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    /// A game's row in Today or Results, opening its sheet.
+    /// A game's row in Upcoming or Recent Results, opening its sheet.
     private func gameRow(_ entry: HomeGame, source: String, identifier: String, tintsOutcome: Bool = false) -> some View {
         let liveScore = model.liveScore(for: entry.game, team: entry.team)
         return gameButton(entry, source: source, identifier: identifier) {
@@ -536,9 +526,46 @@ private struct LivePill: View {
     }
 }
 
+// MARK: - News row
+
+/// A story in Home's news feed: the favorite it came from as a chip, over
+/// the team page's news row (`NewsView`) with its thumbnail, on a plain
+/// content card. No glass: the feed scrolls (§5.2).
+private struct HomeNewsRow: View {
+    let headline: HomeHeadline
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            TeamTagChip(team: headline.team)
+            NewsView(article: headline.article)
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentCard()
+        .contentShape(Theme.Radius.cardShape)
+    }
+}
+
+/// The favorite a story came from: its short name in the ink that reads
+/// on its colour (G-3), on that colour. The name says it, not the colour
+/// alone (G-4).
+private struct TeamTagChip: View {
+    let team: TeamRef
+
+    var body: some View {
+        Text(team.shortName)
+            .font(.caption2.weight(.semibold))
+            .lineLimit(1)
+            .foregroundStyle(TeamColors.ink(on: team))
+            .padding(.horizontal, Theme.Spacing.s)
+            .padding(.vertical, Theme.Spacing.xs)
+            .background(Color(hexString: TeamColors.fillHex(for: team)), in: Theme.Radius.chip)
+    }
+}
+
 // MARK: - Game row
 
-/// A favorite's game in Today or Results: its crest, the matchup and what
+/// A favorite's game in Upcoming or Recent Results: its crest, the matchup and what
 /// the schedule card would say of it — the start, the live score and
 /// stage, or the result. A result is tinted by its outcome, with the
 /// outcome's word beside the score so it never rests on colour (G-4).
