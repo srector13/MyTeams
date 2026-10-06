@@ -324,14 +324,14 @@ struct FavoritesStoreTests {
     }
 
     @MainActor
-    @Test("Home with no favorites selects nothing and drops a widget link")
+    @Test("Home with no favorites selects Home's tab and drops a widget link")
     func homeRoutingWithNoFavorites() {
         let resolved = HomeRouting.favoritesResolved(HomeRouting.State(selection: ""), teams: [])
-        #expect(resolved.selection == "")
+        #expect(resolved.selection == HomeTabs.homeID)
 
-        // The last team unfollowed: the selection clears.
+        // The last team unfollowed: back to Home, the one tab left.
         let unfollowed = HomeRouting.favoritesResolved(HomeRouting.State(selection: seedIDs[0]), teams: [])
-        #expect(unfollowed.selection == "")
+        #expect(unfollowed.selection == HomeTabs.homeID)
 
         // A link to a team no longer followed is dropped, not left pending.
         let linked = HomeRouting.linkChanged(

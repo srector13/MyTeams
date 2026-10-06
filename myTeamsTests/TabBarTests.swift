@@ -97,6 +97,62 @@ struct TeamChosenTests {
     }
 }
 
+/// Home's tab (t_0b94af11): first in the bar, where the app opens, and
+/// always there to choose, whatever the favorites.
+@Suite("Home tab")
+struct HomeTabTests {
+    private let chiefs = "football/nfl:12"
+    private let royals = "baseball/mlb:7"
+    /// Duke, which nobody here follows.
+    private var duke: TeamRef {
+        TeamRef.placeholder(id: "basketball/mens-college-basketball:150")!
+    }
+
+    @Test("Home stays selected as the favorites resolve and change")
+    func homeSurvivesResolving() {
+        let home = HomeRouting.State(selection: HomeTabs.homeID, pendingLink: nil)
+        #expect(HomeRouting.favoritesResolved(home, teams: [chiefs, royals]) == home)
+        #expect(HomeRouting.favoritesResolved(home, teams: []) == home)
+    }
+
+    @Test("A widget link still opens its team's tab over Home")
+    func linkLeavesHome() {
+        let linked = HomeRouting.State(selection: HomeTabs.homeID, pendingLink: royals)
+        let next = HomeRouting.linkChanged(linked, teams: [chiefs, royals], favoriteIDs: [chiefs, royals])
+        #expect(next.selection == royals)
+        #expect(next.pendingLink == nil)
+    }
+
+    @Test("Home's tab can always be chosen")
+    func homeChosen() {
+        let onTeam = HomeRouting.State(selection: chiefs, pendingLink: nil)
+        #expect(HomeRouting.teamChosen(onTeam, team: HomeTabs.homeID, teams: [chiefs]).selection == HomeTabs.homeID)
+        #expect(HomeRouting.teamChosen(onTeam, team: HomeTabs.homeID, teams: []).selection == HomeTabs.homeID)
+    }
+
+    @Test("From Home a favorite opens its tab, and another team nothing")
+    func teamOpenedFromHome() {
+        let home = HomeRouting.State(selection: HomeTabs.homeID, pendingLink: nil)
+        #expect(HomeRouting.teamOpened(home, team: TeamRef.chiefs, teams: [chiefs]).selection == chiefs)
+        // No page stack on Home to push it over.
+        #expect(HomeRouting.teamOpened(home, team: duke, teams: [chiefs]) == home)
+    }
+
+    @Test("Home's id never names a team")
+    func homeIsNotATeam() {
+        #expect(TeamRef.parse(id: HomeTabs.homeID) == nil)
+    }
+
+    @Test("Home takes one of the compact bar's slots")
+    func homeTakesASlot() {
+        let teamRoom = HomeTabs.compactCapacity - HomeTabs.fixedTabCount
+        // Home and four teams fill the bar.
+        #expect(HomeTabs.barCount(teamCount: 4, barCapacity: teamRoom) == 4)
+        // A fifth team: Home, three teams and "More".
+        #expect(HomeTabs.barCount(teamCount: 5, barCapacity: teamRoom) == 3)
+    }
+}
+
 /// Settings belongs to `Home`, not to a team's page, so it outlives the
 /// page (A-5): `HomeRouting` moves the selection but never closes it.
 @Suite("Settings sheet lifecycle")
@@ -119,7 +175,8 @@ struct SettingsSheetLifecycleTests {
     func survivesRemovingEveryTeam() {
         let open = HomeRouting.State(selection: chiefs, pendingLink: nil, showsSettings: true)
         let next = HomeRouting.favoritesResolved(open, teams: [])
-        #expect(next.selection == "")
+        // Home, the one tab left.
+        #expect(next.selection == HomeTabs.homeID)
         #expect(next.showsSettings)
     }
 

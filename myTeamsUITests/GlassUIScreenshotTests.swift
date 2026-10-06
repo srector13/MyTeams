@@ -171,14 +171,15 @@ final class GlassUIScreenshotTests: XCTestCase {
         return app
     }
 
-    /// The main screens only: the first team page, and its player and game
-    /// sheets.
+    /// The main screens only: Home, the first team page, and its player and
+    /// game sheets.
     @MainActor
     private func captureMainScreens(_ app: XCUIApplication, _ configuration: Configuration) {
         guard app.tabBars.buttons.firstMatch.waitForExistence(timeout: 10) else {
             XCTFail("\(configuration.name): the crest bar never appeared")
             return
         }
+        captureHome(app, configuration)
         snapshot("team-page-1", configuration)
 
         // The cards scrolled under the bar, the crest and name pinned in
@@ -193,7 +194,7 @@ final class GlassUIScreenshotTests: XCTestCase {
         captureScheduleCards(app, configuration)
     }
 
-    /// Walks the screens reachable by identifier: the first team
+    /// Walks the screens reachable by identifier: Home, the first team
     /// page and its player, game, leaders and news sheets, a second team
     /// page, the team browser, a sport and a league in it, and Alerts.
     @MainActor
@@ -204,6 +205,7 @@ final class GlassUIScreenshotTests: XCTestCase {
             XCTFail("\(configuration.name): the crest bar never appeared")
             return
         }
+        captureHome(app, configuration)
         snapshot("team-page-1", configuration)
 
         // The cards scrolled under the bar, the crest and name pinned in
@@ -269,6 +271,40 @@ final class GlassUIScreenshotTests: XCTestCase {
                 snapshot("alerts-settings", configuration)
             }
         }
+    }
+
+    /// Home, where the app opens (t_0b94af11): Live Now and Today at the
+    /// top, then scrolled to Results and Headlines under the tab bar. At
+    /// AX3 Live Now is a vertical list rather than a carousel. Then the
+    /// first team's tab, for the team page passes after it.
+    @MainActor
+    private func captureHome(_ app: XCUIApplication, _ configuration: Configuration) {
+        let today = app.descendants(matching: .any)["home.section.today"].firstMatch
+        if today.waitForExistence(timeout: 10) {
+            snapshot("home", configuration)
+            app.swipeUp()
+            snapshot("home-scrolled", configuration)
+            app.swipeUp()
+            snapshot("home-headlines", configuration)
+            // Back to the top, which brings back a bar the scroll
+            // minimized.
+            for _ in 0..<3 {
+                app.swipeDown()
+            }
+        } else {
+            XCTFail("\(configuration.name): the app didn't open on Home")
+        }
+
+        let crests = app.tabBars.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
+        let first = crests.firstMatch
+        // Home is the bar's first tab, the first team its second; by
+        // position on a launch whose bar lost its identifiers.
+        let firstTeam = first.waitForExistence(timeout: 5) ? first : app.tabBars.buttons.element(boundBy: 1)
+        guard firstTeam.waitForExistence(timeout: 5) else {
+            XCTFail("\(configuration.name): no team's tab after Home")
+            return
+        }
+        firstTeam.tap()
     }
 
     /// The first team page's player, game and news sheets, each opened from
@@ -359,8 +395,9 @@ final class GlassUIScreenshotTests: XCTestCase {
     @MainActor
     private func expandTabBar(_ app: XCUIApplication) {
         // A minimized bar keeps only the selected tab, the first team's:
-        // the second team's is back once the bar is.
-        let secondTab = app.tabBars.buttons.element(boundBy: 1)
+        // the second team's (after Home and the first) is back once the
+        // bar is.
+        let secondTab = app.tabBars.buttons.element(boundBy: 2)
         for _ in 0..<3 where !secondTab.isHittable {
             app.swipeDown()
         }

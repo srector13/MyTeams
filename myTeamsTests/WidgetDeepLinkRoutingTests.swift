@@ -161,7 +161,7 @@ struct WidgetDeepLinkRoutingTests {
         let empty = HomeRouting.favoritesResolved(
             HomeRouting.State(selection: chiefs, pendingLink: nil), teams: []
         )
-        #expect(empty == HomeRouting.State(selection: "", pendingLink: nil))
+        #expect(empty == HomeRouting.State(selection: HomeTabs.homeID, pendingLink: nil))
 
         // And a cleared link is no link: nothing to do.
         let idle = HomeRouting.State(selection: royals, pendingLink: nil)

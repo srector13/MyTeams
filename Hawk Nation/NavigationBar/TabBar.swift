@@ -12,9 +12,11 @@ import UIKit
 // The teams on this screen are the reader's favorites (`FavoritesStore`),
 // resolved through `RemoteTeamCatalog` and shown in favorites order.
 
-/// The app's root screen: the system tab bar, one tab per favorite team, each
-/// showing that team's scrolling page. Teams are added from Settings
-/// (t_fa6748f4).
+/// The app's root screen: the system tab bar, Home first — every
+/// favorite's live games, today's games, results and headlines together
+/// (`HomeView`, t_0b94af11) — then one tab per favorite team, each showing
+/// that team's scrolling page. The app opens on Home. Teams are added from
+/// Settings (t_fa6748f4), or from Home's empty state.
 ///
 /// A standard `TabView`, so the platform draws the bar: its Liquid Glass,
 /// selection indicator and animation, the large content viewer, minimizing
@@ -30,7 +32,9 @@ struct Home: View {
     /// the catalog.
     @State private var teams: [TeamRef] = FavoritesStore.shared.teamIDs.compactMap(TeamCatalog.team(id:))
 
-    @State private var selection: TeamRef.ID = FavoritesStore.shared.teamIDs.first ?? ""
+    /// Home at every launch (`HomeTabs.homeID`): there is no memory of the
+    /// last tab. A widget link still opens its team's tab.
+    @State private var selection: TeamRef.ID = HomeTabs.homeID
 
     @State private var showsBrowser = false
 
@@ -142,34 +146,11 @@ struct Home: View {
                     // follows teams.
                     Theme.Surface.content
                         .ignoresSafeArea()
-                } else if teams.isEmpty {
-                    // No favorites: a fresh install, or every team
-                    // unfollowed. The way in is here rather than a sheet
-                    // at launch (t_afe5c297).
-                    ContentUnavailableView {
-                        Label {
-                            Text("No Teams Yet")
-                        } icon: {
-                            // Asset-catalog appearances pick the light/dark art.
-                            Image("myTeamsLogo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: BrandLogo.hero)
-                                .accessibilityHidden(true)
-                        }
-                    } description: {
-                        Text("Add the teams you follow to see their schedules, scores and news.")
-                    } actions: {
-                        Button {
-                            showsBrowser = true
-                        } label: {
-                            Label("Add Teams", systemImage: "plus.circle")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityHint("Find a team by sport, league or name, and follow it.")
-                        .accessibilityIdentifier("home.addTeams")
-                    }
                 } else {
+                    // With no favorites — a fresh install, or every team
+                    // unfollowed — the bar holds Home alone, and Home's
+                    // empty state is the way in rather than a sheet at
+                    // launch (t_afe5c297).
                     tabs
                 }
             }
@@ -209,17 +190,20 @@ struct Home: View {
         }
     }
 
-    /// The favorites' tabs, and nothing else: the bar holds teams only,
-    /// those past its room under the system's "More" (`HomeTabs.barCount`).
-    /// Teams are added from Settings (t_fa6748f4).
+    /// Home's tab, then the favorites' tabs: those past the bar's room
+    /// under the system's "More" (`HomeTabs.barCount`). Teams are added
+    /// from Settings (t_fa6748f4).
     @ViewBuilder
     private var tabs: some View {
         let _ = crestRevision
         let barCount = HomeTabs.barCount(
             teamCount: teams.count,
-            barCapacity: sizeClass == .compact ? HomeTabs.compactCapacity : nil
+            // Home always holds the bar's first slot.
+            barCapacity: sizeClass == .compact ? HomeTabs.compactCapacity - HomeTabs.fixedTabCount : nil
         )
         TabView(selection: tabSelection) {
+            homeTab
+
             ForEach(Array(teams.prefix(barCount))) { team in
                 teamTab(team, inMore: false)
             }
@@ -234,8 +218,26 @@ struct Home: View {
         .modifier(HomeSidebar(isRegularWidth: sizeClass == .regular))
         // A tick as the team changes (C-4).
         .sensoryFeedback(.selection, trigger: selection)
-        // The alerts presenter skips the banner for the team on screen (C-8).
-        .onChange(of: selection, initial: true) { ScoreAlertForeground.shared.teamID = $1 }
+        // The alerts presenter skips the banner for the team on screen
+        // (C-8); Home is every team's, so no banner is skipped there.
+        .onChange(of: selection, initial: true) { _, tab in
+            ScoreAlertForeground.shared.teamID = tab == HomeTabs.homeID ? nil : tab
+        }
+    }
+
+    /// Home: the favorites' live games, today's games, results and
+    /// headlines (`HomeView`). First in the bar, and where the app opens.
+    private var homeTab: some TabContent<TeamRef.ID> {
+        Tab(value: HomeTabs.homeID) {
+            HomeView(
+                teams: teams,
+                addTeams: { showsBrowser = true },
+                showSettings: { showsSettings = true }
+            )
+        } label: {
+            Label("Home", systemImage: "house")
+        }
+        .accessibilityIdentifier("teamPicker.home")
     }
 
     /// A favorite's tab: its crest over its short name. `inMore` for a tab
@@ -290,7 +292,7 @@ struct Home: View {
 /// values: the view feeds it its state and applies the answer.
 enum HomeRouting {
     struct State: Equatable, Sendable {
-        /// The selected team's id; `""` with no teams.
+        /// The selected tab: a team's id, or `HomeTabs.homeID`.
         var selection: TeamRef.ID
         /// A widget link not yet handled (`Home.deepLinkedTeamID`).
         var pendingLink: TeamRef.ID?
@@ -303,14 +305,15 @@ enum HomeRouting {
         var visits: [TeamRef.ID: [TeamVisit]] = [:]
     }
 
-    /// The favorites have been resolved to `teams`, in order. A selection
-    /// no longer among them falls back to the first; a link that arrived
-    /// while the favorites were loading is handled now, selecting its team
-    /// if it resolved and dropped either way.
+    /// The favorites have been resolved to `teams`, in order. Home stays
+    /// selected; a team no longer among them falls back to the first, or to
+    /// Home with none left. A link that arrived while the favorites were
+    /// loading is handled now, selecting its team if it resolved and
+    /// dropped either way.
     static func favoritesResolved(_ state: State, teams: [TeamRef.ID]) -> State {
         var next = state
-        if !teams.contains(next.selection) {
-            next.selection = teams.first ?? ""
+        if next.selection != HomeTabs.homeID, !teams.contains(next.selection) {
+            next.selection = teams.first ?? HomeTabs.homeID
         }
         // A tab that's gone takes the pages pushed over it along.
         next.visits = next.visits.filter { teams.contains($0.key) }
@@ -326,9 +329,10 @@ enum HomeRouting {
     /// The reader chose `team`: tapped its tab in the bar, or picked it
     /// from the bar's "More" list, whose page coming on screen reports it
     /// (`Home.teamPage`). Either way the same change: the team is selected
-    /// if it's one of `teams`. Settings and a pending link are left alone.
+    /// if it's one of `teams`, as Home's tab always is. Settings and a
+    /// pending link are left alone.
     static func teamChosen(_ state: State, team: TeamRef.ID, teams: [TeamRef.ID]) -> State {
-        guard teams.contains(team) else { return state }
+        guard team == HomeTabs.homeID || teams.contains(team) else { return state }
         var next = state
         next.selection = team
         return next
@@ -341,7 +345,8 @@ enum HomeRouting {
     /// own page: anything pushed over it is popped, so a player sheet asked
     /// for with it opens on the page on screen. Any other team's page is
     /// pushed over the selected tab's page, unless it's the one on top
-    /// already. Settings and a pending link are left alone.
+    /// already; Home has no page stack, so from Home nothing happens.
+    /// Settings and a pending link are left alone.
     static func teamOpened(_ state: State, team: TeamRef, teams: [TeamRef.ID]) -> State {
         var next = state
         if teams.contains(team.id) {
@@ -797,12 +802,20 @@ private struct BrandBarLogo: View {
     }
 }
 
-/// How the favorites' tabs fit the system tab bar, which holds teams only:
-/// adding teams is in Settings (t_fa6748f4).
+/// How Home's tab and the favorites' tabs fit the system tab bar: adding
+/// teams is in Settings (t_fa6748f4).
 enum HomeTabs {
     /// The most items a compact-width tab bar shows. With more tabs it
     /// shows one fewer and a "More" item listing the rest.
     static let compactCapacity = 5
+
+    /// Home's tab value (`Home.selection`). Not a `TeamRef.ID`, which is
+    /// always `"sport/league:id"`, so it never names a team.
+    static let homeID: TeamRef.ID = "home"
+
+    /// The tabs before the favorites': Home's. The favorites get the rest
+    /// of the bar's room.
+    static let fixedTabCount = 1
 
     /// How many of `teamCount` favorites' tabs the bar itself shows, in
     /// order, for a bar of `barCapacity` (no limit for `nil`): all of them
@@ -1028,7 +1041,7 @@ enum BarCrest {
 }
 
 /// iPad (B-14): on regular width the tab bar can become a sidebar, which
-/// lists every favorite rather than a stretched phone bar. Compact width
+/// lists Home and every favorite rather than a stretched phone bar. Compact width
 /// keeps the plain tab bar and its "More" item. Like the bar, it lists
 /// teams only: adding teams is in Settings (t_fa6748f4).
 private struct HomeSidebar: ViewModifier {
