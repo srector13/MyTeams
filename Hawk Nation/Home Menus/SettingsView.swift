@@ -119,6 +119,18 @@ struct SettingsView: View {
                     Text("Teams")
                 }
 
+                // Where a player photo came from Wikimedia Commons, its
+                // author and licence (`AthleteHeadshot`).
+                Section {
+                    NavigationLink {
+                        PhotoCreditsView()
+                    } label: {
+                        Label("Photo Credits", systemImage: "photo.on.rectangle")
+                    }
+                    .accessibilityHint("Lists the Wikimedia Commons player photos shown, with their authors and licences.")
+                    .accessibilityIdentifier("settings.photoCredits")
+                }
+
                 Section {
                     LabeledContent("Version", value: AboutInfo.versionText(info: Bundle.main.infoDictionary))
                         .accessibilityIdentifier("settings.version")

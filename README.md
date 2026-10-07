@@ -21,6 +21,12 @@ Built with SwiftUI against ESPN's public site API. No API keys are needed.
   while the game is live; the league standings with the team's row picked
   out; the team's stat leaders and the league's leaderboards; and the team's
   news feed.
+- **Player photos.** Fallback chain: ESPN headshot → Wikimedia Commons photo
+  (found through Wikidata by ESPN's athlete id, only for rows on screen, one
+  batched query per sport, cached for good; `WikidataHeadshotStore`) →
+  monogram. Only the photo comes from Wikidata; every roster fact is ESPN's.
+  Long-press a Commons photo for its credit; Settings → Photo Credits lists
+  those shown.
 - **Favorites.** The system tab bar at the foot of the screen has a tab per
   followed team (its crest and short name), with those past the bar's room
   under "More"; the bar holds teams only. Settings' "Add Teams" and
@@ -145,6 +151,11 @@ The app does no tracking and collects no data. Each target ships a
 `PrivacyInfo.xcprivacy` declaring the required-reason APIs it uses:
 `UserDefaults` (its own and the App Group's) and file modification dates on
 the crests it caches in its own and the App Group's containers.
+
+For the player-photo fallback the app also reads from Wikimedia
+(`query.wikidata.org`, `commons.wikimedia.org` and its image CDN,
+`upload.wikimedia.org` / `thumb.wikimedia.org`). It sends only ESPN athlete
+ids and file titles, with a descriptive User-Agent; no user data.
 
 ## Dependencies
 

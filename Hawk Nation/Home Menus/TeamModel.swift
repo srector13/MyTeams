@@ -11,6 +11,9 @@ import SwiftUI
 /// The roster fields every tab displays, sorts and filters on, whichever sport
 /// it shows.
 protocol RosterPlayer: Identifiable, Hashable, Sendable {
+    /// ESPN's athlete id, or empty when the feed gave none. The headshot
+    /// fallback looks the athlete up on Wikidata by it.
+    var playerID: String { get }
     var name: String { get }
     var lastName: String { get }
     var number: String { get }

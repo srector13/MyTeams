@@ -34,6 +34,9 @@
 		7A1D0C3E5B9F2A4C6E8D1B41 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B42 /* TeamLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B43 /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2FB2E1805F644DD405F129 /* RemoteImage.swift */; };
+		2D20D4F0D14F95669B9634EF /* WikidataHeadshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */; };
+		06B4C8B38F1243ACEDE326D7 /* AthleteHeadshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = DECE0285E2B0460D5C8119F3 /* AthleteHeadshot.swift */; };
+		2C89EA3412BC162DB815225F /* WikidataHeadshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EEDD564F37117499F40D17A /* WikidataHeadshotStoreTests.swift */; };
 		F40E52311E166FC0C805078D /* HomeSections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 295F3B13CE1F1A66438291C3 /* HomeSections.swift */; };
 		3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */; };
 		0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF854E8FC1231BAD448D63BA /* TeamModel.swift */; };
@@ -207,6 +210,9 @@
 		FF333D024A94AD1329FBDD78 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HTTPClient.swift"; sourceTree = "<group>"; };
 		FCF2740419E81BD1C7945B6A /* JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JSON.swift"; sourceTree = "<group>"; };
 		CA2FB2E1805F644DD405F129 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteImage.swift"; sourceTree = "<group>"; };
+		F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WikidataHeadshotStore.swift"; sourceTree = "<group>"; };
+		DECE0285E2B0460D5C8119F3 /* AthleteHeadshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AthleteHeadshot.swift"; sourceTree = "<group>"; };
+		0EEDD564F37117499F40D17A /* WikidataHeadshotStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WikidataHeadshotStoreTests.swift"; sourceTree = "<group>"; };
 		A1CBF316BA698A3A7672774F /* Sport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sport.swift"; sourceTree = "<group>"; };
 		95678F04274EC3A4BFC7B89B /* TeamRef.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamRef.swift"; sourceTree = "<group>"; };
 		6ED568E453469367FE117D58 /* DownloadNewsData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DownloadNewsData.swift"; sourceTree = "<group>"; };
@@ -408,6 +414,7 @@
 				FF333D024A94AD1329FBDD78 /* HTTPClient.swift */,
 				FCF2740419E81BD1C7945B6A /* JSON.swift */,
 				CA2FB2E1805F644DD405F129 /* RemoteImage.swift */,
+				F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */,
 				A1CBF316BA698A3A7672774F /* Sport.swift */,
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
 				5883C4F774D9544E81195578 /* LogoStore.swift */,
@@ -478,6 +485,7 @@
 				229980CC6EADD28B1327288E /* BioViews.swift */,
 				88D1C9C84AB3AE52DB615DEC /* PlayerDetailView.swift */,
 				9B3AA19AD17C939F21D94002 /* PlayerView.swift */,
+				DECE0285E2B0460D5C8119F3 /* AthleteHeadshot.swift */,
 				305483CF1D4C14956E0C87C9 /* StatPercentageView.swift */,
 				C9D0113741554FA64E825BD1 /* StatView.swift */,
 			);
@@ -596,6 +604,7 @@
 				85ADA55D78EE908E3737EFAC /* TeamCatalogTests.swift */,
 				82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */,
 				B6F5832EB99B1723EF239CCC /* LogoStoreTests.swift */,
+				0EEDD564F37117499F40D17A /* WikidataHeadshotStoreTests.swift */,
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */,
@@ -826,6 +835,7 @@
 				443BDD6E8DE6AD6663C2B878 /* HTTPClient.swift in Sources */,
 				E20E73EDC856843862B6F1BA /* JSON.swift in Sources */,
 				78C5D3C2CC114C8CA479A89C /* RemoteImage.swift in Sources */,
+				2D20D4F0D14F95669B9634EF /* WikidataHeadshotStore.swift in Sources */,
 				76207EC0BBD446E30AD3ABCE /* Sport.swift in Sources */,
 				7B4DB145D40FB923834AE02E /* TeamRef.swift in Sources */,
 				FC03614F349A24609A803EE0 /* DownloadNewsData.swift in Sources */,
@@ -838,6 +848,7 @@
 				C29C82642C379588DDB90840 /* BioViews.swift in Sources */,
 				938441ED20DAAFEFEF866860 /* PlayerDetailView.swift in Sources */,
 				A6CF80F5A6D7C40726E89941 /* PlayerView.swift in Sources */,
+				06B4C8B38F1243ACEDE326D7 /* AthleteHeadshot.swift in Sources */,
 				621D4FC2F790F846681CFFEB /* StatPercentageView.swift in Sources */,
 				3FF9FB506BFF3AAB6B99B319 /* StatView.swift in Sources */,
 				52E991A1BB7FE3BFCCBF5C6C /* DownloadGameData.swift in Sources */,
@@ -909,6 +920,7 @@
 				07BFE42C24ACB22870DAD8F2 /* TeamCatalogTests.swift in Sources */,
 				F176834130AB41D1E8184FC8 /* RemoteTeamCatalogTests.swift in Sources */,
 				015DE6289B5E217ECDD3579C /* LogoStoreTests.swift in Sources */,
+				2C89EA3412BC162DB815225F /* WikidataHeadshotStoreTests.swift in Sources */,
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */,

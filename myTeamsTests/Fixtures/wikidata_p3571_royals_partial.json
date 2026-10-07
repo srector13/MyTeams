@@ -1,0 +1,273 @@
+{
+  "head" : {
+    "vars" : [ "espnId", "item", "image" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "31048"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q2852868"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Anthony%20Gose%20Omaha%2020260514%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "31127"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q3470332"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Salvador%20Perez%20%2826925931234%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "32640"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q13417050"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Michael%20Wacha%20of%20the%20Royals%202025.png"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "34873"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q16605329"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Seth%20Lugo%20on%20July%2016%2C%202016.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "33271"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q18350801"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Luke%20Maile%20Omaha%202025.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "40976"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q20707853"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Alex%20Lange%20%2816735091396%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "39646"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q30150649"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Nate%20Pearson%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "42403"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q64009042"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Bobbywittjrprofile.png"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "38958"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q64853364"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Tony%20Gonsolin%20on%20a%20MLB%20rehab%20assignment%20%2855503421983%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "42214"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q66309991"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Randy%20Dobnak%20%2851162967273%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "40718"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q66459263"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "41227"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q96273338"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Daniel%20Lynch%20%2851203543846%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "41263"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q106328195"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Kyle%20Isbel%20%2851162714931%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "35432"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q112193332"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Jose%20Cuas%20%2855181036678%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4109109"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q112761981"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Pasquantino%20%2852048280711%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4109223"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q112960566"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Pregame%20%2853645607171%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4905884"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q113129952"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Maikel%20Garcia%20%2852266252296%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4151063"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q133770898"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Tyler%20Tolbert%20%2854550554826%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4987667"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q133835163"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/May%202017%20GT%20vs.%20UGA%20baseball%20-%20Connor%20Thomas%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4417208"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q134386500"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Noah%20Cameron%20%2854425936242%29%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "42486"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q134426331"
+      }
+    } ]
+  }
+}

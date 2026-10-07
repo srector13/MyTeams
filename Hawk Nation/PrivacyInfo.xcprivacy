@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Network reads beyond ESPN: the player-photo fallback
+	     (WikidataHeadshotStore) fetches photo data from query.wikidata.org,
+	     commons.wikimedia.org and upload.wikimedia.org / thumb.wikimedia.org.
+	     Only ESPN athlete ids and Commons file titles are sent; no user data
+	     is collected or sent, and none of these hosts is a tracking domain. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>

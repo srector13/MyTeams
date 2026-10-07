@@ -801,3 +801,23 @@ Notes from the capture:
    new value has to be traced to the feed.
 5. The `.knownBug` tests are pinned to today's wrong output. If a refresh
    changes one of them, find out whether the feed changed or the bug did.
+
+## Wikidata and Commons
+
+Captured on **2026-10-07 01:34–01:35Z** with `curl` and the app's User-Agent
+(`MyTeams/1.0 (iOS app; https://github.com/srector13/MyTeams)`), for
+`WikidataHeadshotStoreTests`. Not ESPN documents: the headshot fallback's
+answers.
+
+| File | Request | What it covers |
+|---|---|---|
+| `wikidata_p3681_soccer_hit.json` | SPARQL, `P3681` (ESPN FC), ids 196176, 265921, 69450 | Batch hit: every id matched, each with a P18 |
+| `wikidata_p3571_royals_partial.json` | SPARQL, `P3571` (MLB), the 28 ids in `royals_roster.json` plus `99999999` | Partial miss: 21 rows, 19 with a P18; 40718 and 42486 have none; 8 ids unmatched. 0.32 s wall |
+| `wikidata_p3685_nba_apostrophe.json` | SPARQL, `P3685` (NBA), ids 614, 4869342, 4282 | P18 titles with `%27` and `%28…%29` |
+| `commons_imageinfo_{soccer,royals,nba}.json` | `https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=extmetadata&iiextmetadatafilter=LicenseShortName\|Artist\|LicenseUrl&titles=File:…&format=json&formatversion=2&maxlag=5`, the titles of the matching SPARQL fixture | Licence and artist per file |
+| `commons_filepath_head.json` | Not a response: the status and headers `curl -I` recorded for `Special:FilePath/<P18 title>?width=250` (302 to the thumbnail) and for the same title double-encoded (404) | The encode-once rule |
+
+The SPARQL query is
+`SELECT ?espnId ?item ?image WHERE { VALUES ?espnId { "…" } ?item wdt:<P> ?espnId . OPTIONAL { ?item wdt:P18 ?image . } }`,
+sent as `GET https://query.wikidata.org/sparql?query=…&format=json&maxlag=5`
+(`WikidataHeadshots.sparqlURL`).

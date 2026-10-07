@@ -132,8 +132,9 @@ extension HockeyPlayer {
     var id: String { playerID.isEmpty ? "\(name)#\(number)" : playerID }
 }
 
-/// Shown in place of a headshot the feed has no image for.
-private let missingHeadshot = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
+/// Shown in place of a headshot the feed has no image for. `AthleteHeadshot`
+/// treats it as no headshot at all, and looks on Wikimedia Commons.
+let missingHeadshot = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png"
 
 /// The jersey number sorted players without one to the end of the roster.
 private let noJerseyNumber = 1000

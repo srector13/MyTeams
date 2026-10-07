@@ -16,6 +16,9 @@ import SwiftUI
 struct PlayerCard<Player: RosterPlayer>: View {
     var player: Player
     var state: PlayerSort
+    /// The roster's league, for the Wikimedia Commons fallback when ESPN
+    /// has no headshot (`AthleteHeadshot`). `nil` keeps the blank.
+    var league: LeagueID? = nil
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -35,7 +38,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
             : AnyLayout(VStackLayout(spacing: 5))
 
         layout {
-            RemoteImage(url: URL(string: player.photo)) {
+            AthleteHeadshot(player, league: league) {
                 Image("blank")
                     .resizable()
             }
