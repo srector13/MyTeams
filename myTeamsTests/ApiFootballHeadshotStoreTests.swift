@@ -23,10 +23,22 @@ private final class TestClock: @unchecked Sendable {
 /// 2026-10-07 12:00 UTC.
 private let october7 = Date(timeIntervalSince1970: 1_791_374_400)
 
+/// A query item of a request URL.
+private func query(_ name: String, of url: URL) -> String? {
+    URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        .queryItems?.first { $0.name == name }?.value
+}
+
 /// The page asked for in a `/players` URL.
 private func page(of url: URL) -> String? {
-    URLComponents(url: url, resolvingAgainstBaseURL: false)?
-        .queryItems?.first { $0.name == "page" }?.value
+    query("page", of: url)
+}
+
+/// The players of the live team-route captures: Arsenal (team 42), 2024.
+private func team42Players() throws -> [ApiFootballPlayer] {
+    try (1...3).flatMap { page in
+        ApiFootball.parsePlayers(try Fixture.json("apifootball_players_team42_p\(page)"), league: 39).players
+    }
 }
 
 /// The ESPN roster in a roster fixture, as the join takes it, and its team.
@@ -72,6 +84,32 @@ struct ApiFootballParserTests {
         #expect(ApiFootball.fallbackSeason(from: ["token": "Error 2024"]) == nil)
     }
 
+    @Test("A free plan's page-cap error names the last page it allows, and no season")
+    func pageCapError() throws {
+        let page = ApiFootball.parsePlayers(try Fixture.json("apifootball_players_page_cap"), league: 39)
+        #expect(page.players.isEmpty)
+        #expect(ApiFootball.pageCap(from: page.errors) == 3)
+        // Not a season error: no fallback season in it.
+        #expect(ApiFootball.fallbackSeason(from: page.errors) == nil)
+        let season = ApiFootball.parsePlayers(try Fixture.json("apifootball_players_plan_error"), league: 39)
+        #expect(ApiFootball.pageCap(from: season.errors) == nil)
+    }
+
+    @Test("A /teams answer gives each club's id; ESPN's team name finds its id")
+    func teams() throws {
+        let (teams, errors) = ApiFootball.parseTeams(try Fixture.json("apifootball_teams_epl_live"))
+        #expect(errors.isEmpty)
+        #expect(teams.count == 20)
+        #expect(teams.contains(ApiFootballTeam(id: 42, name: "Arsenal")))
+        #expect(ApiFootball.teamID(for: "Arsenal", in: teams) == 42)
+        #expect(ApiFootball.teamID(for: "Chelsea", in: teams) == 49)
+        #expect(ApiFootball.teamID(for: "Manchester City", in: teams) == 50)
+        #expect(ApiFootball.teamID(for: "Manchester United", in: teams) == 33)
+        #expect(ApiFootball.teamID(for: "Tottenham Hotspur", in: teams) == 47)
+        // No match: that club gets no tier 3.
+        #expect(ApiFootball.teamID(for: "Sunderland", in: teams) == nil)
+    }
+
     @Test("/status: a good key's plan and usage; a bad key's errors")
     func status() throws {
         #expect(
@@ -97,6 +135,12 @@ struct ApiFootballParserTests {
         #expect(players.absoluteString == "https://v3.football.api-sports.io/players?league=39&season=2026&page=3")
         let request = try #require(ApiFootball.keyedRequest(players, key: "k"))
         #expect(request.value(forHTTPHeaderField: "x-apisports-key") == "k")
+        let team = try #require(ApiFootball.teamPlayersURL(team: 42, season: 2024, page: 2))
+        #expect(team.absoluteString == "https://v3.football.api-sports.io/players?team=42&season=2024&page=2")
+        #expect(ApiFootball.keyedRequest(team, key: "k")?.value(forHTTPHeaderField: "x-apisports-key") == "k")
+        let teams = try #require(ApiFootball.teamsURL(league: 39, season: 2026))
+        #expect(teams.absoluteString == "https://v3.football.api-sports.io/teams?league=39&season=2026")
+        #expect(ApiFootball.keyedRequest(teams, key: "k")?.value(forHTTPHeaderField: "x-apisports-key") == "k")
 
         let photo = try #require(ApiFootball.photoURL(playerID: 900001))
         #expect(photo.absoluteString == "https://media.api-sports.io/football/players/900001.png")
@@ -220,6 +264,33 @@ struct ApiFootballJoinTests {
         }
         #expect(ApiFootball.join(roster: roster, team: "Arsenal", league: .premierLeague, players: initialsOnly).isEmpty)
     }
+
+    /// The device bug of 2026-10-07, replayed over live captures: the free
+    /// plan's three league pages are its longest-serving players, none on
+    /// Arsenal's roster today; Arsenal's own three pages match most of it.
+    @Test("Live data: the league route joins no current Arsenal player; the team route joins 10+")
+    func liveRoutes() throws {
+        let (roster, team) = try espnRoster("arsenal_roster_live")
+        #expect(team == "Arsenal")
+        #expect(roster.count == 27)
+
+        let league = try (1...3).flatMap { page in
+            ApiFootball.parsePlayers(try Fixture.json("apifootball_players_epl_live_p\(page)"), league: 39).players
+        }
+        #expect(league.count == 60)
+        #expect(ApiFootball.join(roster: roster, team: team, league: .premierLeague, players: league).isEmpty)
+
+        let joined = ApiFootball.join(roster: roster, team: team, league: .premierLeague, players: try team42Players())
+            .mapValues(\.id)
+        #expect(joined.count >= 10)
+        #expect(joined["196176"] == 19465)  // David Raya
+        #expect(joined["169532"] == 2273)  // Kepa Arrizabalaga ↔ Kepa
+        #expect(joined["241077"] == 19959)  // Ben White ↔ B. White
+        #expect(joined["236322"] == 22224)  // Gabriel Magalhães
+        #expect(joined["203669"] == 37127)  // Martin Ødegaard ↔ M. Ødegaard
+        #expect(joined["231182"] == 978)  // Kai Havertz
+        #expect(joined["280555"] == 1460)  // Bukayo Saka
+    }
 }
 
 // MARK: - Budget
@@ -279,10 +350,13 @@ struct ApiFootballGatingTests {
         }
     }
 
-    /// Answers each EPL page from its fixture.
+    /// Answers `/teams` with the EPL's clubs, and each `/players` page
+    /// from its fixture.
     private static func eplTransport() -> RecordingTransport {
         RecordingTransport { url, _ in
-            let name = page(of: url) == "2" ? "apifootball_players_epl_p2" : "apifootball_players_epl_p1"
+            let name = url.path() == "/teams"
+                ? "apifootball_teams_epl_live"
+                : page(of: url) == "2" ? "apifootball_players_epl_p2" : "apifootball_players_epl_p1"
             return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
         }
     }
@@ -345,7 +419,7 @@ struct ApiFootballGatingTests {
         #expect(harness.transport.urls.isEmpty)
     }
 
-    @Test("Key and toggle: the sweep pages through the league with the key, and photos join")
+    @Test("Key and toggle: the sweep finds the club and pages through it with the key, and photos join")
     func sweeps() async throws {
         let settings = try settings(key: Self.key, enabled: true)
         let harness = try makeHarness { settings.activeKey() }
@@ -355,13 +429,14 @@ struct ApiFootballGatingTests {
         harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
         await harness.store.settle()
         #expect(harness.transport.urls.map(\.absoluteString) == [
-            "https://v3.football.api-sports.io/players?league=39&season=2026&page=1",
-            "https://v3.football.api-sports.io/players?league=39&season=2026&page=2",
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=1",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=2",
         ])
         for request in harness.transport.requests {
             #expect(request.value(forHTTPHeaderField: "x-apisports-key") == Self.key)
         }
-        #expect(ApiFootballBudget(defaults: harness.defaults).used == 2)
+        #expect(ApiFootballBudget(defaults: harness.defaults).used == 3)
 
         let raya = try #require(harness.store.photo(espnID: "196176", league: .premierLeague))
         #expect(raya.playerID == 900001)
@@ -371,7 +446,7 @@ struct ApiFootballGatingTests {
         // Swept this week: another roster load asks nothing.
         harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
         await harness.store.settle()
-        #expect(harness.transport.requestCount == 2)
+        #expect(harness.transport.requestCount == 3)
 
         // Turning the toggle off hides the photos at once.
         settings.isEnabled = false
@@ -397,6 +472,7 @@ struct ApiFootballGatingTests {
         let harness = try makeHarness { settings.activeKey() }
         defer { harness.tearDown() }
         #expect(!FileManager.default.fileExists(atPath: harness.store.fileURL(for: 39).path()))
+        #expect(!FileManager.default.fileExists(atPath: harness.store.teamMapURL(for: 39).path()))
         let (roster, team) = try espnRoster("epl_roster")
 
         // The roster loads before there is a key: not one request.
@@ -411,8 +487,9 @@ struct ApiFootballGatingTests {
         harness.store.resume()
         await harness.store.settle()
         #expect(harness.transport.urls.map(\.absoluteString) == [
-            "https://v3.football.api-sports.io/players?league=39&season=2026&page=1",
-            "https://v3.football.api-sports.io/players?league=39&season=2026&page=2",
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=1",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=2",
         ])
         for request in harness.transport.requests {
             #expect(request.value(forHTTPHeaderField: "x-apisports-key") == Self.key)
@@ -455,15 +532,17 @@ struct ApiFootballGatingTests {
             .appending(path: "ApiFootballGatingTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         let (roster, team) = try espnRoster("epl_roster")
 
-        let capped = try makeHarness(cap: 1, directory: directory) { Self.key }
+        // The club map, then page 1.
+        let capped = try makeHarness(cap: 2, directory: directory) { Self.key }
         defer { capped.tearDown() }
         capped.store.prefetch(roster: roster, team: team, league: .premierLeague)
         await capped.store.settle()
-        #expect(capped.transport.urls.map { page(of: $0) } == ["1"])
+        #expect(capped.transport.urls.map { page(of: $0) } == [nil, "1"])
         // Page 1's rows are drawable already.
         #expect(capped.store.photo(espnID: "196176", league: .premierLeague)?.playerID == 900001)
 
-        // A later day (a fresh budget), from the cache on disk: page 2 only.
+        // A later day (a fresh budget), from the cache on disk: page 2
+        // only — the map is on disk too.
         let resumed = try makeHarness(directory: directory) { Self.key }
         defer { resumed.tearDown() }
         resumed.store.prefetch(roster: roster, team: team, league: .premierLeague)
@@ -476,11 +555,11 @@ struct ApiFootballGatingTests {
     @Test("A free plan's season error falls back to the newest season it offers")
     func seasonFallback() async throws {
         let transport = RecordingTransport { url, _ in
-            let season = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?.first { $0.name == "season" }?.value
-            let name = season == "2024"
-                ? (page(of: url) == "2" ? "apifootball_players_epl_p2" : "apifootball_players_epl_p1")
-                : "apifootball_players_plan_error"
+            let name = query("season", of: url) != "2024"
+                ? "apifootball_players_plan_error"
+                : url.path() == "/teams"
+                    ? "apifootball_teams_epl_live"
+                    : (page(of: url) == "2" ? "apifootball_players_epl_p2" : "apifootball_players_epl_p1")
             return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
         }
         let harness = try makeHarness(transport: transport) { Self.key }
@@ -489,12 +568,156 @@ struct ApiFootballGatingTests {
 
         harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
         await harness.store.settle()
+        // The map falls back; the club's sweep starts at the season it got.
         #expect(harness.transport.urls.map(\.absoluteString) == [
-            "https://v3.football.api-sports.io/players?league=39&season=2026&page=1",
-            "https://v3.football.api-sports.io/players?league=39&season=2024&page=1",
-            "https://v3.football.api-sports.io/players?league=39&season=2024&page=2",
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/teams?league=39&season=2024",
+            "https://v3.football.api-sports.io/players?team=42&season=2024&page=1",
+            "https://v3.football.api-sports.io/players?team=42&season=2024&page=2",
         ])
         #expect(harness.store.photo(espnID: "196176", league: .premierLeague)?.playerID == 900001)
+    }
+
+    /// The device bug of 2026-10-07: the free plan refuses any page past 3,
+    /// and the sweep paused an hour on that refusal, then asked for page 4
+    /// again at the next roster load — forever, never finishing. A page-cap
+    /// error now ends the sweep with what it found.
+    @Test("Free-plan page cap completes the sweep")
+    func pageCapCompletes() async throws {
+        // Pages 1-3 are live league pages (`paging.total` 57); page 4 is
+        // the live refusal.
+        let route: @Sendable (URL, Int) -> RecordingTransport.Reply = { url, _ in
+            let name = switch (url.path(), page(of: url) ?? "") {
+            case ("/teams", _): "apifootball_teams_epl_live"
+            case (_, "1"): "apifootball_players_epl_live_p1"
+            case (_, "2"): "apifootball_players_epl_live_p2"
+            case (_, "3"): "apifootball_players_epl_live_p3"
+            default: "apifootball_players_page_cap"
+            }
+            return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
+        }
+        let transport = RecordingTransport(route)
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "ApiFootballGatingTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let harness = try makeHarness(transport: transport, directory: directory) { Self.key }
+        defer { harness.tearDown() }
+        // The two Arsenal players in the league's first three pages.
+        let roster = [
+            ApiFootballRosterEntry(espnID: "e-partey", name: "Thomas Partey"),
+            ApiFootballRosterEntry(espnID: "e-cedric", name: "Cédric Soares"),
+        ]
+
+        harness.store.prefetch(roster: roster, team: "Arsenal", league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.urls.map(\.absoluteString) == [
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=1",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=2",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=3",
+            "https://v3.football.api-sports.io/players?team=42&season=2026&page=4",
+        ])
+
+        // Finished, on disk, with every row the plan gave.
+        let data = try Data(contentsOf: harness.store.teamFileURL(for: 42))
+        let sweep = try JSONDecoder().decode(ApiFootballSweep.self, from: data)
+        #expect(sweep.route == .team)
+        #expect(sweep.completed == october7)
+        #expect(sweep.pageCap == 3)
+        #expect(sweep.players.count == 60)
+        #expect(harness.store.photo(espnID: "e-partey", league: .premierLeague)?.playerID == 49)
+        #expect(harness.store.photo(espnID: "e-cedric", league: .premierLeague)?.playerID == 190)
+
+        // No pause loop: the next roster load asks nothing…
+        harness.store.prefetch(roster: roster, team: "Arsenal", league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.requestCount == 5)
+
+        // …nor does a relaunch, from the cache on disk (its own transport,
+        // so the first run's requests don't count against it)…
+        let relaunched = try makeHarness(transport: RecordingTransport(route), directory: directory) { Self.key }
+        defer { relaunched.tearDown() }
+        relaunched.store.prefetch(roster: roster, team: "Arsenal", league: .premierLeague)
+        await relaunched.store.settle()
+        #expect(relaunched.transport.requestCount == 0)
+        #expect(relaunched.store.photo(espnID: "e-partey", league: .premierLeague)?.playerID == 49)
+
+        // …and the store is not paused: another club still sweeps.
+        harness.store.prefetch(roster: [ApiFootballRosterEntry(espnID: "1", name: "Cole Palmer")], team: "Chelsea", league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.urls.dropFirst(5).first?.absoluteString
+            == "https://v3.football.api-sports.io/players?team=49&season=2026&page=1")
+    }
+
+    @Test("Team route: opening a club sweeps that team and joins it")
+    func teamRoute() async throws {
+        // Live captures: the free plan refuses 2026 and offers 2024, for
+        // `/teams` as for `/players`.
+        let transport = RecordingTransport { url, _ in
+            let name = query("season", of: url) != "2024"
+                ? "apifootball_players_plan_error"
+                : url.path() == "/teams"
+                    ? "apifootball_teams_epl_live"
+                    : "apifootball_players_team\(query("team", of: url) ?? "")_p\(page(of: url) ?? "")"
+            return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
+        }
+        let harness = try makeHarness(transport: transport) { Self.key }
+        defer { harness.tearDown() }
+        let (roster, team) = try espnRoster("arsenal_roster_live")
+
+        harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.urls.map(\.absoluteString) == [
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/teams?league=39&season=2024",
+            "https://v3.football.api-sports.io/players?team=42&season=2024&page=1",
+            "https://v3.football.api-sports.io/players?team=42&season=2024&page=2",
+            "https://v3.football.api-sports.io/players?team=42&season=2024&page=3",
+        ])
+        for request in harness.transport.requests {
+            #expect(request.value(forHTTPHeaderField: "x-apisports-key") == Self.key)
+        }
+        #expect(ApiFootballBudget(defaults: harness.defaults).used == 5)
+
+        let raya = try #require(harness.store.photo(espnID: "196176", league: .premierLeague))
+        #expect(raya.playerID == 19465)
+        #expect(raya.imageURL?.absoluteString == "https://media.api-sports.io/football/players/19465.png")
+        #expect(harness.store.photo(espnID: "280555", league: .premierLeague)?.playerID == 1460)  // Saka
+        #expect(harness.store.photo(espnID: "203669", league: .premierLeague)?.playerID == 37127)  // Ødegaard
+        #expect(harness.store.photo(espnID: "231182", league: .premierLeague)?.playerID == 978)  // Havertz
+        let matched = roster.filter { harness.store.photo(espnID: $0.espnID, league: .premierLeague) != nil }
+        #expect(matched.count >= 10)
+
+        // Swept this week, map and club: another roster load asks nothing.
+        harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.requestCount == 5)
+    }
+
+    @Test("A sweep file from the league route still loads and joins")
+    func legacyLeagueFile() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "ApiFootballGatingTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Written before `route` and `pageCap` existed.
+        let players = ApiFootball.parsePlayers(try Fixture.json("apifootball_players_epl_p1"), league: 39).players
+        var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            ApiFootballSweep(season: 2026, nextPage: 1, completed: october7, players: players)
+        )) as? [String: Any] ?? [:]
+        legacy["route"] = nil
+        legacy["pageCap"] = nil
+        let harness = try makeHarness(transport: RecordingTransport(always: .status(500)), directory: directory) { Self.key }
+        defer { harness.tearDown() }
+        try JSONSerialization.data(withJSONObject: legacy).write(to: harness.store.fileURL(for: 39))
+        let sweep = try JSONDecoder().decode(ApiFootballSweep.self, from: Data(contentsOf: harness.store.fileURL(for: 39)))
+        #expect(sweep.route == .league)
+        #expect(sweep.players.count == players.count)
+
+        let reloaded = try makeHarness(transport: RecordingTransport(always: .status(500)), directory: directory) { Self.key }
+        defer { reloaded.tearDown() }
+        let (roster, team) = try espnRoster("epl_roster")
+        reloaded.store.prefetch(roster: roster, team: team, league: .premierLeague)
+        #expect(reloaded.store.photo(espnID: "196176", league: .premierLeague)?.playerID == 900001)
+        await reloaded.store.settle()
     }
 
     @Test("A failed page stops the sweep quietly")

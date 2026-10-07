@@ -1,0 +1,467 @@
+{
+ "get": "players",
+ "parameters": {
+  "league": "39",
+  "season": "2024",
+  "page": 2
+ },
+ "errors": [],
+ "results": 20,
+ "paging": {
+  "current": 2,
+  "total": 57
+ },
+ "response": [
+  {
+   "player": {
+    "id": 171,
+    "name": "K. Walker-Peters",
+    "firstname": "Kyle Leonardus",
+    "lastname": "Walker-Peters",
+    "photo": "https://media.api-sports.io/football/players/171.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 41,
+      "name": "Southampton"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 172,
+    "name": "D. Alli",
+    "firstname": "Bamidele Jermaine",
+    "lastname": "Alli",
+    "photo": "https://media.api-sports.io/football/players/172.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 45,
+      "name": "Everton"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 174,
+    "name": "C. Eriksen",
+    "firstname": "Christian",
+    "lastname": "Dannemann Eriksen",
+    "photo": "https://media.api-sports.io/football/players/174.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 33,
+      "name": "Manchester United"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 180,
+    "name": "O. Skipp",
+    "firstname": "Oliver William",
+    "lastname": "Skipp",
+    "photo": "https://media.api-sports.io/football/players/180.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 46,
+      "name": "Leicester"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 47,
+      "name": "Tottenham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 182,
+    "name": "H. Winks",
+    "firstname": "Harry Billy",
+    "lastname": "Winks",
+    "photo": "https://media.api-sports.io/football/players/182.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 46,
+      "name": "Leicester"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 186,
+    "name": "Son Heung-Min",
+    "firstname": "Heung-Min",
+    "lastname": "Son",
+    "photo": "https://media.api-sports.io/football/players/186.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 47,
+      "name": "Tottenham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 190,
+    "name": "Cédric Soares",
+    "firstname": "Cédric Ricardo",
+    "lastname": "Alves Soares",
+    "photo": "https://media.api-sports.io/football/players/190.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 247,
+    "name": "C. Gakpo",
+    "firstname": "Cody Mathès",
+    "lastname": "Gakpo",
+    "photo": "https://media.api-sports.io/football/players/247.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 249,
+    "name": "D. Malen",
+    "firstname": "Donyell",
+    "lastname": "Malen",
+    "photo": "https://media.api-sports.io/football/players/249.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 66,
+      "name": "Aston Villa"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 253,
+    "name": "A. Areola",
+    "firstname": "Alphonse Francis",
+    "lastname": "Areola",
+    "photo": "https://media.api-sports.io/football/players/253.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 48,
+      "name": "West Ham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 259,
+    "name": "Thiago Silva",
+    "firstname": "Thiago",
+    "lastname": "Emiliano da Silva",
+    "photo": "https://media.api-sports.io/football/players/259.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 49,
+      "name": "Chelsea"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 269,
+    "name": "C. Nkunku",
+    "firstname": "Christopher Alan",
+    "lastname": "Nkunku",
+    "photo": "https://media.api-sports.io/football/players/269.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 49,
+      "name": "Chelsea"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 277,
+    "name": "M. Diaby",
+    "firstname": "Moussa",
+    "lastname": "Diaby",
+    "photo": "https://media.api-sports.io/football/players/277.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 66,
+      "name": "Aston Villa"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 279,
+    "name": "L. Mbe Soh",
+    "firstname": "Loïc Junior",
+    "lastname": "Mbe Soh",
+    "photo": "https://media.api-sports.io/football/players/279.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 65,
+      "name": "Nottingham Forest"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 280,
+    "name": "Alisson Becker",
+    "firstname": "Alisson Ramsés",
+    "lastname": "Becker",
+    "photo": "https://media.api-sports.io/football/players/280.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 281,
+    "name": "C. Kelleher",
+    "firstname": "Caoimhín Odhrán",
+    "lastname": "Kelleher",
+    "photo": "https://media.api-sports.io/football/players/281.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 283,
+    "name": "T. Alexander-Arnold",
+    "firstname": "Trent John",
+    "lastname": "Alexander-Arnold",
+    "photo": "https://media.api-sports.io/football/players/283.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 284,
+    "name": "J. Gomez",
+    "firstname": "Joseph Dave",
+    "lastname": "Gomez",
+    "photo": "https://media.api-sports.io/football/players/284.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 285,
+    "name": "K. Hoever",
+    "firstname": "Ki-Jana Delano",
+    "lastname": "Hoever",
+    "photo": "https://media.api-sports.io/football/players/285.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 39,
+      "name": "Wolves"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 286,
+    "name": "J. Matip",
+    "firstname": "Job Joël André",
+    "lastname": "Matip",
+    "photo": "https://media.api-sports.io/football/players/286.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 40,
+      "name": "Liverpool"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,262 @@
+{
+ "timestamp": "2026-10-07T22:28:39Z",
+ "status": "success",
+ "season": {
+  "year": 2026,
+  "displayName": "2026-27 English Premier League",
+  "type": 14308,
+  "name": "2026-27 English Premier League"
+ },
+ "team": {
+  "id": "359",
+  "abbreviation": "ARS",
+  "location": "Arsenal",
+  "name": "Arsenal",
+  "displayName": "Arsenal"
+ },
+ "athletes": [
+  {
+   "id": "169532",
+   "firstName": "Kepa",
+   "lastName": "Arrizabalaga",
+   "fullName": "Kepa Arrizabalaga",
+   "displayName": "Kepa Arrizabalaga",
+   "shortName": "K. Arrizabalaga",
+   "jersey": "13"
+  },
+  {
+   "id": "196176",
+   "firstName": "David",
+   "lastName": "Raya",
+   "fullName": "David Raya",
+   "displayName": "David Raya",
+   "shortName": "D. Raya",
+   "jersey": "1"
+  },
+  {
+   "id": "265921",
+   "firstName": "Illan",
+   "lastName": "Meslier",
+   "fullName": "Illan Meslier",
+   "displayName": "Illan Meslier",
+   "shortName": "I. Meslier",
+   "jersey": "30"
+  },
+  {
+   "id": "231859",
+   "firstName": "Ezri",
+   "lastName": "Konsa",
+   "fullName": "Ezri Konsa",
+   "displayName": "Ezri Konsa",
+   "shortName": "E. Konsa",
+   "jersey": "15"
+  },
+  {
+   "id": "236322",
+   "firstName": "Gabriel",
+   "lastName": "Magalhães",
+   "fullName": "Gabriel Magalhães",
+   "displayName": "Gabriel Magalhães",
+   "shortName": "G. Magalhães",
+   "jersey": "6"
+  },
+  {
+   "id": "241077",
+   "firstName": "Ben",
+   "lastName": "White",
+   "fullName": "Ben White",
+   "displayName": "Ben White",
+   "shortName": "B. White",
+   "jersey": "4"
+  },
+  {
+   "id": "277385",
+   "firstName": "William",
+   "lastName": "Saliba",
+   "fullName": "William Saliba",
+   "displayName": "William Saliba",
+   "shortName": "W. Saliba",
+   "jersey": "2"
+  },
+  {
+   "id": "282716",
+   "firstName": "Jurriën",
+   "lastName": "Timber",
+   "fullName": "Jurriën Timber",
+   "displayName": "Jurriën Timber",
+   "shortName": "J. Timber",
+   "jersey": "12"
+  },
+  {
+   "id": "292062",
+   "firstName": "Piero",
+   "lastName": "Hincapié",
+   "fullName": "Piero Hincapié",
+   "displayName": "Piero Hincapié",
+   "shortName": "P. Hincapié",
+   "jersey": "5"
+  },
+  {
+   "id": "298329",
+   "firstName": "Riccardo",
+   "lastName": "Calafiori",
+   "fullName": "Riccardo Calafiori",
+   "displayName": "Riccardo Calafiori",
+   "shortName": "R. Calafiori",
+   "jersey": "33"
+  },
+  {
+   "id": "328497",
+   "firstName": "Cristhian",
+   "lastName": "Mosquera",
+   "fullName": "Cristhian Mosquera",
+   "displayName": "Cristhian Mosquera",
+   "shortName": "C. Mosquera",
+   "jersey": "3"
+  },
+  {
+   "id": "352758",
+   "firstName": "Myles",
+   "lastName": "Lewis-Skelly",
+   "fullName": "Myles Lewis-Skelly",
+   "displayName": "Myles Lewis-Skelly",
+   "shortName": "M. Lewis-Skelly",
+   "jersey": "49"
+  },
+  {
+   "id": "400284",
+   "firstName": "Marli",
+   "lastName": "Salmon",
+   "fullName": "Marli Salmon",
+   "displayName": "Marli Salmon",
+   "shortName": "M. Salmon",
+   "jersey": "89"
+  },
+  {
+   "id": "203669",
+   "firstName": "Martin",
+   "lastName": "Ødegaard",
+   "fullName": "Martin Ødegaard",
+   "displayName": "Martin Ødegaard",
+   "shortName": "M. Ødegaard",
+   "jersey": "8"
+  },
+  {
+   "id": "209581",
+   "firstName": "Mikel",
+   "lastName": "Merino",
+   "fullName": "Mikel Merino",
+   "displayName": "Mikel Merino",
+   "shortName": "M. Merino",
+   "jersey": "23"
+  },
+  {
+   "id": "218522",
+   "firstName": "Bruno",
+   "lastName": "Guimarães",
+   "fullName": "Bruno Guimarães",
+   "displayName": "Bruno Guimarães",
+   "shortName": "B. Guimarães",
+   "jersey": "39"
+  },
+  {
+   "id": "238262",
+   "firstName": "Declan",
+   "lastName": "Rice",
+   "fullName": "Declan Rice",
+   "displayName": "Declan Rice",
+   "shortName": "D. Rice",
+   "jersey": "41"
+  },
+  {
+   "id": "251400",
+   "firstName": "Eberechi",
+   "lastName": "Eze",
+   "fullName": "Eberechi Eze",
+   "displayName": "Eberechi Eze",
+   "shortName": "E. Eze",
+   "jersey": "10"
+  },
+  {
+   "id": "287266",
+   "firstName": "Martín",
+   "lastName": "Zubimendi",
+   "fullName": "Martín Zubimendi",
+   "displayName": "Martín Zubimendi",
+   "shortName": "M. Zubimendi",
+   "jersey": "36"
+  },
+  {
+   "id": "393424",
+   "firstName": "Theo",
+   "lastName": "Julienne",
+   "fullName": "Theo Julienne",
+   "displayName": "Theo Julienne",
+   "shortName": "T. Julienne",
+   "jersey": "45"
+  },
+  {
+   "id": "399894",
+   "firstName": "Ife",
+   "lastName": "Ibrahim",
+   "fullName": "Ife Ibrahim",
+   "displayName": "Ife Ibrahim",
+   "shortName": "I. Ibrahim",
+   "jersey": "44"
+  },
+  {
+   "id": "231182",
+   "firstName": "Kai",
+   "lastName": "Havertz",
+   "fullName": "Kai Havertz",
+   "displayName": "Kai Havertz",
+   "shortName": "K. Havertz",
+   "jersey": "29"
+  },
+  {
+   "id": "258906",
+   "firstName": "Viktor",
+   "lastName": "Gyökeres",
+   "fullName": "Viktor Gyökeres",
+   "displayName": "Viktor Gyökeres",
+   "shortName": "V. Gyökeres",
+   "jersey": "14"
+  },
+  {
+   "id": "280555",
+   "firstName": "Bukayo",
+   "lastName": "Saka",
+   "fullName": "Bukayo Saka",
+   "displayName": "Bukayo Saka",
+   "shortName": "B. Saka",
+   "jersey": "7"
+  },
+  {
+   "id": "293236",
+   "firstName": "Noni",
+   "lastName": "Madueke",
+   "fullName": "Noni Madueke",
+   "displayName": "Noni Madueke",
+   "shortName": "N. Madueke",
+   "jersey": "20"
+  },
+  {
+   "id": "303793",
+   "firstName": "Christos",
+   "lastName": "Tzolis",
+   "fullName": "Christos Tzolis",
+   "displayName": "Christos Tzolis",
+   "shortName": "C. Tzolis",
+   "jersey": "17"
+  },
+  {
+   "id": "397263",
+   "firstName": "Max",
+   "lastName": "Dowman",
+   "fullName": "Max Dowman",
+   "displayName": "Max Dowman",
+   "shortName": "M. Dowman",
+   "jersey": "56"
+  }
+ ]
+}

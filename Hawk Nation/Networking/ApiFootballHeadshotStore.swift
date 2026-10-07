@@ -77,8 +77,17 @@ struct ApiFootballPhoto: Codable, Hashable, Sendable {
     static let creditLine = "Photo via API-Football / API-Sports"
 }
 
-/// Where a league's weekly sweep of `/players` has got to, and what it found.
+/// Where a weekly sweep of `/players` has got to, and what it found.
 struct ApiFootballSweep: Codable, Hashable, Sendable {
+    /// What was swept: a whole league (`/players?league=`, the route
+    /// before 2026-10-07, whose files are still read) or one club
+    /// (`/players?team=`).
+    enum Route: String, Codable, Sendable {
+        case league
+        case team
+    }
+
+    var route: Route = .league
     var season: Int
     /// The page to ask for next.
     var nextPage: Int
@@ -86,6 +95,43 @@ struct ApiFootballSweep: Codable, Hashable, Sendable {
     var completed: Date?
     /// Every player found, by sweeps past and present.
     var players: [ApiFootballPlayer]
+    /// The last page the plan allows, once a page-cap error has said so.
+    var pageCap: Int?
+
+    private enum CodingKeys: String, CodingKey {
+        case route, season, nextPage, completed, players, pageCap
+    }
+}
+
+extension ApiFootballSweep {
+    /// Files written before `route` existed are league sweeps.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        route = try container.decodeIfPresent(Route.self, forKey: .route) ?? .league
+        season = try container.decode(Int.self, forKey: .season)
+        nextPage = try container.decode(Int.self, forKey: .nextPage)
+        completed = try container.decodeIfPresent(Date.self, forKey: .completed)
+        players = try container.decode([ApiFootballPlayer].self, forKey: .players)
+        pageCap = try container.decodeIfPresent(Int.self, forKey: .pageCap)
+    }
+}
+
+/// A club in API-Football's `/teams` answer.
+struct ApiFootballTeam: Codable, Hashable, Sendable {
+    var id: Int
+    var name: String
+}
+
+/// A league's clubs, by API-Football id: how a roster's team finds the
+/// `team=` to sweep.
+struct ApiFootballTeamMap: Codable, Hashable, Sendable {
+    /// The season asked for (`ApiFootball.season(for:at:)`): the map is
+    /// asked again only once that changes.
+    var season: Int
+    /// The season the answer is of: older than `season` when the plan
+    /// offered only older ones. Team sweeps start there.
+    var served: Int
+    var teams: [ApiFootballTeam]
 }
 
 // MARK: - Requests and parsing
@@ -159,6 +205,17 @@ enum ApiFootball {
     /// `GET https://v3.football.api-sports.io/players?league=39&season=2026&page=1`.
     static func playersURL(league: Int, season: Int, page: Int) -> URL? {
         URL(string: "https://\(apiHost)/players?league=\(league)&season=\(season)&page=\(page)")
+    }
+
+    /// `GET https://v3.football.api-sports.io/players?team=42&season=2024&page=1`:
+    /// one club's players, which the free plan's three-page cap covers.
+    static func teamPlayersURL(team: Int, season: Int, page: Int) -> URL? {
+        URL(string: "https://\(apiHost)/players?team=\(team)&season=\(season)&page=\(page)")
+    }
+
+    /// `GET https://v3.football.api-sports.io/teams?league=39&season=2026`.
+    static func teamsURL(league: Int, season: Int) -> URL? {
+        URL(string: "https://\(apiHost)/teams?league=\(league)&season=\(season)")
     }
 
     /// `https://media.api-sports.io/football/players/<id>.png`. `playerID`
@@ -244,6 +301,37 @@ enum ApiFootball {
     static func fallbackSeason(from errors: [String: String]) -> Int? {
         guard let message = errors["plan"] else { return nil }
         return message.matches(of: /\b(?:19|20)\d{2}\b/).compactMap { Int(String($0.output)) }.max()
+    }
+
+    /// The last page a free-plan `plan` error allows ("limited to a maximum
+    /// value of 3 for the Page parameter" → 3), or `nil` for any other error.
+    static func pageCap(from errors: [String: String]) -> Int? {
+        for message in errors.values {
+            if let match = message.firstMatch(of: /maximum value of (\d+) for the Page parameter/) {
+                return Int(String(match.output.1))
+            }
+        }
+        return nil
+    }
+
+    /// The clubs in a `/teams` answer, and its `errors`.
+    static func parseTeams(_ json: JSON) -> (teams: [ApiFootballTeam], errors: [String: String]) {
+        let teams = json["response"].arrayValue.compactMap { row -> ApiFootballTeam? in
+            let team = row["team"]
+            guard let id = team["id"].int, id > 0, !team["name"].stringValue.isEmpty else { return nil }
+            return ApiFootballTeam(id: id, name: team["name"].stringValue)
+        }
+        return (teams, errorMessages(json))
+    }
+
+    /// The API-Football id of ESPN's `team`: the one club `teamsMatch`
+    /// finds, or, of several, the one whose name has the same words.
+    /// `nil` when none, or several, fit.
+    static func teamID(for team: String, in teams: [ApiFootballTeam]) -> Int? {
+        let found = teams.filter { teamsMatch(team, $0.name) }
+        if found.count == 1 { return found[0].id }
+        let same = found.filter { Set(tokens($0.name)) == Set(tokens(team)) }
+        return same.count == 1 ? same[0].id : nil
     }
 
     /// Whether `data` is one of the CDN's "no photo" images.
@@ -444,13 +532,21 @@ struct ApiFootballBudget {
 /// the reader's own key, for athletes ESPN and Wikidata have none of.
 ///
 /// A team page hands the store its roster as it loads (`prefetch(roster:team:league:)`).
-/// If that league's last sweep is a week old, or never ran, the store pages
-/// through `/players?league=&season=` — one request every few seconds,
-/// never more than `ApiFootball.dailyRequestCap` a UTC day (`ApiFootballBudget`);
-/// a sweep cut short by the cap resumes on a later day where it stopped.
-/// Rows are joined to ESPN's roster by name and team, never by id.
+/// The store finds the club's API-Football id in the league's `/teams` map
+/// (asked once a season), and if that club's last sweep is a week old, or
+/// never ran, pages through `/players?team=&season=` — one request every
+/// few seconds, never more than `ApiFootball.dailyRequestCap` a UTC day
+/// (`ApiFootballBudget`); a sweep cut short by the cap resumes on a later
+/// day where it stopped. Rows are joined to ESPN's roster by name and
+/// team, never by id.
 ///
-/// Every page is cached on disk, one file per league under
+/// By club, not by league: the free plan refuses any page past 3, and a
+/// league's first three pages (by ascending player id) are its longest-
+/// serving players — none of Arsenal's 27 on 2026-10-07. A page-cap error
+/// ends a sweep, finished, with what it found (docs/APIFOOTBALL_LIVE_DIAGNOSTIC.md).
+///
+/// Every page is cached on disk, one file per club (and one per league
+/// from the old whole-league sweep, still drawn from) under
 /// Caches/ApiFootball, so photos survive without spending quota. Nothing
 /// is asked, and no photo is given, without `credentials()`: the toggle on
 /// and a key saved. Failure is silent and pauses the sweep for an hour.
@@ -476,8 +572,13 @@ final class ApiFootballHeadshotStore {
     /// `false` keeps the store off the network: fixture launches.
     @ObservationIgnored private let enabled: Bool
 
-    /// Sweeps by API-Football league.
-    @ObservationIgnored private var sweeps: [Int: ApiFootballSweep]
+    /// Sweeps by API-Football team.
+    @ObservationIgnored private var teamSweeps: [Int: ApiFootballSweep]
+    /// Whole-league sweeps from before the team route, by API-Football
+    /// league: drawn from, never resumed.
+    @ObservationIgnored private var leagueSweeps: [Int: ApiFootballSweep]
+    /// Each league's clubs, by API-Football league.
+    @ObservationIgnored private var teamMaps: [Int: ApiFootballTeamMap]
     /// The rosters seen, by league and team name, to join each new page to.
     @ObservationIgnored private var rosters: [LeagueID: [String: [ApiFootballRosterEntry]]] = [:]
     @ObservationIgnored private var sweepTasks: [Int: Task<Void, Never>] = [:]
@@ -508,7 +609,10 @@ final class ApiFootballHeadshotStore {
         self.spacing = spacing
         self.now = now
         self.enabled = enabled
-        sweeps = Self.load(from: directory)
+        let cache = Self.load(from: directory)
+        teamSweeps = cache.teams
+        leagueSweeps = cache.leagues
+        teamMaps = cache.maps
     }
 
     // MARK: Reading
@@ -529,7 +633,7 @@ final class ApiFootballHeadshotStore {
     // MARK: Requesting
 
     /// Joins a roster that has just loaded to the cached rows, and starts
-    /// the league's sweep if it is due and today's budget allows. Without a
+    /// its club's sweep if it is due and today's budget allows. Without a
     /// key the roster is only remembered, for `resume()`; nothing is asked.
     /// Does nothing for a league with no API-Football id.
     func prefetch(roster: [ApiFootballRosterEntry], team: String, league: LeagueID) {
@@ -562,8 +666,7 @@ final class ApiFootballHeadshotStore {
 
     private func startSweepIfDue(_ league: LeagueID, apiLeague: Int) {
         guard sweepTasks[apiLeague] == nil, !isPaused, budget.canSpend else { return }
-        if let completed = sweeps[apiLeague]?.completed,
-           now().timeIntervalSince(completed) < ApiFootball.sweepInterval {
+        if let map = currentMap(league, apiLeague: apiLeague), dueTeam(league, map: map) == nil {
             return
         }
         sweepTasks[apiLeague] = Task { [weak self] in
@@ -572,39 +675,113 @@ final class ApiFootballHeadshotStore {
         }
     }
 
-    /// Pages through the league until the sweep is done, the day's budget
-    /// is spent, the key is withdrawn, or a request fails.
+    /// `league`'s club map, unless it is missing or of another season.
+    private func currentMap(_ league: LeagueID, apiLeague: Int) -> ApiFootballTeamMap? {
+        guard let map = teamMaps[apiLeague], map.season == ApiFootball.season(for: league, at: now()) else { return nil }
+        return map
+    }
+
+    /// The first club in `league`'s rosters whose sweep is unfinished or a
+    /// week old. A club the map does not name is never due: it gets no
+    /// tier 3.
+    private func dueTeam(_ league: LeagueID, map: ApiFootballTeamMap) -> Int? {
+        let teams = (rosters[league] ?? [:]).keys.sorted().compactMap { ApiFootball.teamID(for: $0, in: map.teams) }
+        return teams.first { team in
+            guard let completed = teamSweeps[team]?.completed else { return true }
+            return now().timeIntervalSince(completed) >= ApiFootball.sweepInterval
+        }
+    }
+
+    /// Asks for the league's club map if it has none of this season, then
+    /// sweeps each club due, until all are done, the day's budget is spent,
+    /// the key is withdrawn, or a request fails.
     private func sweep(_ league: LeagueID, apiLeague: Int) async {
-        var sweep = sweeps[apiLeague] ?? ApiFootballSweep(season: 0, nextPage: 1, completed: nil, players: [])
+        var spaced = false
+        if currentMap(league, apiLeague: apiLeague) == nil {
+            guard await fetchTeams(league, apiLeague: apiLeague, spaced: &spaced) else { return }
+        }
+        while let map = currentMap(league, apiLeague: apiLeague), let team = dueTeam(league, map: map) {
+            guard await sweep(team: team, league: league, apiLeague: apiLeague, season: map.served, spaced: &spaced)
+            else { return }
+        }
+    }
+
+    /// Asks `/teams` for the league's clubs. `false` when it stopped short.
+    private func fetchTeams(_ league: LeagueID, apiLeague: Int, spaced: inout Bool) async -> Bool {
+        guard let season = ApiFootball.season(for: league, at: now()) else { return false }
+        var served = season
+        var triedOlderSeason = false
+        while true {
+            let answer = await ask(ApiFootball.teamsURL(league: apiLeague, season: served), spaced: &spaced)
+            guard case .answered(let status, let json) = answer else {
+                if case .failed = answer { pause() }
+                return false
+            }
+            let (teams, errors) = ApiFootball.parseTeams(json)
+            if !errors.isEmpty {
+                // As for `/players`: the newest season the plan offers.
+                if !triedOlderSeason, let older = ApiFootball.fallbackSeason(from: errors), older < served {
+                    triedOlderSeason = true
+                    served = older
+                    continue
+                }
+                logger.debug("API-Football refused the clubs of league \(apiLeague)")
+                pause()
+                return false
+            }
+            guard (200..<300).contains(status), !teams.isEmpty else {
+                pause()
+                return false
+            }
+            let map = ApiFootballTeamMap(season: season, served: served, teams: teams)
+            teamMaps[apiLeague] = map
+            write(map, to: teamMapURL(for: apiLeague))
+            return true
+        }
+    }
+
+    /// Pages through club `team`'s players, from `season` when starting
+    /// afresh. `false` when it stopped short.
+    private func sweep(team: Int, league: LeagueID, apiLeague: Int, season: Int, spaced: inout Bool) async -> Bool {
+        var sweep = teamSweeps[team]
+            ?? ApiFootballSweep(route: .team, season: 0, nextPage: 1, completed: nil, players: [])
         if sweep.completed != nil || sweep.season == 0 {
-            // A new sweep, of the season under way; the old rows stay
-            // drawable until the new pages replace them.
-            guard let season = ApiFootball.season(for: league, at: now()) else { return }
+            // A new sweep; the old rows stay drawable until the new pages
+            // replace them.
             sweep.season = season
             sweep.nextPage = 1
             sweep.completed = nil
         }
         var triedOlderSeason = false
-        var first = true
 
         while sweep.completed == nil {
-            if !first {
-                do { try await Task.sleep(for: spacing) } catch { return }
+            if let cap = sweep.pageCap, sweep.nextPage > cap {
+                // The plan gives no page past `cap`: the sweep is done.
+                sweep.completed = now()
+                sweep.nextPage = 1
+                teamSweeps[team] = sweep
+                write(sweep, to: teamFileURL(for: team))
+                break
             }
-            first = false
-            guard let key = credentials(), budget.canSpend,
-                  let url = ApiFootball.playersURL(league: apiLeague, season: sweep.season, page: sweep.nextPage),
-                  let request = ApiFootball.keyedRequest(url, key: key)
-            else { return }
-            budget.spend()
-
-            guard let answer = await load(request) else {
-                pause()
-                return
+            let url = ApiFootball.teamPlayersURL(team: team, season: sweep.season, page: sweep.nextPage)
+            let answer = await ask(url, spaced: &spaced)
+            guard case .answered(let status, let json) = answer else {
+                if case .failed = answer { pause() }
+                return false
             }
-            let (status, json) = answer
             let page = ApiFootball.parsePlayers(json, league: apiLeague)
             if !page.errors.isEmpty {
+                if let cap = ApiFootball.pageCap(from: page.errors) {
+                    // The free plan stops at page `cap`, so what is swept
+                    // is all it will give: done. Pausing instead would ask
+                    // for this page again every hour, forever.
+                    sweep.pageCap = cap
+                    sweep.completed = now()
+                    sweep.nextPage = 1
+                    teamSweeps[team] = sweep
+                    write(sweep, to: teamFileURL(for: team))
+                    break
+                }
                 // The free plan covers only some seasons: sweep the newest
                 // it offers. Clubs may have changed since, so some players
                 // will miss; none will be mismatched.
@@ -615,13 +792,13 @@ final class ApiFootballHeadshotStore {
                     continue
                 }
                 let refused = sweep.nextPage
-                logger.debug("API-Football refused page \(refused) of league \(apiLeague)")
+                logger.debug("API-Football refused page \(refused) of team \(team)")
                 pause()
-                return
+                return false
             }
             guard (200..<300).contains(status) else {
                 pause()
-                return
+                return false
             }
 
             var byID = Dictionary(sweep.players.map { ($0.id, $0) }, uniquingKeysWith: { _, new in new })
@@ -633,12 +810,37 @@ final class ApiFootballHeadshotStore {
             } else {
                 sweep.nextPage = page.current + 1
             }
-            sweeps[apiLeague] = sweep
-            save(apiLeague)
+            teamSweeps[team] = sweep
+            write(sweep, to: teamFileURL(for: team))
             rejoin(league, apiLeague: apiLeague)
         }
         let count = sweep.players.count
-        logger.debug("Swept league \(apiLeague): \(count) players")
+        logger.debug("Swept team \(team) of league \(apiLeague): \(count) players")
+        return true
+    }
+
+    /// What one keyed request came to.
+    private enum Answer {
+        /// No key, no budget left, or cancelled: stop, quietly.
+        case stopped
+        /// No answer came.
+        case failed
+        case answered(status: Int, JSON)
+    }
+
+    /// Sends `url` with the key, counted against the day's budget — after
+    /// `spacing`, unless it is the sweep's first request.
+    private func ask(_ url: URL?, spaced: inout Bool) async -> Answer {
+        if spaced {
+            do { try await Task.sleep(for: spacing) } catch { return .stopped }
+        }
+        spaced = true
+        guard let url, let key = credentials(), budget.canSpend,
+              let request = ApiFootball.keyedRequest(url, key: key)
+        else { return .stopped }
+        budget.spend()
+        guard let answer = await load(request) else { return .failed }
+        return .answered(status: answer.0, answer.1)
     }
 
     /// Sends `request`: its status and body, or `nil` when no answer came.
@@ -651,9 +853,12 @@ final class ApiFootballHeadshotStore {
         }
     }
 
-    /// Joins every roster seen in `league` to its rows.
+    /// Joins every roster seen in `league` to its rows: those of every
+    /// sweep, by club or by league, swept from that league.
     private func rejoin(_ league: LeagueID, apiLeague: Int) {
-        let players = sweeps[apiLeague]?.players ?? []
+        let swept = (leagueSweeps[apiLeague].map { [$0] } ?? [])
+            + teamSweeps.sorted { $0.key < $1.key }.map(\.value)
+        let players = swept.flatMap(\.players).filter { $0.league == apiLeague }
         guard !players.isEmpty else { return }
         var joined = matches[league] ?? [:]
         for (team, roster) in rosters[league] ?? [:] {
@@ -677,28 +882,50 @@ final class ApiFootballHeadshotStore {
 
     // MARK: Disk
 
+    /// A whole-league sweep's file, from before the team route.
     func fileURL(for apiLeague: Int) -> URL {
         directory.appending(path: "league-\(apiLeague).json", directoryHint: .notDirectory)
     }
 
-    /// Every `league-<id>.json` in `directory`, by league id.
-    private static func load(from directory: URL) -> [Int: ApiFootballSweep] {
-        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        var sweeps: [Int: ApiFootballSweep] = [:]
-        for file in files where file.pathExtension == "json" {
-            let name = file.deletingPathExtension().lastPathComponent
-            guard name.hasPrefix("league-"), let id = Int(name.dropFirst("league-".count)),
-                  let data = try? Data(contentsOf: file),
-                  let sweep = try? JSONDecoder().decode(ApiFootballSweep.self, from: data)
-            else { continue }
-            sweeps[id] = sweep
-        }
-        return sweeps
+    /// A club's sweep.
+    func teamFileURL(for team: Int) -> URL {
+        directory.appending(path: "team-\(team).json", directoryHint: .notDirectory)
     }
 
-    private func save(_ apiLeague: Int) {
-        guard let sweep = sweeps[apiLeague], let data = try? JSONEncoder().encode(sweep) else { return }
-        let file = fileURL(for: apiLeague)
+    /// A league's club map.
+    func teamMapURL(for apiLeague: Int) -> URL {
+        directory.appending(path: "teams-league-\(apiLeague).json", directoryHint: .notDirectory)
+    }
+
+    /// Every `league-<id>.json`, `team-<id>.json` and `teams-league-<id>.json`
+    /// in `directory`, by id.
+    private static func load(from directory: URL) -> (
+        leagues: [Int: ApiFootballSweep], teams: [Int: ApiFootballSweep], maps: [Int: ApiFootballTeamMap]
+    ) {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        var leagues: [Int: ApiFootballSweep] = [:]
+        var teams: [Int: ApiFootballSweep] = [:]
+        var maps: [Int: ApiFootballTeamMap] = [:]
+        func id(_ name: String, after prefix: String) -> Int? {
+            name.hasPrefix(prefix) ? Int(name.dropFirst(prefix.count)) : nil
+        }
+        let decoder = JSONDecoder()
+        for file in files where file.pathExtension == "json" {
+            let name = file.deletingPathExtension().lastPathComponent
+            guard let data = try? Data(contentsOf: file) else { continue }
+            if let league = id(name, after: "league-") {
+                leagues[league] = try? decoder.decode(ApiFootballSweep.self, from: data)
+            } else if let team = id(name, after: "team-") {
+                teams[team] = try? decoder.decode(ApiFootballSweep.self, from: data)
+            } else if let league = id(name, after: "teams-league-") {
+                maps[league] = try? decoder.decode(ApiFootballTeamMap.self, from: data)
+            }
+        }
+        return (leagues, teams, maps)
+    }
+
+    private func write(_ value: some Encodable, to file: URL) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try data.write(to: file, options: .atomic)

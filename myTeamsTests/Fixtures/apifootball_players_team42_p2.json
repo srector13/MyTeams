@@ -1,0 +1,1017 @@
+{
+ "get": "players",
+ "parameters": {
+  "team": "42",
+  "season": "2024",
+  "page": 2
+ },
+ "errors": [],
+ "results": 20,
+ "paging": {
+  "current": 2,
+  "total": 3
+ },
+ "response": [
+  {
+   "player": {
+    "id": 19959,
+    "name": "B. White",
+    "firstname": "Benjamin William",
+    "lastname": "White",
+    "photo": "https://media.api-sports.io/football/players/19959.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 20355,
+    "name": "A. Ramsdale",
+    "firstname": "Aaron Christopher",
+    "lastname": "Ramsdale",
+    "photo": "https://media.api-sports.io/football/players/20355.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 22090,
+    "name": "W. Saliba",
+    "firstname": "William Alain André Gabriel",
+    "lastname": "Saliba",
+    "photo": "https://media.api-sports.io/football/players/22090.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 22224,
+    "name": "Gabriel Magalhães",
+    "firstname": "Gabriel",
+    "lastname": "dos Santos Magalhães",
+    "photo": "https://media.api-sports.io/football/players/22224.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 37127,
+    "name": "M. Ødegaard",
+    "firstname": "Martin",
+    "lastname": "Ødegaard",
+    "photo": "https://media.api-sports.io/football/players/37127.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 38746,
+    "name": "J. Timber",
+    "firstname": "Jurriën David Norman",
+    "lastname": "Timber",
+    "photo": "https://media.api-sports.io/football/players/38746.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 41577,
+    "name": "Nuno Tavares",
+    "firstname": "Nuno Albertino",
+    "lastname": "Varela Tavares",
+    "photo": "https://media.api-sports.io/football/players/41577.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 41725,
+    "name": "Fábio Vieira",
+    "firstname": "Fábio Daniel",
+    "lastname": "Ferreira Vieira",
+    "photo": "https://media.api-sports.io/football/players/41725.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 47311,
+    "name": "Mikel Merino",
+    "firstname": "Mikel",
+    "lastname": "Merino Zazón",
+    "photo": "https://media.api-sports.io/football/players/47311.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 61431,
+    "name": "J. Kiwior",
+    "firstname": "Jakub Piotr",
+    "lastname": "Kiwior",
+    "photo": "https://media.api-sports.io/football/players/61431.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 127769,
+    "name": "Gabriel Martinelli",
+    "firstname": "Gabriel Teodoro",
+    "lastname": "Martinelli Silva",
+    "photo": "https://media.api-sports.io/football/players/127769.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 153407,
+    "name": "N. Butler-Oyedeji",
+    "firstname": "Nathan Jerome Chatoyer",
+    "lastname": "Butler-Oyedeji",
+    "photo": "https://media.api-sports.io/football/players/153407.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 157052,
+    "name": "R. Calafiori",
+    "firstname": "Riccardo",
+    "lastname": "Calafiori",
+    "photo": "https://media.api-sports.io/football/players/157052.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 163068,
+    "name": "O. Rekik",
+    "firstname": "Omar",
+    "lastname": "Rekik",
+    "photo": "https://media.api-sports.io/football/players/163068.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 169295,
+    "name": "K. Hein",
+    "firstname": "Karl Jakob",
+    "lastname": "Hein",
+    "photo": "https://media.api-sports.io/football/players/169295.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 937,
+      "name": "Emirates Cup",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 278074,
+    "name": "S. Oulad M&apos;Hand",
+    "firstname": "Salah",
+    "lastname": "Oulad M'Hand",
+    "photo": "https://media.api-sports.io/football/players/278074.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 48,
+      "name": "League Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 45,
+      "name": "FA Cup",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 283026,
+    "name": "M. Biereth",
+    "firstname": "Mika",
+    "lastname": "Miles Biereth",
+    "photo": "https://media.api-sports.io/football/players/283026.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 284463,
+    "name": "Jack Henry-Francis",
+    "firstname": "Jack",
+    "lastname": "Henry-Francis",
+    "photo": "https://media.api-sports.io/football/players/284463.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 2,
+      "name": "UEFA Champions League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 284502,
+    "name": "James Lannin-Sweet",
+    "firstname": "James",
+    "lastname": "Lannin-Sweet",
+    "photo": "https://media.api-sports.io/football/players/284502.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 284540,
+    "name": "Mauro Bandeira",
+    "firstname": "Mauro",
+    "lastname": "Gomes Bandeira",
+    "photo": "https://media.api-sports.io/football/players/284540.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  }
+ ]
+}
