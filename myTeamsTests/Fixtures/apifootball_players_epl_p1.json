@@ -1,0 +1,286 @@
+{
+  "get": "players",
+  "parameters": {
+    "league": "39",
+    "season": "2026",
+    "page": "1"
+  },
+  "errors": [],
+  "results": 6,
+  "paging": {
+    "current": 1,
+    "total": 2
+  },
+  "response": [
+    {
+      "player": {
+        "id": 900001,
+        "name": "D. Raya",
+        "firstname": "David",
+        "lastname": "Raya Martín",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900001.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Goalkeeper",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900002,
+        "name": "Gabriel Magalhães",
+        "firstname": "Gabriel",
+        "lastname": "dos Santos Magalhães",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900002.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Defender",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900003,
+        "name": "B. White",
+        "firstname": "Benjamin William",
+        "lastname": "White",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900003.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Defender",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900004,
+        "name": "Kepa",
+        "firstname": "Kepa",
+        "lastname": "Arrizabalaga Revuelta",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900004.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Goalkeeper",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900005,
+        "name": "B. White",
+        "firstname": "Ben",
+        "lastname": "White",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900005.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 51,
+            "name": "Brighton",
+            "logo": "https://media.api-sports.io/football/teams/51.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Defender",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900006,
+        "name": "I. Meslier",
+        "firstname": "Illan",
+        "lastname": "Meslier",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900006.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 63,
+            "name": "Leeds",
+            "logo": "https://media.api-sports.io/football/teams/63.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Goalkeeper",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    }
+  ]
+}

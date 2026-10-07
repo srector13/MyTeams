@@ -10,8 +10,9 @@ import SwiftUI
 import UIKit
 
 /// An athlete's photo: ESPN's headshot, else their Wikimedia Commons photo
-/// found through Wikidata (`WikidataHeadshotStore`), else `placeholder` —
-/// the card's blank or the sheet's monogram, as before.
+/// found through Wikidata (`WikidataHeadshotStore`), else — for soccer, with
+/// the reader's own key — their API-Football photo (`ApiFootballHeadshotStore`),
+/// else `placeholder`: the card's blank or the sheet's monogram, as before.
 ///
 /// A team page has usually asked Wikidata about its whole roster already
 /// (`WikidataHeadshotStore.prefetch(espnIDs:league:)`), so the photo is
@@ -33,6 +34,7 @@ struct AthleteHeadshot<Placeholder: View>: View {
     /// Whether ESPN's image failed to load, or there was no URL.
     @State private var espnFailed = false
     @State private var commonsImage: UIImage?
+    @State private var apiFootballImage: UIImage?
 
     private var store: WikidataHeadshotStore { .shared }
 
@@ -64,6 +66,15 @@ struct AthleteHeadshot<Placeholder: View>: View {
         return store.photo(espnID: espnID, league: league)
     }
 
+    /// The API-Football photo: only once Wikidata has answered with none,
+    /// and only while the reader's key is in use.
+    private var apiFootballPhoto: ApiFootballPhoto? {
+        guard needsFallback, let league,
+              let record = store.record(espnID: espnID, league: league), record.photo == nil
+        else { return nil }
+        return ApiFootballHeadshotStore.shared.photo(espnID: espnID, league: league)
+    }
+
     var body: some View {
         let photo = commonsPhoto
         Group {
@@ -74,6 +85,12 @@ struct AthleteHeadshot<Placeholder: View>: View {
                     Image(uiImage: commonsImage)
                         .resizable()
                 }
+            } else if let apiFootballImage {
+                Image(uiImage: apiFootballImage)
+                    .resizable()
+                    .contextMenu {
+                        Text(ApiFootballPhoto.creditLine)
+                    }
             } else if espnFailed {
                 placeholder
             } else {
@@ -99,6 +116,18 @@ struct AthleteHeadshot<Placeholder: View>: View {
             else { return }
             commonsImage = image
             store.noteShown(photo)
+        }
+        // Tier 3, after Wikidata has none. Gone again if the key is.
+        .task(id: apiFootballPhoto?.imageURL) {
+            guard let photo = apiFootballPhoto, let url = photo.imageURL else {
+                apiFootballImage = nil
+                return
+            }
+            guard let image = await ApiFootballImageLoader.shared.image(for: url),
+                  !Task.isCancelled
+            else { return }
+            apiFootballImage = image
+            ApiFootballHeadshotStore.shared.noteShown(photo)
         }
     }
 
@@ -189,9 +218,11 @@ extension AthleteHeadshot {
 // MARK: - Credits
 
 /// Settings → Photo Credits: every Commons photo shown this session, with
-/// its author and licence, linking to its description page.
+/// its author and licence, linking to its description page; then every
+/// API-Football photo shown.
 struct PhotoCreditsView: View {
     private var store: WikidataHeadshotStore { .shared }
+    private var apiFootball: ApiFootballHeadshotStore { .shared }
 
     var body: some View {
         List {
@@ -206,6 +237,24 @@ struct PhotoCreditsView: View {
                 }
             } footer: {
                 Text("Player photos come from ESPN. Where ESPN has none, the photo is from Wikimedia Commons, found through Wikidata, and is used under the licence shown.")
+            }
+
+            if !apiFootball.shownThisSession.isEmpty {
+                Section {
+                    ForEach(apiFootball.shownThisSession, id: \.playerID) { photo in
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            Text(photo.name)
+                                .font(.subheadline)
+                            Text(ApiFootballPhoto.creditLine)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("API-Football")
+                } footer: {
+                    Text("Where neither ESPN nor Wikimedia Commons has a soccer player's photo, it is from API-Football / API-Sports, found with your own API key.")
+                }
             }
         }
         .navigationTitle("Photo Credits")

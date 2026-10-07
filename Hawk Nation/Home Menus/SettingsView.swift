@@ -50,8 +50,8 @@ enum AboutInfo {
     }
 }
 
-/// The app's settings: appearance, game alerts, the reader's teams and
-/// what build this is.
+/// The app's settings: appearance, game alerts, the reader's teams, photo
+/// credits and the API-Football key, and what build this is.
 ///
 /// Opened from the gear in Home's or a team page's navigation bar, as a
 /// sheet with its own stack. `Home` presents it, not the page: removing
@@ -130,6 +130,10 @@ struct SettingsView: View {
                     .accessibilityHint("Lists the Wikimedia Commons player photos shown, with their authors and licences.")
                     .accessibilityIdentifier("settings.photoCredits")
                 }
+
+                // The reader's own API-Football key, for soccer photos
+                // neither ESPN nor Commons has (tier 3).
+                ApiFootballSettingsSection()
 
                 Section {
                     LabeledContent("Version", value: AboutInfo.versionText(info: Bundle.main.infoDictionary))

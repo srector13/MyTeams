@@ -12,8 +12,9 @@ import Foundation
 
 /// Stands in for `URLSession`: answers each request with whatever `respond`
 /// returns for it, and records every URL asked for, so tests can count the
-/// requests a loader or poller makes.
-final class RecordingTransport: HTTPTransport, @unchecked Sendable {
+/// requests a loader or poller makes. Keyed requests (`KeyedHTTPTransport`)
+/// are kept whole too, headers and all.
+final class RecordingTransport: HTTPTransport, KeyedHTTPTransport, @unchecked Sendable {
     /// One canned response.
     struct Reply: Sendable {
         var status = 200
@@ -32,6 +33,7 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
 
     private let lock = NSLock()
     private var recorded: [URL] = []
+    private var recordedRequests: [URLRequest] = []
     private let respond: @Sendable (URL, _ callIndex: Int) -> Reply
 
     /// - Parameter respond: the reply to a request, given its URL and how
@@ -51,6 +53,17 @@ final class RecordingTransport: HTTPTransport, @unchecked Sendable {
     }
 
     var requestCount: Int { urls.count }
+
+    /// Every keyed request sent so far, in order.
+    var requests: [URLRequest] {
+        lock.withLock { recordedRequests }
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url else { throw URLError(.badURL) }
+        lock.withLock { recordedRequests.append(request) }
+        return try await load(url)
+    }
 
     func load(_ url: URL) async throws -> (Data, URLResponse) {
         let index = lock.withLock {
