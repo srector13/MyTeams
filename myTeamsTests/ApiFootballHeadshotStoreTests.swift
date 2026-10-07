@@ -378,6 +378,65 @@ struct ApiFootballGatingTests {
         #expect(harness.store.photo(espnID: "196176", league: .premierLeague) == nil)
     }
 
+    /// The field bug in 1.0.10: a fresh install opens a soccer team's page,
+    /// its roster loads (no key yet: nothing asked), then the reader saves
+    /// a key from Settings — a sheet over that same page. The roster does
+    /// not change, so the page's roster hook never runs again, and the
+    /// league was never swept. Saving the key must start the sweep for the
+    /// roster already on screen.
+    @Test("A key saved after the roster loaded sweeps that roster's league")
+    func keySavedAfterRosterLoad() async throws {
+        let suite = "ApiFootballGatingTests.settings.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        // A fresh install: no key, no toggle, no sweep on disk.
+        let probe = RecordingTransport { _, _ in
+            (try? RecordingTransport.Reply.fixture("apifootball_status_ok")) ?? .status(500)
+        }
+        let settings = ApiFootballSettings(storage: InMemorySecretStorage(), defaults: defaults, transport: probe)
+        let harness = try makeHarness { settings.activeKey() }
+        defer { harness.tearDown() }
+        #expect(!FileManager.default.fileExists(atPath: harness.store.fileURL(for: 39).path()))
+        let (roster, team) = try espnRoster("epl_roster")
+
+        // The roster loads before there is a key: not one request.
+        harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
+        await harness.store.settle()
+        #expect(harness.transport.urls.isEmpty)
+
+        // Settings → API-Football: the key is checked and saved, which
+        // turns the toggle on. The app then calls `resume()`.
+        await settings.save(Self.key)
+        #expect(settings.activeKey() == Self.key)
+        harness.store.resume()
+        await harness.store.settle()
+        #expect(harness.transport.urls.map(\.absoluteString) == [
+            "https://v3.football.api-sports.io/players?league=39&season=2026&page=1",
+            "https://v3.football.api-sports.io/players?league=39&season=2026&page=2",
+        ])
+        for request in harness.transport.requests {
+            #expect(request.value(forHTTPHeaderField: "x-apisports-key") == Self.key)
+        }
+        // The roster seen before the key joins without loading again.
+        #expect(harness.store.photo(espnID: "196176", league: .premierLeague)?.playerID == 900001)
+    }
+
+    @Test("Resuming without a key, or with the toggle off, asks nothing")
+    func resumeWithoutKey() async throws {
+        let (roster, team) = try espnRoster("epl_roster")
+        for (key, enabled) in [(nil, true), (Self.key, false)] as [(String?, Bool)] {
+            let settings = try settings(key: key, enabled: enabled)
+            let harness = try makeHarness { settings.activeKey() }
+            defer { harness.tearDown() }
+
+            harness.store.prefetch(roster: roster, team: team, league: .premierLeague)
+            harness.store.resume()
+            await harness.store.settle()
+            #expect(harness.transport.urls.isEmpty)
+            #expect(harness.store.photo(espnID: "196176", league: .premierLeague) == nil)
+        }
+    }
+
     @Test("Other sports, and soccer leagues with no API-Football id, ask nothing")
     func otherLeagues() async throws {
         let harness = try makeHarness { Self.key }

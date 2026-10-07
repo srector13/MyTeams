@@ -188,6 +188,12 @@ struct Home: View {
         .sheet(isPresented: $showsSettings) {
             SettingsView()
         }
+        // A key saved, or the toggle turned on, in that sheet: the team
+        // page under it has its roster already and asks nothing more, so
+        // the API-Football store sweeps what it has seen (t_1fa9b665).
+        .onChange(of: ApiFootballSettings.shared.isActive) { _, isActive in
+            if isActive { ApiFootballHeadshotStore.shared.resume() }
+        }
     }
 
     /// Home's tab, then the favorites' tabs: those past the bar's room

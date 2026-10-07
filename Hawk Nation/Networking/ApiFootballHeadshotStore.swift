@@ -529,13 +529,26 @@ final class ApiFootballHeadshotStore {
     // MARK: Requesting
 
     /// Joins a roster that has just loaded to the cached rows, and starts
-    /// the league's sweep if it is due and today's budget allows. Does
-    /// nothing without a key, or for a league with no API-Football id.
+    /// the league's sweep if it is due and today's budget allows. Without a
+    /// key the roster is only remembered, for `resume()`; nothing is asked.
+    /// Does nothing for a league with no API-Football id.
     func prefetch(roster: [ApiFootballRosterEntry], team: String, league: LeagueID) {
-        guard enabled, credentials() != nil, !roster.isEmpty,
-              let apiLeague = ApiFootball.leagueID(for: league)
-        else { return }
+        guard enabled, !roster.isEmpty, ApiFootball.leagueID(for: league) != nil else { return }
         rosters[league, default: [:]][team] = roster
+        resume(league)
+    }
+
+    /// Joins and sweeps every roster seen this session, as `prefetch` would:
+    /// for when the key or toggle has just turned on, since a page already
+    /// on screen loads no roster to say so. Nothing without a key.
+    func resume() {
+        for league in rosters.keys {
+            resume(league)
+        }
+    }
+
+    private func resume(_ league: LeagueID) {
+        guard enabled, credentials() != nil, let apiLeague = ApiFootball.leagueID(for: league) else { return }
         rejoin(league, apiLeague: apiLeague)
         startSweepIfDue(league, apiLeague: apiLeague)
     }
