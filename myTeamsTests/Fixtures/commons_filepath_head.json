@@ -1,0 +1,16 @@
+{
+  "comment": "Recorded with curl -I on 2026-10-07T01:35Z (User-Agent: MyTeams/1.0 (iOS app; https://github.com/srector13/MyTeams)). Not a JSON API response: the status and headers of HEAD requests to Special:FilePath, once with the P18 title as Wikidata sends it and once double-encoded.",
+  "request": "https://commons.wikimedia.org/wiki/Special:FilePath/Shaquille%20O%27Neal%20October%202017%20%28cropped%29.jpg?width=250",
+  "status": 302,
+  "location": "https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/Shaquille_O%27Neal_October_2017_(cropped).jpg&width=250",
+  "final": {
+    "location": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f6/Shaquille_O%27Neal_October_2017_%28cropped%29.jpg/250px-Shaquille_O%27Neal_October_2017_%28cropped%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=index&utm_content=thumbnail",
+    "status": 200,
+    "contentType": "image/jpeg",
+    "etag": "0449c0a35ed8956f45f95f3b8b2f7c9d"
+  },
+  "doubleEncoded": {
+    "request": "https://commons.wikimedia.org/wiki/Special:FilePath/Shaquille%2520O%2527Neal%2520October%25202017%2520%2528cropped%2529.jpg?width=250",
+    "status": 404
+  }
+}

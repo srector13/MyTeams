@@ -1,0 +1,47 @@
+{
+  "head" : {
+    "vars" : [ "espnId", "item", "image" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "69450"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q1910"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Yohan%20Cabaye.JPG"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "196176"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q19665907"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/David%20Raya%20Argentina%20v%20Spain%2019%20July%202026-003%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "265921"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q56249966"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Illan%20Meslier%20April%202019.jpg"
+      }
+    } ]
+  }
+}

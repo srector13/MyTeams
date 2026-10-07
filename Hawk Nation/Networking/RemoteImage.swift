@@ -107,6 +107,10 @@ struct RemoteImage<Placeholder: View>: View {
     private let reloading: Bool
     private let showsProgress: Bool
     private let placeholder: Placeholder
+    /// Told whether an image arrived, once the load settles: `false` for no
+    /// URL, an error status or a failed download. The roster's headshots
+    /// fall back to Wikimedia Commons on `false` (`AthleteHeadshot`).
+    private let onLoad: (@MainActor (_ loaded: Bool) -> Void)?
 
     @State private var phase: Phase = .loading
 
@@ -114,11 +118,13 @@ struct RemoteImage<Placeholder: View>: View {
         url: URL?,
         reloading: Bool = false,
         showsProgress: Bool = true,
+        onLoad: (@MainActor (_ loaded: Bool) -> Void)? = nil,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.url = url
         self.reloading = reloading
         self.showsProgress = showsProgress
+        self.onLoad = onLoad
         self.placeholder = placeholder()
     }
 
@@ -139,10 +145,15 @@ struct RemoteImage<Placeholder: View>: View {
         .task(id: url) {
             guard let url else {
                 phase = .loaded(nil)
+                onLoad?(false)
                 return
             }
             phase = .loading
-            phase = .loaded(await ImageCache.shared.image(for: url, reloading: reloading))
+            let image = await ImageCache.shared.image(for: url, reloading: reloading)
+            // A view that went away mid-load has nothing to report.
+            guard !Task.isCancelled else { return }
+            phase = .loaded(image)
+            onLoad?(image != nil)
         }
     }
 }

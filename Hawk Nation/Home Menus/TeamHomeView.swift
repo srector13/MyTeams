@@ -115,7 +115,7 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
     var body: some View {
         TeamHomeLayout {
             RosterSection(model: model) { player in
-                PlayerCard(player: player, state: model.sort)
+                PlayerCard(player: player, state: model.sort, league: team.league)
             } detail: { player in
                 PlayerDetailView(player: player, team: team)
             } filterMenu: {

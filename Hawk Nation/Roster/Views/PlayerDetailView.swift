@@ -702,10 +702,11 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     }
 
     /// The headshot in a circle; the player's initials stand in while it
-    /// loads or where the feed has none, or their number without a name.
+    /// loads or where neither ESPN nor Wikimedia Commons has one, or their
+    /// number without a name. Long-press a Commons photo for its credit.
     private var headshot: some View {
         let size = min(headshotSize, 180)
-        return RemoteImage(url: URL(string: player.photo), showsProgress: false) {
+        return AthleteHeadshot(player, league: team.league, showsProgress: false) {
             monogram(size: size)
         }
         .aspectRatio(contentMode: .fill)

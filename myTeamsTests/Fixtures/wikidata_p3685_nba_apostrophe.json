@@ -1,0 +1,47 @@
+{
+  "head" : {
+    "vars" : [ "espnId", "item", "image" ]
+  },
+  "results" : {
+    "bindings" : [ {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "614"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q169452"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Shaquille%20O%27Neal%20October%202017%20%28cropped%29.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4282"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q2632370"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Hamady%20N%27Diaye%20in%202011.jpg"
+      }
+    }, {
+      "espnId" : {
+        "type" : "literal",
+        "value" : "4869342"
+      },
+      "item" : {
+        "type" : "uri",
+        "value" : "http://www.wikidata.org/entity/Q107308380"
+      },
+      "image" : {
+        "type" : "uri",
+        "value" : "http://commons.wikimedia.org/wiki/Special:FilePath/Dyson%20Daniels.png"
+      }
+    } ]
+  }
+}
