@@ -61,6 +61,8 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     static let serieA = LeagueID(sport: "soccer", league: "ita.1")
     static let ligue1 = LeagueID(sport: "soccer", league: "fra.1")
     static let championsLeague = LeagueID(sport: "soccer", league: "uefa.champions")
+    static let wsl = LeagueID(sport: "soccer", league: "eng.w.1")
+    static let premiereLigue = LeagueID(sport: "soccer", league: "fra.w.1")
 
     /// A soccer competition by its ESPN slug, such as a cup a league's teams
     /// also play in (`LeagueDescriptor.cupCompetitions`): `"eng.fa"`,
@@ -76,6 +78,7 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
         .nba, .wnba, .womensCollegeBasketball, .nhl, .collegeFootball,
         .premierLeague, .laLiga, .ligaMX, .nwsl,
         .bundesliga, .serieA, .ligue1, .championsLeague,
+        .wsl, .premiereLigue,
     ]
 
     /// Whether the league is a college one. Unknown leagues are judged by
@@ -370,6 +373,10 @@ extension LeagueID {
         BrowsableLeague(label: "Serie A", league: .serieA),
         BrowsableLeague(label: "Ligue 1", league: .ligue1),
         BrowsableLeague(label: "UCL", league: .championsLeague),
+        // Women's soccer after the men's European leagues.
+        BrowsableLeague(label: "NWSL", league: .nwsl),
+        BrowsableLeague(label: "WSL", league: .wsl),
+        BrowsableLeague(label: "Première Ligue", league: .premiereLigue),
     ]
 
     /// The short label a team row's badge shows, e.g. `"NFL"`. Leagues the

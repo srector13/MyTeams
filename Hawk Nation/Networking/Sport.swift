@@ -562,6 +562,44 @@ struct LeagueDescriptor: Sendable, Identifiable {
         leadersSeasonType: soccerLeadersSeasonType
     )
 
+    static let wsl = LeagueDescriptor(
+        id: .wsl,
+        kind: .soccer,
+        displayName: "Women's Super League",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        // The feed's season starts on July 1 (2026-07-01), not June 1 as
+        // the men's leagues' do.
+        seasonNaming: .startingYear(rolloverMonth: 7),
+        // The FA Cup's team feed is empty until its 2026-27 rounds are drawn.
+        cupCompetitions: [.soccer("eng.w.fa"), .soccer("eng.w.league_cup"), .soccer("uefa.wchampions")],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
+    static let premiereLigue = LeagueDescriptor(
+        id: .premiereLigue,
+        kind: .soccer,
+        displayName: "Première Ligue",
+        isCollege: false,
+        rosterShape: .flat,
+        recordRule: RecordRule(),
+        competitorNameField: .shortDisplayName,
+        periodStyle: .halves,
+        rosterFilters: soccerRosterFilters,
+        venueBackdropAsset: "soccerField",
+        // Starts on July 1, like the WSL.
+        seasonNaming: .startingYear(rolloverMonth: 7),
+        // ESPN serves no French women's cup (`fra.coupe_de_france` is the
+        // men's), so only the Champions League.
+        cupCompetitions: [.soccer("uefa.wchampions")],
+        leadersSeasonType: soccerLeadersSeasonType
+    )
+
     /// Every known league's descriptor, keyed by id. `LeagueID.knownLeagues`
     /// lists the same leagues in order.
     static let known: [LeagueID: LeagueDescriptor] = Dictionary(
@@ -570,6 +608,7 @@ struct LeagueDescriptor: Sendable, Identifiable {
             nba, wnba, womensCollegeBasketball, nhl, collegeFootball,
             premierLeague, laLiga, ligaMX, nwsl,
             bundesliga, serieA, ligue1, championsLeague,
+            wsl, premiereLigue,
         ].map { ($0.id, $0) }
     )
 

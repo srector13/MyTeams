@@ -715,6 +715,63 @@ Notes from the capture:
 | `uclleague_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/uefa.champions/standings` | 2026-10-04T19:49:04Z | children=1 entries=36 |
 | `uclleague_summary_final_401915423.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/summary?event=401915423` | 2026-10-04T19:49:05Z | phase=final |
 
+## European women's leagues (t_67da893e)
+
+`LeagueRegistryTests.swift` (`CapturedLeague.all`) reads 14 documents for
+the two women's leagues t_67da893e registered — the English Women's Super
+League (`eng.w.1`, ESPN league 8097, prefix `wsl_`) and France's Première
+Ligue (`fra.w.1`, ESPN league 20955, prefix `premiere_`) — captured on
+**2026-10-06 between 22:36:17Z and 22:36:35Z** from this host by the
+checked-in script:
+
+```sh
+python3 scripts/capture_fixtures_womens.py            # both leagues
+python3 scripts/capture_fixtures_womens.py wsl        # just this one
+```
+
+It runs BE-3's `capture` (see "European soccer leagues (BE-3)"), so the
+same eight files per league and the same trimming: teams to 15 (neither
+league has more, so both are whole), scoreboards to 3 events keeping the
+summary's, `schedule_fixtures` to the first 10 events. Sample clubs:
+Chelsea (19970) and OL Lyonnes (19256).
+
+Notes from the capture:
+
+- Both feeds file 2026-27 under **2026**, and both seasons start on
+  **July 1** (`season.startDate` 2026-07-01), so both descriptors roll over
+  in July, like the Champions League's, not June.
+- Standings: one child each, `"2026-27 English Women's Super League"` (14
+  rows) and `"2026-27 French Division 1 Féminine"` (12 rows).
+- Rosters are flat, Goalkeeper/Defender/Midfielder/Forward only. Headshots:
+  Chelsea 1 of 28, OL Lyonnes 0 of 31.
+- Cups: `eng.w.fa`, `eng.w.league_cup` and `uefa.wchampions` answer teams
+  with 200 (`eng.w.fa` with no teams until its 2026-27 draw; its scoreboard
+  is still the 2025-26 final). ESPN's soccer league directory lists no
+  French women's cup (`fra.w.coupe_de_france`, `fra.w.cup`,
+  `fra.w.super_cup` are 404; `fra.super_cup` is the men's, Lens v PSG), so
+  the Première Ligue lists only `uefa.wchampions`.
+- The Frauen-Bundesliga is not onboarded: ESPN serves no feed for it
+  (`ger.w.1` and its variants are 404, and it is absent from the directory).
+
+| File | URL | Captured | Contents |
+|---|---|---|---|
+| `wsl_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/teams?limit=1000` | 2026-10-06T22:36:17Z | teams=14 |
+| `wsl_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/teams/19970/schedule` | 2026-10-06T22:36:17Z | events=5 |
+| `wsl_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/teams/19970/schedule?fixture=true` | 2026-10-06T22:36:28Z | events=10; trimmed 21 → 10 events |
+| `wsl_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/teams/19970/roster` | 2026-10-06T22:36:28Z | athletes=28 shape=flat |
+| `wsl_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/news?team=19970&limit=25` | 2026-10-06T22:36:29Z | articles=25 |
+| `wsl_scoreboard_20261004.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/scoreboard?dates=20261004` | 2026-10-06T22:36:29Z | events=3; trimmed 6 → 3 events |
+| `wsl_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/eng.w.1/standings` | 2026-10-06T22:36:30Z | children=1 entries=14 |
+| `wsl_summary_final_401902895.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.w.1/summary?event=401902895` | 2026-10-06T22:36:31Z | phase=final |
+| `premiere_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/teams?limit=1000` | 2026-10-06T22:36:31Z | teams=12 |
+| `premiere_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/teams/19256/schedule` | 2026-10-06T22:36:32Z | events=4 |
+| `premiere_schedule_fixtures.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/teams/19256/schedule?fixture=true` | 2026-10-06T22:36:32Z | events=10; trimmed 18 → 10 events |
+| `premiere_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/teams/19256/roster` | 2026-10-06T22:36:33Z | athletes=31 shape=flat |
+| `premiere_news.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/news?team=19256&limit=25` | 2026-10-06T22:36:33Z | articles=25 |
+| `premiere_scoreboard_20261003.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/scoreboard?dates=20261003` | 2026-10-06T22:36:34Z | events=3; trimmed 5 → 3 events |
+| `premiere_standings.json` | `https://site.api.espn.com/apis/v2/sports/soccer/fra.w.1/standings` | 2026-10-06T22:36:34Z | children=1 entries=12 |
+| `premiere_summary_final_401885704.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/fra.w.1/summary?event=401885704` | 2026-10-06T22:36:35Z | phase=final |
+
 ## Refreshing
 
 1. Re-run the requests above, for example:

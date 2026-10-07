@@ -175,6 +175,8 @@ struct FixtureTransport: HTTPTransport {
             "\(site)/soccer/ita.1/teams?limit=1000": "seriea_teams",
             "\(site)/soccer/fra.1/teams?limit=1000": "ligue1_teams",
             "\(site)/soccer/uefa.champions/teams?limit=1000": "uclleague_teams",
+            "\(site)/soccer/eng.w.1/teams?limit=1000": "wsl_teams",
+            "\(site)/soccer/fra.w.1/teams?limit=1000": "premiere_teams",
             // The seed teams. Kansas's live feed is between seasons and lists
             // no games, so it is served the 2025-26 season.
             "\(site)/basketball/mens-college-basketball/teams/2305/schedule": "jayhawks_schedule_2026",
