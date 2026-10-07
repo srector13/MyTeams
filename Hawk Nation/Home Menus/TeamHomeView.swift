@@ -171,6 +171,15 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         .onChange(of: navigator?.pendingPlayer) { presentRequestedPlayer() }
         .onChange(of: model.rosterState) { presentRequestedPlayer() }
         .onChange(of: model.allPlayers.count) { presentRequestedPlayer() }
+        // As soon as the roster lands, ask Wikidata about all of it in one
+        // query (`WikidataHeadshotStore.prefetch`), so a card whose ESPN
+        // headshot is missing finds its Commons photo already known.
+        .onChange(of: model.allPlayers, initial: true) {
+            WikidataHeadshotStore.shared.prefetch(
+                espnIDs: model.allPlayers.map(\.playerID),
+                league: team.league
+            )
+        }
         .sheet(item: $requestedPlayer) { player in
             PlayerDetailView(player: player, team: team)
         }

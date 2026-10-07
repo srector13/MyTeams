@@ -13,10 +13,13 @@ import UIKit
 /// found through Wikidata (`WikidataHeadshotStore`), else `placeholder` —
 /// the card's blank or the sheet's monogram, as before.
 ///
-/// Commons is asked only once ESPN's image has failed, or the feed had
-/// none, and only while the view is on screen. The photo fills the same
-/// frame when it arrives, so nothing moves. Long-pressing a Commons photo
-/// shows its credit and licence.
+/// A team page has usually asked Wikidata about its whole roster already
+/// (`WikidataHeadshotStore.prefetch(espnIDs:league:)`), so the photo is
+/// known by the time ESPN's image fails. Elsewhere Commons is asked only
+/// once ESPN's image has failed, or the feed had none, and only while the
+/// view is on screen. The photo fills the same frame when it arrives, so
+/// nothing moves; it never waits for its licence. Long-pressing a Commons
+/// photo shows its credit and licence, fetching them then.
 struct AthleteHeadshot<Placeholder: View>: View {
     private let espnURL: URL?
     /// Whether the feed gave ESPN's generic silhouette (`missingHeadshot`):
@@ -65,8 +68,12 @@ struct AthleteHeadshot<Placeholder: View>: View {
         let photo = commonsPhoto
         Group {
             if let commonsImage {
-                Image(uiImage: commonsImage)
-                    .resizable()
+                if let photo, let league {
+                    CommonsHeadshotImage(image: commonsImage, photo: photo, espnID: espnID, league: league)
+                } else {
+                    Image(uiImage: commonsImage)
+                        .resizable()
+                }
             } else if espnFailed {
                 placeholder
             } else {
@@ -77,8 +84,10 @@ struct AthleteHeadshot<Placeholder: View>: View {
                 }
             }
         }
-        // Ask Commons once ESPN has failed; draw its photo once known.
-        .task(id: FallbackState(needsFallback: needsFallback, photo: photo)) {
+        // Ask Commons once ESPN has failed; draw its photo once known. Keyed
+        // on the image, not the whole photo, so a licence arriving later
+        // does not load it again.
+        .task(id: FallbackState(needsFallback: needsFallback, imageURL: photo?.imageURL)) {
             guard needsFallback, let league else { return }
             guard let photo else {
                 store.request(espnID: espnID, league: league)
@@ -91,21 +100,71 @@ struct AthleteHeadshot<Placeholder: View>: View {
             commonsImage = image
             store.noteShown(photo)
         }
-        .contextMenu {
-            if commonsImage != nil, let photo {
+    }
+
+    private struct FallbackState: Equatable {
+        var needsFallback: Bool
+        var imageURL: URL?
+    }
+}
+
+/// A Commons photo drawn in place of ESPN's. Long-pressing it shows it
+/// larger with its credit, and only then asks Commons for the licence.
+private struct CommonsHeadshotImage: View {
+    let image: UIImage
+    let photo: CommonsPhoto
+    let espnID: String
+    let league: LeagueID
+
+    private var store: WikidataHeadshotStore { .shared }
+
+    /// The photo as the store has it now, its licence included once fetched.
+    private var current: CommonsPhoto {
+        store.photo(espnID: espnID, league: league) ?? photo
+    }
+
+    var body: some View {
+        let photo = current
+        Image(uiImage: image)
+            .resizable()
+            .contextMenu {
                 Text(photo.creditLine)
                 if let page = photo.descriptionPageURL {
                     Link(destination: page) {
                         Label("View on Wikimedia Commons", systemImage: "safari")
                     }
                 }
+            } preview: {
+                CommonsCreditPreview(image: image, espnID: espnID, league: league, photo: photo)
             }
-        }
     }
+}
 
-    private struct FallbackState: Equatable {
-        var needsFallback: Bool
-        var photo: CommonsPhoto?
+/// The long-press preview: the photo with its credit, which fills in when
+/// the licence arrives.
+private struct CommonsCreditPreview: View {
+    let image: UIImage
+    let espnID: String
+    let league: LeagueID
+    let photo: CommonsPhoto
+
+    private var store: WikidataHeadshotStore { .shared }
+
+    var body: some View {
+        let photo = store.photo(espnID: espnID, league: league) ?? self.photo
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 250)
+            Text(photo.creditLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 250, alignment: .leading)
+        }
+        .padding(Theme.Spacing.m)
+        // Someone is looking at the credit: now it is worth asking for.
+        .task { store.requestLicenses(for: [photo]) }
     }
 }
 
@@ -141,7 +200,7 @@ struct PhotoCreditsView: View {
                     Text("No Wikimedia Commons photos shown yet.")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(store.shownThisSession, id: \.self) { photo in
+                    ForEach(store.shownThisSession, id: \.fileTitle) { photo in
                         PhotoCreditRow(photo: photo)
                     }
                 }
@@ -151,6 +210,8 @@ struct PhotoCreditsView: View {
         }
         .navigationTitle("Photo Credits")
         .navigationBarTitleDisplayMode(.inline)
+        // Licences are fetched only for credits someone reads.
+        .task { store.requestLicenses(for: store.shownThisSession) }
     }
 }
 
