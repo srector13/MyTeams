@@ -6,7 +6,13 @@
 	     (WikidataHeadshotStore) fetches photo data from query.wikidata.org,
 	     commons.wikimedia.org and upload.wikimedia.org / thumb.wikimedia.org.
 	     Only ESPN athlete ids and Commons file titles are sent; no user data
-	     is collected or sent, and none of these hosts is a tracking domain. -->
+	     is collected or sent, and none of these hosts is a tracking domain.
+	     Only when the reader saves their own API-Football key and turns on
+	     "Use API for missing photos" (ApiFootballHeadshotStore), the app also
+	     asks v3.football.api-sports.io for soccer league player lists (the
+	     key goes to that host only) and loads photos from media.api-sports.io
+	     (no key). The key stays in the device Keychain; no user data is
+	     collected or sent, and neither host is a tracking domain. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>

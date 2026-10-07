@@ -821,3 +821,28 @@ The SPARQL query is
 `SELECT ?espnId ?item ?image WHERE { VALUES ?espnId { "…" } ?item wdt:<P> ?espnId . OPTIONAL { ?item wdt:P18 ?image . } }`,
 sent as `GET https://query.wikidata.org/sparql?query=…&format=json&maxlag=5`
 (`WikidataHeadshots.sparqlURL`).
+
+## API-Football
+
+**Hand-authored, not captured**, on 2026-10-07: no API key exists in this
+repository or its CI, and none may be checked in. Each follows the v3
+response shape (`get`, `parameters`, `errors` — `[]` when none, else an object
+of messages — `results`, `paging: {current, total}`, `response`). Player ids
+900001… and 910001… are illustrative, not API-Sports' real ones; the names
+mirror `epl_roster.json` and `wsl_roster.json` so `ApiFootball.join` has
+something to match. The account fields are placeholders.
+
+| File | Stands for | What it covers |
+|---|---|---|
+| `apifootball_players_epl_p1.json` | `GET https://v3.football.api-sports.io/players?league=39&season=2026&page=1` | Arsenal rows matched by full name, short name (`B. White`) and first name + surname word (`Kepa`); Brighton's Ben White and Leeds' Meslier, which must not match Arsenal's |
+| `apifootball_players_epl_p2.json` | the same, `page=2` (last page) | Accents (`Ødegaard`), hyphens (`Lewis-Skelly`), and a men's Chelsea `L. James` — the gender-collision decoy for WSL Chelsea's Lauren James |
+| `apifootball_players_wsl_p1.json` | `league=44` (FA WSL), `page=1` of 1 | Chelsea W's Lauren James, Lucy Bronze (`L. Bronze`), Hannah Hampton |
+| `apifootball_players_plan_error.json` | a free key asking for a season its plan lacks | `errors.plan`, whose newest year is the season retried |
+| `apifootball_status_ok.json` | `GET https://v3.football.api-sports.io/status`, a working key | Plan and the day's request count |
+| `apifootball_status_bad_key.json` | the same, a bad key | `errors.token` |
+
+League ids (`ApiFootball.leagueIDs`) were checked against each league's
+crest on the keyless CDN, `https://media.api-sports.io/football/leagues/<id>.png`;
+the placeholder hashes (`ApiFootball.placeholderHashes`) by SHA-256 of the
+CDN's 5,192 B and 8,624 B "no photo" images. See
+docs/HEADSHOT_SOURCE_APIFOOTBALL.md.

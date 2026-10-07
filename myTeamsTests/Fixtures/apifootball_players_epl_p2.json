@@ -1,0 +1,196 @@
+{
+  "get": "players",
+  "parameters": {
+    "league": "39",
+    "season": "2026",
+    "page": "2"
+  },
+  "errors": [],
+  "results": 4,
+  "paging": {
+    "current": 2,
+    "total": 2
+  },
+  "response": [
+    {
+      "player": {
+        "id": 900007,
+        "name": "M. Ødegaard",
+        "firstname": "Martin",
+        "lastname": "Ødegaard",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900007.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Midfielder",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900008,
+        "name": "M. Lewis-Skelly",
+        "firstname": "Myles",
+        "lastname": "Lewis-Skelly",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900008.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Defender",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900009,
+        "name": "B. Saka",
+        "firstname": "Bukayo",
+        "lastname": "Saka",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900009.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 42,
+            "name": "Arsenal",
+            "logo": "https://media.api-sports.io/football/teams/42.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Attacker",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    },
+    {
+      "player": {
+        "id": 900010,
+        "name": "L. James",
+        "firstname": "Lewis",
+        "lastname": "James",
+        "age": 27,
+        "birth": {
+          "date": "1999-01-01",
+          "place": null,
+          "country": null
+        },
+        "nationality": null,
+        "height": null,
+        "weight": null,
+        "injured": false,
+        "photo": "https://media.api-sports.io/football/players/900010.png"
+      },
+      "statistics": [
+        {
+          "team": {
+            "id": 49,
+            "name": "Chelsea",
+            "logo": "https://media.api-sports.io/football/teams/49.png"
+          },
+          "league": {
+            "id": 39,
+            "name": "Premier League",
+            "country": "England",
+            "logo": "https://media.api-sports.io/football/leagues/39.png",
+            "flag": "https://media.api-sports.io/flags/gb-eng.svg",
+            "season": 2026
+          },
+          "games": {
+            "appearences": 6,
+            "lineups": 5,
+            "minutes": 450,
+            "number": null,
+            "position": "Defender",
+            "rating": null,
+            "captain": false
+          }
+        }
+      ]
+    }
+  ]
+}
