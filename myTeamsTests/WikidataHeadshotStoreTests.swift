@@ -8,12 +8,14 @@
 
 import Foundation
 import Testing
+import UIKit
 
 @testable import myTeams
 
 /// The Wikimedia Commons headshot fallback: the sport → property map, the
 /// URLs, the parsers over captured Wikidata and Commons answers (see
-/// FIXTURES.md, "Wikidata and Commons"), and the store's batching and cache.
+/// FIXTURES.md, "Wikidata and Commons"), the store's batching, roster
+/// prefetch, lazy licences and cache, and the image loader's de-dupe.
 /// No test reaches the network.
 @Suite("Wikidata headshots", .serialized)
 @MainActor
@@ -194,6 +196,11 @@ struct WikidataHeadshotStoreTests {
 
     // MARK: Store
 
+    /// The store's records for `property`'s photos, as the credits would ask.
+    private func photos(_ store: WikidataHeadshotStore, property: String) -> [CommonsPhoto] {
+        (store.records[property] ?? [:]).values.compactMap(\.photo)
+    }
+
     @Test("Misses requested together go out as one query, and every id is cached")
     func batchesAndCaches() async throws {
         let directory = scratchDirectory()
@@ -208,7 +215,8 @@ struct WikidataHeadshotStoreTests {
 
         let sparql = requests(to: "query.wikidata.org", in: transport)
         #expect(sparql.count == 1)
-        #expect(requests(to: "commons.wikimedia.org", in: transport).count == 1)
+        // Licences wait until a credit is looked at.
+        #expect(requests(to: "commons.wikimedia.org", in: transport).isEmpty)
         let sparqlURL = try #require(sparql.first)
         let parts = try #require(URLComponents(url: sparqlURL, resolvingAgainstBaseURL: false))
         let query = try #require(parts.queryItems?.first { $0.name == "query" }?.value)
@@ -223,7 +231,11 @@ struct WikidataHeadshotStoreTests {
         #expect(store.record(espnID: "5136077", league: .mlb)?.photo == nil)
         #expect(store.record(espnID: "40718", league: .mlb)?.photo == nil)
 
-        // A hit keeps its attribution.
+        // Looking at the credits fetches every photo's licence in one
+        // request, and a hit keeps its attribution.
+        store.requestLicenses(for: photos(store, property: "P3571"))
+        await store.settle()
+        #expect(requests(to: "commons.wikimedia.org", in: transport).count == 1)
         let lugo = try #require(store.photo(espnID: "34873", league: .mlb))
         #expect(lugo.qid == "Q16605329")
         #expect(lugo.licenseShortName == "CC0")
@@ -245,7 +257,14 @@ struct WikidataHeadshotStoreTests {
             first.request(espnID: id, league: .mlb)
         }
         await first.settle()
+        first.requestLicenses(for: photos(first, property: "P3571"))
+        await first.settle()
         let afterFirst = transport.requestCount
+
+        // Known licences are not asked for again.
+        first.requestLicenses(for: photos(first, property: "P3571"))
+        await first.settle()
+        #expect(transport.requestCount == afterFirst)
 
         for id in Self.royalsIDs {
             first.request(espnID: id, league: .mlb)
@@ -299,6 +318,12 @@ struct WikidataHeadshotStoreTests {
         store.request(espnID: "34873", league: .mlb)
         await store.settle()
         #expect(failing.requestCount == 1)
+
+        // So is a prefetch: the rows that come back on screen ask again.
+        store.prefetch(espnIDs: ["34873"], league: .mlb)
+        await store.settle()
+        #expect(failing.requestCount == 1)
+        #expect(store.record(espnID: "34873", league: .mlb) == nil)
     }
 
     @Test("Ids that cannot be ESPN's, and leagues with no property, are never queried")
@@ -346,5 +371,240 @@ struct WikidataHeadshotStoreTests {
         anonymous.artist = ""
         anonymous.licenseShortName = ""
         #expect(anonymous.creditLine == "Photo via Wikimedia Commons")
+    }
+    // MARK: Roster prefetch
+
+    @Test("A roster that lands is asked about at once in one query, without the debounce")
+    func prefetchSendsAtOnce() async throws {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = makeTransport(sparql: "wikidata_p3571_royals_partial", commons: "commons_imageinfo_royals")
+        // A debounce no prefetch could sit out within the test's bound.
+        let store = WikidataHeadshotStore(
+            client: HTTPClient(transport: transport),
+            directory: directory,
+            debounce: .seconds(30),
+            enabled: true
+        )
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        // Name#number ids are skipped, not sent.
+        store.prefetch(espnIDs: Self.royalsIDs + ["Bobby Witt Jr.#7"], league: .mlb)
+        await store.settle()
+        #expect(clock.now - started < WikidataHeadshotStore.maxWait)
+
+        let sparql = requests(to: "query.wikidata.org", in: transport)
+        #expect(sparql.count == 1)
+        let sparqlURL = try #require(sparql.first)
+        let parts = try #require(URLComponents(url: sparqlURL, resolvingAgainstBaseURL: false))
+        let query = try #require(parts.queryItems?.first { $0.name == "query" }?.value)
+        for id in Self.royalsIDs {
+            #expect(query.contains("\"\(id)\""))
+            #expect(store.record(espnID: id, league: .mlb) != nil)
+        }
+        #expect(!query.contains("Witt"))
+        #expect(requests(to: "commons.wikimedia.org", in: transport).isEmpty)
+
+        // The cards drawn afterwards find every answer cached and ask nothing,
+        // and neither does the same roster loading again.
+        for id in Self.royalsIDs {
+            store.request(espnID: id, league: .mlb)
+        }
+        store.prefetch(espnIDs: Self.royalsIDs, league: .mlb)
+        await store.settle()
+        #expect(transport.requestCount == 1)
+    }
+
+    @Test("Render-time misses still debounce, by about 0.3 s by default")
+    func renderTimeDebounce() async {
+        #expect(WikidataHeadshotStore.defaultDebounce == .milliseconds(300))
+
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = makeTransport(sparql: "wikidata_p3571_royals_partial", commons: "commons_imageinfo_royals")
+        let store = makeStore(transport, directory: directory)
+
+        // A prefetch and the rows a game sheet draws meanwhile share one query.
+        store.prefetch(espnIDs: Array(Self.royalsIDs.prefix(10)), league: .mlb)
+        for id in Self.royalsIDs.dropFirst(10) {
+            store.request(espnID: id, league: .mlb)
+        }
+        await store.settle()
+        #expect(requests(to: "query.wikidata.org", in: transport).count == 1)
+        for id in Self.royalsIDs {
+            #expect(store.record(espnID: id, league: .mlb) != nil)
+        }
+    }
+
+    // MARK: Lazy licences
+
+    @Test("A photo is displayable as soon as Wikidata answers, with no licence fetched")
+    func displayableWithoutLicense() async throws {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // Commons's API would fail: the photo must not depend on it.
+        let transport = RecordingTransport { url, _ in
+            guard url.host() == "query.wikidata.org" else { return .status(500) }
+            return (try? RecordingTransport.Reply.fixture("wikidata_p3571_royals_partial")) ?? .status(404)
+        }
+        let store = makeStore(transport, directory: directory)
+
+        store.prefetch(espnIDs: Self.royalsIDs, league: .mlb)
+        await store.settle()
+
+        let lugo = try #require(store.photo(espnID: "34873", league: .mlb))
+        #expect(!lugo.hasLicense)
+        #expect(lugo.licenseShortName == nil)
+        #expect(lugo.artist == nil)
+        #expect(lugo.qid == "Q16605329")
+        #expect(lugo.fileTitle == "Seth%20Lugo%20on%20July%2016%2C%202016.jpg")
+        // All a headshot view needs to draw it.
+        #expect(lugo.imageURL == WikidataHeadshots.imageURL(fileTitle: lugo.fileTitle))
+        #expect(lugo.descriptionPage == "https://commons.wikimedia.org/wiki/File:Seth%20Lugo%20on%20July%2016%2C%202016.jpg")
+        #expect(lugo.creditLine == "Photo via Wikimedia Commons")
+        #expect(photos(store, property: "P3571").count == 19)
+        #expect(requests(to: "commons.wikimedia.org", in: transport).isEmpty)
+
+        // Cached without a licence, it still draws after a relaunch.
+        let relaunched = makeStore(transport, directory: directory)
+        #expect(relaunched.photo(espnID: "34873", league: .mlb)?.imageURL == lugo.imageURL)
+
+        // A failed licence fetch is silent: the photo stays, credit generic.
+        store.requestLicenses(for: [lugo])
+        await store.settle()
+        #expect(requests(to: "commons.wikimedia.org", in: transport).count == 1)
+        #expect(store.photo(espnID: "34873", league: .mlb) == lugo)
+    }
+
+    @Test("A credit looked at fetches only its own licence, merged into the cache and the credits")
+    func licenseFetchedOnInteraction() async throws {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport = makeTransport(sparql: "wikidata_p3571_royals_partial", commons: "commons_imageinfo_royals")
+        let store = makeStore(transport, directory: directory)
+
+        store.prefetch(espnIDs: Self.royalsIDs, league: .mlb)
+        await store.settle()
+        let lugo = try #require(store.photo(espnID: "34873", league: .mlb))
+        store.noteShown(lugo)
+        #expect(store.shownThisSession.first?.hasLicense == false)
+
+        // A long-press on Lugo's photo.
+        store.requestLicenses(for: [lugo])
+        store.requestLicenses(for: [lugo])
+        await store.settle()
+
+        let commons = requests(to: "commons.wikimedia.org", in: transport)
+        #expect(commons.count == 1)
+        let commonsURL = try #require(commons.first)
+        let parts = try #require(URLComponents(url: commonsURL, resolvingAgainstBaseURL: false))
+        let titles = try #require(parts.queryItems?.first { $0.name == "titles" }?.value)
+        // Only the photo looked at, not the roster's other 18.
+        #expect(titles == "File:Seth Lugo on July 16, 2016.jpg")
+
+        let merged = try #require(store.photo(espnID: "34873", league: .mlb))
+        #expect(merged.hasLicense)
+        #expect(merged.licenseShortName == "CC0")
+        #expect(merged.artist == "D. Benjamin Miller")
+        #expect(merged.creditLine == "Photo: D. Benjamin Miller, CC0, via Wikimedia Commons")
+        #expect(merged.qid == lugo.qid && merged.fileTitle == lugo.fileTitle)
+        // The credits list shows it once, now with its licence.
+        #expect(store.shownThisSession == [merged])
+        store.noteShown(lugo)
+        #expect(store.shownThisSession == [merged])
+        // The others were never interacted with, and stay without one.
+        #expect(photos(store, property: "P3571").filter(\.hasLicense).count == 1)
+
+        // The merged licence is on disk.
+        let relaunched = makeStore(transport, directory: directory)
+        #expect(relaunched.photo(espnID: "34873", league: .mlb)?.licenseShortName == "CC0")
+        #expect(relaunched.photo(espnID: "40976", league: .mlb).map(\.hasLicense) != true)
+    }
+
+    @Test("Cached entries from before lazy licences keep their licence")
+    func legacyCacheDecodes() throws {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let legacy = """
+        {"614":{"checked":0,"photo":{"qid":"Q169452","fileTitle":"\(Self.shaqTitle)",\
+        "licenseShortName":"CC BY-SA 2.0","artist":"MarkScottAustinTX",\
+        "descriptionPage":"https://commons.wikimedia.org/wiki/File:\(Self.shaqTitle)"}}}
+        """
+        try Data(legacy.utf8).write(to: directory.appending(path: "P3685.json"))
+
+        let store = makeStore(RecordingTransport(always: .status(500)), directory: directory)
+        let shaq = try #require(store.photo(espnID: "614", league: .nba))
+        #expect(shaq.hasLicense)
+        #expect(shaq.creditLine == "Photo: MarkScottAustinTX, CC BY-SA 2.0, via Wikimedia Commons")
+    }
+
+    // MARK: Images
+
+    @Test("A thumbnail asked for twice while downloading is downloaded once")
+    func imageDownloadDeduped() async throws {
+        let png = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).pngData { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }
+        let transport = SlowTransport(body: png, delay: .milliseconds(200))
+        let loader = CommonsImageLoader(transport: transport, enabled: true)
+        let url = try #require(WikidataHeadshots.imageURL(fileTitle: Self.shaqTitle))
+
+        async let card = loader.image(for: url)
+        async let sheet = loader.image(for: url)
+        let (first, second) = await (card, sheet)
+        #expect(first != nil)
+        #expect(second != nil)
+        #expect(transport.requestCount == 1)
+
+        // Once loaded it is served from memory.
+        #expect(await loader.image(for: url) != nil)
+        #expect(transport.requestCount == 1)
+
+        // Another photo is its own download.
+        let other = try #require(WikidataHeadshots.imageURL(fileTitle: "David%20Raya.jpg"))
+        #expect(await loader.image(for: other) != nil)
+        #expect(transport.requestCount == 2)
+    }
+
+    @Test("A failed thumbnail is nil, so the monogram stays, and is not cached")
+    func imageFailureIsSilent() async throws {
+        let failing = RecordingTransport(always: .status(404))
+        let loader = CommonsImageLoader(transport: failing, enabled: true)
+        let url = try #require(WikidataHeadshots.imageURL(fileTitle: Self.shaqTitle))
+        #expect(await loader.image(for: url) == nil)
+        #expect(await loader.image(for: url) == nil)
+        #expect(failing.requestCount == 2)
+
+        let disabled = CommonsImageLoader(transport: failing, enabled: false)
+        #expect(await disabled.image(for: url) == nil)
+        #expect(failing.requestCount == 2)
+    }
+}
+
+/// Answers every request with `body` after `delay`, counting them: long
+/// enough for a second caller to arrive while the first is in flight.
+private final class SlowTransport: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    private let body: Data
+    private let delay: Duration
+
+    init(body: Data, delay: Duration) {
+        self.body = body
+        self.delay = delay
+    }
+
+    var requestCount: Int { lock.withLock { count } }
+
+    func load(_ url: URL) async throws -> (Data, URLResponse) {
+        lock.withLock { count += 1 }
+        try await Task.sleep(for: delay)
+        guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil) else {
+            throw URLError(.badServerResponse)
+        }
+        return (body, response)
     }
 }
