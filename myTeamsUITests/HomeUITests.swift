@@ -9,9 +9,11 @@
 import XCTest
 
 /// The Home tab (t_0b94af11): first in the bar, where the app opens, with
-/// its four sections — Live Now, Today, Results, Headlines — and the way to
-/// Settings. Keyed on accessibility identifiers, so it holds whichever
-/// games and stories the feeds serve.
+/// the way to Settings. Its page (t_191edd79) is the favorites' news feed,
+/// under Live Now, Upcoming and Recent Results only when each has games.
+/// Keyed on accessibility identifiers; the window tests pin Home's clock
+/// (`MYTEAMS_HOME_NOW`) against the Chiefs' fixture season, so the ±7-day
+/// windows hold the same games whenever they run.
 final class HomeUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -26,12 +28,27 @@ final class HomeUITests: XCTestCase {
         "soccer/usa.1:186",
     ].joined(separator: ",")
 
-    /// Home's sections, top to bottom.
+    /// The Chiefs alone: the one bundled team whose news the fixtures
+    /// serve (`chiefs_news`), and a season (`chiefs_schedule`) whose dates
+    /// the window tests are pinned against.
+    private static let chiefs = "football/nfl:12"
+
+    /// Sat, Sep 26, 2026, 12:00 UTC, in the Chiefs' fixture season: last
+    /// played Sep 21 (401872945, final) and Sep 15 (401872931, final, 11
+    /// days back); next Sep 27 (401872952) then Oct 4 (401872976, 8 days
+    /// on). No scoreboard is served, so nothing is live.
+    private static let midSeason = "1790424000"
+
+    /// Mon, Jun 1, 2026, 12:00 UTC: months before the Chiefs' first game,
+    /// so no game section has anything to show.
+    private static let offSeason = "1780315200"
+
+    /// Home's sections on `midSeason`, top to bottom: Live Now has no game
+    /// to show.
     private static let sections = [
-        "home.section.live",
-        "home.section.today",
+        "home.section.upcoming",
         "home.section.results",
-        "home.section.headlines",
+        "home.section.news",
     ]
 
     /// The app opens on Home, not on a team's page: Home's tab is selected,
@@ -50,11 +67,12 @@ final class HomeUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["teamPage.header"].exists, "A team's page is on screen.")
     }
 
-    /// Home's identifiers are there: the page, its four sections in order,
-    /// and the Settings gear in its bar.
+    /// Home's identifiers are there: the page, its sections with games in
+    /// order over the news feed, none for a section without games, and the
+    /// Settings gear in its bar.
     @MainActor
     func testHomeShowsItsSections() throws {
-        let app = launchWithFixtures()
+        let app = launchWithFixtures(following: Self.chiefs, now: Self.midSeason)
         XCTAssertTrue(homeTab(app).waitForExistence(timeout: 10))
 
         XCTAssertTrue(element("home.page", in: app).waitForExistence(timeout: 10), "Home's page never showed.")
@@ -76,6 +94,50 @@ final class HomeUITests: XCTestCase {
         }
         let laidOut = Self.sections.map { element($0, in: app).frame.minY }
         XCTAssertEqual(laidOut, laidOut.sorted(), "Home's sections are out of order.")
+
+        // No game under way: Live Now takes no room.
+        XCTAssertFalse(element("home.section.live", in: app).exists, "Live Now showed with no game live.")
+    }
+
+    /// Upcoming is the next seven days' games and Recent Results the last
+    /// seven days': each window's edge game is in, the one past it out.
+    @MainActor
+    func testGameSectionsHoldSevenDays() throws {
+        let app = launchWithFixtures(following: Self.chiefs, now: Self.midSeason)
+
+        let upcoming = element("home.section.upcoming", in: app)
+        XCTAssertTrue(upcoming.waitForExistence(timeout: 15), "No Upcoming with a game tomorrow.")
+        XCTAssertTrue(app.buttons["home.upcoming.401872952"].waitForExistence(timeout: 5), "Tomorrow's game isn't in Upcoming.")
+        XCTAssertFalse(app.buttons["home.upcoming.401872976"].exists, "A game eight days on is in Upcoming.")
+        XCTAssertTrue(element("home.upcoming.date", in: app).exists, "Upcoming has no date header.")
+
+        let results = element("home.section.results", in: app)
+        XCTAssertTrue(results.waitForExistence(timeout: 5), "No Recent Results with a game five days back.")
+        XCTAssertTrue(app.buttons["home.result.401872945"].exists, "Sep 21's result isn't in Recent Results.")
+        XCTAssertFalse(app.buttons["home.result.401872931"].exists, "A result eleven days back is in Recent Results.")
+        XCTAssertFalse(app.buttons["home.result.401872952"].exists, "A game still to play is in Recent Results.")
+    }
+
+    /// With no game live, upcoming or recent, the game sections take no
+    /// room and the page is the news feed, its stories there to open.
+    @MainActor
+    func testNewsFeedWithoutGames() throws {
+        let app = launchWithFixtures(following: Self.chiefs, now: Self.offSeason)
+
+        XCTAssertTrue(element("home.section.news", in: app).waitForExistence(timeout: 15), "No news feed on Home.")
+        let row = app.buttons["home.news.row"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "The news feed has no stories.")
+        XCTAssertTrue(row.isHittable, "The feed's first story isn't on screen without games above it.")
+
+        for identifier in ["home.section.live", "home.section.upcoming", "home.section.results"] {
+            XCTAssertFalse(element(identifier, in: app).exists, "\(identifier) showed with no games.")
+        }
+
+        // The feed runs on below the fold, uncapped: still stories after
+        // scrolling well past the first.
+        app.swipeUp()
+        app.swipeUp()
+        XCTAssertTrue(app.buttons["home.news.row"].firstMatch.waitForExistence(timeout: 5), "The feed ran out of stories.")
     }
 
     /// Home's gear opens Settings, the way to alerts and teams from where
@@ -142,15 +204,20 @@ final class HomeUITests: XCTestCase {
 
     /// The app, serving its ESPN requests from the unit tests' captured
     /// documents (`FixtureTransport`), so Home's feeds answer without the
-    /// network. See `myTeamsUITests.launchWithFixtures`.
+    /// network. See `myTeamsUITests.launchWithFixtures`. `now`, in seconds
+    /// since 1970, pins Home's clock (`HomeViewModel.launchNowKey`).
     @MainActor
-    private func launchWithFixtures() -> XCUIApplication {
+    private func launchWithFixtures(following favorites: String = bundledTeams, now: String? = nil) -> XCUIApplication {
         let fixtures = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("myTeamsTests")
             .appendingPathComponent("Fixtures")
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixtures.path), "No fixtures at \(fixtures.path)")
-        return launch(environment: ["MYTEAMS_FIXTURES_DIR": fixtures.path])
+        var environment = ["MYTEAMS_FIXTURES_DIR": fixtures.path]
+        if let now {
+            environment["MYTEAMS_HOME_NOW"] = now
+        }
+        return launch(following: favorites, environment: environment)
     }
 }

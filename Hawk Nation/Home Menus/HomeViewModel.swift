@@ -37,13 +37,14 @@ struct HomeLiveGame: Identifiable, Hashable, Sendable {
     var id: String { info.gameID }
 }
 
-/// A day of favorites' games: today's, or tomorrow's on a day without any.
-struct HomeDay: Equatable, Sendable {
+/// A day of the favorites' upcoming games, under its date header.
+struct HomeDay: Identifiable, Equatable, Sendable {
     /// The day's start.
     let date: Date
-    let isToday: Bool
     /// In start order.
     let games: [HomeGame]
+
+    var id: Date { date }
 }
 
 /// A story from a favorite's news feed, with the favorite it came from.
@@ -58,11 +59,11 @@ struct HomeHeadline: Identifiable, Hashable, Sendable {
 /// scoreboards and the news feeds as plain values, so the tests can drive
 /// it.
 enum HomeFeed {
-    /// How far back Results reaches.
-    static let resultsWindow: TimeInterval = 48 * 60 * 60
+    /// How far ahead Upcoming reaches.
+    static let upcomingWindow: TimeInterval = 7 * 24 * 60 * 60
 
-    /// The most headlines Home shows.
-    static let headlineCount = 5
+    /// How far back Recent Results reaches.
+    static let resultsWindow: TimeInterval = 7 * 24 * 60 * 60
 
     /// The favorites' games under way on `boards`, in favorites order, each
     /// game once however many favorites play in it. A favorite's games are
@@ -115,21 +116,30 @@ enum HomeFeed {
         return result
     }
 
-    /// The favorites' games today in start order, or tomorrow's when there
-    /// are none today; `nil` when there are none either day. Games without
-    /// a date are left out.
-    static func upcomingDay(_ games: [HomeGame], now: Date, calendar: Calendar = .autoupdatingCurrent) -> HomeDay? {
-        let today = calendar.startOfDay(for: now)
-        guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) else { return nil }
-        for (day, isToday) in [(today, true), (tomorrow, false)] {
-            let onDay = games
-                .filter { !$0.game.date.isEmpty && calendar.isDate($0.game.dateAsDate, inSameDayAs: day) }
-                .sorted { $0.game.dateAsDate < $1.game.dateAsDate }
-            if !onDay.isEmpty {
-                return HomeDay(date: day, isToday: isToday, games: onDay)
+    /// The favorites' games still to start within the next
+    /// `upcomingWindow`, by day, soonest first; none when there are none.
+    /// Games without a date are left out, and a game under way is Live
+    /// Now's.
+    static func upcomingDays(_ games: [HomeGame], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [HomeDay] {
+        let latest = now.addingTimeInterval(upcomingWindow)
+        let upcoming = games
+            .filter { entry in
+                let game = entry.game
+                return !game.completed && !game.date.isEmpty
+                    && game.dateAsDate >= now && game.dateAsDate <= latest
+            }
+            .sorted { $0.game.dateAsDate < $1.game.dateAsDate }
+
+        var days: [HomeDay] = []
+        for entry in upcoming {
+            let day = calendar.startOfDay(for: entry.game.dateAsDate)
+            if let last = days.last, last.date == day {
+                days[days.count - 1] = HomeDay(date: day, games: last.games + [entry])
+            } else {
+                days.append(HomeDay(date: day, games: [entry]))
             }
         }
-        return nil
+        return days
     }
 
     /// The favorites' games played out in the last `resultsWindow`, newest
@@ -146,9 +156,10 @@ enum HomeFeed {
             .sorted { $0.game.dateAsDate > $1.game.dateAsDate }
     }
 
-    /// The newest `headlineCount` stories across the favorites' feeds, each
-    /// story once (a story tagged with two favorites is in both feeds), as
-    /// the first favorite in `teams` to list it.
+    /// Every story across the favorites' feeds, newest first, each story
+    /// once (a story tagged with two favorites is in both feeds), as the
+    /// first favorite in `teams` to list it. No cap: Home's news feed is
+    /// the page's bottom layer and draws its rows lazily.
     static func headlines(teams: [TeamRef], articles: [TeamRef.ID: [News]]) -> [HomeHeadline] {
         var seen: Set<String> = []
         var merged: [HomeHeadline] = []
@@ -157,7 +168,7 @@ enum HomeFeed {
                 merged.append(HomeHeadline(team: team, article: article))
             }
         }
-        return Array(merged.sorted { $0.article.publishedAt > $1.article.publishedAt }.prefix(headlineCount))
+        return merged.sorted { $0.article.publishedAt > $1.article.publishedAt }
     }
 
     /// One state for a section fed by every favorite's feed (P1's
@@ -177,14 +188,16 @@ enum HomeFeed {
 /// - Live Now reads the league scoreboards `LeagueScoreboardCenter`
 ///   polls for every favorite while the app is in the foreground — the
 ///   same app-owned feed score alerts and Live Activities read.
-/// - Today and Results read the favorites' seasons the center loaded to
-///   know which boards to poll (`followedSeason(of:)`).
-/// - Headlines merges each favorite's ESPN news feed
-///   (`downloadNewsData`), fetched again once `TeamFeed.news.timeToLive`
-///   has run out, as a team page's is.
+/// - Upcoming and Recent Results read the favorites' seasons the center
+///   loaded to know which boards to poll (`followedSeason(of:)`).
+/// - The news feed merges each favorite's ESPN news feed
+///   (`downloadNewsData`, up to the 25 stories `TeamRef.newsURL` asks
+///   for), fetched again once `TeamFeed.news.timeToLive` has run out, as a
+///   team page's is.
 ///
 /// One cadence (`refreshInterval`, the center's): the clock moves on for
-/// Today and Results, and any news feed past its time-to-live is fetched.
+/// Upcoming and Recent Results, and any news feed past its time-to-live is
+/// fetched.
 /// The scoreboards redraw Home whenever the center's polls change them.
 @MainActor
 @Observable
@@ -196,8 +209,8 @@ final class HomeViewModel {
     /// The favorites, in favorites order.
     private(set) var teams: [TeamRef] = []
 
-    /// The moment Today and Results are worked out against, moved on each
-    /// `refreshInterval`.
+    /// The moment Upcoming and Recent Results are worked out against, moved
+    /// on each `refreshInterval`.
     private(set) var now: Date
 
     private var articles: [TeamRef.ID: [News]] = [:]
@@ -211,12 +224,28 @@ final class HomeViewModel {
     init(
         scoreboards: LeagueScoreboardCenter = .shared,
         loadNews: @escaping @Sendable (String) async -> Result<[News], NetworkError> = { await downloadNewsData(queryURL: $0) },
-        now: @escaping @MainActor () -> Date = { Date() }
+        now: @escaping @MainActor () -> Date = { HomeViewModel.launchNow() }
     ) {
         self.scoreboards = scoreboards
         self.loadNews = loadNews
         self.clock = now
         self.now = now()
+    }
+
+    /// The launch-environment key a UI test pins Home's clock with, in
+    /// seconds since 1970, so the ±7-day windows read the same against the
+    /// fixtures (`MYTEAMS_FIXTURES_DIR`) whenever the tests run. Read by
+    /// Debug builds only.
+    static let launchNowKey = "MYTEAMS_HOME_NOW"
+
+    /// The time, or in a Debug build the moment `launchNowKey` pins.
+    static func launchNow() -> Date {
+        #if DEBUG
+        if let raw = ProcessInfo.processInfo.environment[launchNowKey], let seconds = TimeInterval(raw) {
+            return Date(timeIntervalSince1970: seconds)
+        }
+        #endif
+        return Date()
     }
 
     // MARK: Sections
@@ -232,29 +261,16 @@ final class HomeViewModel {
         return seasons
     }
 
-    /// Where the favorites' seasons stand, for Today and Results.
-    var scheduleState: SectionLoadState {
-        HomeFeed.combinedState(teams.map { Self.loadState(of: scoreboards.followedSeason(of: $0.id)) })
-    }
-
-    private static func loadState(of season: LeagueScoreboardCenter.FollowedSeason) -> SectionLoadState {
-        switch season {
-        case .loading: return .loading
-        case .loaded: return .loaded
-        case .failed: return .failed
-        }
-    }
+    // The game sections show only when they have games (t_191edd79):
+    // nothing to say while the seasons load or when one failed, which pull
+    // to refresh asks for again.
 
     var liveGames: [HomeLiveGame] {
         HomeFeed.liveGames(teams: teams, boards: scoreboards.games, seasons: seasons)
     }
 
-    /// The boards are only polled for the days of games the seasons list,
-    /// so Live Now stands where the seasons do.
-    var liveState: SectionLoadState { scheduleState }
-
-    var today: HomeDay? {
-        HomeFeed.upcomingDay(HomeFeed.games(teams: teams, seasons: seasons), now: now)
+    var upcoming: [HomeDay] {
+        HomeFeed.upcomingDays(HomeFeed.games(teams: teams, seasons: seasons), now: now)
     }
 
     var results: [HomeGame] {
@@ -269,8 +285,8 @@ final class HomeViewModel {
         HomeFeed.combinedState(teams.map { newsStates[$0.id] ?? .loading })
     }
 
-    /// `game`'s live score for `team` on the scoreboard, for a game under
-    /// way in Today.
+    /// `game`'s live score for `team` on the scoreboard, for a game in
+    /// Upcoming that has got under way since the last `refreshInterval`.
     func liveScore(for game: Game, team: TeamRef) -> LiveGameScore? {
         shouldPollLiveScore(game: game, now: now) ? scoreboards.liveScore(for: game, team: team) : nil
     }
@@ -310,11 +326,6 @@ final class HomeViewModel {
     /// Retries the news feeds that failed.
     func reloadNews() async {
         await refreshNews(force: false)
-    }
-
-    /// Asks the center again for the seasons that failed.
-    func reloadSchedules() async {
-        await scoreboards.retryFailedSchedules()
     }
 
     /// Fetches the favorites' news feeds that are due (`feedNeedsRefresh`):
