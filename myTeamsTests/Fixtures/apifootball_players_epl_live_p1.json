@@ -1,0 +1,467 @@
+{
+ "get": "players",
+ "parameters": {
+  "league": "39",
+  "season": "2024",
+  "page": 1
+ },
+ "errors": [],
+ "results": 20,
+ "paging": {
+  "current": 1,
+  "total": 57
+ },
+ "response": [
+  {
+   "player": {
+    "id": 5,
+    "name": "M. Akanji",
+    "firstname": "Manuel Obafemi",
+    "lastname": "Akanji",
+    "photo": "https://media.api-sports.io/football/players/5.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 50,
+      "name": "Manchester City"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 14,
+    "name": "M. Dahoud",
+    "firstname": "Mahmoud",
+    "lastname": "Dahoud",
+    "photo": "https://media.api-sports.io/football/players/14.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 51,
+      "name": "Brighton"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 18,
+    "name": "J. Sancho",
+    "firstname": "Jadon Malik",
+    "lastname": "Sancho",
+    "photo": "https://media.api-sports.io/football/players/18.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 49,
+      "name": "Chelsea"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    },
+    {
+     "team": {
+      "id": 33,
+      "name": "Manchester United"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 23,
+    "name": "Sergio Gómez",
+    "firstname": "Sergio",
+    "lastname": "Gómez Martín",
+    "photo": "https://media.api-sports.io/football/players/23.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 50,
+      "name": "Manchester City"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 44,
+    "name": "Rodri",
+    "firstname": "Rodrigo",
+    "lastname": "Hernández Cascante",
+    "photo": "https://media.api-sports.io/football/players/44.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 50,
+      "name": "Manchester City"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 49,
+    "name": "T. Partey",
+    "firstname": "Thomas",
+    "lastname": "Teye Partey",
+    "photo": "https://media.api-sports.io/football/players/49.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 42,
+      "name": "Arsenal"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 74,
+    "name": "S. Amrabat",
+    "firstname": "Sofyan",
+    "lastname": "Amrabat",
+    "photo": "https://media.api-sports.io/football/players/74.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 33,
+      "name": "Manchester United"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 80,
+    "name": "E. Dennis",
+    "firstname": "Emmanuel Bonaventure",
+    "lastname": "Dennis",
+    "photo": "https://media.api-sports.io/football/players/80.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 65,
+      "name": "Nottingham Forest"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 83,
+    "name": "A. Danjuma",
+    "firstname": "Arnaut",
+    "lastname": "Danjuma Adam Groeneveld",
+    "photo": "https://media.api-sports.io/football/players/83.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 45,
+      "name": "Everton"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 95,
+    "name": "B. Badiashile",
+    "firstname": "Benoît Ntambue",
+    "lastname": "Badiashile Mukinayi Baya",
+    "photo": "https://media.api-sports.io/football/players/95.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 49,
+      "name": "Chelsea"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 104,
+    "name": "Carlos Vinícius",
+    "firstname": "Carlos Vinícius",
+    "lastname": "Alves Morais",
+    "photo": "https://media.api-sports.io/football/players/104.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 36,
+      "name": "Fulham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 105,
+    "name": "F. Ballo-Touré",
+    "firstname": "Fodé",
+    "lastname": "Ballo-Touré",
+    "photo": "https://media.api-sports.io/football/players/105.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 36,
+      "name": "Fulham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 130,
+    "name": "Nélson Semedo",
+    "firstname": "Nélson",
+    "lastname": "Cabral Semedo",
+    "photo": "https://media.api-sports.io/football/players/130.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 39,
+      "name": "Wolves"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 131,
+    "name": "Jorge Cuenca",
+    "firstname": "Jorge",
+    "lastname": "Cuenca Barreno",
+    "photo": "https://media.api-sports.io/football/players/131.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 36,
+      "name": "Fulham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 133,
+    "name": "C. Lenglet",
+    "firstname": "Clément Nicolas Laurent",
+    "lastname": "Lenglet",
+    "photo": "https://media.api-sports.io/football/players/133.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 66,
+      "name": "Aston Villa"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 138,
+    "name": "J. Todibo",
+    "firstname": "Jean-Clair Dimitri Roger",
+    "lastname": "Todibo",
+    "photo": "https://media.api-sports.io/football/players/138.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 48,
+      "name": "West Ham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 147,
+    "name": "Philippe Coutinho",
+    "firstname": "Philippe",
+    "lastname": "Coutinho Correia",
+    "photo": "https://media.api-sports.io/football/players/147.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 66,
+      "name": "Aston Villa"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 161,
+    "name": "A. Whiteman",
+    "firstname": "Alfie Malik",
+    "lastname": "Whiteman",
+    "photo": "https://media.api-sports.io/football/players/161.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 47,
+      "name": "Tottenham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 164,
+    "name": "B. Davies",
+    "firstname": "Benjamin Thomas",
+    "lastname": "Davies",
+    "photo": "https://media.api-sports.io/football/players/164.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 47,
+      "name": "Tottenham"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  },
+  {
+   "player": {
+    "id": 169,
+    "name": "K. Trippier",
+    "firstname": "Kieran John",
+    "lastname": "Trippier",
+    "photo": "https://media.api-sports.io/football/players/169.png"
+   },
+   "statistics": [
+    {
+     "team": {
+      "id": 34,
+      "name": "Newcastle"
+     },
+     "league": {
+      "id": 39,
+      "name": "Premier League",
+      "season": 2024
+     }
+    }
+   ]
+  }
+ ]
+}

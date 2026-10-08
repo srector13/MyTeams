@@ -841,6 +841,23 @@ something to match. The account fields are placeholders.
 | `apifootball_status_ok.json` | `GET https://v3.football.api-sports.io/status`, a working key | Plan and the day's request count |
 | `apifootball_status_bad_key.json` | the same, a bad key | `errors.token` |
 
+### Live captures (2026-10-07, a free-plan key)
+
+Captured with the reader's free key between 17:25Z and 18:02Z, the key
+sent as `x-apisports-key` and in none of the bodies (no file here contains
+it, nor any account field). Trimmed to what the parsers read: `player.{id,
+name, firstname, lastname, photo}` and each `statistics[]`'s `team` and
+`league`; `/teams` without `venue`; the ESPN roster to its athletes' ids and
+names. See docs/APIFOOTBALL_LIVE_DIAGNOSTIC.md.
+
+| File | URL | What it covers |
+|---|---|---|
+| `apifootball_players_epl_live_p1.json` … `_p3.json` | `GET /players?league=39&season=2024&page=1`…`3` | The league route: 20 rows a page, ascending player id, `paging.total` 57. Only Partey and Cédric Soares name Arsenal, and neither is on its roster today |
+| `apifootball_players_page_cap.json` | `GET /players?league=39&season=2024&page=4` | The free plan's refusal: `errors.plan` "limited to a maximum value of 3 for the Page parameter" (`ApiFootball.pageCap`) |
+| `apifootball_teams_epl_live.json` | `GET /teams?league=39&season=2024` | The EPL's 20 clubs and their ids (Arsenal 42, Chelsea 49) |
+| `apifootball_players_team42_p1.json` … `_p3.json` | `GET /players?team=42&season=2024&page=1`…`3` | The team route: Arsenal's 59 rows, 3 pages |
+| `arsenal_roster_live.json` | `GET https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams/359/roster` (22:28Z) | Arsenal's 27 players, 2026-27, for the join over live rows |
+
 League ids (`ApiFootball.leagueIDs`) were checked against each league's
 crest on the keyless CDN, `https://media.api-sports.io/football/leagues/<id>.png`;
 the placeholder hashes (`ApiFootball.placeholderHashes`) by SHA-256 of the

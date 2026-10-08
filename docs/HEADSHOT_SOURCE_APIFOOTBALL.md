@@ -162,6 +162,10 @@ mex.1, eng.w.1, fra.w.1, usa.nwsl) ≈ 18–20 men's / 12–16 women's teams eac
   sweep, or 2 leagues/day (weekly full refresh). **Amortized ≈ 24–30 req/day — fits.**
 - Per-league `players?league=&season=` (50/page, ~2–3 pages/league): ~25 req full sweep —
   **fits a once-a-week cron in a single day with margin.**
+  **Wrong on the free plan (live, 2026-10-07):** pages are 20 rows, the EPL is 57 pages,
+  and the free plan refuses `page` > 3 — the app now sweeps per club
+  (`players?team=&season=`, ~3 pages a club), on demand for clubs the reader opens.
+  See docs/APIFOOTBALL_LIVE_DIAGNOSTIC.md.
 - Photo bytes themselves: $0 API cost (keyless CDN), 48h public edge cache — client
   hotlinking is free and unlimited.
 - **Weekly-cache-viable: yes.** One sweep/week + CDN hotlink is the shape, ~25–40 req
