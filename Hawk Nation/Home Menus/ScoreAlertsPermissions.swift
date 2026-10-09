@@ -31,7 +31,10 @@ enum ScoreAlertsPermissions {
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .notDetermined else { return }
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .sound])
+            // Time Sensitive for finals and close games late (R-6). iOS 15
+            // and later grant it with the entitlement, whatever is asked;
+            // asked for still, for the systems that read it.
+            let granted = try await center.requestAuthorization(options: [.alert, .sound, .timeSensitive])
             logger.info("Score alerts \(granted ? "allowed" : "declined")")
         } catch {
             logger.error("Could not ask for score alerts: \(error.localizedDescription)")
@@ -41,5 +44,15 @@ enum ScoreAlertsPermissions {
     /// Whether alerts may be posted now. Denied or undetermined reads as no.
     static func isAuthorized() async -> Bool {
         await permission() == .granted
+    }
+
+    /// Whether a Time Sensitive alert would go out as one (R-6): only with
+    /// the Time Sensitive entitlement signed into the app, and the reader
+    /// not having turned them off in Settings. The probe, rather than an
+    /// assumption, because the entitlement may be missing from the
+    /// provisioning profile a build was signed with; where the system
+    /// reports it unsupported or off, alerts go out as standard ones.
+    static func allowsTimeSensitive() async -> Bool {
+        await UNUserNotificationCenter.current().notificationSettings().timeSensitiveSetting == .enabled
     }
 }

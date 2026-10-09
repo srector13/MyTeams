@@ -29,7 +29,8 @@ extension AlertsSettingsModel {
 /// Which followed teams send game alerts, and whether the system lets them:
 /// the notification permission, with a way to grant it from here, and Live
 /// Activities; then which kinds of alert go out, and quiet hours
-/// (`AlertPreferences`).
+/// (`AlertPreferences`). Each team pushes to its own alerts
+/// (`TeamAlertsView`, R-6): on or off, and the global kinds or its own.
 ///
 /// Reached from the team browser, so readers who never followed a new team
 /// (whose seeded teams never prompted) can still turn alerts on.
@@ -59,7 +60,7 @@ struct AlertsSettingsView: View {
 
             Section {
                 ForEach(teams) { team in
-                    teamToggle(team)
+                    teamRow(team)
                 }
             } header: {
                 Text("Game Alerts")
@@ -74,7 +75,7 @@ struct AlertsSettingsView: View {
             } header: {
                 Text("Alert Types")
             } footer: {
-                Text("Score updates include the end of each period.")
+                Text("Score updates include the end of each period. A team can choose its own types instead.")
             }
 
             Section {
@@ -143,11 +144,12 @@ struct AlertsSettingsView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func teamToggle(_ team: TeamRef) -> some View {
-        Toggle(isOn: Binding(
-            get: { store.notify(for: team.id) },
-            set: { store.setNotify($0, for: team.id) }
-        )) {
+    /// A team's row: its alerts at a glance, pushing to their settings.
+    private func teamRow(_ team: TeamRef) -> some View {
+        let status = TeamAlertsView.status(store.alertKinds(for: team.id))
+        return NavigationLink {
+            TeamAlertsView(team: team)
+        } label: {
             HStack(spacing: 12) {
                 TeamLogo(team: team, size: crestSize)
                     .frame(width: crestSize, height: crestSize)
@@ -156,11 +158,14 @@ struct AlertsSettingsView: View {
                 Text(team.league.badge)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
+                Spacer()
+                Text(status)
+                    .foregroundStyle(.secondary)
             }
         }
-        .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge)")
-        .accessibilityHint("Turns notifications for this team's games on or off.")
-        .accessibilityIdentifier("alerts.toggle.\(team.id)")
+        .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge): \(status)")
+        .accessibilityHint("Shows this team's alert settings.")
+        .accessibilityIdentifier("alerts.team.\(team.id)")
     }
 
     private func kindToggle(_ kind: ScoreAlertKind) -> some View {
@@ -206,6 +211,93 @@ struct AlertsSettingsView: View {
         case .ask: "Shows the system prompt to allow notifications."
         case .openSettings: "Leaves myTeams for its page in the Settings app."
         }
+    }
+}
+
+/// One followed team's game alerts (R-6): on or off, and either the global
+/// alert types or the team's own (`FavoriteTeam.alertKinds`). Choosing a
+/// type here stores the team's own set; going back to the global types
+/// stores none, so the team follows later changes to them.
+struct TeamAlertsView: View {
+    let team: TeamRef
+
+    private var store: FavoritesStore { .shared }
+    private var preferences: AlertPreferencesStore { .shared }
+
+    /// What a team's row says of its alerts.
+    static func status(_ kinds: AlertMask?) -> String {
+        switch kinds {
+        case nil: "On"
+        case let kinds? where kinds.isEmpty: "Off"
+        default: "Custom"
+        }
+    }
+
+    private var kinds: AlertMask? { store.alertKinds(for: team.id) }
+
+    var body: some View {
+        List {
+            Section {
+                Toggle("Game Alerts", isOn: Binding(
+                    get: { store.notify(for: team.id) },
+                    set: { store.setNotify($0, for: team.id) }
+                ))
+                .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge)")
+                .accessibilityHint("Turns notifications for this team's games on or off.")
+                .accessibilityIdentifier("alerts.toggle.\(team.id)")
+            }
+
+            if kinds != AlertMask() {
+                Section {
+                    Toggle("Use Default Types", isOn: Binding(
+                        get: { kinds == nil },
+                        set: { usesDefault in
+                            store.setAlertKinds(usesDefault ? nil : ownKindsToStart, for: team.id)
+                        }
+                    ))
+                    .accessibilityHint("Follows the alert types chosen for every team.")
+                    .accessibilityIdentifier("alerts.team.default")
+                    ForEach(ScoreAlertKind.allCases, id: \.self) { kind in
+                        kindToggle(kind)
+                    }
+                } header: {
+                    Text("Alert Types")
+                } footer: {
+                    Text("Turn off Use Default Types to choose this team's own. Turning every type off turns its alerts off.")
+                }
+            }
+        }
+        .navigationTitle(team.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// The team's own kinds when it leaves the defaults: the global ones as
+    /// they stand, or every kind should those all be off.
+    private var ownKindsToStart: AlertMask {
+        let global = preferences.preferences.kinds
+        // The defaults send every kind.
+        return global == AlertMask() ? AlertPreferences().kinds : global
+    }
+
+    private func kindToggle(_ kind: ScoreAlertKind) -> some View {
+        Toggle(kind.title, isOn: Binding(
+            get: {
+                guard let kinds else { return preferences.preferences.sends(kind) }
+                return kinds.contains(kind.mask)
+            },
+            set: { sends in
+                var own = kinds ?? ownKindsToStart
+                if sends {
+                    own.insert(kind.mask)
+                } else {
+                    own.remove(kind.mask)
+                }
+                store.setAlertKinds(own, for: team.id)
+            }
+        ))
+        .disabled(kinds == nil)
+        .accessibilityHint("Turns \(kind.title.lowercased()) on or off for this team.")
+        .accessibilityIdentifier("alerts.team.kind.\(kind.rawValue)")
     }
 }
 
