@@ -27,6 +27,9 @@ struct MyTeamsApp: App {
     /// The team a widget, Live Activity or score alert tap asked for,
     /// until `Home` shows it.
     @State private var deepLinkedTeamID: TeamRef.ID?
+    /// The game a link asked for, whose sheet `Home` opens over
+    /// `deepLinkedTeamID`'s page (R-3).
+    @State private var deepLinkedGame: WidgetDeepLink.GameTarget?
     /// Taps on score alerts, which arrive through the notification center
     /// rather than as a URL.
     @State private var alertTaps = ScoreAlertTaps.shared
@@ -35,7 +38,7 @@ struct MyTeamsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Home(deepLinkedTeamID: $deepLinkedTeamID)
+            Home(deepLinkedTeamID: $deepLinkedTeamID, deepLinkedGame: $deepLinkedGame)
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
@@ -44,15 +47,13 @@ struct MyTeamsApp: App {
                 // `appearance` once it has gone.
                 .splashOverlay(preferredColorScheme: appearance.colorScheme)
                 .onOpenURL { url in
-                    if let teamID = WidgetDeepLink.teamID(from: url) {
-                        deepLinkedTeamID = teamID
-                    }
+                    open(url)
                 }
-                .onChange(of: alertTaps.teamID, initial: true) { _, teamID in
+                .onChange(of: alertTaps.link, initial: true) { _, link in
                     // Initially too: the tap may have launched the app.
-                    guard let teamID else { return }
-                    deepLinkedTeamID = teamID
-                    alertTaps.teamID = nil
+                    guard let link else { return }
+                    open(link)
+                    alertTaps.link = nil
                 }
                 .task {
                     // Watch the live scoreboards for favorites' alerts. Asks
@@ -155,6 +156,18 @@ enum BackgroundRefresh {
         } catch {
             // Refused in the Simulator, and with Background App Refresh off.
             logger.error("Could not schedule a background refresh: \(error.localizedDescription)")
+        }
+    }
+
+    /// A team link opens its page; a game link with a team, the game's
+    /// sheet over that page. Anything else is ignored.
+    private func open(_ url: URL) {
+        if let teamID = WidgetDeepLink.teamID(from: url) {
+            deepLinkedGame = nil
+            deepLinkedTeamID = teamID
+        } else if let game = WidgetDeepLink.game(from: url), let teamID = game.teamID {
+            deepLinkedGame = game
+            deepLinkedTeamID = teamID
         }
     }
 }

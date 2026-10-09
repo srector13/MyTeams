@@ -25,6 +25,7 @@ private let closeButtonClearance: CGFloat = 44 + Theme.Spacing.m
 /// alike; only a game with its clock running refreshes every ten seconds.
 struct GameDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.displayScale) private var displayScale
 
     /// The venue header's height at the default text size; it grows with
     /// the text over it.
@@ -49,6 +50,9 @@ struct GameDetailView: View {
     @State private var loading = true
     /// The lineup or box-score player whose sheet is open (C-6).
     @State private var sheetPlayer: GameSheetPlayer?
+    /// The scoreboard as an image, for Share (R-3); `nil` until the game
+    /// has a score.
+    @State private var shareImage: Image?
 
     /// Paces refreshes that produced no sheet: 30 seconds, doubling while
     /// ESPN throttles. See `PollBackoff`.
@@ -131,6 +135,17 @@ struct GameDetailView: View {
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .accessibilityIdentifier("gameDetail.close")
                 .padding(Theme.Spacing.m)
+        }
+        .overlay(alignment: .topLeading) {
+            if !loading {
+                shareButton
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .padding(Theme.Spacing.m)
+            }
+        }
+        // Drawn again as the score or status changes.
+        .onChange(of: shareLine, initial: true) {
+            shareImage = renderShareImage()
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
@@ -440,6 +455,76 @@ struct GameDetailView: View {
         Text(text)
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
+    }
+
+    // MARK: - Share
+
+    /// "Chiefs 27–24 Bills · Final": the scoreline as the card reads it,
+    /// home side first, and its status; before a score, the matchup and
+    /// date.
+    private var shareLine: String {
+        let left = game.gameHome ? teamLabel : game.opponent
+        let right = game.gameHome ? game.opponent : teamLabel
+        guard let boxScore, !game.cancelled, !game.postponed else {
+            return "\(left) vs \(right) · \(game.date)"
+        }
+        let shown = GameStatus.shown(refreshed: refreshedStatus, tapped: game)
+        let status: String
+        if shown.completed {
+            status = "Final"
+        } else if shown.halftime {
+            status = "Halftime"
+        } else {
+            status = [league.liveCardPeriodLabel(shown.period), shown.clock]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+        }
+        return "\(left) \(boxScore.homeScore)–\(boxScore.awayScore) \(right)" + (status.isEmpty ? "" : " · \(status)")
+    }
+
+    /// Shares the scoreboard image, the score line and the game's ESPN page:
+    /// not a `myteams://` link, which means nothing without the app.
+    @ViewBuilder
+    private var shareButton: some View {
+        let webURL = (game.competition ?? team.league).gameWebURL(gameID: game.gameID)
+        let message = Text([shareLine, webURL?.absoluteString].compactMap { $0 }.joined(separator: "\n"))
+        Group {
+            if let shareImage {
+                ShareLink(item: shareImage, message: message, preview: SharePreview(shareLine, image: shareImage)) {
+                    shareLabel
+                }
+            } else if let webURL {
+                ShareLink(item: webURL, message: message, preview: SharePreview(shareLine)) {
+                    shareLabel
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .glassChrome(in: Circle(), interactive: true)
+        .accessibilityLabel("Share")
+        .accessibilityIdentifier("gameDetail.share")
+    }
+
+    private var shareLabel: some View {
+        Image(systemName: "square.and.arrow.up")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .contentShape(.circle)
+    }
+
+    /// The scoreboard on a plain card, light, at the screen's scale.
+    private func renderShareImage() -> Image? {
+        guard let boxScore, !game.cancelled, !game.postponed else { return nil }
+        let renderer = ImageRenderer(content:
+            scoreboard(score: "\(boxScore.homeScore) - \(boxScore.awayScore)")
+                .padding(Theme.Spacing.xl)
+                .frame(width: 360)
+                .background(Color.white)
+                .environment(\.colorScheme, .light)
+        )
+        renderer.scale = displayScale
+        return renderer.cgImage.map { Image(decorative: $0, scale: displayScale) }
     }
 
     private func message(_ text: String) -> some View {

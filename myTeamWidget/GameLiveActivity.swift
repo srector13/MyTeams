@@ -21,10 +21,10 @@ struct GameLiveActivity: Widget {
             // No background tint or action colour (LA-1): the system's own
             // platter follows the Lock Screen's light or dark appearance, as
             // the notifications around it do, and the banner's ink is
-            // hierarchical to match. A tap opens the followed team's page,
-            // as the widget's does.
+            // hierarchical to match. A tap opens the game's sheet over the
+            // followed team's page (R-3).
             GameActivityBanner(game: context.attributes.game, state: context.state, isStale: context.isStale)
-                .widgetURL(context.attributes.game.deepLink)
+                .widgetURL(context.attributes.game.gameLink)
         } dynamicIsland: { context in
             let game = context.attributes.game
             let state = context.state
@@ -83,7 +83,7 @@ struct GameLiveActivity: Widget {
             // bundle's, else the one the app stored at the start (B-13),
             // else the system's own.
             .keylineTint(game.followedKeylineHex.map { Color(hexString: $0) })
-            .widgetURL(game.deepLink)
+            .widgetURL(game.gameLink)
         }
     }
 }
@@ -408,5 +408,17 @@ extension GameActivityAttributes {
     GameLiveActivity()
 } contentStates: {
     GameActivityState(homeScore: 23, awayScore: 26, period: 4, clock: "0:48", phase: .live)
+}
+
+private extension GameActivityInfo {
+    /// The `myteams://game/` link to the game's sheet over the followed
+    /// team's page (R-3); the team's page alone if the league is not a
+    /// path; nothing without the team.
+    var gameLink: URL? {
+        guard let favoriteID else { return nil }
+        return LeagueID(path: league)
+            .flatMap { WidgetDeepLink.url(forGame: gameID, league: $0, teamID: favoriteID) }
+            ?? deepLink
+    }
 }
 #endif
