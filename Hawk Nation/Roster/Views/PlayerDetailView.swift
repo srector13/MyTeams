@@ -35,6 +35,9 @@ struct PlayerSheetGrid: Sendable {
     var sections: [Section]
     /// Shown beneath the sections, e.g. once a fetch found nothing.
     var message: String?
+    /// The seasons the sheet's season picker offers, from the splits
+    /// document the grid was read from.
+    var seasons: AthleteSeasons = .empty
 
     init(sections: [Section], message: String? = nil) {
         self.sections = sections
@@ -56,11 +59,14 @@ protocol PlayerSheetDescribing: RosterPlayer {
     /// The About card.
     var about: PlayerSheetGrid { get }
 
-    /// The Season Stats card before `statistics(league:)` has answered.
+    /// The Season Stats card before `statistics(league:season:)` has
+    /// answered.
     var placeholderStatistics: PlayerSheetGrid { get }
 
-    /// Loads the player's season statistics in `league`.
-    func statistics(league: LeagueID) async -> PlayerSheetGrid
+    /// Loads the player's statistics in `league` for `season`, an
+    /// `AthleteSeason.value`, or for the feed's current season when `nil`.
+    /// The grid's `seasons` are those the feed offers.
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid
 
     /// The statistics lifted out of the grid into the sheet's headline
     /// tiles, by their cell titles, in the order they're shown. A title the
@@ -77,10 +83,15 @@ extension PlayerSheetDescribing {
 struct PlayerSheetFeature: Sendable {
     var title: String
     var abbreviation: String
+    /// Whether the tile takes a row of its own above the others, for a
+    /// figure too wide to share one (a baseball slash line). It doesn't
+    /// count toward the four tiles.
+    var spansRow: Bool
 
-    init(_ title: String, _ abbreviation: String) {
+    init(_ title: String, _ abbreviation: String, spansRow: Bool = false) {
         self.title = title
         self.abbreviation = abbreviation
+        self.spansRow = spansRow
     }
 }
 
@@ -112,8 +123,11 @@ extension BasketballPlayer: PlayerSheetDescribing {
 
     var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid {
-        Self.grid(await downloadBasketballPlayerStats(playerID: playerID, league: league))
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
+        let stats = await downloadBasketballPlayerStats(playerID: playerID, league: league, season: season)
+        var sheet = Self.grid(stats)
+        sheet.seasons = stats.seasons
+        return sheet
     }
 
     var featuredStatistics: [PlayerSheetFeature] {
@@ -178,8 +192,11 @@ extension FootBallPlayer: PlayerSheetDescribing {
 
     var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid {
-        Self.grid(await downloadFootballPlayerStats(playerID: playerID, league: league))
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
+        let stats = await downloadFootballPlayerStats(playerID: playerID, league: league, season: season)
+        var sheet = Self.grid(stats)
+        sheet.seasons = stats.seasons
+        return sheet
     }
 
     /// One titled section per position-appropriate stat group.
@@ -223,16 +240,20 @@ extension BaseballPlayer: PlayerSheetDescribing {
 
     var placeholderStatistics: PlayerSheetGrid { grid(.empty) }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid {
-        grid(await downloadBaseballPlayerStats(
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
+        let stats = await downloadBaseballPlayerStats(
             playerID: playerID,
             playerPosition: position,
-            league: league
-        ))
+            league: league,
+            season: season
+        )
+        var sheet = grid(stats)
+        sheet.seasons = stats.seasons
+        return sheet
     }
 
-    /// The pitching line's headline, or the batting line's. The feed gives
-    /// no AVG, OBP or SLG, so OPS stands in for the slash line.
+    /// The pitching line's headline, or the batting line's: the AVG/OBP/SLG
+    /// slash line on a row of its own, then hits, home runs, RBIs and OPS.
     var featuredStatistics: [PlayerSheetFeature] {
         if position.contains("Pitcher") {
             return [
@@ -243,6 +264,7 @@ extension BaseballPlayer: PlayerSheetDescribing {
             ]
         }
         return [
+            PlayerSheetFeature(Self.slashLineTitle, "AVG / OBP / SLG", spansRow: true),
             PlayerSheetFeature("Hits", "H"),
             PlayerSheetFeature("Home Runs", "HR"),
             PlayerSheetFeature("RBIs", "RBI"),
@@ -308,9 +330,25 @@ extension BaseballPlayer: PlayerSheetDescribing {
             ],
             [
                 .stat(title: "OPS", info: "\(stats.OPS)"),
+                .stat(title: Self.slashLineTitle, info: baseballSlashLine(stats)),
             ],
         ])
     }
+
+    /// The slash line's cell title, which VoiceOver reads for its tile.
+    private static let slashLineTitle = "Batting Average / On-Base / Slugging"
+}
+
+/// A batter's AVG/OBP/SLG as a box score prints it, `".281/.357/.455"`: a
+/// rate under one loses its leading zero, a rate of one or more
+/// (`"1.000"`) keeps it.
+func baseballSlashLine(_ stats: BaseballPlayerStats) -> String {
+    [stats.Avg, stats.OnBasePct, stats.SlugAvg]
+        .map { rate in
+            let text = String(format: "%.3f", rate)
+            return text.hasPrefix("0.") ? String(text.dropFirst()) : text
+        }
+        .joined(separator: "/")
 }
 
 extension SoccerPlayer: PlayerSheetDescribing {
@@ -336,8 +374,9 @@ extension SoccerPlayer: PlayerSheetDescribing {
     }
 
     /// A player the roster listed without totals gets the athlete
-    /// document's headline figures instead.
-    func statistics(league: LeagueID) async -> PlayerSheetGrid {
+    /// document's headline figures instead. Neither has seasons to pick
+    /// from, so `season` goes unused.
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
         guard !hasSeasonStats else { return seasonTotals }
         let stats = await downloadSoccerPlayerStats(playerID: playerID, playerPosition: position, league: league)
         return Self.headline(stats, keeper: position.contains("Goalkeeper"))
@@ -465,8 +504,11 @@ extension HockeyPlayer: PlayerSheetDescribing {
 
     var placeholderStatistics: PlayerSheetGrid { Self.grid(.empty) }
 
-    func statistics(league: LeagueID) async -> PlayerSheetGrid {
-        Self.grid(await downloadHockeyPlayerStats(playerID: playerID, league: league))
+    func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
+        let line = await downloadHockeyPlayerStats(playerID: playerID, league: league, season: season)
+        var sheet = Self.grid(line)
+        sheet.seasons = line.seasons
+        return sheet
     }
 
     /// The feed's own labels (`displayNames`): a goalie's line first, as a
@@ -527,8 +569,22 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     let team: TeamRef
 
     @State private var statistics: PlayerSheetGrid
-    /// Whether `statistics(league:)` has answered.
+    /// Whether `statistics(league:season:)` has answered for `season`.
     @State private var loaded = false
+    /// The seasons the picker offers, from the first fetch: a past season's
+    /// document lists only itself.
+    @State private var seasons: [AthleteSeason] = []
+    /// The picker's selection, an `AthleteSeason.value`; empty until the
+    /// first fetch says which season it is for.
+    @State private var season = ""
+    /// The season `statistics` is for.
+    @State private var statisticsSeason = ""
+    /// The season the first fetch was for: the feed's current one.
+    @State private var currentSeason = ""
+    @State private var gameLog = AthleteGameLog.empty
+    /// Whether the game-log card has scrolled into view. Its request waits
+    /// for that, so a sheet opened and closed costs no extra fetch.
+    @State private var gameLogVisible = false
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
 
@@ -587,10 +643,32 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         // Full height: the header alone fills most of a medium detent.
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .task {
-            let loadedStatistics = await player.statistics(league: team.league)
-            statistics = loadedStatistics
-            loaded = true
+        .task(id: season) {
+            await loadStatistics()
+        }
+    }
+
+    /// Loads the statistics for the picked season, or for the feed's current
+    /// one before anything is picked. Adopting that first fetch's season
+    /// into the picker re-runs this, which then has nothing to do.
+    private func loadStatistics() async {
+        guard !loaded || season != statisticsSeason else { return }
+        let requested = season.isEmpty ? nil : season
+        loaded = false
+        let loadedStatistics = await player.statistics(league: team.league, season: requested)
+        // A newer pick has taken over.
+        guard !Task.isCancelled else { return }
+        statistics = loadedStatistics
+        if seasons.isEmpty {
+            seasons = loadedStatistics.seasons.options
+        }
+        statisticsSeason = requested ?? loadedStatistics.seasons.selected ?? ""
+        if requested == nil {
+            currentSeason = statisticsSeason
+        }
+        loaded = true
+        if season.isEmpty {
+            season = statisticsSeason
         }
     }
 
@@ -786,6 +864,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         VStack(spacing: Theme.Spacing.m) {
             statisticsCard
 
+            if !player.playerID.isEmpty {
+                gameLogCard
+            }
+
             if !facts.isEmpty {
                 aboutCard
             }
@@ -825,12 +907,74 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     private var statisticsCard: some View {
         card {
-            cardTitle("Season Stats")
-                .accessibilityIdentifier("playerDetail.section")
+            HStack(spacing: Theme.Spacing.s) {
+                cardTitle("Season Stats")
+                    .accessibilityIdentifier("playerDetail.section")
+
+                if seasons.count > 1 {
+                    Spacer(minLength: Theme.Spacing.s)
+                    seasonPicker
+                }
+            }
 
             statisticsContent
                 .motionAnimation(Theme.Motion.stateChange, value: loaded)
         }
+    }
+
+    /// The seasons the splits feed offers, newest first. Picking one
+    /// reloads the season stats and the game log for it.
+    private var seasonPicker: some View {
+        Picker("Season", selection: $season) {
+            ForEach(seasons) { option in
+                Text(option.label)
+                    .tag(option.value)
+            }
+        }
+        .pickerStyle(.menu)
+        .accessibilityIdentifier("playerDetail.season")
+    }
+
+    // MARK: Game log
+
+    /// The season the game log is fetched for once its card is in view and
+    /// the statistics have said which season they show: empty for the
+    /// feed's current season, `nil` until then.
+    private var gameLogRequest: String? {
+        guard gameLogVisible, loaded else { return nil }
+        return statisticsSeason == currentSeason ? "" : statisticsSeason
+    }
+
+    /// The player's five most recent games in the season shown, fetched
+    /// only once the card scrolls into view.
+    private var gameLogCard: some View {
+        card {
+            cardTitle("Last 5 Games")
+
+            PlayerGameLogView(log: gameLog, limit: 5)
+                .motionAnimation(Theme.Motion.stateChange, value: gameLog.loaded)
+        }
+        .onScrollVisibilityChange(threshold: 0.1) { visible in
+            if visible {
+                gameLogVisible = true
+            }
+        }
+        .task(id: gameLogRequest) {
+            await loadGameLog()
+        }
+    }
+
+    private func loadGameLog() async {
+        guard let request = gameLogRequest else { return }
+        gameLog.loaded = false
+        let log = await downloadGameLog(
+            athlete: player.playerID,
+            league: team.league,
+            season: request.isEmpty ? nil : request
+        )
+        // A newer season has taken over.
+        guard !Task.isCancelled else { return }
+        gameLog = log
     }
 
     /// Every cell in the grid, in reading order.
@@ -838,17 +982,22 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         statistics.sections.flatMap(\.rows).flatMap { $0 }
     }
 
-    /// The player's headline statistics that the grid has, four at most.
-    private var featuredCells: [(abbreviation: String, cell: PlayerSheetCell)] {
+    /// The player's headline statistics that the grid has: four tiles at
+    /// most, plus any that span a row.
+    private var featuredCells: [(abbreviation: String, cell: PlayerSheetCell, spansRow: Bool)] {
         let cells = allCells
         var used: Set<String> = []
-        var featured: [(abbreviation: String, cell: PlayerSheetCell)] = []
-        for feature in player.featuredStatistics where featured.count < 4 {
+        var tiles = 0
+        var featured: [(abbreviation: String, cell: PlayerSheetCell, spansRow: Bool)] = []
+        for feature in player.featuredStatistics where feature.spansRow || tiles < 4 {
             guard !used.contains(feature.title),
                   let cell = cells.first(where: { $0.title == feature.title })
             else { continue }
             used.insert(feature.title)
-            featured.append((abbreviation: feature.abbreviation, cell: cell))
+            featured.append((abbreviation: feature.abbreviation, cell: cell, spansRow: feature.spansRow))
+            if !feature.spansRow {
+                tiles += 1
+            }
         }
         return featured
     }
@@ -884,15 +1033,25 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     private var statisticsBody: some View {
         let featured = featuredCells
+        let wide = featured.filter { $0.spansRow }
+        let tiles = featured.filter { !$0.spansRow }
         let sections = remainingSections(excluding: Set(featured.map { $0.cell.title }))
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             if !featured.isEmpty {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: featureMinimumWidth), spacing: Theme.Spacing.s)],
-                    spacing: Theme.Spacing.s
-                ) {
-                    ForEach(Array(featured.enumerated()), id: \.offset) { _, feature in
+                VStack(spacing: Theme.Spacing.s) {
+                    ForEach(Array(wide.enumerated()), id: \.offset) { _, feature in
                         FeaturedStatTile(abbreviation: feature.abbreviation, cell: feature.cell)
+                    }
+
+                    if !tiles.isEmpty {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: featureMinimumWidth), spacing: Theme.Spacing.s)],
+                            spacing: Theme.Spacing.s
+                        ) {
+                            ForEach(Array(tiles.enumerated()), id: \.offset) { _, feature in
+                                FeaturedStatTile(abbreviation: feature.abbreviation, cell: feature.cell)
+                            }
+                        }
                     }
                 }
             }

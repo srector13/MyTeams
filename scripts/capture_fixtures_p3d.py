@@ -8,6 +8,7 @@ prints one Markdown table row per file for FIXTURES.md.
     python3 scripts/capture_fixtures_p3d.py              # everything
     python3 scripts/capture_fixtures_p3d.py leaders      # just the leaders
     python3 scripts/capture_fixtures_p3d.py athletes     # just the athletes
+    python3 scripts/capture_fixtures_p3d.py gamelogs     # just the game logs
 
 Requests go through plain `curl` with its default User-Agent (ESPN's Akamai
 front answers browser User-Agents with 403), spaced 0.5 s apart; a 403 or 429
@@ -25,6 +26,10 @@ athlete's and team's `links` (a dozen URLs each), the team's `logos`, and
 (US leagues) a `teams` list. The script drops those four and nothing else,
 and re-serialises compactly (separators=(',', ':'), ensure_ascii=False).
 Athlete and splits documents are written byte-for-byte.
+
+Game logs (`.../athletes/{id}/gamelog`) lose the `links` arrays on each
+event, its opponent and its team, and nothing else, and are re-serialised
+the same compact way.
 """
 
 import datetime
@@ -76,6 +81,19 @@ ATHLETES = [
     ("wnba", "splits", "3058901", "Allisha Gray, Dream guard"),
     ("ncaaw", "splits", "5108548", "Sania Copeland, Kansas guard"),
     ("ncaaf", "splits", "5079604", "Isaiah Marshall, Kansas quarterback"),
+]
+
+# (league key, athlete id, who): athlete game logs for the player sheet's
+# "Last 5 games" card (R-10), one or two per sport.
+GAMELOGS = [
+    ("nfl", "3139477", "Patrick Mahomes, Chiefs quarterback"),
+    ("nfl", "15847", "Travis Kelce, Chiefs tight end"),
+    ("nba", "4869342", "Dyson Daniels, Hawks guard"),
+    ("mlb", "42403", "Bobby Witt Jr., Royals shortstop"),
+    ("mlb", "5136077", "Royals relief pitcher"),
+    ("nhl", "5080145", "Cutter Gauthier, Ducks left wing"),
+    ("nhl", "4588165", "Lukas Dostal, Ducks goaltender"),
+    ("epl", "280555", "Bukayo Saka, Arsenal forward"),
 ]
 
 _last_request = 0.0
@@ -198,13 +216,67 @@ def capture_athletes():
     return rows
 
 
+def validate_gamelog(name, document):
+    """Summarises a game log: its season types and categories (with event
+    counts), the column `names`, and the first event's metadata."""
+    names = document.get("names") or []
+    events = document.get("events") or {}
+    seasons = []
+    for season in document.get("seasonTypes") or []:
+        counted = []
+        for category in season.get("categories") or []:
+            rows = category.get("events") or []
+            assert all(len(r.get("stats", [])) == len(names) for r in rows), f"{name}: row width"
+            counted.append(f"{category.get('displayName') or category.get('type')}x{len(rows)}")
+        seasons.append(f"{season.get('displayName')} [{', '.join(counted)}]")
+    first = next(iter(events.values()), {})
+    sample = (f" first={first.get('gameDate')} {first.get('atVs')} "
+              f"{first.get('opponent', {}).get('abbreviation')} {first.get('gameResult')} {first.get('score')}"
+              if first else "")
+    return f"names={names} events={len(events)} seasonTypes={'; '.join(seasons) or 'none'}" + sample
+
+
+def strip_gamelog_links(document):
+    """Drops the `links` arrays on each event, its `opponent` and its `team`
+    (a dozen URLs apiece, never read; a season of MLB games is otherwise
+    over a megabyte). Returns how many arrays were dropped."""
+    dropped = 0
+    for event in (document.get("events") or {}).values():
+        for owner in (event, event.get("opponent") or {}, event.get("team") or {}):
+            if "links" in owner:
+                del owner["links"]
+                dropped += 1
+    return dropped
+
+
+def capture_gamelogs():
+    rows = []
+    for key, athlete, who in GAMELOGS:
+        path, _ = LEAGUES[key]
+        url = f"{COMMON}/{path}/athletes/{athlete}/gamelog"
+        name = f"{key}_gamelog_{athlete}"
+        body = fetch(url)
+        captured = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        document = json.loads(body)
+        strip_gamelog_links(document)
+        data = compact(document)
+        summary = validate_gamelog(name, json.loads(data))
+        with open(os.path.join(OUT, f"{name}.json"), "wb") as f:
+            f.write(data)
+        print(f"ok {name}.json {len(body)}→{len(data)} bytes {summary}", file=sys.stderr)
+        rows.append(f"| `{name}.json` | `{url}` | {captured} | {who}. {summary}; {len(body)}→{len(data)} bytes |")
+    return rows
+
+
 def main():
-    parts = sys.argv[1:] or ["leaders", "athletes"]
+    parts = sys.argv[1:] or ["leaders", "athletes", "gamelogs"]
     rows = []
     if "leaders" in parts:
         rows += capture_leaders()
     if "athletes" in parts:
         rows += capture_athletes()
+    if "gamelogs" in parts:
+        rows += capture_gamelogs()
     print("| File | URL | Captured | Contents |")
     print("|---|---|---|---|")
     print("\n".join(rows))
