@@ -317,6 +317,30 @@ enum GameSheetPlayer: Identifiable, Hashable, Sendable {
         ))
     }
 
+    /// The player with ESPN id `athleteID` in the game's soccer lineups or
+    /// hockey box score, matched by id, or `nil` when neither lists them
+    /// (R-2: a timeline row names athletes by id only).
+    init?(athleteID: String, soccerLineups: SoccerLineups?, hockey: HockeyBoxScore?) {
+        guard !athleteID.isEmpty else { return nil }
+        for lineup in soccerLineups?.lineups ?? [] {
+            if let row = (lineup.starters + lineup.substitutes).first(where: { $0.athleteID == athleteID }) {
+                self.init(lineupRow: row)
+                return
+            }
+        }
+        for team in hockey?.teams ?? [] {
+            if let skater = (team.forwards + team.defense).first(where: { $0.athleteID == athleteID }) {
+                self.init(skater: skater)
+                return
+            }
+            if let goalie = team.goalies.first(where: { $0.athleteID == athleteID }) {
+                self.init(goalie: goalie)
+                return
+            }
+        }
+        return nil
+    }
+
     /// The player in a hockey skater row, or `nil` without an athlete id.
     init?(skater: HockeyBoxScore.Skater) {
         guard let player = Self.hockeyPlayer(
@@ -376,7 +400,7 @@ enum GameSheetPlayer: Identifiable, Hashable, Sendable {
     }
 }
 
-private extension View {
+extension View {
     /// The row as a button that opens `player`'s sheet, or the row as it is
     /// when it has no player (no athlete id) or nothing to open the sheet.
     @ViewBuilder

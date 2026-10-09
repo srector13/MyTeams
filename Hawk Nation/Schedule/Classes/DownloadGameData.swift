@@ -611,6 +611,9 @@ struct GameSheet: Sendable {
     /// A soccer game's lineups; `nil` for other sports, or a summary with
     /// no rosters yet.
     var soccerLineups: SoccerLineups?
+    /// The timeline, win probability and injuries (R-2); empty parts for a
+    /// summary that carries none.
+    var story: GameStory = .empty
     var info: GameInfo
     var phase: GamePhase
     /// The status line beneath the scoreline; `nil` when the summary
@@ -676,6 +679,8 @@ extension LeagueDescriptor {
         // Every sport's periods come from the same reader, sized by the
         // summary's `format`.
         sheet.linescore = Linescore(summary: json, league: self)
+        // As is the story, from whichever lists the sport's summary carries.
+        sheet.story = GameStory(summary: json)
         return sheet
     }
 

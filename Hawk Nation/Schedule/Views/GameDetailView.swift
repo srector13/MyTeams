@@ -18,7 +18,9 @@ private let closeButtonClearance: CGFloat = 44 + Theme.Spacing.m
 /// The box score comes through `LeagueDescriptor.downloadGameSheet`, which
 /// reduces each sport's statistics to the same `BoxScore` rows, with a
 /// linescore sized from the summary's format beneath the scoreline and, for
-/// hockey and soccer, the sport's own player tables below. Each refresh
+/// hockey and soccer, the sport's own player tables below. The game's
+/// story (`GameStoryView`: timeline, win probability, injuries) sits
+/// between the linescore and the rows. Each refresh
 /// is one summary request, whose document fills the box score and the venue
 /// alike; only a game with its clock running refreshes every ten seconds.
 struct GameDetailView: View {
@@ -39,6 +41,8 @@ struct GameDetailView: View {
     @State private var linescore: Linescore?
     @State private var hockey: HockeyBoxScore?
     @State private var soccerLineups: SoccerLineups?
+    /// The timeline, win probability and injuries (R-2).
+    @State private var story = GameStory.empty
     @State private var gameInfo = GameInfo.empty
     /// The last status a summary gave; `nil` until one has (A-2).
     @State private var refreshedStatus: GameStatus?
@@ -91,6 +95,9 @@ struct GameDetailView: View {
                                 LinescoreView(linescore: linescore)
                             }
 
+                            // How the game went, before the figures.
+                            storyView
+
                             ForEach(boxScore.rows) { row in
                                 StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
                             }
@@ -105,6 +112,8 @@ struct GameDetailView: View {
                             }
                         } else {
                             message("No game statistics at this time. Please check back later.")
+                            // A pre-game summary still carries injuries.
+                            storyView
                         }
                     }
                 }
@@ -161,6 +170,7 @@ struct GameDetailView: View {
             linescore = sheet.linescore
             hockey = sheet.hockey
             soccerLineups = sheet.soccerLineups
+            story = sheet.story
             gameInfo = sheet.info
             // A summary with no status keeps the one already shown.
             if let status = sheet.status {
@@ -174,6 +184,25 @@ struct GameDetailView: View {
             return sheet.refreshInterval.map { interval in
                 max(interval, min(load.response.maxAge ?? .zero, backoff.cap))
             }
+        }
+    }
+
+    // MARK: - Story
+
+    /// The timeline, win probability and injuries, when the summary has any.
+    /// A timeline row's player opens the sheet the lineup or box-score row
+    /// for the same athlete id would (C-6).
+    @ViewBuilder
+    private var storyView: some View {
+        if !story.isEmpty {
+            GameStoryView(
+                story: story,
+                league: league,
+                player: { [soccerLineups, hockey] athleteID in
+                    GameSheetPlayer(athleteID: athleteID, soccerLineups: soccerLineups, hockey: hockey)
+                },
+                onPlayer: { sheetPlayer = $0 }
+            )
         }
     }
 
