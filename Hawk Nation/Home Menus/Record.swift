@@ -175,3 +175,80 @@ func scheduleRecord(games: [Game], league: LeagueID, now: Date = Date()) -> Reco
         format: format
     )
 }
+
+// MARK: - Form
+
+extension Record {
+    /// How one decided game went for the followed team, as a form guide
+    /// draws it: a capsule lettered W, D or L.
+    enum Outcome: Hashable, Sendable {
+        case win
+        /// A level game: a soccer draw, an NFL tie (`Game.isDraw`).
+        case draw
+        /// Any game not won or drawn, in regulation or after it: a hockey
+        /// overtime loss is an L here, as in a form guide.
+        case loss
+
+        /// The capsule's letter.
+        var letter: String {
+            switch self {
+            case .win: "W"
+            case .draw: "D"
+            case .loss: "L"
+            }
+        }
+
+        /// The outcome spoken in full, for VoiceOver.
+        var spokenName: String {
+            switch self {
+            case .win: "won"
+            case .draw: "drew"
+            case .loss: "lost"
+            }
+        }
+    }
+}
+
+/// The team's form guide: its last `last` decided league games, **oldest
+/// first, most recent last**, so the capsules read left to right as the
+/// season did (R-5).
+///
+/// The same walk as `scheduleRecord`, over the same games: only the
+/// league's own games, exhibitions left out (`Game.countsTowardRecord`),
+/// and "played" judged as `seasonRecord` judges it under the league's
+/// `RecordRule` — under MLS's (`usesDateForNextGame`), a fixture whose
+/// kickoff is more than four hours past counts as played even if its feed
+/// never set `completed`. A won game
+/// is a win; a played, level one a draw; any other played one a loss.
+///
+/// Games that were not decided are skipped rather than counted: fixtures
+/// still to be played, live ones, and cancelled or postponed ones — even
+/// under MLB's rule, which counts those in the record's losses column, a
+/// game never played has no result to show.
+///
+/// Games are taken in date order (a stable sort, so games at the same time
+/// keep the feed's order), since a merged soccer schedule need not arrive
+/// sorted. Fewer than `last` decided games gives what there is; none gives
+/// `[]`.
+func scheduleForm(games: [Game], league: LeagueID, last: Int = 5, now: Date = Date()) -> [Record.Outcome] {
+    guard last > 0 else { return [] }
+    let pastDatesCountAsPlayed = league.descriptor.recordRule.usesDateForNextGame
+
+    func played(_ game: Game) -> Bool {
+        if game.completed { return true }
+        return pastDatesCountAsPlayed
+            && game.dateAsDate.addingTimeInterval(4 * 3600) < now
+    }
+
+    let decided: [(date: Date, outcome: Record.Outcome)] = games.compactMap { game in
+        guard game.isLeagueGame(of: league), game.countsTowardRecord else { return nil }
+        if game.gameWin { return (game.dateAsDate, .win) }
+        guard !game.cancelled, !game.postponed, played(game) else { return nil }
+        return (game.dateAsDate, game.isDraw ? .draw : .loss)
+    }
+
+    let ordered = decided.enumerated()
+        .sorted { ($0.element.date, $0.offset) < ($1.element.date, $1.offset) }
+        .map(\.element.outcome)
+    return Array(ordered.suffix(last))
+}

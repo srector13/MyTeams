@@ -203,6 +203,42 @@ struct BrowsableSport: Identifiable, Hashable, Sendable {
     }()
 }
 
+// MARK: - Conference sections
+
+/// One section of a college league's team list: the teams of one
+/// conference, or of none (R-5).
+struct ConferenceSection: Identifiable, Hashable, Sendable {
+    /// The conference's name, or `nil` for the teams the standings list in
+    /// none (a college catalog spans every division; the standings only the
+    /// descriptor's).
+    let conference: String?
+    /// The conference's teams, in the order they were given.
+    let teams: [TeamRef]
+
+    var id: String { conference ?? "" }
+
+    /// `teams` grouped by conference: the conference-less teams first, then
+    /// each conference alphabetically by name, each section keeping the
+    /// order `teams` came in (the browser's alphabetical list). `[]` when not
+    /// one team has a conference, for the caller to keep its single section.
+    static func sections(_ teams: [TeamRef]) -> [ConferenceSection] {
+        guard teams.contains(where: { $0.conference != nil }) else { return [] }
+        var byConference: [String: [TeamRef]] = [:]
+        var unaffiliated: [TeamRef] = []
+        for team in teams {
+            if let conference = team.conference {
+                byConference[conference, default: []].append(team)
+            } else {
+                unaffiliated.append(team)
+            }
+        }
+        let named = byConference.keys
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            .map { ConferenceSection(conference: $0, teams: byConference[$0] ?? []) }
+        return (unaffiliated.isEmpty ? [] : [ConferenceSection(conference: nil, teams: unaffiliated)]) + named
+    }
+}
+
 // MARK: - Browser
 
 /// The team picker: sports, then a sport's leagues, then every team in a
@@ -394,25 +430,47 @@ struct TeamBrowserView: View {
     }
 
     /// Every team in a league, to follow or unfollow.
+    ///
+    /// A college league whose catalog names conferences (`TeamRef.conference`,
+    /// read from the standings by `RemoteTeamCatalog`) is one section per
+    /// conference (`ConferenceSection.sections`); any other list is one
+    /// alphabetical section.
     private func teamsPage(_ league: LeagueID) -> some View {
         let leagueTeams = teams(in: league)
+        let conferences = league.isCollege ? ConferenceSection.sections(leagueTeams) : []
         return page(league.descriptor.displayName) {
-            // TODO(P3): conference sections for college leagues. The teams
-            // feed carries no group data and `TeamRef` keeps none, so
-            // college lists are one alphabetical section.
-            Section {
-                if catalogs[league] == nil {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
+            if conferences.isEmpty {
+                Section {
+                    if catalogs[league] == nil {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    }
+                    ForEach(leagueTeams) { team in
+                        row(team)
+                    }
+                } header: {
+                    Text(league.badge)
+                } footer: {
+                    if catalogs[league] != nil {
+                        Text(teamCount(leagueTeams.count))
+                    }
                 }
-                ForEach(leagueTeams) { team in
-                    row(team)
-                }
-            } header: {
-                Text(league.badge)
-            } footer: {
-                if catalogs[league] != nil {
-                    Text(teamCount(leagueTeams.count))
+            } else {
+                ForEach(conferences) { section in
+                    Section {
+                        ForEach(section.teams) { team in
+                            row(team)
+                        }
+                    } header: {
+                        // Teams in no listed conference (other divisions)
+                        // go under the league's badge, as the one section did.
+                        Text(section.conference ?? league.badge)
+                    } footer: {
+                        // The league's count once, under its last section.
+                        if section.id == conferences.last?.id {
+                            Text(teamCount(leagueTeams.count))
+                        }
+                    }
                 }
             }
         }

@@ -42,6 +42,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>myTeams adds your team’s remaining games to a calendar of their own, and reads back only the games it added so it can move rescheduled ones instead of adding them twice.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>myTeams adds the games you choose to your calendar, with the kickoff time, venue and channel. It never reads your other events.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIBackgroundModes</key>

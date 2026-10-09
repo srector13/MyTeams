@@ -190,6 +190,9 @@ unchanged; they are re-serialised compactly (`separators=(',', ':')`,
   `ncaaf` keeps Big 12 (`big12`) and Sun Belt (`belt`, the one FBS
   conference split into divisions); `ncaaw` keeps America East (`aeast`) and
   Big 12. (Uncut, they are 2.6 MB and 6.2 MB: each entry carries ~20 stats.)
+- **rankings** (college only, added for R-5): the AP poll (`type == "ap"`)
+  plus the first other poll, each cut to its first 25 `ranks`. Every other
+  key — `others`, `droppedOut`, the `$ref` season blobs — is kept.
 
 ### What was captured
 
@@ -223,6 +226,7 @@ unchanged; they are re-serialised compactly (`separators=(',', ':')`,
 | `ncaaf_scoreboard_20260829.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=20260829` | 2026-09-28T04:45:53Z | events=3; trimmed 8 → 3 events |
 | `ncaaf_standings.json` | `https://site.api.espn.com/apis/v2/sports/football/college-football/standings?group=80` | 2026-09-28T04:45:54Z | children=2 entries=30; trimmed 11 → 2 children |
 | `ncaaf_summary_final_401864494.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/summary?event=401864494` | 2026-09-28T04:45:55Z | phase=final |
+| `ncaaf_rankings.json` | `https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings` | 2026-10-09T02:44:22Z | polls=ap:25,usa:25; trimmed 5 → 2 polls, 50 → 50 ranks |
 | `ncaaw_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams?limit=1000&groups=50` | 2026-09-28T04:45:55Z | teams=15; trimmed 362 → 15 teams |
 | `ncaaw_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/2305/schedule` | 2026-09-28T04:45:56Z | events=12; trimmed 31 → 12 events |
 | `ncaaw_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/2305/roster` | 2026-09-28T04:45:56Z | athletes=12 shape=flat |
@@ -230,6 +234,7 @@ unchanged; they are re-serialised compactly (`separators=(',', ':')`,
 | `ncaaw_scoreboard_20261102.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?dates=20261102&groups=50&limit=1000` | 2026-09-28T04:45:57Z | events=3; trimmed 118 → 3 events |
 | `ncaaw_standings.json` | `https://site.api.espn.com/apis/v2/sports/basketball/womens-college-basketball/standings?group=50` | 2026-09-28T04:45:58Z | children=2 entries=25; trimmed 31 → 2 children |
 | `ncaaw_summary_pregame_401926040.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/summary?event=401926040` | 2026-09-28T04:45:58Z | phase=pregame |
+| `ncaaw_rankings.json` | `https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/rankings` | 2026-10-09T02:44:23Z | polls=ap:25,usa:25; trimmed 2 → 2 polls, 50 → 50 ranks |
 | `epl_teams.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams?limit=1000` | 2026-09-28T04:45:59Z | teams=15; trimmed 20 → 15 teams |
 | `epl_schedule.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams/359/schedule` | 2026-09-28T04:45:59Z | events=5 |
 | `epl_roster.json` | `https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/teams/359/roster` | 2026-09-28T04:46:00Z | athletes=27 shape=flat |
@@ -340,11 +345,16 @@ parser has to allow for, found in these captures:
 - The NHL test gives the Ducks' preseason row a season by rewriting four
   `value`s in memory (`JSON.setting`); the fixture is unchanged.
 
-No rankings document was captured. The college fallback
-(`https://site.api.espn.com/apis/site/v2/sports/{league}/rankings`:
-`rankings[].ranks[]` of `current`, `recordSummary`, `team`) is tested with
-a hand-written document in that shape, checked against the live endpoint on
-2026-09-28.
+The college rankings (`https://site.api.espn.com/apis/site/v2/sports/{league}/rankings`:
+`rankings[].ranks[]` of `current`, `recordSummary`, `team`) were captured
+for R-5 on 2026-10-09 (`ncaaf_rankings`, `ncaaw_rankings`, rows above),
+replacing the hand-written document the fallback was first tested with.
+Each poll has `type` (`"ap"`, `"usa"`, …), `name`, `shortName`,
+`season.displayName`, and its `ranks` flat (no `teams` level). In both
+captures each rank's `team` carries `id`, `location`, `name`, `nickname`,
+`abbreviation` and `logos`. FBS lists five polls; the women's feed two.
+`ncaaw_rankings` is still last season's final poll (`2025-26`, UCLA
+first).
 
 ### Cup schedules (P3-b)
 
