@@ -285,9 +285,10 @@ func parseRecordSummary(_ summary: String) -> [Int] {
 /// group: the AP poll if the document has one, else its first poll with any
 /// teams. Each rank carries `current`, a `team` and a `recordSummary`.
 ///
-/// The fallback for a college standings tree with no table in it. The
-/// registry's captured trees all have tables, so this shape is exercised
-/// only by the tests' hand-built document.
+/// The fallback for a college standings tree with no table in it, and the
+/// source of the poll ranks college team names are prefixed with
+/// (`PollRanks`). Tested against the live FBS and women's captures
+/// (`ncaaf_rankings`, `ncaaw_rankings`; FIXTURES.md).
 func parseRankings(from json: JSON, league: LeagueID) -> Standings {
     let polls = json["rankings"].arrayValue.filter { !$0["ranks"].arrayValue.isEmpty }
     guard let poll = polls.first(where: { $0["type"].stringValue == "ap" }) ?? polls.first else {

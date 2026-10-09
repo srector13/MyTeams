@@ -332,51 +332,57 @@ struct StandingsParsingTests {
 
     // MARK: Rankings fallback
 
-    /// A rankings document in the shape `/rankings` answers with (checked on
-    /// 2026-09-28; not captured as a fixture): polls under `rankings`, each
-    /// with `ranks` of `current`, `recordSummary` and `team`.
-    private static let rankingsDocument = document(#"""
-    {
-      "children": [{"id": "4", "name": "Big 12 Conference"}],
-      "rankings": [
-        {"id": "2", "name": "AFCA Coaches Poll", "shortName": "Coaches", "type": "usa",
-         "ranks": [{"current": 1, "recordSummary": "4-0",
-                    "team": {"id": "251", "location": "Texas", "name": "Longhorns"}}]},
-        {"id": "1", "name": "AP Top 25", "shortName": "AP Poll", "type": "ap",
-         "season": {"displayName": "2026"},
-         "ranks": [
-           {"current": 2, "recordSummary": "4-0",
-            "team": {"id": "2305", "location": "Kansas", "name": "Jayhawks", "nickname": "Kansas",
-                     "abbreviation": "KU",
-                     "logos": [{"href": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png",
-                                "rel": ["full", "default"]}]}},
-           {"current": 1, "recordSummary": "4-0-1",
-            "team": {"id": "251", "location": "Texas", "name": "Longhorns"}}
-         ]}
-      ]
-    }
-    """#)
-
     @Test("A college tree with no table falls back to the AP poll: rank and record")
     func rankingsFallback() throws {
-        let polls = parseStandings(from: Self.rankingsDocument, league: .collegeFootball)
+        // The live FBS rankings (captured 2026-10-09): AP first, then the
+        // coaches' poll, and no `children` — so no table to prefer.
+        let json = try Fixture.json("ncaaf_rankings")
+        #expect(json["rankings"].arrayValue.map { $0["type"].stringValue } == ["ap", "usa"])
+        let polls = parseStandings(from: json, league: .collegeFootball)
         #expect(polls.kind == .rankings)
         #expect(polls.seasonDisplayName == "2026")
         #expect(polls.groups.map(\.name) == ["AP Top 25"])
+        #expect(polls.groups.map(\.abbreviation) == ["AP Poll"])
 
-        // Ordered by `current`, not feed order.
         let poll = try #require(polls.groups.first)
-        #expect(poll.entries.map(\.teamID) == ["251", "2305"])
+        #expect(poll.entries.map(\.rank) == (1...25).map { Optional($0) })
 
-        let kansas = try #require(polls.entry(for: "2305"))
-        #expect(kansas.rank == 2)
-        #expect(kansas.name == "Kansas Jayhawks")
-        #expect(kansas.shortName == "Kansas")
-        #expect(kansas.abbreviation == "KU")
-        #expect(kansas.logoURL?.absoluteString == "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png")
-        #expect(kansas.record.summary == "4-0")
-        // A tie shows as football's third column.
-        #expect(polls.entry(for: "251")?.record.summary == "4-0-1")
+        // Texas (251), first: location "Texas", name "Longhorns".
+        let texas = try #require(polls.entry(for: "251"))
+        #expect(texas.rank == 1)
+        #expect(texas.name == "Texas Longhorns")
+        #expect(texas.shortName == "Texas")
+        #expect(texas.abbreviation == "TEX")
+        #expect(texas.logoURL?.absoluteString == "https://a.espncdn.com/i/teamlogos/ncaa/500/251.png")
+        #expect(texas.record.summary == "4-0")
+        // Georgia (61), second, 5-0.
+        #expect(polls.entry(for: "61")?.rank == 2)
+        #expect(polls.entry(for: "61")?.record.summary == "5-0")
+
+        // Ordered by `current`, not feed order: Texas pushed to 26th sorts
+        // last. A tie shows as football's third column.
+        let first: [JSON.Index] = ["rankings", 0, "ranks", 0]
+        let reordered = json
+            .setting(first + ["current"], to: .number(26))
+            .setting(first + ["recordSummary"], to: .string("4-0-1"))
+        let resorted = try #require(parseStandings(from: reordered, league: .collegeFootball).groups.first)
+        #expect(resorted.entries.first?.teamID == "61")
+        #expect(resorted.entries.last?.teamID == "251")
+        #expect(resorted.entries.last?.record.summary == "4-0-1")
+
+        // Without an AP poll, the first poll with ranks is read.
+        let coachesOnly = json.setting(["rankings", 0, "ranks"], to: .array([]))
+        #expect(parseRankings(from: coachesOnly, league: .collegeFootball).groups.map(\.name) == ["AFCA Coaches Poll"])
+    }
+
+    @Test("NCAAW's rankings are last season's final AP poll")
+    func ncaawRankings() throws {
+        let polls = parseRankings(from: try Fixture.json("ncaaw_rankings"), league: .womensCollegeBasketball)
+        #expect(polls.seasonDisplayName == "2025-26")
+        #expect(polls.groups.map(\.name) == ["AP Top 25"])
+        // UCLA (26) first at 37-1, then South Carolina, UConn and Texas.
+        #expect(polls.groups[0].entries.prefix(4).map(\.teamID) == ["26", "2579", "41", "251"])
+        #expect(polls.entry(for: "251")?.record.summary == "35-4")
     }
 
     @Test("No tables and no polls is empty standings, not a crash")
