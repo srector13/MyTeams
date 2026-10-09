@@ -30,11 +30,14 @@ private let logger = Logger(subsystem: "com.myTeams", category: "alerts")
 /// (`ScoreAlertDelivery.quiet`), to Notification Center only.
 ///
 /// Hybrid limitation, accepted for now: the trigger is the scoreboard
-/// center's polling, which runs only while the app is in the foreground and a
-/// team page wants a live day. With the app suspended or closed, no alert
-/// fires. The server upgrade (P4-e: APNs pushes from a poller of our own)
-/// replaces only that trigger source; `ScoreSnapshot`, `ScoreEvent` and the
-/// debounce stay the event model on both sides.
+/// center's polling, which runs while the app is in the foreground and, with
+/// it in the background, on each background app refresh (R-1,
+/// `BackgroundRefresh`) — as often as iOS allows, which may be rarely. The
+/// last looks and posts are kept across launches (`ScoreAlertMemory`), so a
+/// launch into the background alerts on the first change it sees. The
+/// server upgrade (P4-e: APNs pushes from a poller of our own) replaces only
+/// that trigger source; `ScoreSnapshot`, `ScoreEvent` and the debounce stay
+/// the event model on both sides.
 ///
 /// Tapping an alert opens the favorite's page: each alert carries the
 /// favorite's `WidgetDeepLink` (`request(for:teamID:)`), and the tap is
@@ -58,20 +61,33 @@ final class ScoreAlertEngine {
     /// Waits until a held event's window ends (`scheduleRelease`).
     private let sleep: @Sendable (Duration) async throws -> Void
 
+    /// Where the looks and the debounce's posts are kept across launches;
+    /// `nil` keeps them in memory only.
+    private let memory: ScoreAlertMemory?
+
     /// The last look at every followed game seen so far, by game id. Games
     /// that drop off a board keep their entry, so one that comes back is not
-    /// taken for a new game. Memory only: a game's first look each launch
-    /// seeds its entry without an alert (`ScoreDiff`), so a relaunch
-    /// mid-game does not announce a start.
+    /// taken for a new game. Kept in `memory` for a day from each game's
+    /// last look, and restored at `start()`: a launch into the background
+    /// diffs against the look before it, rather than seeding again. A game
+    /// first seen still seeds its entry without an alert (`ScoreDiff`).
     private var snapshots: [String: ScoreSnapshot] = [:]
+    /// When each game in `snapshots` was last on a board, by game id: the
+    /// clock of its day in `memory`.
+    private var lastSeen: [String: Date] = [:]
     /// The favorite each followed game was last seen for, by game id: the
     /// `TeamRef.id` in its home league, even for a cup tie.
     private var followers: [String: TeamRef.ID] = [:]
     private var debounce = ScoreAlertDebounce()
     /// Wakes when the first held event's window ends.
     private var releaseTask: Task<Void, Never>?
+    /// The latest batch of alerts on its way; each batch waits for the one
+    /// before, so `finishPosting()` can wait for them all.
+    private var posting: Task<Void, Never>?
     private var isStarted = false
 
+    /// - Parameter memory: where looks and posts outlive the launch: the
+    ///   App Group's defaults in the app, a scratch suite or `nil` in tests.
     init(
         center: LeagueScoreboardCenter = .shared,
         favorites: @escaping @MainActor () -> [FavoriteTeam] = { FavoritesStore.shared.favorites },
@@ -81,7 +97,8 @@ final class ScoreAlertEngine {
         deliver: @escaping @Sendable (ScoreEvent, TeamRef.ID?, ScoreAlertDelivery) async -> Void = {
             await ScoreAlertEngine.systemDeliver($0, teamID: $1, delivery: $2)
         },
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        memory: ScoreAlertMemory? = ScoreAlertMemory(defaults: SharedPaths.defaults)
     ) {
         self.center = center
         self.favorites = favorites
@@ -90,18 +107,33 @@ final class ScoreAlertEngine {
         self.isAuthorized = isAuthorized
         self.deliver = deliver
         self.sleep = sleep
+        self.memory = memory
     }
 
-    /// Begins watching the scoreboards. Calling it again does nothing.
+    /// Restores the looks and posts kept from earlier launches, and begins
+    /// watching the scoreboards. Calling it again does nothing.
     func start() {
         guard !isStarted else { return }
         isStarted = true
         #if canImport(UserNotifications)
-        // Alerts only fire while the app is open, so they must show there.
-        // `AppDelegate` sets this at launch as well, for taps that launch the app.
+        // Alerts must show while the app is open, too. `AppDelegate` sets
+        // this at launch as well, for taps that launch the app.
         Self.presentAlerts()
         #endif
+        if let memory {
+            let restored = memory.restore(at: now())
+            snapshots = restored.snapshots
+            lastSeen = restored.lastSeen
+            debounce = ScoreAlertDebounce(lastPosted: restored.lastPosted)
+        }
         observe()
+    }
+
+    /// Waits until every alert asked for so far has been handed to the
+    /// system: a background refresh (`BackgroundRefresh`) must not end, and
+    /// the app suspend, before.
+    func finishPosting() async {
+        await posting?.value
     }
 
     /// Reads the games once and re-arms for their next change.
@@ -118,16 +150,26 @@ final class ScoreAlertEngine {
     }
 
     private func update(_ games: [LeagueID: [ScoreboardGame]]) {
+        let now = self.now()
         let (current, followedBy) = followedSnapshots(in: games)
         let events = ScoreDiff.diff(previous: snapshots, current: current)
         snapshots.merge(current) { _, new in new }
+        for gameID in current.keys {
+            lastSeen[gameID] = now
+        }
         followers.merge(followedBy) { _, new in new }
         // Kinds turned off are dropped before the debounce, so they neither
         // take a game's window nor wait in it.
         let preferences = self.preferences()
         let wanted = events.filter { preferences.sends($0) }
-        post(debounce.admit(wanted, at: now()), preferences: preferences)
+        post(debounce.admit(wanted, at: now), preferences: preferences)
+        remember(at: now)
         scheduleRelease()
+    }
+
+    /// Writes the looks and the debounce's posts to `memory`.
+    private func remember(at now: Date) {
+        memory?.save(snapshots: snapshots, lastSeen: lastSeen, lastPosted: debounce.lastPosted, at: now)
     }
 
     /// Posts the held events whose window has ended, on the first look
@@ -154,7 +196,9 @@ final class ScoreAlertEngine {
     }
 
     private func releaseHeld() {
-        post(debounce.release(at: now()), preferences: preferences())
+        let now = self.now()
+        post(debounce.release(at: now), preferences: preferences())
+        remember(at: now)
         scheduleRelease()
     }
 
@@ -231,7 +275,9 @@ final class ScoreAlertEngine {
         let deliver = self.deliver
         let delivery: ScoreAlertDelivery = preferences.isQuiet(at: now()) ? .quiet : .standard
         let alerts = events.map { ($0, followers[$0.gameID]) }
-        Task {
+        let previous = posting
+        posting = Task {
+            await previous?.value
             // Denied or never asked: alerts stay off, silently.
             guard await isAuthorized() else { return }
             for (event, teamID) in alerts {
@@ -355,6 +401,83 @@ enum ScoreAlertDelivery: Equatable, Sendable {
     case standard
     /// During quiet hours: to Notification Center only, passive and silent.
     case quiet
+}
+
+/// The alert engine's last look at each followed game, and when each last
+/// had an alert posted, kept across launches (R-1).
+///
+/// Without it, a launch into the background for a refresh
+/// (`BackgroundRefresh`) would see every game for the first time, seed it
+/// and alert on nothing (`ScoreDiff`); with it, the first change since the
+/// last look — from the foreground or an earlier refresh — is news. The
+/// posts keep a game's two-minute window shut across the relaunch.
+///
+/// Each game is kept with the moment it was last on a board and dropped
+/// `horizon` later, as `RetiredLiveActivities` does: past a day the game is
+/// off the boards anyway, and the store never outgrows a day's games. Events
+/// held by the debounce are not kept; a held one lost to a relaunch is
+/// folded into the game's next look, whose score has moved past it.
+struct ScoreAlertMemory {
+    static let horizon: TimeInterval = 24 * 60 * 60
+    static let defaultsKey = "alerts.snapshots"
+
+    /// What a launch starts from.
+    struct Restored {
+        var snapshots: [String: ScoreSnapshot] = [:]
+        var lastSeen: [String: Date] = [:]
+        var lastPosted: [String: Date] = [:]
+    }
+
+    private struct Entry: Codable {
+        var snapshot: ScoreSnapshot
+        /// When the game was last on a board.
+        var seen: Date
+        /// When it last had an alert posted, if ever.
+        var posted: Date?
+    }
+
+    private let defaults: UserDefaults
+
+    /// Kept in `defaults`: the App Group's (`SharedPaths.defaults`) in the
+    /// app, a scratch suite in tests.
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+    }
+
+    /// The games last seen within `horizon` of `now`.
+    func restore(at now: Date) -> Restored {
+        var restored = Restored()
+        for (gameID, entry) in entries(at: now) {
+            restored.snapshots[gameID] = entry.snapshot
+            restored.lastSeen[gameID] = entry.seen
+            restored.lastPosted[gameID] = entry.posted
+        }
+        return restored
+    }
+
+    /// Replaces what is kept with `snapshots`, less the games not seen
+    /// within `horizon` of `now`.
+    func save(
+        snapshots: [String: ScoreSnapshot],
+        lastSeen: [String: Date],
+        lastPosted: [String: Date],
+        at now: Date
+    ) {
+        var entries: [String: Entry] = [:]
+        for (gameID, snapshot) in snapshots {
+            guard let seen = lastSeen[gameID], now.timeIntervalSince(seen) < Self.horizon else { continue }
+            entries[gameID] = Entry(snapshot: snapshot, seen: seen, posted: lastPosted[gameID])
+        }
+        guard let data = try? JSONEncoder().encode(entries) else { return }
+        defaults.set(data, forKey: Self.defaultsKey)
+    }
+
+    private func entries(at now: Date) -> [String: Entry] {
+        guard let data = defaults.data(forKey: Self.defaultsKey),
+              let stored = try? JSONDecoder().decode([String: Entry].self, from: data)
+        else { return [:] }
+        return stored.filter { now.timeIntervalSince($0.value.seen) < Self.horizon }
+    }
 }
 
 /// The team whose page is on screen, for the alerts presenter (C-8), which

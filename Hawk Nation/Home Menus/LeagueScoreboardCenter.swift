@@ -76,6 +76,10 @@ final class LeagueScoreboardCenter {
     @ObservationIgnored private var backoffs: [LeagueID: PollBackoff] = [:]
     /// The last good scoreboard of each league, by day.
     @ObservationIgnored private var scoreboards: [LeagueID: [String: LeagueScoreboard]] = [:]
+    /// How many refreshes of each league have finished, answered or not, so
+    /// a background pass can tell when each has had one
+    /// (`refreshFavoritesOnce(timeout:)`).
+    @ObservationIgnored private var refreshCounts: [LeagueID: Int] = [:]
 
     /// A favorite's standing request for one of its competitions, while the
     /// center follows the favorites.
@@ -241,6 +245,7 @@ final class LeagueScoreboardCenter {
             scoreboards[league] = scoreboards[league]?.filter { wanted.contains($0.key) }
         }
         fanOut(league)
+        refreshCounts[league, default: 0] += 1
         // A favorite's game that just ended no longer keeps its league
         // polled.
         regateFollowedFavorites()
@@ -466,6 +471,82 @@ final class LeagueScoreboardCenter {
                     && !ended.contains(game.gameID)
             }
             .map { scoreboardDay(for: $0.dateAsDate) })
+    }
+
+    // MARK: Background refresh
+
+    /// How long after a background refresh the next is asked for while a
+    /// favorite's game is in the live window. iOS treats it as a floor.
+    static let backgroundLiveInterval: TimeInterval = 15 * 60
+
+    /// One look at the favorites' live games, for a background app refresh
+    /// (`BackgroundRefresh`, R-1): follows the favorites as in the
+    /// foreground (`startFollowingFavorites()`) until every league with a
+    /// favorite's game in the live window has refreshed once, or `timeout`
+    /// passes. Readers of `games` — the alerts, the widget, Live Activities
+    /// — react as they do in the foreground. Following carries on; the
+    /// caller stops it if the app is still in the background.
+    ///
+    /// One request per such league, as a minute's polling costs: a league a
+    /// page still has a poller for is refreshed here, since that poller is
+    /// sleeping out its interval; the rest refresh as their pollers start.
+    ///
+    /// - Returns: when the next look is worth having
+    ///   (`nextFollowedRefresh(after:)`).
+    func refreshFavoritesOnce(timeout: Duration = .seconds(20)) async -> Date? {
+        let alreadyPolling = pollingLeagues
+        let before = refreshCounts
+        startFollowingFavorites()
+        await refreshFollowedFavorites()
+
+        let leagues = Set(followed.keys.map(\.competition))
+        for league in leagues.intersection(alreadyPolling) {
+            await refresh(league)
+        }
+        let step: Duration = .milliseconds(250)
+        var waited: Duration = .zero
+        while waited < timeout,
+              leagues.contains(where: { refreshCounts[$0, default: 0] == before[$0, default: 0] }) {
+            do {
+                try await sleep(step)
+            } catch {
+                break
+            }
+            waited += step
+        }
+        return nextFollowedRefresh(after: now())
+    }
+
+    /// When a background refresh is next worth running: `backgroundLiveInterval`
+    /// on while any favorite's game is in the live window, else as the
+    /// earliest one ahead enters it; `nil` with no game ahead in the seasons
+    /// loaded.
+    func nextFollowedRefresh(after date: Date) -> Date? {
+        Self.nextFollowedRefresh(
+            schedules: followedSchedules.values.compactMap(\.games),
+            ended: endedGames,
+            now: date
+        )
+    }
+
+    /// See `nextFollowedRefresh(after:)`. A game a scoreboard has shown over
+    /// (`ended`) no longer counts as live.
+    static func nextFollowedRefresh(schedules: [[Game]], ended: Set<String>, now: Date) -> Date? {
+        var next: Date?
+        for game in schedules.joined() where !game.gameID.isEmpty && !ended.contains(game.gameID) {
+            if shouldPollLiveScore(game: game, now: now) {
+                return now.addingTimeInterval(backgroundLiveInterval)
+            }
+            guard !game.completed, !game.cancelled, !game.postponed else { continue }
+            // The live window opens fifteen minutes before the start
+            // (`shouldPollLiveScore`): a look then seeds the game before
+            // it starts, so the next one can tell its start.
+            let opens = game.dateAsDate.addingTimeInterval(-15 * 60)
+            if opens > now, next.map({ opens < $0 }) ?? true {
+                next = opens
+            }
+        }
+        return next
     }
 
     // MARK: Reading

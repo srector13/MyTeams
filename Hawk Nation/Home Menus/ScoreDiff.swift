@@ -14,9 +14,10 @@ import Foundation
 // league's period rules (`LeagueDescriptor`), to name periods.
 // `ScoreAlertEngine` feeds it.
 
-/// One game as a score alert sees it.
-struct ScoreSnapshot: Equatable, Sendable {
-    enum State: Equatable, Sendable {
+/// One game as a score alert sees it. Codable, so the engine's last look
+/// at each game outlives the launch (`ScoreAlertMemory`).
+struct ScoreSnapshot: Equatable, Sendable, Codable {
+    enum State: Equatable, Sendable, Codable {
         /// Not started, or called off.
         case scheduled
         case inProgress
@@ -137,6 +138,40 @@ struct PeriodNaming: Equatable, Sendable {
     }
 }
 
+// Coded by hand: `LeagueDescriptor.PeriodStyle` is not Codable, and is
+// written here by name.
+extension PeriodNaming: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case style
+        case hasExtraTime
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let style: LeagueDescriptor.PeriodStyle
+        switch try container.decode(String.self, forKey: .style) {
+        case "halves": style = .halves
+        case "quarters": style = .quarters
+        case "periods": style = .periods
+        default: style = .unnamed
+        }
+        self.init(style: style, hasExtraTime: try container.decode(Bool.self, forKey: .hasExtraTime))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        let name: String
+        switch style {
+        case .halves: name = "halves"
+        case .quarters: name = "quarters"
+        case .periods: name = "periods"
+        case .unnamed: name = "unnamed"
+        }
+        try container.encode(name, forKey: .style)
+        try container.encode(hasExtraTime, forKey: .hasExtraTime)
+    }
+}
+
 /// Something worth an alert, between two looks at a game.
 enum ScoreEvent: Equatable, Sendable {
     case gameStart(gameID: String, snapshot: ScoreSnapshot)
@@ -187,8 +222,10 @@ enum ScoreDiff {
     /// game id order.
     ///
     /// - A game first seen, in whatever state, says nothing: its look is only
-    ///   the seed for the next. The snapshots live in memory, so after a
-    ///   relaunch mid-game every game is first seen again, and one already
+    ///   the seed for the next. The engine keeps its looks across launches
+    ///   for a day (`ScoreAlertMemory`), so a launch into the background
+    ///   (R-1) diffs against the last look rather than seeding again; a game
+    ///   it has never seen, or not for a day, is first seen, and one already
     ///   under way is no more news than a final missed. Only a game seen
     ///   before its start and then under way starts.
     /// - A game that drops off the board says nothing.
@@ -236,8 +273,12 @@ struct ScoreAlertDebounce: Equatable, Sendable {
     /// The event each game is holding until its window ends, by game id.
     private(set) var held: [String: ScoreEvent] = [:]
 
-    init(window: TimeInterval = 120) {
+    /// - Parameter lastPosted: when each game last had an alert posted, as
+    ///   kept from an earlier launch (`ScoreAlertMemory`), so a relaunch
+    ///   does not reopen a game's window early.
+    init(window: TimeInterval = 120, lastPosted: [String: Date] = [:]) {
         self.window = window
+        self.lastPosted = lastPosted
     }
 
     /// Whether `event` may be posted at `now`; if so, records it as posted.
