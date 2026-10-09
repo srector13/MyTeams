@@ -64,7 +64,7 @@ struct AlertsSettingsView: View {
             } header: {
                 Text("Game Alerts")
             } footer: {
-                Text("Starts, scores, period ends and finals for each team turned on.")
+                Text("Starts, scores, period ends and finals for each team turned on. With the app closed, iOS decides when scores are checked, and may check rarely if you seldom open the app.")
             }
 
             Section {

@@ -254,13 +254,15 @@ struct ScoreAlertEngineTests {
     }
 
     /// An engine over `center`, posting to `recorder`. Its wait for a held
-    /// event's window (`sleep`) never ends unless a test supplies one.
+    /// event's window (`sleep`) never ends unless a test supplies one. It
+    /// keeps its looks in memory only, unless a test gives it a `memory`.
     @MainActor
     private func makeEngine(
         _ center: LeagueScoreboardCenter,
         _ recorder: AlertRecorder,
         _ inputs: Inputs,
-        sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in try await Task.sleep(for: .seconds(24 * 60 * 60)) }
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in try await Task.sleep(for: .seconds(24 * 60 * 60)) },
+        memory: ScoreAlertMemory? = nil
     ) -> ScoreAlertEngine {
         ScoreAlertEngine(
             center: center,
@@ -272,8 +274,15 @@ struct ScoreAlertEngineTests {
             preferences: { inputs.preferences },
             isAuthorized: { await recorder.isAuthorized() },
             deliver: { await recorder.deliver($0, teamID: $1, delivery: $2) },
-            sleep: sleep
+            sleep: sleep,
+            memory: memory
         )
+    }
+
+    /// A store of the engine's looks in a scratch defaults suite of its own.
+    private func scratchMemory() throws -> ScoreAlertMemory {
+        let defaults = try #require(UserDefaults(suiteName: "ScoreAlertMemoryTests.\(UUID().uuidString)"))
+        return ScoreAlertMemory(defaults: defaults)
     }
 
     /// The Broncos game as the engine sees it on the captured board, its
@@ -662,6 +671,169 @@ struct ScoreAlertEngineTests {
                 snapshot: broncosSnapshot(home: 30)
             )),
         ])
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("Launched into the background with the last looks kept: the first change since them alerts")
+    @MainActor
+    func restoredLooksAlertOnFirstDiff() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(board, at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        let memory = try scratchMemory()
+
+        // The launch before: the Broncos in the 4th, seen once, which seeds.
+        let earlierCenter = makeCenter(boards)
+        let earlier = makeEngine(earlierCenter, recorder, inputs, memory: memory)
+        earlier.start()
+        _ = await nextSteps(1, from: &steps)
+        let earlierSubscription = earlierCenter.subscribe(broncos, days: [nflDay])
+        let seeded = await nextSteps(1, from: &steps)
+        #expect(seeded == [.looked])
+        earlierCenter.unsubscribe(earlierSubscription)
+
+        // Fifteen minutes on, a cold launch into the background: a new
+        // center and engine. The Broncos have scored meanwhile.
+        inputs.advance(15 * 60)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs, memory: memory)
+        engine.start()
+        let first = await nextSteps(1, from: &steps)
+        #expect(first == [.looked])
+
+        // Its first look at the game is news, read against the kept look.
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+        await engine.finishPosting()
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("A game's two-minute window outlives the launch: a score just after a kept post is held")
+    @MainActor
+    func restoredWindowHolds() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        let memory = try scratchMemory()
+
+        // The launch before posts the kickoff.
+        let earlierCenter = makeCenter(boards)
+        let earlier = makeEngine(earlierCenter, recorder, inputs, memory: memory)
+        earlier.start()
+        _ = await nextSteps(1, from: &steps)
+        let earlierSubscription = earlierCenter.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await earlierCenter.refresh(.nfl)
+        let kickoff = await nextSteps(3, from: &steps)
+        #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
+        earlierCenter.unsubscribe(earlierSubscription)
+
+        // A minute later, relaunched, the Broncos score: inside the kept
+        // window, held.
+        inputs.advance(60)
+        let scored = try moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26)
+        try boards.serve(scored, at: url)
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs, memory: memory)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        let held = await nextSteps(1, from: &steps)
+        #expect(held == [.looked])
+
+        // Past the window, the next look posts it.
+        inputs.advance(70)
+        try boards.serve(
+            moving(chiefsGame, in: scored, to: "post", completed: true, period: 4, home: 10, away: 31),
+            at: url
+        )
+        await center.refresh(.nfl)
+        let followUp = await nextSteps(3, from: &steps)
+        #expect(followUp == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("Kept looks expire a day after the game was last seen; a game unseen that long seeds again")
+    @MainActor
+    func keptLooksExpire() async throws {
+        let memory = try scratchMemory()
+        let seen = Date(timeIntervalSince1970: 1_790_000_000)
+        memory.save(
+            snapshots: [broncosGame: broncosSnapshot(), chiefsGame: broncosSnapshot(state: .final)],
+            lastSeen: [broncosGame: seen, chiefsGame: seen.addingTimeInterval(-ScoreAlertMemory.horizon)],
+            lastPosted: [broncosGame: seen],
+            at: seen
+        )
+
+        // Saved: only the game seen within the day, with its look and post.
+        let restored = memory.restore(at: seen)
+        #expect(restored.snapshots == [broncosGame: broncosSnapshot()])
+        #expect(restored.lastSeen == [broncosGame: seen])
+        #expect(restored.lastPosted == [broncosGame: seen])
+
+        // Kept until a day after, then gone.
+        #expect(memory.restore(at: seen.addingTimeInterval(ScoreAlertMemory.horizon - 1)).snapshots.count == 1)
+        #expect(memory.restore(at: seen.addingTimeInterval(ScoreAlertMemory.horizon)).snapshots.isEmpty)
+
+        // An engine launched past it sees the game for the first time:
+        // it seeds, and posts nothing.
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        inputs.now = seen.addingTimeInterval(ScoreAlertMemory.horizon + 60)
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs, memory: memory)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        let seeded = await nextSteps(1, from: &steps)
+        #expect(seeded == [.looked])
+
+        // And its next score reads against that seed.
+        inputs.advance(300)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 33), at: url)
+        await center.refresh(.nfl)
+        let score = await nextSteps(3, from: &steps)
+        #expect(score.last == .delivered(.scoreChange(
+            gameID: broncosGame,
+            previous: broncosSnapshot(home: 30),
+            snapshot: broncosSnapshot(home: 30, away: 33)
+        )))
 
         center.unsubscribe(subscription)
     }

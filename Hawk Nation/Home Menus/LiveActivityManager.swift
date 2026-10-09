@@ -35,8 +35,10 @@ private let logger = Logger(subsystem: "com.myTeams", category: "liveActivities"
 /// Every favorite counts, those with alerts on (`FavoriteTeam.notify`)
 /// first, so they win the places when more games are live than fit.
 ///
-/// Foreground-driven only: with the app suspended, activities keep their
-/// last content and turn stale after `staleAfter`. Push updates are P4-e.
+/// Foreground-driven, plus each background app refresh (R-1,
+/// `BackgroundRefresh`), which updates and ends running activities but
+/// cannot start one. Between them, activities keep their last content and
+/// turn stale after `staleAfter`. Push updates are P4-e.
 @MainActor
 final class LiveActivityManager {
     static let shared = LiveActivityManager()
@@ -298,6 +300,15 @@ final class LiveActivityManager {
         activityWork[gameID] = Task {
             await previous?.value
             await work()
+        }
+    }
+
+    /// Waits until every update and end asked for so far has reached
+    /// ActivityKit: a background refresh (`BackgroundRefresh`) must not end,
+    /// and the app suspend, before.
+    func finishWork() async {
+        for work in Array(activityWork.values) {
+            await work.value
         }
     }
 
