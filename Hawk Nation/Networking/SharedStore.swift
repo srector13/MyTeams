@@ -33,10 +33,15 @@ struct SigningEntitlements: Equatable, Sendable {
     var appGroups: [String]
     /// `keychain-access-groups`; empty when the signature carries none.
     var keychainAccessGroups: [String]
+    /// `application-identifier`. zsign signs the widget with the app's, so
+    /// under a re-signer it is a keychain group both processes hold even
+    /// when the profile lists none.
+    var applicationIdentifier: String?
 
-    init(appGroups: [String] = [], keychainAccessGroups: [String] = []) {
+    init(appGroups: [String] = [], keychainAccessGroups: [String] = [], applicationIdentifier: String? = nil) {
         self.appGroups = appGroups
         self.keychainAccessGroups = keychainAccessGroups
+        self.applicationIdentifier = applicationIdentifier
     }
 
     /// A signature's entitlements plist; `nil` when it isn't one.
@@ -46,6 +51,7 @@ struct SigningEntitlements: Equatable, Sendable {
         else { return nil }
         appGroups = entitlements["com.apple.security.application-groups"] as? [String] ?? []
         keychainAccessGroups = entitlements["keychain-access-groups"] as? [String] ?? []
+        applicationIdentifier = entitlements["application-identifier"] as? String
     }
 
     /// This process's, read once. `nil` when its executable carries no
@@ -206,12 +212,17 @@ private extension Data {
 /// gives the app and the widget the same profile's groups. The keychain
 /// group carries the favorites when no App Group does (a wildcard profile,
 /// which has none).
+///
+/// The keychain group is the signature's own string, never one derived
+/// from it: securityd matches an item's access group against the client's
+/// entitlement exactly, with only a bare `"*"` as a wildcard
+/// (`SecServerAccessGroupsAllows`), so a wildcard profile's `TEAMID.*`
+/// grants the literal group `TEAMID.*` and nothing under it. Filling the
+/// `*` in, as 1.0.16 did, asked for a group neither process holds, and every
+/// read and write failed with `errSecMissingEntitlement` (t_684fd0fb).
 struct SharedStoreIdentity: Equatable, Sendable {
     /// The App Group the project's entitlements name.
     static let canonicalGroup = "group.PolarReailty.Hawk-Nation"
-    /// The keychain access group's name after a wildcard's team prefix.
-    static let keychainGroupName = "PolarReailty.Hawk-Nation.shared"
-
     /// The App Group to share through; `nil` when the signature has none.
     var appGroup: String?
     /// The keychain access group both processes hold; `nil` when the
@@ -227,7 +238,7 @@ struct SharedStoreIdentity: Equatable, Sendable {
         }
         return SharedStoreIdentity(
             appGroup: appGroup(in: signed.appGroups),
-            keychainGroup: keychainGroup(in: signed.keychainAccessGroups)
+            keychainGroup: keychainGroup(in: signed.keychainAccessGroups, applicationIdentifier: signed.applicationIdentifier)
         )
     }
 
@@ -241,11 +252,11 @@ struct SharedStoreIdentity: Equatable, Sendable {
         return groups.first { $0.localizedCaseInsensitiveContains("Hawk-Nation") } ?? groups.first
     }
 
-    /// The first keychain group, a wildcard profile's `TEAMID.*` filled in
-    /// with `keychainGroupName`.
-    static func keychainGroup(in groups: [String]) -> String? {
-        guard let first = groups.first else { return nil }
-        return first.hasSuffix("*") ? String(first.dropLast()) + keychainGroupName : first
+    /// The first keychain group, as signed (a wildcard profile's `TEAMID.*`
+    /// included), else the application identifier, which a re-signer gives
+    /// the widget too. `nil` with neither.
+    static func keychainGroup(in groups: [String], applicationIdentifier: String? = nil) -> String? {
+        groups.first ?? applicationIdentifier.flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// This process's.
@@ -262,15 +273,42 @@ struct SharedStoreIdentity: Equatable, Sendable {
 
 // MARK: - Keychain
 
+/// Where the app and the widget keep a shared item outside an App Group:
+/// the keychain (`SharedKeychain`), or a test's stand-in.
+protocol SharedSecretStore: Sendable {
+    /// The access group the item lives in.
+    var accessGroup: String { get }
+    /// The item's data and the read's status.
+    func read(_ account: String) -> (data: Data?, status: OSStatus)
+    /// Writes the item; returns the status.
+    @discardableResult
+    func write(_ data: Data, for account: String) -> OSStatus
+}
+
+extension SharedSecretStore {
+    /// The item's data; `nil` when there is none or the group can't be read.
+    func data(for account: String) -> Data? {
+        read(account).data
+    }
+
+    /// Writes the item; returns whether it was written.
+    @discardableResult
+    func set(_ data: Data, for account: String) -> Bool {
+        write(data, for: account) == errSecSuccess
+    }
+}
+
 /// A keychain item the app writes and the widget reads, in an access group
 /// both are signed with: the favorites' path when no App Group carries them.
-struct SharedKeychain: Equatable, Sendable {
+struct SharedKeychain: SharedSecretStore, Equatable {
     static let service = "PolarReailty.Hawk-Nation.shared"
 
     let accessGroup: String
 
-    /// The item's data; `nil` when there is none or the group can't be read.
-    func data(for account: String) -> Data? {
+    /// The item's data and the read's status, for the diagnostics:
+    /// `errSecItemNotFound` (-25300) before the app has written it,
+    /// `errSecMissingEntitlement` (-34018) for a group the signature lacks.
+    func read(_ account: String) -> (data: Data?, status: OSStatus) {
         var query = item(account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -280,15 +318,15 @@ struct SharedKeychain: Equatable, Sendable {
             if status != errSecItemNotFound {
                 logger.error("Keychain read from \(self.accessGroup) failed: \(status)")
             }
-            return nil
+            return (nil, status)
         }
-        return result as? Data
+        return (result as? Data, status)
     }
 
     /// Writes the item, readable after the first unlock so the Lock Screen
-    /// widgets can read it. Returns whether it was written.
+    /// widgets can read it. The status is kept for the app's diagnostics.
     @discardableResult
-    func set(_ data: Data, for account: String) -> Bool {
+    func write(_ data: Data, for account: String) -> OSStatus {
         let attributes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
@@ -301,8 +339,13 @@ struct SharedKeychain: Equatable, Sendable {
         if status != errSecSuccess {
             logger.error("Keychain write to \(self.accessGroup) failed: \(status)")
         }
-        return status == errSecSuccess
+        SharedKeychain.lastWriteStatus.withLock { $0 = status }
+        return status
     }
+
+    /// The status of this process's last write, `nil` before any: the app's
+    /// diagnostics show it beside the widget's read.
+    static let lastWriteStatus = Mutex<OSStatus?>(nil)
 
     private func item(_ account: String) -> [String: Any] {
         [
@@ -358,7 +401,7 @@ struct SharedFavoritesMirror: Codable, Equatable, Sendable {
         teams: [TeamRef],
         at now: Date = Date(),
         defaults: UserDefaults = SharedPaths.defaults,
-        keychain: SharedKeychain? = SharedContainer.live.keychain
+        keychain: (any SharedSecretStore)? = SharedContainer.live.keychain
     ) -> Bool {
         let resolved = teams.filter { $0 != TeamRef.placeholder(id: $0.id) }
         func current(_ mirror: SharedFavoritesMirror?) -> Bool {
@@ -388,6 +431,88 @@ struct SharedFavoritesMirror: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+}
+
+// MARK: - Diagnostics
+
+/// What one process knows about the store it shares through, drawn on the
+/// widget's face and in the app's Settings so the two can be compared side
+/// by side on a re-signed device: its bundle id, the groups its own
+/// signature carries, the store it chose, and how many favorites it read.
+struct SharedStoreDiagnostics: Equatable, Sendable {
+    /// "app" or "widget".
+    var process: String
+    var bundleID: String
+    /// The process's signature; `nil` when it carries no entitlements.
+    var signed: SigningEntitlements?
+    var identity: SharedStoreIdentity
+    var status: SharedDataStatus
+    /// The favorites read through the chosen store.
+    var favoritesCount: Int
+    /// The keychain item's read; `nil` without a keychain group.
+    var keychainRead: OSStatus?
+    /// The app's last keychain write; `nil` before any, and in the widget.
+    var keychainWrite: OSStatus? = nil
+
+    /// One line each, for the widget's no-team face and the app's
+    /// Settings.
+    var lines: [String] {
+        var lines = [
+            "\(process) \(bundleID)",
+            "groups: \(Self.list(signed?.appGroups))",
+            "keychain: \(Self.list(signed?.keychainAccessGroups))",
+            "store: \(store)",
+            "favorites: \(favoritesCount)",
+        ]
+        if let keychainRead, let group = identity.keychainGroup {
+            var line = "keychain \(group) read \(keychainRead)"
+            if let keychainWrite { line += " · write \(keychainWrite)" }
+            lines.append(line)
+        }
+        return lines
+    }
+
+    /// One line for a tile: "widget · Keychain ABCDE12345.* · fav 3".
+    var compact: String {
+        "\(process) · \(store) · fav \(favoritesCount)"
+    }
+
+    /// The store chosen and whether the app's data is in it.
+    var store: String {
+        switch status {
+        case .available: return SharedStore.appGroup(SharedStoreIdentity.canonicalGroup).detail
+        case .fallback(let store, _): return store.detail
+        case .unshared(let store): return "\(store.detail) (empty)"
+        case .unavailable: return "none"
+        }
+    }
+
+    private static func list(_ values: [String]?) -> String {
+        guard let values else { return "unsigned" }
+        return values.isEmpty ? "none" : values.joined(separator: ", ")
+    }
+
+    /// `diagnostics`, unless the project's App Group carries the app's
+    /// data: an Xcode-signed install's widgets keep their faces clean.
+    static func shown(_ diagnostics: SharedStoreDiagnostics) -> SharedStoreDiagnostics? {
+        if case .available = diagnostics.status { return nil }
+        return diagnostics
+    }
+
+    /// This process's, read now.
+    static func current(in container: SharedContainer = .live) -> SharedStoreDiagnostics {
+        let isExtension = Bundle.main.bundleURL.pathExtension == "appex"
+        return SharedStoreDiagnostics(
+            process: isExtension ? "widget" : "app",
+            bundleID: Bundle.main.bundleIdentifier ?? "?",
+            signed: SigningEntitlements.current,
+            identity: SharedStoreIdentity.current,
+            status: container.status,
+            favoritesCount: container.favoriteTeamIDs().count,
+            keychainRead: container.keychain?.read(SharedFavoritesMirror.keychainAccount).status,
+            keychainWrite: isExtension ? nil : SharedKeychain.lastWriteStatus.withLock { $0 }
+        )
     }
 }
 

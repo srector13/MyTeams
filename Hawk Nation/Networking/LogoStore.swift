@@ -94,7 +94,7 @@ struct SharedContainer {
     /// The group's identifier, for the status line.
     var groupID: String? = SharedStoreIdentity.canonicalGroup
     /// The keychain group both processes are signed with, if any.
-    var keychain: SharedKeychain? = nil
+    var keychain: (any SharedSecretStore)? = nil
     /// The process's own defaults, `.standard`; tests pass a scratch suite.
     var ownDefaults: UserDefaults = .standard
 
@@ -109,7 +109,7 @@ struct SharedContainer {
     /// it counts only when its container resolves.
     static var live: SharedContainer {
         let identity = SharedStoreIdentity.current
-        let keychain = identity.keychainGroup.map(SharedKeychain.init(accessGroup:))
+        let keychain: (any SharedSecretStore)? = identity.keychainGroup.map(SharedKeychain.init(accessGroup:))
         guard let group = identity.appGroup,
               FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil,
               let shared = UserDefaults(suiteName: group)
@@ -157,6 +157,11 @@ struct SharedContainer {
         }
         if groupDefaults != nil {
             return .unshared(.appGroup(groupID ?? SharedStoreIdentity.canonicalGroup))
+        }
+        // A keychain group both processes hold, not yet written by the app:
+        // nothing shared yet, not nothing shareable.
+        if let keychain {
+            return .unshared(.keychain(keychain.accessGroup))
         }
         return .unavailable
     }
@@ -212,8 +217,10 @@ enum SharedDataStatus: Hashable, Sendable {
     /// the widget are not reading the same one, or the app has not been
     /// opened since it was installed.
     case unshared(SharedStore)
-    /// No store is reachable: the install's signing profile left them out,
-    /// and only reinstalling a build signed with one repairs that.
+    /// No store is reachable: the install's signature carries no App Group,
+    /// keychain group or application identifier, and only re-signing with
+    /// a profile that has one repairs that. A team chosen in the widget's
+    /// settings still shows (`WidgetConfigTeams`).
     case unavailable
 
     /// Whether the app's data reaches the widget.
@@ -225,9 +232,9 @@ enum SharedDataStatus: Hashable, Sendable {
     }
 
     static let unavailableTitle = "Shared data unavailable"
-    static let repairHint = "Reinstall via the app to repair."
+    static let repairHint = "Choose a team in Edit Widget, or re-sign with an App Group."
     /// The one caption-sized line a widget or its settings show.
-    static let unavailableCaption = "Shared data unavailable — reinstall via app to repair"
+    static let unavailableCaption = "Shared data unavailable — signature has no App Group or keychain group"
 
     /// The caption-sized line a widget draws under its content: which store
     /// it reads and whether that works. `nil` while the project's group
