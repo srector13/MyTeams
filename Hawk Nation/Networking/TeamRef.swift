@@ -703,15 +703,29 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     /// When the team was unfollowed. `nil`, or earlier than `addedAt`, while
     /// it is followed.
     var removedAt: Date?
-    /// Whether game alerts are wanted for the team (`ScoreAlertEngine`).
-    var notify: Bool
-    /// When the reader last set `notify`. `nil` until they do, which counts
-    /// as `addedAt`: following a team sets it to the default.
+    /// Which game alerts the team sends (`ScoreAlertEngine`, R-6): `nil`
+    /// for the reader's global choice of kinds (`AlertPreferences`), a set
+    /// of kinds chosen for this team alone, or none for alerts off.
+    var alertKinds: AlertMask?
+    /// When the reader last set `alertKinds` (or `notify`). `nil` until
+    /// they do, which counts as `addedAt`: following a team sets it to the
+    /// default.
     var notifyChangedAt: Date?
 
     var id: String { teamID }
 
-    /// When `notify` took its value, for merging.
+    /// Whether game alerts are wanted for the team at all: anything but
+    /// none. Turning them on from off follows the global kinds; setting it
+    /// the way it is keeps the team's own.
+    var notify: Bool {
+        get { alertKinds != AlertMask() }
+        set {
+            guard newValue != notify else { return }
+            alertKinds = newValue ? nil : []
+        }
+    }
+
+    /// When `alertKinds` took its value, for merging.
     var notifySetAt: Date { notifyChangedAt ?? addedAt }
 
     /// Whether the entry is a tombstone: removed no earlier than it was added.
@@ -721,11 +735,93 @@ struct FavoriteTeam: Codable, Identifiable, Equatable, Sendable {
     }
 
     init(teamID: String, addedAt: Date = Date(), removedAt: Date? = nil, notify: Bool = true, notifyChangedAt: Date? = nil) {
+        self.init(
+            teamID: teamID, addedAt: addedAt, removedAt: removedAt,
+            alertKinds: notify ? nil : [], notifyChangedAt: notifyChangedAt
+        )
+    }
+
+    init(teamID: String, addedAt: Date = Date(), removedAt: Date? = nil, alertKinds: AlertMask?, notifyChangedAt: Date? = nil) {
         self.teamID = teamID
         self.addedAt = addedAt
         self.removedAt = removedAt
-        self.notify = notify
+        self.alertKinds = alertKinds
         self.notifyChangedAt = notifyChangedAt
+    }
+}
+
+// Coded by hand for the alerts setting. Builds before R-6 stored a Bool,
+// `notify`, and still read it from iCloud, so it is written still, beside
+// the kinds: `true` follows the global kinds, `false` is off. A stored
+// `alertKinds` refines a `true`; a `false` is off whatever it says, so a
+// device on an older build turning alerts off is not undone by the kinds
+// it can't see.
+extension FavoriteTeam {
+    private enum CodingKeys: String, CodingKey {
+        case teamID
+        case addedAt
+        case removedAt
+        case notify
+        case alertKinds
+        case notifyChangedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let teamID = try container.decode(String.self, forKey: .teamID)
+        let addedAt = try container.decode(Date.self, forKey: .addedAt)
+        let removedAt = try container.decodeIfPresent(Date.self, forKey: .removedAt)
+        let notify = try container.decode(Bool.self, forKey: .notify)
+        let storedKinds = try container.decodeIfPresent(AlertMask.self, forKey: .alertKinds)
+        let notifyChangedAt = try container.decodeIfPresent(Date.self, forKey: .notifyChangedAt)
+        self.init(
+            teamID: teamID,
+            addedAt: addedAt,
+            removedAt: removedAt,
+            alertKinds: notify ? storedKinds : [],
+            notifyChangedAt: notifyChangedAt
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(teamID, forKey: .teamID)
+        try container.encode(addedAt, forKey: .addedAt)
+        try container.encodeIfPresent(removedAt, forKey: .removedAt)
+        try container.encode(notify, forKey: .notify)
+        // Off is `notify` alone; the kinds go only with alerts on.
+        if notify {
+            try container.encodeIfPresent(alertKinds, forKey: .alertKinds)
+        }
+        try container.encodeIfPresent(notifyChangedAt, forKey: .notifyChangedAt)
+    }
+}
+
+/// A set of score alert kinds, as a favorite keeps its own (R-6,
+/// `FavoriteTeam.alertKinds`). Here rather than with `ScoreAlertKind`, which
+/// maps onto it (`AlertsSettings.swift`), because the widget reads the
+/// favorites too. Stored as its bits; bits a later build adds are kept.
+struct AlertMask: OptionSet, Codable, Hashable, Sendable {
+    let rawValue: Int
+
+    init(rawValue: Int) {
+        self.rawValue = rawValue
+    }
+
+    static let starts = AlertMask(rawValue: 1 << 0)
+    /// Score updates and period ends.
+    static let scores = AlertMask(rawValue: 1 << 1)
+    static let finals = AlertMask(rawValue: 1 << 2)
+    /// Close games late, and overtime.
+    static let closeGames = AlertMask(rawValue: 1 << 3)
+
+    init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(Int.self)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 }
 
@@ -888,7 +984,7 @@ enum FavoritesCodec {
             var winner = newer(current, entry)
             if current.notifySetAt != entry.notifySetAt {
                 let setting = current.notifySetAt > entry.notifySetAt ? current : entry
-                winner.notify = setting.notify
+                winner.alertKinds = setting.alertKinds
                 winner.notifyChangedAt = setting.notifyChangedAt
             }
             winners[entry.teamID] = winner
@@ -928,13 +1024,16 @@ enum FavoritesCodec {
     /// then fall through the other fields, so every device picks the same one.
     private static func newer(_ a: FavoriteTeam, _ b: FavoriteTeam) -> FavoriteTeam {
         func rank(_ entry: FavoriteTeam) -> (Date, Int, Date, Date, Int, Date) {
+            // Off, then each set of kinds by its bits, then the global kinds:
+            // any order will do, so long as every device agrees.
+            let alerts = entry.alertKinds?.rawValue ?? .max
             let removedAt = entry.removedAt ?? .distantPast
             return (
                 max(entry.addedAt, removedAt),
                 entry.isRemoved ? 1 : 0,
                 entry.addedAt,
                 removedAt,
-                entry.notify ? 1 : 0,
+                alerts,
                 entry.notifyChangedAt ?? .distantPast
             )
         }

@@ -35,6 +35,30 @@ struct ScoreSnapshot: Equatable, Sendable, Codable {
     /// How the game's league names its periods; plain ordinals where the
     /// league is not known.
     var periodNaming: PeriodNaming = .ordinal
+    /// The board's clock (`ScoreboardGame.clock`): `"4:32"`, `"45.3"`,
+    /// `"67'"`; empty where it gives none. For close-game alerts only.
+    var clock: String = ""
+    /// When the game's league calls it close and late, and where its
+    /// regulation ends (R-6); `nil` where the league is not known, or has
+    /// no such alerts.
+    var lateGame: LateGameRule? = nil
+    /// Whether the game has had its one close-game alert (`.closeLate`), or
+    /// gone to overtime, which says as much. The diff's own bookkeeping,
+    /// carried from look to look (`ScoreDiff.advance`) and kept with the
+    /// look across launches, so a game is told once.
+    var closeLateTold = false
+
+    /// Equal when an alert reads them the same: the clock moves on every
+    /// look, and the rule and the latch are the diff's, not the game's.
+    static func == (lhs: ScoreSnapshot, rhs: ScoreSnapshot) -> Bool {
+        lhs.homeName == rhs.homeName
+            && lhs.awayName == rhs.awayName
+            && lhs.homeScore == rhs.homeScore
+            && lhs.awayScore == rhs.awayScore
+            && lhs.period == rhs.period
+            && lhs.state == rhs.state
+            && lhs.periodNaming == rhs.periodNaming
+    }
 
     /// Where the game stands, by its league's rules (A-11): "3rd Period",
     /// "OT", "Extra Time", "7th"; "Live" under way before the board gives a
@@ -53,6 +77,116 @@ struct ScoreSnapshot: Equatable, Sendable, Codable {
         "\(awayName) \(awayScore) – \(homeName) \(homeScore) (\(stageLabel))"
     }
 
+}
+
+extension ScoreSnapshot {
+    // In an extension, so the memberwise initializer stays. Every field
+    // past the score decodes to its default when missing, so a look kept by
+    // an older build (`ScoreAlertMemory`) still reads.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        homeName = try container.decode(String.self, forKey: .homeName)
+        awayName = try container.decode(String.self, forKey: .awayName)
+        homeScore = try container.decode(Int.self, forKey: .homeScore)
+        awayScore = try container.decode(Int.self, forKey: .awayScore)
+        period = try container.decode(Int.self, forKey: .period)
+        state = try container.decode(State.self, forKey: .state)
+        periodNaming = try container.decodeIfPresent(PeriodNaming.self, forKey: .periodNaming) ?? .ordinal
+        clock = try container.decodeIfPresent(String.self, forKey: .clock) ?? ""
+        lateGame = try container.decodeIfPresent(LateGameRule.self, forKey: .lateGame)
+        closeLateTold = try container.decodeIfPresent(Bool.self, forKey: .closeLateTold) ?? false
+    }
+}
+
+/// When a league's game is close and late, for the one close-game alert
+/// (`.closeLate`), and where its regulation ends, for the overtime one
+/// (R-6). Built from the league's thresholds (`LeagueDescriptor.
+/// closeGameMargin`, `lateGameSeconds`, `regulationPeriods`), and kept with
+/// each look so the diff needs no league. A league with unnamed periods
+/// (a cup with no descriptor of its own) takes its sport's regulation, as
+/// `PeriodNaming` does.
+struct LateGameRule: Equatable, Sendable, Codable {
+    /// The periods regulation runs to.
+    var regulationPeriods: Int
+    /// The widest margin that is still close.
+    var closeMargin: Int
+    /// How many seconds of regulation left count as late.
+    var lateSeconds: Int
+    /// For soccer, whose clock counts minutes played up (`"67'"`,
+    /// `"90'+3'"`) rather than time left down: regulation's length in
+    /// minutes. `nil` for a clock that counts down (`"4:32"`, `"45.3"`).
+    var regulationMinutes: Int?
+
+    init(regulationPeriods: Int, closeMargin: Int, lateSeconds: Int, regulationMinutes: Int? = nil) {
+        self.regulationPeriods = regulationPeriods
+        self.closeMargin = closeMargin
+        self.lateSeconds = lateSeconds
+        self.regulationMinutes = regulationMinutes
+    }
+
+    /// `league`'s rule, or `nil` for a league without close-game alerts.
+    init?(league: LeagueID) {
+        let descriptor = league.descriptor
+        let sportPeriods: Int? = switch descriptor.kind {
+        case .soccer: 2
+        case .hockey: 3
+        case .football: 4
+        default: nil
+        }
+        guard let periods = descriptor.regulationPeriods ?? sportPeriods,
+              let margin = descriptor.closeGameMargin,
+              let late = descriptor.lateGameSeconds
+        else { return nil }
+        self.init(
+            regulationPeriods: periods,
+            closeMargin: margin,
+            lateSeconds: late,
+            regulationMinutes: descriptor.kind == .soccer ? 90 : nil
+        )
+    }
+
+    /// The seconds of regulation `clock` leaves, or `nil` for a clock that
+    /// does not read. A soccer clock past 90 minutes (stoppage time) leaves
+    /// none, or less than none.
+    func secondsLeft(_ clock: String) -> Int? {
+        // Anything past a few hours is not a game clock; bounded, too, so
+        // a garbled one can't overflow.
+        let limit = 10_000
+        let clock = clock.trimmingCharacters(in: .whitespaces)
+        if let regulationMinutes {
+            guard let minute = Int(String(clock.prefix(while: { $0.isASCII && $0.isNumber }))), minute < limit else { return nil }
+            return (regulationMinutes - minute) * 60
+        }
+        let parts = clock.split(separator: ":", omittingEmptySubsequences: false)
+        switch parts.count {
+        case 1:
+            // Under a minute, as basketball writes it: "45.3".
+            guard let seconds = Double(parts[0]), seconds.isFinite, seconds >= 0, seconds < Double(limit) else { return nil }
+            return Int(seconds)
+        case 2:
+            guard let minutes = Int(parts[0]), minutes >= 0, minutes < limit,
+                  let seconds = Double(parts[1]), seconds.isFinite, seconds >= 0, seconds < 60
+            else { return nil }
+            return minutes * 60 + Int(seconds)
+        default:
+            return nil
+        }
+    }
+
+    /// Whether `snapshot` is close and late: under way, in the last
+    /// regulation period or past it, within `closeMargin`, and with no more
+    /// than `lateSeconds` left. A clock run down to nothing reads as the
+    /// period over, not late in it; soccer's stoppage time is as late as it
+    /// gets.
+    func isCloseLate(_ snapshot: ScoreSnapshot) -> Bool {
+        guard snapshot.state == .inProgress,
+              snapshot.period >= regulationPeriods,
+              abs(snapshot.homeScore - snapshot.awayScore) <= closeMargin,
+              let left = secondsLeft(snapshot.clock)
+        else { return false }
+        if regulationMinutes == nil && left <= 0 { return false }
+        return left <= lateSeconds
+    }
 }
 
 /// How a league names its periods in alerts and on the Live Activity:
@@ -167,13 +301,20 @@ enum ScoreEvent: Equatable, Sendable {
     /// `period` is the one that ended; `snapshot` is the game now.
     case periodEnd(gameID: String, period: Int, snapshot: ScoreSnapshot)
     case final(gameID: String, snapshot: ScoreSnapshot)
+    /// The game is close late in regulation, by its league's rule
+    /// (`LateGameRule`); told once a game.
+    case closeLate(gameID: String, snapshot: ScoreSnapshot)
+    /// The game has gone past regulation: overtime, or soccer's extra time.
+    case overtime(gameID: String, snapshot: ScoreSnapshot)
 
     var gameID: String {
         switch self {
         case .gameStart(let gameID, _),
              .scoreChange(let gameID, _, _),
              .periodEnd(let gameID, _, _),
-             .final(let gameID, _):
+             .final(let gameID, _),
+             .closeLate(let gameID, _),
+             .overtime(let gameID, _):
             return gameID
         }
     }
@@ -184,7 +325,9 @@ enum ScoreEvent: Equatable, Sendable {
         case .gameStart(_, let snapshot),
              .scoreChange(_, _, let snapshot),
              .periodEnd(_, _, let snapshot),
-             .final(_, let snapshot):
+             .final(_, let snapshot),
+             .closeLate(_, let snapshot),
+             .overtime(_, let snapshot):
             return snapshot
         }
     }
@@ -194,6 +337,16 @@ enum ScoreEvent: Equatable, Sendable {
         return false
     }
 
+    /// Whether the event is a close-game or overtime alert, which carries
+    /// the score and so stands for a score update or period end in the same
+    /// look (`ScoreDiff.headlines`).
+    var isHeadline: Bool {
+        switch self {
+        case .closeLate, .overtime: return true
+        default: return false
+        }
+    }
+
     /// The alert's title line.
     var title: String {
         switch self {
@@ -201,6 +354,8 @@ enum ScoreEvent: Equatable, Sendable {
         case .scoreChange: return "Score update"
         case .periodEnd(_, let period, let snapshot): return "End of \(snapshot.periodNaming.label(period))"
         case .final: return "Final"
+        case .closeLate: return "Close game late"
+        case .overtime(_, let snapshot): return snapshot.periodNaming.hasExtraTime ? "Extra time" : "Overtime"
         }
     }
 }
@@ -220,10 +375,26 @@ enum ScoreDiff {
     /// - Going final reports only `final`, whatever else changed with it.
     /// - Under way, a new score and a new period each report; the score
     ///   comes first.
+    /// - Under way, a game whose league has a `LateGameRule` also reports,
+    ///   last, crossing out of regulation (`overtime`), or else being close
+    ///   and late (`closeLate`). Either is told once a game: the latch
+    ///   (`closeLateTold`) rides on the looks `advance` returns.
     static func diff(previous: [String: ScoreSnapshot], current: [String: ScoreSnapshot]) -> [ScoreEvent] {
+        advance(previous: previous, current: current).events
+    }
+
+    /// `diff`'s events, and `current` with each game's latch carried over
+    /// from `previous` and set by this look's close-game or overtime alert:
+    /// the looks to keep for the next diff.
+    static func advance(
+        previous: [String: ScoreSnapshot],
+        current: [String: ScoreSnapshot]
+    ) -> (events: [ScoreEvent], snapshots: [String: ScoreSnapshot]) {
         var events: [ScoreEvent] = []
+        var looks = current
         for gameID in current.keys.sorted() {
-            guard let now = current[gameID], let before = previous[gameID] else { continue }
+            guard var now = current[gameID], let before = previous[gameID] else { continue }
+            now.closeLateTold = now.closeLateTold || before.closeLateTold
 
             switch (before.state, now.state) {
             case (.scheduled, .inProgress):
@@ -237,11 +408,37 @@ enum ScoreDiff {
                 if now.period > before.period {
                     events.append(.periodEnd(gameID: gameID, period: before.period, snapshot: now))
                 }
+                if let rule = now.lateGame {
+                    if before.period <= rule.regulationPeriods && now.period > rule.regulationPeriods {
+                        // Going to overtime says the game is close and late.
+                        now.closeLateTold = true
+                        events.append(.overtime(gameID: gameID, snapshot: now))
+                    } else if !now.closeLateTold && rule.isCloseLate(now) {
+                        now.closeLateTold = true
+                        events.append(.closeLate(gameID: gameID, snapshot: now))
+                    }
+                }
             default:
                 break
             }
+            looks[gameID] = now
         }
-        return events
+        return (events, looks)
+    }
+
+    /// `events` with a close-game or overtime alert standing for its game's
+    /// score update and period end in the same look: its summary carries the
+    /// score, and the debounce would hold a second alert for the game two
+    /// minutes. Applied after the reader's kinds, so a headline turned off
+    /// leaves the score update to go.
+    static func headlines(_ events: [ScoreEvent]) -> [ScoreEvent] {
+        let headlined = Set(events.filter(\.isHeadline).map(\.gameID))
+        return events.filter { event in
+            switch event {
+            case .scoreChange, .periodEnd: return !headlined.contains(event.gameID)
+            default: return true
+            }
+        }
     }
 }
 

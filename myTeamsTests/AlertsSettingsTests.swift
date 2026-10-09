@@ -230,6 +230,69 @@ struct AlertPreferencesTests {
         #expect(ScoreAlertKind(.scoreChange(gameID: "1", previous: snapshot, snapshot: snapshot)) == .scores)
         #expect(ScoreAlertKind(.periodEnd(gameID: "1", period: 1, snapshot: snapshot)) == .scores)
         #expect(ScoreAlertKind(.final(gameID: "1", snapshot: snapshot)) == .finals)
+        #expect(ScoreAlertKind(.closeLate(gameID: "1", snapshot: snapshot)) == .closeGames)
+        #expect(ScoreAlertKind(.overtime(gameID: "1", snapshot: snapshot)) == .closeGames)
+    }
+
+    @Test("Each kind has its own bit, and the preferences read as the kinds they send")
+    func masks() {
+        let bits = ScoreAlertKind.allCases.map(\.mask)
+        #expect(Set(bits.map(\.rawValue)).count == ScoreAlertKind.allCases.count)
+        #expect(AlertPreferences().kinds == [.starts, .scores, .finals, .closeGames])
+        var preferences = AlertPreferences()
+        preferences.setSends(false, for: .scores)
+        preferences.setSends(false, for: .closeGames)
+        #expect(preferences.kinds == [.starts, .finals])
+        #expect(!preferences.sendsCloseGames)
+    }
+
+    @Test("A team's own kinds take precedence over the global ones; without them, the global ones apply")
+    func teamKindsPrecedence() {
+        var global = AlertPreferences()
+        global.setSends(false, for: .finals)
+        let score = ScoreEvent.scoreChange(gameID: "1", previous: snapshot, snapshot: snapshot)
+        let final = ScoreEvent.final(gameID: "1", snapshot: snapshot)
+        let closeLate = ScoreEvent.closeLate(gameID: "1", snapshot: snapshot)
+
+        // Finals only, for this team: finals go though they're off globally.
+        #expect(global.sends(final, teamKinds: .finals))
+        #expect(!global.sends(score, teamKinds: .finals))
+        #expect(!global.sends(closeLate, teamKinds: .finals))
+        // Following the global kinds.
+        #expect(!global.sends(final, teamKinds: nil))
+        #expect(global.sends(score, teamKinds: nil))
+        // Off: nothing.
+        #expect(!global.sends(score, teamKinds: AlertMask()))
+    }
+
+    @Test("A game two favorites follow alerts for whatever either wants")
+    func followedKinds() {
+        var global = AlertPreferences()
+        global.setSends(false, for: .scores)
+        let score = ScoreEvent.scoreChange(gameID: "1", previous: snapshot, snapshot: snapshot)
+        let start = ScoreEvent.gameStart(gameID: "1", snapshot: snapshot)
+        let final = ScoreEvent.final(gameID: "1", snapshot: snapshot)
+
+        var kinds = FollowedKinds()
+        kinds.add(.finals)
+        #expect(kinds.sends(final, preferences: global))
+        #expect(!kinds.sends(start, preferences: global))
+        // A second favorite on the global kinds adds starts, not scores.
+        kinds.add(nil)
+        #expect(kinds.sends(start, preferences: global))
+        #expect(!kinds.sends(score, preferences: global))
+        // A third with scores of its own adds them.
+        kinds.add(.scores)
+        #expect(kinds.sends(score, preferences: global))
+    }
+
+    @Test("A payload from before close-game alerts reads them as on")
+    func closeGamesDefault() throws {
+        let older = try JSONDecoder().decode(
+            AlertPreferences.self, from: Data(#"{"sendsStarts":true,"sendsScores":true,"sendsFinals":false}"#.utf8)
+        )
+        #expect(older.sendsCloseGames)
+        #expect(!older.sendsFinals)
     }
 
     @Test("Finals only: starts and scores are filtered out")

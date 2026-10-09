@@ -280,6 +280,27 @@ final class FavoritesStore {
         didChange()
     }
 
+    /// The kinds of game alert a followed team sends (R-6): `nil` for the
+    /// global kinds (`AlertPreferences`), or the team's own; `[]` for off,
+    /// or a team not followed.
+    func alertKinds(for teamID: TeamRef.ID) -> AlertMask? {
+        guard let favorite = favorites.first(where: { $0.teamID == teamID }) else { return [] }
+        return favorite.alertKinds
+    }
+
+    /// Sets the kinds of game alert a followed team sends: `nil` to follow
+    /// the global kinds again, `[]` to turn its alerts off. Stamped and
+    /// merged across devices as `setNotify` is. Does nothing for a team not
+    /// followed, or already set that way.
+    func setAlertKinds(_ kinds: AlertMask?, for teamID: TeamRef.ID) {
+        guard let index = favorites.firstIndex(where: { $0.teamID == teamID }),
+              favorites[index].alertKinds != kinds
+        else { return }
+        favorites[index].alertKinds = kinds
+        favorites[index].notifyChangedAt = max(now(), favorites[index].addedAt + 1)
+        didChange()
+    }
+
     /// Reorders the favorites, as `List`'s `.onMove` reports it, and stamps
     /// the order so it reaches the reader's other devices (A-8).
     func move(from source: IndexSet, to destination: Int) {

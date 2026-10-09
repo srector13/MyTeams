@@ -33,6 +33,8 @@ struct MyTeamsApp: App {
     /// Taps on score alerts, which arrive through the notification center
     /// rather than as a URL.
     @State private var alertTaps = ScoreAlertTaps.shared
+    /// Links an intent run in the app asked for (`OpenTeamIntent`, R-12).
+    @State private var intentLinks = AppIntentLinks.shared
     /// Light, dark or the system's, from Settings (`SettingsView`).
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
 
@@ -55,6 +57,12 @@ struct MyTeamsApp: App {
                     open(link)
                     alertTaps.link = nil
                 }
+                .onChange(of: intentLinks.link, initial: true) { _, link in
+                    // Initially too: the intent may have launched the app.
+                    guard let link else { return }
+                    open(link)
+                    intentLinks.link = nil
+                }
                 .task {
                     // Watch the live scoreboards for favorites' alerts. Asks
                     // for no permission; following a team does.
@@ -65,6 +73,9 @@ struct MyTeamsApp: App {
                     #if canImport(ActivityKit)
                     LiveActivityManager.shared.start()
                     #endif
+
+                    // Offer the favorites in Spotlight and Siri (R-12).
+                    TeamSpotlightIndexer.shared.start()
 
                     // Put the bundled crests on disk once, then keep the
                     // favorites' crests current (weekly revalidation).

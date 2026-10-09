@@ -152,6 +152,29 @@ struct LeagueDescriptor: Sendable, Identifiable {
 
     let periodStyle: PeriodStyle
 
+    /// The widest margin a game late in regulation still counts as close
+    /// for an alert (R-6, `.closeLate`): a goal in soccer and hockey, a
+    /// one-possession game in basketball and football. `nil` where close-game
+    /// alerts don't apply.
+    var closeGameMargin: Int? {
+        switch kind {
+        case .soccer, .hockey: 1
+        case .basketball, .football: 8
+        default: nil
+        }
+    }
+
+    /// How late counts as late for a close-game alert: the seconds left in
+    /// the last regulation period. Soccer's clock counts minutes up rather
+    /// than down, so its ten minutes are from the 80th on.
+    var lateGameSeconds: Int? {
+        switch kind {
+        case .soccer: 10 * 60
+        case .hockey, .basketball, .football: 5 * 60
+        default: nil
+        }
+    }
+
     /// What a schedule card calls a finished game that stands level.
     var drawLabel = "Draw"
 

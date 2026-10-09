@@ -644,6 +644,102 @@ struct FavoritesStoreTests {
         }
     }
 
+    // MARK: Per-team alert kinds (R-6)
+
+    @Test("A stored Bool migrates: true follows the global kinds, false is off")
+    func legacyNotifyDecodes() throws {
+        let json = #"""
+        [
+            {"teamID": "a", "addedAt": 0, "notify": true},
+            {"teamID": "b", "addedAt": 0, "notify": false},
+            {"teamID": "c", "addedAt": 0, "notify": true, "alertKinds": 4},
+            {"teamID": "d", "addedAt": 0, "notify": false, "alertKinds": 4}
+        ]
+        """#
+        let decoded = try JSONDecoder().decode([FavoriteTeam].self, from: Data(json.utf8))
+        #expect(decoded[0].alertKinds == nil)
+        #expect(decoded[0].notify)
+        #expect(decoded[1].alertKinds == AlertMask())
+        #expect(!decoded[1].notify)
+        // Kinds of its own refine alerts on.
+        #expect(decoded[2].alertKinds == AlertMask.finals)
+        #expect(decoded[2].notify)
+        // Off is off, whatever kinds an older device could not see.
+        #expect(decoded[3].alertKinds == AlertMask())
+        #expect(!decoded[3].notify)
+    }
+
+    @Test("The kinds are written beside the Bool older builds read, and round-trip")
+    func alertKindsRoundTrip() throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let entries = [
+            FavoriteTeam(teamID: "football/nfl:12", addedAt: t, alertKinds: [.finals, .closeGames], notifyChangedAt: t + 60),
+            FavoriteTeam(teamID: "baseball/mlb:7", addedAt: t, alertKinds: []),
+            FavoriteTeam(teamID: "soccer/usa.1:186", addedAt: t),
+        ]
+        let data = try #require(FavoritesCodec.encode(entries))
+        #expect(FavoritesCodec.decodeEntries(data) == entries)
+
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let stored = try #require(object["favorites"] as? [[String: Any]])
+        #expect(stored[0]["notify"] as? Bool == true)
+        #expect(stored[0]["alertKinds"] as? Int == AlertMask([.finals, .closeGames]).rawValue)
+        #expect(stored[1]["notify"] as? Bool == false)
+        #expect(stored[1]["alertKinds"] == nil)
+        #expect(stored[2]["notify"] as? Bool == true)
+        #expect(stored[2]["alertKinds"] == nil)
+    }
+
+    @Test("Notify reads and writes through the kinds")
+    func notifyOverKinds() {
+        var team = FavoriteTeam(teamID: "x", alertKinds: .finals)
+        #expect(team.notify)
+        // Already on: its own kinds stay.
+        team.notify = true
+        #expect(team.alertKinds == AlertMask.finals)
+        team.notify = false
+        #expect(team.alertKinds == AlertMask())
+        team.notify = true
+        #expect(team.alertKinds == nil)
+    }
+
+    @Test("Kinds merge like the Bool did: the later-set copy wins", arguments: [true, false])
+    func alertKindsMerge(kindsAreLater: Bool) throws {
+        let t = Date(timeIntervalSince1970: 1_800_000_000)
+        let kinds = FavoriteTeam(teamID: "x", addedAt: t, alertKinds: .finals, notifyChangedAt: kindsAreLater ? t + 20 : t + 10)
+        let off = FavoriteTeam(teamID: "x", addedAt: t, notify: false, notifyChangedAt: kindsAreLater ? t + 10 : t + 20)
+        for merged in [FavoritesCodec.merge([kinds], [off]), FavoritesCodec.merge([off], [kinds])] {
+            let entry = try #require(merged.first)
+            #expect(merged.count == 1)
+            #expect(entry.alertKinds == (kindsAreLater ? AlertMask.finals : AlertMask()))
+        }
+    }
+
+    @MainActor
+    @Test("A team's own kinds persist, are stamped, and going back to the defaults stores none")
+    func setAlertKindsPersists() throws {
+        let defaults = try scratchDefaults()
+        let cloud = MemoryCloudStore()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = FavoritesStore(defaults: defaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {}, now: { now })
+        let team = seedIDs[1]
+        #expect(store.alertKinds(for: team) == nil)
+        #expect(store.alertKinds(for: "football/nfl:99") == AlertMask())
+
+        store.setAlertKinds(.finals, for: team)
+        #expect(store.alertKinds(for: team) == AlertMask.finals)
+        #expect(store.notify(for: team))
+        #expect(store.favorites.first { $0.teamID == team }?.notifyChangedAt == now)
+        #expect(cloud.entries.first { $0.teamID == team }?.alertKinds == AlertMask.finals)
+
+        let relaunched = FavoritesStore(defaults: defaults, cloud: cloud, seedIDs: seedIDs, reloadWidgets: {})
+        #expect(relaunched.alertKinds(for: team) == AlertMask.finals)
+
+        store.setAlertKinds(nil, for: team)
+        #expect(store.alertKinds(for: team) == nil)
+        #expect(cloud.entries.first { $0.teamID == team }?.alertKinds == nil)
+    }
+
     // MARK: Unresolved favorites (A-4)
 
     @MainActor

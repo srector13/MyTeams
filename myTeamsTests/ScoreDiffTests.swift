@@ -371,3 +371,203 @@ struct ScoreAlertDebounceTests {
         #expect(posted == [score("1"), score("2")])
     }
 }
+
+/// A `league` game under way as the engine reads it (R-6): its periods
+/// named, its clock, and its league's close-game rule.
+private func late(
+    _ league: LeagueID,
+    home: Int,
+    away: Int,
+    period: Int,
+    clock: String,
+    state: ScoreSnapshot.State = .inProgress
+) -> ScoreSnapshot {
+    ScoreSnapshot(
+        homeName: "Home", awayName: "Away",
+        homeScore: home, awayScore: away,
+        period: period, state: state,
+        periodNaming: PeriodNaming(league: league),
+        clock: clock,
+        lateGame: LateGameRule(league: league)
+    )
+}
+
+@Suite("Close games late and overtime")
+struct CloseLateTests {
+    @Test("Each sport's thresholds come from its league")
+    func leagueThresholds() {
+        #expect(LeagueID.premierLeague.descriptor.closeGameMargin == 1)
+        #expect(LeagueID.nhl.descriptor.closeGameMargin == 1)
+        #expect(LeagueID.nba.descriptor.closeGameMargin == 8)
+        #expect(LeagueID.nfl.descriptor.closeGameMargin == 8)
+        #expect(LeagueID.mlb.descriptor.closeGameMargin == nil)
+        #expect(LeagueID.nfl.descriptor.regulationPeriods == 4)
+        #expect(LeagueID.mensCollegeBasketball.descriptor.regulationPeriods == 2)
+        #expect(LeagueID.nhl.descriptor.regulationPeriods == 3)
+        // A cup with no descriptor of its own takes its sport's regulation.
+        #expect(LateGameRule(league: .soccer("eng.fa"))?.regulationPeriods == 2)
+        #expect(LateGameRule(league: .mlb) == nil)
+        #expect(LateGameRule(league: LeagueID(sport: "lacrosse", league: "pll")) == nil)
+    }
+
+    @Test("Football and basketball: the last regulation period, within 8, five minutes or less left")
+    func countdownThresholds() throws {
+        let nfl = try #require(LateGameRule(league: .nfl))
+        #expect(nfl.isCloseLate(late(.nfl, home: 20, away: 12, period: 4, clock: "4:59")))
+        #expect(nfl.isCloseLate(late(.nfl, home: 20, away: 12, period: 4, clock: "5:00")))
+        #expect(!nfl.isCloseLate(late(.nfl, home: 21, away: 12, period: 4, clock: "4:59")))
+        #expect(!nfl.isCloseLate(late(.nfl, home: 20, away: 12, period: 4, clock: "5:01")))
+        #expect(!nfl.isCloseLate(late(.nfl, home: 20, away: 12, period: 3, clock: "1:00")))
+        // Run out: the period is over, not late.
+        #expect(!nfl.isCloseLate(late(.nfl, home: 20, away: 20, period: 4, clock: "0:00")))
+        #expect(!nfl.isCloseLate(late(.nfl, home: 20, away: 20, period: 4, clock: "")))
+        #expect(!nfl.isCloseLate(late(.nfl, home: 20, away: 20, period: 4, clock: "1:00", state: .final)))
+
+        let nba = try #require(LateGameRule(league: .nba))
+        #expect(nba.isCloseLate(late(.nba, home: 101, away: 99, period: 4, clock: "45.3")))
+        #expect(!nba.isCloseLate(late(.nba, home: 101, away: 99, period: 2, clock: "45.3")))
+
+        // College men play halves: the second is the last.
+        let college = try #require(LateGameRule(league: .mensCollegeBasketball))
+        #expect(college.isCloseLate(late(.mensCollegeBasketball, home: 60, away: 55, period: 2, clock: "3:10")))
+        #expect(!college.isCloseLate(late(.mensCollegeBasketball, home: 30, away: 25, period: 1, clock: "3:10")))
+    }
+
+    @Test("Hockey: the 3rd period, within a goal, five minutes or less left")
+    func hockeyThresholds() throws {
+        let nhl = try #require(LateGameRule(league: .nhl))
+        #expect(nhl.isCloseLate(late(.nhl, home: 3, away: 2, period: 3, clock: "4:12")))
+        #expect(!nhl.isCloseLate(late(.nhl, home: 4, away: 2, period: 3, clock: "4:12")))
+        #expect(!nhl.isCloseLate(late(.nhl, home: 3, away: 2, period: 3, clock: "6:00")))
+        #expect(!nhl.isCloseLate(late(.nhl, home: 3, away: 2, period: 2, clock: "4:12")))
+    }
+
+    @Test("Soccer: the second half from the 80th minute, stoppage time included, within a goal")
+    func soccerThresholds() throws {
+        let epl = try #require(LateGameRule(league: .premierLeague))
+        #expect(epl.isCloseLate(late(.premierLeague, home: 1, away: 1, period: 2, clock: "80'")))
+        #expect(epl.isCloseLate(late(.premierLeague, home: 2, away: 1, period: 2, clock: "90'+3'")))
+        #expect(!epl.isCloseLate(late(.premierLeague, home: 1, away: 1, period: 2, clock: "79'")))
+        #expect(!epl.isCloseLate(late(.premierLeague, home: 3, away: 1, period: 2, clock: "88'")))
+        #expect(!epl.isCloseLate(late(.premierLeague, home: 1, away: 1, period: 1, clock: "45'+2'")))
+        #expect(!epl.isCloseLate(late(.premierLeague, home: 1, away: 1, period: 2, clock: "HT")))
+    }
+
+    @Test("A close game late alerts once, however long it stays close")
+    func closeLateOnce() {
+        let early = late(.nfl, home: 20, away: 17, period: 4, clock: "6:10")
+        let lateLook = late(.nfl, home: 20, away: 17, period: 4, clock: "4:50")
+        let first = ScoreDiff.advance(previous: ["1": early], current: ["1": lateLook])
+        #expect(first.events == [.closeLate(gameID: "1", snapshot: lateLook)])
+        #expect(first.events.first?.title == "Close game late")
+        #expect(first.snapshots["1"]?.closeLateTold == true)
+
+        // Tied up, still late: a score update, and no second close-game alert.
+        let tied = late(.nfl, home: 20, away: 20, period: 4, clock: "2:00")
+        let second = ScoreDiff.advance(previous: first.snapshots, current: ["1": tied])
+        #expect(second.events == [.scoreChange(gameID: "1", previous: lateLook, snapshot: tied)])
+        #expect(second.snapshots["1"]?.closeLateTold == true)
+
+        // Without the latch carried, the same look would have alerted again.
+        #expect(ScoreDiff.diff(previous: ["1": lateLook], current: ["1": tied]).contains { $0.isHeadline })
+    }
+
+    @Test("Late but not close says nothing until the margin closes, then alerts once")
+    func closeLateWhenMarginCloses() {
+        let wide = late(.nba, home: 100, away: 85, period: 4, clock: "4:00")
+        let wider = late(.nba, home: 100, away: 88, period: 4, clock: "3:00")
+        let first = ScoreDiff.advance(previous: ["1": wide], current: ["1": wider])
+        #expect(first.events.allSatisfy { !$0.isHeadline })
+
+        let close = late(.nba, home: 100, away: 94, period: 4, clock: "2:00")
+        let second = ScoreDiff.advance(previous: first.snapshots, current: ["1": close])
+        #expect(second.events.contains(.closeLate(gameID: "1", snapshot: close)))
+
+        let wideAgain = late(.nba, home: 104, away: 94, period: 4, clock: "1:30")
+        let closeAgain = late(.nba, home: 104, away: 100, period: 4, clock: "0:40")
+        let third = ScoreDiff.advance(previous: second.snapshots, current: ["1": wideAgain])
+        let fourth = ScoreDiff.advance(previous: third.snapshots, current: ["1": closeAgain])
+        #expect((third.events + fourth.events).allSatisfy { !$0.isHeadline })
+    }
+
+    @Test("A game first seen close and late says nothing; one with no league rule never alerts")
+    func closeLateNeedsALookBeforeAndARule() {
+        let lateLook = late(.nhl, home: 2, away: 1, period: 3, clock: "3:00")
+        #expect(ScoreDiff.diff(previous: [:], current: ["1": lateLook]).isEmpty)
+
+        var unruled = lateLook
+        unruled.lateGame = nil
+        var before = unruled
+        before.clock = "8:00"
+        #expect(ScoreDiff.diff(previous: ["1": before], current: ["1": unruled]).isEmpty)
+    }
+
+    @Test("Crossing out of regulation is overtime, or extra time; told once, and no close-game alert after it")
+    func overtime() {
+        let endOfThird = late(.nhl, home: 2, away: 2, period: 3, clock: "0:00")
+        let overtime = late(.nhl, home: 2, away: 2, period: 4, clock: "5:00")
+        let crossing = ScoreDiff.advance(previous: ["1": endOfThird], current: ["1": overtime])
+        #expect(crossing.events == [
+            .periodEnd(gameID: "1", period: 3, snapshot: overtime),
+            .overtime(gameID: "1", snapshot: overtime),
+        ])
+        #expect(crossing.events.last?.title == "Overtime")
+        #expect(crossing.snapshots["1"]?.closeLateTold == true)
+
+        // Late in overtime, and into a shootout: nothing more of either.
+        let lateInOT = late(.nhl, home: 2, away: 2, period: 4, clock: "0:30")
+        let shootout = late(.nhl, home: 2, away: 2, period: 5, clock: "0:00")
+        let later = ScoreDiff.advance(previous: crossing.snapshots, current: ["1": lateInOT])
+        #expect(later.events.isEmpty)
+        let last = ScoreDiff.advance(previous: later.snapshots, current: ["1": shootout])
+        #expect(last.events == [.periodEnd(gameID: "1", period: 4, snapshot: shootout)])
+
+        let ucl = LeagueID.soccer("uefa.champions")
+        let fullTime = late(ucl, home: 1, away: 1, period: 2, clock: "90'+4'")
+        let extraTime = late(ucl, home: 1, away: 1, period: 3, clock: "91'")
+        let events = ScoreDiff.diff(previous: ["1": fullTime], current: ["1": extraTime])
+        #expect(events.last == .overtime(gameID: "1", snapshot: extraTime))
+        #expect(events.last?.title == "Extra time")
+    }
+
+    @Test("A close-game or overtime alert stands for its game's score and period end in the same look")
+    func headlines() {
+        let before = late(.nfl, home: 17, away: 10, period: 4, clock: "6:00")
+        let now = late(.nfl, home: 17, away: 14, period: 4, clock: "4:00")
+        let other = game(.inProgress, home: 7, away: 3, period: 2)
+        let events: [ScoreEvent] = [
+            .scoreChange(gameID: "1", previous: before, snapshot: now),
+            .closeLate(gameID: "1", snapshot: now),
+            .scoreChange(gameID: "2", previous: other, snapshot: other),
+        ]
+        #expect(ScoreDiff.headlines(events) == [
+            .closeLate(gameID: "1", snapshot: now),
+            .scoreChange(gameID: "2", previous: other, snapshot: other),
+        ])
+        // With no headline, nothing is dropped.
+        #expect(ScoreDiff.headlines(Array(events.dropFirst(2))) == Array(events.dropFirst(2)))
+    }
+
+    @Test("A look kept by an older build reads, with no clock, rule or latch; a new one round-trips them")
+    func snapshotDecoding() throws {
+        var told = late(.nhl, home: 2, away: 1, period: 3, clock: "3:00")
+        told.closeLateTold = true
+        let data = try JSONEncoder().encode(told)
+
+        let roundTripped = try JSONDecoder().decode(ScoreSnapshot.self, from: data)
+        #expect(roundTripped == told)
+        #expect(roundTripped.clock == "3:00")
+        #expect(roundTripped.lateGame == LateGameRule(league: .nhl))
+        #expect(roundTripped.closeLateTold)
+
+        var object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object["clock"] = nil
+        object["lateGame"] = nil
+        object["closeLateTold"] = nil
+        let older = try JSONDecoder().decode(ScoreSnapshot.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(older == told)
+        #expect(older.clock == "")
+        #expect(older.lateGame == nil)
+        #expect(!older.closeLateTold)
+    }
+}

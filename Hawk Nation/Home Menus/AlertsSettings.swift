@@ -141,6 +141,8 @@ enum ScoreAlertKind: String, CaseIterable, Sendable {
     /// Each score, and each period's end, which reads as one.
     case scores
     case finals
+    /// A close game late in regulation, and a game going to overtime (R-6).
+    case closeGames
 
     /// The kind of `event`.
     init(_ event: ScoreEvent) {
@@ -148,6 +150,7 @@ enum ScoreAlertKind: String, CaseIterable, Sendable {
         case .gameStart: self = .starts
         case .scoreChange, .periodEnd: self = .scores
         case .final: self = .finals
+        case .closeLate, .overtime: self = .closeGames
         }
     }
 
@@ -157,6 +160,17 @@ enum ScoreAlertKind: String, CaseIterable, Sendable {
         case .starts: "Game Starts"
         case .scores: "Score Updates"
         case .finals: "Finals"
+        case .closeGames: "Close Games & Overtime"
+        }
+    }
+
+    /// The kind's bit in a favorite's own kinds (`FavoriteTeam.alertKinds`).
+    var mask: AlertMask {
+        switch self {
+        case .starts: .starts
+        case .scores: .scores
+        case .finals: .finals
+        case .closeGames: .closeGames
         }
     }
 }
@@ -174,6 +188,7 @@ struct AlertPreferences: Codable, Equatable, Sendable {
     var sendsStarts = true
     var sendsScores = true
     var sendsFinals = true
+    var sendsCloseGames = true
 
     var quietHoursEnabled = false
     /// When quiet hours begin and end, in minutes after local midnight. The
@@ -188,6 +203,7 @@ struct AlertPreferences: Codable, Equatable, Sendable {
         case .starts: sendsStarts
         case .scores: sendsScores
         case .finals: sendsFinals
+        case .closeGames: sendsCloseGames
         }
     }
 
@@ -196,11 +212,27 @@ struct AlertPreferences: Codable, Equatable, Sendable {
         sends(ScoreAlertKind(event))
     }
 
+    /// The kinds that go out, as a favorite's own would be set (R-6).
+    var kinds: AlertMask {
+        ScoreAlertKind.allCases.reduce(into: AlertMask()) { mask, kind in
+            if sends(kind) { mask.insert(kind.mask) }
+        }
+    }
+
+    /// Whether `event`'s kind goes out for a favorite whose own kinds are
+    /// `teamKinds` (`FavoriteTeam.alertKinds`): those when it has them,
+    /// these preferences' when `nil`.
+    func sends(_ event: ScoreEvent, teamKinds: AlertMask?) -> Bool {
+        guard let teamKinds else { return sends(event) }
+        return teamKinds.contains(ScoreAlertKind(event).mask)
+    }
+
     mutating func setSends(_ sends: Bool, for kind: ScoreAlertKind) {
         switch kind {
         case .starts: sendsStarts = sends
         case .scores: sendsScores = sends
         case .finals: sendsFinals = sends
+        case .closeGames: sendsCloseGames = sends
         }
     }
 
@@ -234,6 +266,7 @@ extension AlertPreferences {
         sendsStarts = try container.decodeIfPresent(Bool.self, forKey: .sendsStarts) ?? defaults.sendsStarts
         sendsScores = try container.decodeIfPresent(Bool.self, forKey: .sendsScores) ?? defaults.sendsScores
         sendsFinals = try container.decodeIfPresent(Bool.self, forKey: .sendsFinals) ?? defaults.sendsFinals
+        sendsCloseGames = try container.decodeIfPresent(Bool.self, forKey: .sendsCloseGames) ?? defaults.sendsCloseGames
         quietHoursEnabled = try container.decodeIfPresent(Bool.self, forKey: .quietHoursEnabled) ?? defaults.quietHoursEnabled
         quietStart = Self.normalized(try container.decodeIfPresent(Int.self, forKey: .quietStart) ?? defaults.quietStart)
         quietEnd = Self.normalized(try container.decodeIfPresent(Int.self, forKey: .quietEnd) ?? defaults.quietEnd)

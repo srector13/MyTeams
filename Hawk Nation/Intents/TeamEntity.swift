@@ -1,6 +1,6 @@
 //
 //  TeamEntity.swift
-//  myTeamsWidget
+//  myTeams
 //
 //  Created by Stephen Rector on 9/27/26.
 //  Copyright © 2026 Stephen Rector. All rights reserved.
@@ -9,11 +9,16 @@
 import AppIntents
 import Foundation
 
+// Compiled into both targets, like `LogoStore`: the widget's configuration
+// (`SelectTeamIntent`) and the app's intents, Siri phrases and Spotlight
+// results (R-12) offer the same teams.
+
 // MARK: - Team entity
 
-/// A team, as the widget's configuration offers it. Identified by
-/// `TeamRef.id`, which is all the system persists for a placed widget; the
-/// team itself is resolved again through `TeamEntityQuery`.
+/// A team, as the widget's configuration and the app's intents offer it.
+/// Identified by `TeamRef.id`, which is all the system persists for a placed
+/// widget or a shortcut; the team itself is resolved again through
+/// `TeamEntityQuery`.
 struct TeamEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Team"
     static let defaultQuery = TeamEntityQuery()
@@ -88,25 +93,11 @@ struct TeamEntityQuery: EntityStringQuery {
     }
 }
 
-// MARK: - Configuration intent
-
-/// The configurable widget's settings: which team it follows.
-struct SelectTeamIntent: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "Select Team"
-    static let description = IntentDescription("Choose the team whose next game the widget shows.")
-
-    /// The team to show. When unset, the widget shows the first favorite,
-    /// or, with none followed, asks for one (`WidgetTimelines.noTeam`).
-    @Parameter(title: "Team")
-    var team: TeamEntity?
-
-    init() {}
-}
-
 // MARK: - Resolving teams
 
 /// Turns stored team ids into teams inside the widget process, which has no
 /// `FavoritesStore`: favorites come from `SharedPaths.favoriteTeamIDs()`.
+/// The app's intents resolve through it too, so both offer the same teams.
 enum WidgetTeams {
     /// The team a widget shows when a favorite does not resolve, and the
     /// gallery's sample: the Jayhawks, the original widget's team. Never
@@ -153,18 +144,5 @@ enum WidgetTeams {
     /// built synchronously.
     static var firstSeedFavorite: TeamRef {
         SharedPaths.favoriteTeamIDs().lazy.compactMap(TeamCatalog.team(id:)).first ?? fallback
-    }
-
-    /// The team a configured widget shows: the chosen one, else the first
-    /// favorite (`fallback` if it does not resolve). `nil` with no team
-    /// chosen and none followed: a fresh install (t_afe5c297).
-    static func team(for configuration: SelectTeamIntent) async -> TeamRef? {
-        if let chosen = configuration.team?.team {
-            return chosen
-        }
-        guard let first = SharedPaths.favoriteTeamIDs().first else {
-            return nil
-        }
-        return await resolve(first) ?? fallback
     }
 }
