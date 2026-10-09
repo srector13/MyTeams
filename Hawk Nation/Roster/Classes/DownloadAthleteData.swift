@@ -23,6 +23,8 @@ struct BasketballPlayerStats: Hashable, Sendable {
     var avgFouls: Float
     var avgTurnovers: Float
     var avgPoints: Float
+    /// The seasons the splits document offers. See `AthleteSeasons`.
+    var seasons: AthleteSeasons = .empty
 
     /// The value shown before a player's splits have loaded.
     static let empty = BasketballPlayerStats(
@@ -76,6 +78,8 @@ struct FootballPlayerStats: Hashable, Sendable {
     /// Whether the splits fetch has finished; lets the view tell "loading"
     /// from "nothing to show".
     var loaded: Bool
+    /// The seasons the splits document offers. See `AthleteSeasons`.
+    var seasons: AthleteSeasons = .empty
 
     static let empty = FootballPlayerStats(groups: [], loaded: false)
 }
@@ -218,11 +222,18 @@ private func humaniseStatName(_ name: String) -> String {
 /// group, and whether the group appears at all, come from
 /// `footballStatSpecs`; the feed only carries the lines a given position
 /// actually plays, and groups whose numbers are all zero are dropped.
-func downloadFootballPlayerStats(playerID: String, league: LeagueID) async -> FootballPlayerStats {
+///
+/// `season` is a `season` filter value (`AthleteSeason.value`); `nil` asks
+/// for the feed's current season, as do the other splits loaders.
+func downloadFootballPlayerStats(
+    playerID: String,
+    league: LeagueID,
+    season: String? = nil
+) async -> FootballPlayerStats {
     // The player sheets have no error state of their own: a failed fetch
     // reads as an empty document, which each parser renders as no stats.
     let json = await HTTPClient.shared.fetch(
-        league.athleteSplitsURL(athleteID: playerID)
+        athleteSplitsURL(league: league, athleteID: playerID, season: season)
     ).document ?? .null
     return parseFootballPlayerStats(from: json)
 }
@@ -232,8 +243,9 @@ func downloadFootballPlayerStats(playerID: String, league: LeagueID) async -> Fo
 func parseFootballPlayerStats(from json: JSON) -> FootballPlayerStats {
     let names = json["names"].arrayValue.map { $0.stringValue }
     let values = json["splitCategories"][0]["splits"][0]["stats"].arrayValue.map { $0.stringValue }
+    let seasons = parseAthleteSeasons(from: json)
     guard !names.isEmpty, names.count == values.count else {
-        return FootballPlayerStats(groups: [], loaded: true)
+        return FootballPlayerStats(groups: [], loaded: true, seasons: seasons)
     }
 
     var feed: [String: String] = [:]
@@ -266,7 +278,7 @@ func parseFootballPlayerStats(from json: JSON) -> FootballPlayerStats {
         }
     }
 
-    return FootballPlayerStats(groups: groups, loaded: true)
+    return FootballPlayerStats(groups: groups, loaded: true, seasons: seasons)
 }
 
 /// A soccer player's headline season statistics, from the athlete
@@ -333,6 +345,9 @@ struct BaseballPlayerStats: Hashable, Sendable {
     var SlugAvg: Float
     var OPS: Float
 
+    /// The seasons the splits document offers. See `AthleteSeasons`.
+    var seasons: AthleteSeasons = .empty
+
     /// The value shown before a player's splits have loaded, and the base the
     /// loader fills in either the pitching or the batting half of.
     static let empty = BaseballPlayerStats(
@@ -351,9 +366,13 @@ struct BaseballPlayerStats: Hashable, Sendable {
 /// is the mean of the two weighted by games played, and games played is
 /// their sum. The NBA and WNBA feeds lead with an "All Splits" row, which
 /// is read alone. See `parseBasketballPlayerStats`.
-func downloadBasketballPlayerStats(playerID: String, league: LeagueID) async -> BasketballPlayerStats {
+func downloadBasketballPlayerStats(
+    playerID: String,
+    league: LeagueID,
+    season: String? = nil
+) async -> BasketballPlayerStats {
     let json = await HTTPClient.shared.fetch(
-        league.athleteSplitsURL(athleteID: playerID)
+        athleteSplitsURL(league: league, athleteID: playerID, season: season)
     ).document ?? .null
     return parseBasketballPlayerStats(from: json)
 }
@@ -409,7 +428,8 @@ func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
         avgSteals: average("avgSteals", 13),
         avgFouls: average("avgFouls", 14),
         avgTurnovers: average("avgTurnovers", 15),
-        avgPoints: average("avgPoints", 16)
+        avgPoints: average("avgPoints", 16),
+        seasons: parseAthleteSeasons(from: json)
     )
 }
 
@@ -443,6 +463,8 @@ struct SplitsSeasonLine: Hashable, Sendable {
     /// Whether the fetch has finished; lets a view tell "loading" from
     /// "nothing to show".
     var loaded: Bool
+    /// The seasons the document offers. See `AthleteSeasons`.
+    var seasons: AthleteSeasons = .empty
 
     static let empty = SplitsSeasonLine(title: "", stats: [], loaded: false)
 
@@ -464,9 +486,10 @@ func parseSplitsSeasonLine(from json: JSON) -> SplitsSeasonLine {
     let season = rows.first { seasonSplitNames.contains($0["displayName"].stringValue) }
         ?? (rows.count == 1 ? rows.first : nil)
     let values = season?["stats"].arrayValue.map(\.stringValue) ?? []
+    let seasons = parseAthleteSeasons(from: json)
 
     guard !names.isEmpty, names.count == values.count else {
-        return SplitsSeasonLine(title: json["displayName"].stringValue, stats: [], loaded: true)
+        return SplitsSeasonLine(title: json["displayName"].stringValue, stats: [], loaded: true, seasons: seasons)
     }
 
     var seen: Set<String> = []
@@ -479,7 +502,7 @@ func parseSplitsSeasonLine(from json: JSON) -> SplitsSeasonLine {
             display: values[index]
         ))
     }
-    return SplitsSeasonLine(title: json["displayName"].stringValue, stats: stats, loaded: true)
+    return SplitsSeasonLine(title: json["displayName"].stringValue, stats: stats, loaded: true, seasons: seasons)
 }
 
 // MARK: - Hockey
@@ -501,9 +524,13 @@ let hockeyGoalieStatNames = [
 
 /// Loads a hockey player's season line in `league`, from the athlete
 /// splits. See `hockeySheetStats(from:)`.
-func downloadHockeyPlayerStats(playerID: String, league: LeagueID) async -> SplitsSeasonLine {
+func downloadHockeyPlayerStats(
+    playerID: String,
+    league: LeagueID,
+    season: String? = nil
+) async -> SplitsSeasonLine {
     let json = await HTTPClient.shared.fetch(
-        league.athleteSplitsURL(athleteID: playerID)
+        athleteSplitsURL(league: league, athleteID: playerID, season: season)
     ).document ?? .null
     return parseSplitsSeasonLine(from: json)
 }
@@ -526,10 +553,11 @@ func hockeySheetStats(from line: SplitsSeasonLine) -> [PlayerSeasonStat] {
 func downloadBaseballPlayerStats(
     playerID: String,
     playerPosition: String,
-    league: LeagueID
+    league: LeagueID,
+    season: String? = nil
 ) async -> BaseballPlayerStats {
     let json = await HTTPClient.shared.fetch(
-        league.athleteSplitsURL(athleteID: playerID)
+        athleteSplitsURL(league: league, athleteID: playerID, season: season)
     ).document ?? .null
     return parseBaseballPlayerStats(from: json, playerPosition: playerPosition)
 }
@@ -548,6 +576,7 @@ func parseBaseballPlayerStats(from json: JSON, playerPosition: String) -> Baseba
     let names = json["names"].arrayValue.map(\.stringValue)
     let byName = !names.isEmpty && names.count == values.count
     var result = BaseballPlayerStats.empty
+    result.seasons = parseAthleteSeasons(from: json)
 
     let isPitcher = playerPosition.contains("Pitcher")
     let order = isPitcher ? baseballPitchingStatNames : baseballBattingStatNames
@@ -681,4 +710,277 @@ func parseSoccerPlayerStats(from json: JSON, playerPosition: String) -> SoccerPl
         assists: value("goalAssists"),
         shots: value("totalShots")
     )
+}
+
+// MARK: - Seasons
+
+/// One season an athlete document's `season` filter offers.
+struct AthleteSeason: Identifiable, Hashable, Sendable {
+    /// What the feed takes as `?season=`: the year the season ends,
+    /// `"2026"` for 2025-26.
+    var value: String
+    /// As the feed shows it: `"2025-26"`, or `"2026"` for a one-year season.
+    var label: String
+
+    var id: String { value }
+}
+
+/// The seasons a splits or game-log document's `filters` list, newest first
+/// as the feed orders them, and the one the document is for.
+///
+/// A document fetched for a past season lists only that season, so a sheet
+/// keeps the list from its first, current-season fetch.
+struct AthleteSeasons: Hashable, Sendable {
+    var options: [AthleteSeason]
+    /// The `value` of the season the document covers, if it says.
+    var selected: String?
+
+    static let empty = AthleteSeasons(options: [], selected: nil)
+}
+
+/// Reads the `season` entry of a document's `filters`. A document without
+/// one, or a failed fetch, offers no seasons.
+func parseAthleteSeasons(from json: JSON) -> AthleteSeasons {
+    let filter = json["filters"].arrayValue.first { $0["name"].stringValue == "season" } ?? .null
+    var seen: Set<String> = []
+    let options = filter["options"].arrayValue.compactMap { option -> AthleteSeason? in
+        let value = option["value"].stringValue
+        guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+        let label = option["displayValue"].stringValue
+        return AthleteSeason(value: value, label: label.isEmpty ? value : label)
+    }
+    let selected = filter["value"].stringValue
+    return AthleteSeasons(options: options, selected: selected.isEmpty ? nil : selected)
+}
+
+/// `url` for `season`, or as it is for `nil`: the feed's current season.
+private func seasonURL(_ url: String, season: String?) -> String {
+    guard let season, !season.isEmpty else { return url }
+    return "\(url)?season=\(season.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? season)"
+}
+
+/// An athlete's splits in `season`. See `seasonURL(_:season:)`.
+private func athleteSplitsURL(league: LeagueID, athleteID: String, season: String?) -> String {
+    seasonURL(league.athleteSplitsURL(athleteID: athleteID), season: season)
+}
+
+// MARK: - Game logs
+
+/// One stat column of a game log: the feed's `names`, `labels` and
+/// `displayNames` at one position.
+struct GameLogColumn: Identifiable, Hashable, Sendable {
+    /// The feed's name for it, e.g. `"passingYards"`.
+    var id: String
+    /// The column header, e.g. `"YDS"`.
+    var label: String
+    /// The full name VoiceOver reads, e.g. `"Passing Yards"`.
+    var displayName: String
+}
+
+/// One game in an athlete's game log.
+struct GameLogRow: Identifiable, Hashable, Sendable {
+    /// ESPN's event id.
+    var id: String
+    /// When the game started; `nil` if the feed's `gameDate` did not parse.
+    var date: Date?
+    var opponentID: String
+    /// `"Las Vegas Raiders"`.
+    var opponentName: String
+    /// `"LV"`.
+    var opponentAbbreviation: String
+    /// The feed's `atVs`: `"vs"` at home, `"@"` away.
+    var isHome: Bool
+    /// The feed's `gameResult` for the athlete's team: `"W"`, `"L"`, a
+    /// draw's letter, or empty for a game without one.
+    var result: String
+    /// Winner's score first, as the feed gives it: `"30-27"`, `"33-30 OT"`.
+    var score: String
+    /// A postseason game's `eventNote`, e.g. `"East 1st Round - Game 6"`.
+    var note: String
+    /// The season type the game is filed under, e.g. `"2025-26 Postseason"`.
+    var seasonType: String
+    /// The athlete's line in the game, by the document's `names`, as the
+    /// feed displays it: `["passingYards": "225", "completionPct": "50.0"]`.
+    var stats: [String: String]
+
+    /// `"W 30-27"`, or whichever half the feed gave.
+    var resultSummary: String {
+        [result, score].filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    /// `"@ LV"` or `"vs LV"`, the full name standing in for a missing
+    /// abbreviation.
+    var opponentSummary: String {
+        let opponent = opponentAbbreviation.isEmpty ? opponentName : opponentAbbreviation
+        return "\(isHome ? "vs" : "@") \(opponent)"
+    }
+}
+
+/// An athlete's game log in one season: every game the feed lists, newest
+/// first.
+struct AthleteGameLog: Hashable, Sendable {
+    /// Feed order.
+    var columns: [GameLogColumn]
+    /// Newest first.
+    var rows: [GameLogRow]
+    /// The seasons the document offers. See `AthleteSeasons`.
+    var seasons: AthleteSeasons
+    /// Whether the fetch has finished; lets a view tell "loading" from
+    /// "nothing to show".
+    var loaded: Bool
+
+    static let empty = AthleteGameLog(columns: [], rows: [], seasons: .empty, loaded: false)
+
+    /// The three or four columns a compact row shows, under the spec's own
+    /// headers (the NFL's `labels` call both passing and rushing yards
+    /// "YDS"): the `gameLogHeadlineSpecs` entry this log has the most
+    /// columns of. A tie goes to the spec whose first column comes first in
+    /// the log, as the feed leads with a player's main line: a tight end's
+    /// receiving before his rushing. A log matching no spec in at least two
+    /// columns shows its first four.
+    var headlineColumns: [GameLogColumn] {
+        var positions: [String: Int] = [:]
+        for (index, column) in columns.enumerated() where positions[column.id] == nil {
+            positions[column.id] = index
+        }
+
+        var best: [GameLogColumn] = []
+        var bestLead = Int.max
+        for spec in gameLogHeadlineSpecs {
+            let picked = spec.compactMap { entry -> GameLogColumn? in
+                guard let index = positions[entry.name] else { return nil }
+                return GameLogColumn(id: entry.name, label: entry.label, displayName: columns[index].displayName)
+            }
+            let lead = picked.first.flatMap { positions[$0.id] } ?? Int.max
+            if picked.count > best.count || (picked.count == best.count && lead < bestLead) {
+                best = picked
+                bestLead = lead
+            }
+        }
+        return best.count >= 2 ? best : Array(columns.prefix(4))
+    }
+}
+
+/// The compact columns per kind of player, by the game-log `names` each
+/// sport's feed publishes (`{key}_gamelog_{id}.json`).
+private let gameLogHeadlineSpecs: [[(name: String, label: String)]] = [
+    // Football: passer, runner, receiver, defender, kicker.
+    [("passingYards", "YDS"), ("passingTouchdowns", "TD"), ("interceptions", "INT"), ("QBRating", "RTG")],
+    [("rushingAttempts", "CAR"), ("rushingYards", "YDS"), ("rushingTouchdowns", "TD"), ("receptions", "REC")],
+    [("receptions", "REC"), ("receivingYards", "YDS"), ("receivingTouchdowns", "TD"), ("receivingTargets", "TGT")],
+    [("totalTackles", "TOT"), ("sacks", "SACK"), ("interceptions", "INT"), ("passesDefended", "PD")],
+    [("fieldGoalsMade-fieldGoalAttempts", "FG"), ("longFieldGoalMade", "LNG"),
+     ("extraPointsMade-extraPointAttempts", "XP"), ("totalKickingPoints", "PTS")],
+    // Basketball.
+    [("points", "PTS"), ("totalRebounds", "REB"), ("assists", "AST"), ("minutes", "MIN")],
+    // Baseball: batter, pitcher.
+    [("atBats", "AB"), ("hits", "H"), ("homeRuns", "HR"), ("RBIs", "RBI")],
+    [("innings", "IP"), ("hits", "H"), ("earnedRuns", "ER"), ("strikeouts", "K")],
+    // Hockey: goaltender, skater.
+    [("saves", "SV"), ("goalsAgainst", "GA"), ("savePct", "SV%")],
+    [("goals", "G"), ("assists", "A"), ("points", "PTS"), ("plusMinus", "+/-")],
+    // Soccer.
+    [("totalGoals", "G"), ("goalAssists", "A"), ("totalShots", "SH"), ("shotsOnTarget", "SOT")],
+]
+
+/// Loads an athlete's game log in `league`: `season`'s, or the feed's
+/// current season's for `nil`. A failed fetch reads as a loaded, empty log.
+func downloadGameLog(athlete: String, league: LeagueID, season: String? = nil) async -> AthleteGameLog {
+    let json = await HTTPClient.shared.fetch(
+        seasonURL("\(league.athleteURL(athleteID: athlete))/gamelog", season: season)
+    ).document ?? .null
+    return parseGameLog(from: json)
+}
+
+/// Builds an athlete's game log from a game-log document. See
+/// `downloadGameLog`.
+///
+/// Every sport's document has the same shape. Top-level `names`, `labels`
+/// and `displayNames` name the stat columns; `seasonTypes[].categories[]`
+/// (a month, a playoff round, a whole season) list `events[]` of
+/// `{eventId, stats}`, the stats in `names` order; and the top-level
+/// `events` object keys each game's date, opponent and result by event id.
+/// The season types and their categories run newest first, and so do the
+/// rows here: the `events` object is unordered. A category of type
+/// `"total"` lists no events. A row whose game is missing from `events` is
+/// dropped, as is a game listed twice.
+func parseGameLog(from json: JSON) -> AthleteGameLog {
+    let names = json["names"].arrayValue.map(\.stringValue)
+    let labels = json["labels"].arrayValue.map(\.stringValue)
+    let displayNames = json["displayNames"].arrayValue.map(\.stringValue)
+
+    var columns: [GameLogColumn] = []
+    var seenColumns: Set<String> = []
+    for (index, name) in names.enumerated() where seenColumns.insert(name).inserted {
+        columns.append(GameLogColumn(
+            id: name,
+            label: index < labels.count ? labels[index] : name,
+            displayName: index < displayNames.count ? displayNames[index] : name
+        ))
+    }
+
+    let events = json["events"]
+    var seenEvents: Set<String> = []
+    var rows: [GameLogRow] = []
+    for seasonType in json["seasonTypes"].arrayValue {
+        let seasonName = seasonType["displayName"].stringValue
+        for category in seasonType["categories"].arrayValue {
+            for entry in category["events"].arrayValue {
+                let id = entry["eventId"].stringValue
+                let event = events[id]
+                guard !id.isEmpty, event.exists, seenEvents.insert(id).inserted else { continue }
+
+                var stats: [String: String] = [:]
+                for (name, value) in zip(names, entry["stats"].arrayValue) where stats[name] == nil {
+                    stats[name] = value.stringValue
+                }
+
+                let opponent = event["opponent"]
+                let atVs = event["atVs"].stringValue
+                rows.append(GameLogRow(
+                    id: id,
+                    date: parseGameLogDate(event["gameDate"].stringValue),
+                    opponentID: opponent["id"].stringValue,
+                    opponentName: opponent["displayName"].stringValue,
+                    opponentAbbreviation: opponent["abbreviation"].stringValue,
+                    // A game without `atVs` is placed by the home team's id.
+                    isHome: atVs.isEmpty
+                        ? event["homeTeamId"].stringValue == event["team"]["id"].stringValue
+                        : atVs != "@",
+                    result: event["gameResult"].stringValue,
+                    score: event["score"].stringValue,
+                    note: event["eventNote"].stringValue,
+                    seasonType: seasonName,
+                    stats: stats
+                ))
+            }
+        }
+    }
+
+    return AthleteGameLog(columns: columns, rows: rows, seasons: parseAthleteSeasons(from: json), loaded: true)
+}
+
+/// Readers for a game log's `gameDate`, `2026-10-04T20:25:00.000+00:00`,
+/// and the same without fractional seconds or seconds. Pinned to
+/// `en_US_POSIX` and the Gregorian calendar, as `makeEventDateParser` is.
+private let gameLogDateParsers: [DateFormatter] = [
+    "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+    "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+    "yyyy-MM-dd'T'HH:mmXXXXX",
+].map { format in
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = format
+    return formatter
+}
+
+/// The instant a game log's `gameDate` names, or `nil`.
+func parseGameLogDate(_ string: String) -> Date? {
+    guard !string.isEmpty else { return nil }
+    for parser in gameLogDateParsers {
+        if let date = parser.date(from: string) { return date }
+    }
+    return nil
 }

@@ -87,6 +87,7 @@ ATHLETES = [
 # "Last 5 games" card (R-10), one or two per sport.
 GAMELOGS = [
     ("nfl", "3139477", "Patrick Mahomes, Chiefs quarterback"),
+    ("nfl", "15847", "Travis Kelce, Chiefs tight end"),
     ("nba", "4869342", "Dyson Daniels, Hawks guard"),
     ("mlb", "42403", "Bobby Witt Jr., Royals shortstop"),
     ("mlb", "5136077", "Royals relief pitcher"),

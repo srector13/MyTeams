@@ -309,3 +309,229 @@ struct BaseballSeasonStatsTests {
         #expect(stats.saves == 0)
     }
 }
+
+// MARK: - Seasons
+
+@Suite("Player stats: the seasons a splits document offers", .tags(.golden))
+struct AthleteSeasonsTests {
+    @Test("The season filter's options, newest first, and the one the document is for")
+    func splitsSeasons() throws {
+        // nhl_splits_5080145.json filters: season value "2026", options
+        // 2026 "2025-26", 2025 "2024-25", 2024 "2023-24".
+        let line = parseSplitsSeasonLine(from: try Fixture.json("nhl_splits_5080145"))
+        #expect(line.seasons.options.map(\.value) == ["2026", "2025", "2024"])
+        #expect(line.seasons.options.map(\.label) == ["2025-26", "2024-25", "2023-24"])
+        #expect(line.seasons.selected == "2026")
+
+        // Every splits parser carries them.
+        let nba = parseBasketballPlayerStats(from: try Fixture.json("nba_splits_4869342"))
+        #expect(nba.seasons.options.map(\.value) == ["2026", "2025", "2024", "2023"])
+        let pitcher = parseBaseballPlayerStats(from: try Fixture.json("royals_splits_5136077"), playerPosition: "Relief Pitcher")
+        #expect(pitcher.seasons.options.map(\.label) == ["2026", "2025", "2024"])
+        let football = parseFootballPlayerStats(from: try Fixture.json("ncaaf_splits_5079604"))
+        #expect(football.seasons.options.map(\.value) == ["2026", "2025"])
+
+        // chiefs_splits_4912218.json lists one season: nothing to pick.
+        #expect(parseAthleteSeasons(from: try Fixture.json("chiefs_splits_4912218")).options.count == 1)
+    }
+
+    @Test("A document without a season filter, or a failed fetch, offers none")
+    func noSeasons() {
+        #expect(parseAthleteSeasons(from: .null) == .empty)
+        #expect(parseSplitsSeasonLine(from: .null).seasons == .empty)
+    }
+}
+
+// MARK: - Game logs
+
+/// A fixture `gameDate` as the instant it names, from its Unix time.
+private func utc(_ seconds: TimeInterval) -> Date { Date(timeIntervalSince1970: seconds) }
+
+@Suite("Player stats: game logs", .tags(.golden))
+struct GameLogTests {
+    @Test("NFL quarterback: newest first, opponent, result and the passing line")
+    func nflQuarterback() throws {
+        // nfl_gamelog_3139477.json (Patrick Mahomes): 2026 Regular Season,
+        // weeks 4 back to 1.
+        let log = parseGameLog(from: try Fixture.json("nfl_gamelog_3139477"))
+        #expect(log.loaded)
+        #expect(log.rows.map(\.id) == ["401872976", "401872952", "401872945", "401872931"])
+
+        let latest = try #require(log.rows.first)
+        #expect(latest.date == utc(1_791_145_500))  // 2026-10-04T20:25:00.000+00:00
+        #expect(latest.opponentID == "13")
+        #expect(latest.opponentName == "Las Vegas Raiders")
+        #expect(latest.opponentAbbreviation == "LV")
+        #expect(!latest.isHome)
+        #expect(latest.opponentSummary == "@ LV")
+        #expect(latest.result == "W")
+        #expect(latest.resultSummary == "W 30-27")
+        #expect(latest.seasonType == "2026 Regular Season")
+        #expect(latest.stats["passingYards"] == "225")
+        #expect(latest.stats["passingTouchdowns"] == "2")
+        #expect(latest.stats["QBRating"] == "97.2")
+        #expect(latest.stats.count == 16)
+
+        // Week 3 went to overtime at home.
+        let colts = log.rows[2]
+        #expect(colts.date == utc(1_789_950_000))  // 2026-09-21T00:20:00.000+00:00
+        #expect(colts.isHome && colts.opponentAbbreviation == "IND")
+        #expect(colts.resultSummary == "W 33-30 OT")
+        #expect(colts.stats["passingYards"] == "382")
+
+        #expect(log.headlineColumns.map(\.id) == ["passingYards", "passingTouchdowns", "interceptions", "QBRating"])
+        #expect(log.headlineColumns.map(\.label) == ["YDS", "TD", "INT", "RTG"])
+        #expect(log.headlineColumns.first?.displayName == "Passing Yards")
+        #expect(log.seasons.selected == "2026")
+    }
+
+    @Test("NFL tight end: the receiving line, though his rushing columns match as many")
+    func nflTightEnd() throws {
+        // nfl_gamelog_15847.json (Travis Kelce): receiving, then rushing.
+        let log = parseGameLog(from: try Fixture.json("nfl_gamelog_15847"))
+        #expect(log.headlineColumns.map(\.id) == ["receptions", "receivingYards", "receivingTouchdowns", "receivingTargets"])
+        let latest = try #require(log.rows.first)
+        #expect(latest.opponentAbbreviation == "LV")
+        #expect(latest.stats["receptions"] == "2")
+        #expect(latest.stats["receivingYards"] == "15")
+        #expect(latest.stats["receivingTargets"] == "4")
+    }
+
+    @Test("NBA: postseason before regular season before preseason")
+    func nba() throws {
+        // nba_gamelog_4869342.json (Dyson Daniels): 2025-26 Postseason
+        // (Conference Quarterfinals ×6, an empty "total" category), Regular
+        // Season (april … october, 76), Preseason (2).
+        let log = parseGameLog(from: try Fixture.json("nba_gamelog_4869342"))
+        #expect(log.rows.count == 84)
+
+        let latest = try #require(log.rows.first)
+        #expect(latest.id == "401869393")
+        #expect(latest.date == utc(1_777_590_000))  // 2026-04-30T23:00:00.000+00:00
+        #expect(latest.opponentID == "18")
+        #expect(latest.opponentName == "New York Knicks")
+        #expect(latest.isHome)
+        #expect(latest.resultSummary == "L 140-89")
+        #expect(latest.note == "East 1st Round - Game 6")
+        #expect(latest.seasonType == "2025-26 Postseason")
+        #expect(latest.stats["points"] == "3")
+        #expect(latest.stats["fieldGoalsMade-fieldGoalsAttempted"] == "1-4")
+        #expect(latest.stats["minutes"] == "15")
+
+        #expect(log.rows[1].stats["points"] == "17")
+        #expect(log.rows[1].opponentSummary == "@ NY")
+
+        let regular = log.rows[6]
+        #expect(regular.id == "401811028")
+        #expect(regular.seasonType == "2025-26 Regular Season")
+        #expect(regular.opponentAbbreviation == "CLE" && regular.resultSummary == "W 124-102")
+        #expect(regular.note.isEmpty)
+
+        #expect(log.rows.last?.id == "401812679")
+        #expect(log.rows.last?.seasonType == "2025-26 Preseason")
+
+        #expect(log.headlineColumns.map(\.id) == ["points", "totalRebounds", "assists", "minutes"])
+        #expect(log.seasons.options.first?.value == "2027")
+        #expect(log.seasons.selected == "2026")
+    }
+
+    @Test("MLB batter: AB, H, HR, RBI, and the running slash line in each row")
+    func mlbBatter() throws {
+        // mlb_gamelog_42403.json (Bobby Witt Jr.): 2026 Regular Season,
+        // september … march, 144 games.
+        let log = parseGameLog(from: try Fixture.json("mlb_gamelog_42403"))
+        #expect(log.rows.count == 144)
+
+        let latest = try #require(log.rows.first)
+        #expect(latest.id == "401817109")
+        #expect(latest.date == utc(1_790_536_200))  // 2026-09-27T19:10:00.000+00:00
+        #expect(latest.opponentID == "5" && latest.opponentAbbreviation == "CLE")
+        #expect(latest.isHome)
+        #expect(latest.resultSummary == "W 3-2")
+        #expect(latest.stats["atBats"] == "4")
+        #expect(latest.stats["hits"] == "0")
+        #expect(latest.stats["avg"] == ".281")
+        #expect(latest.stats["OPS"] == ".800")
+
+        let previous = log.rows[1]
+        #expect(previous.date == utc(1_790_464_200))  // 2026-09-26T23:10:00.000+00:00
+        #expect(previous.resultSummary == "L 11-5")
+        #expect(previous.stats["hits"] == "2" && previous.stats["doubles"] == "1")
+
+        #expect(log.headlineColumns.map(\.id) == ["atBats", "hits", "homeRuns", "RBIs"])
+        #expect(log.headlineColumns.map(\.label) == ["AB", "H", "HR", "RBI"])
+    }
+
+    @Test("MLB pitcher: the pitching line, by name")
+    func mlbPitcher() throws {
+        // mlb_gamelog_5136077.json (Royals reliever): six games.
+        let log = parseGameLog(from: try Fixture.json("mlb_gamelog_5136077"))
+        #expect(log.rows.count == 6)
+        let latest = try #require(log.rows.first)
+        #expect(latest.id == "401817094")
+        #expect(latest.stats["innings"] == "0.2")
+        #expect(latest.stats["walks"] == "2")
+        #expect(latest.stats["ERA"] == "9.39")
+        #expect(log.rows[3].stats["saves-blownSaves-holds"] == "HLD(1)")
+        #expect(log.headlineColumns.map(\.id) == ["innings", "hits", "earnedRuns", "strikeouts"])
+    }
+
+    @Test("NHL: a skater's and a goalie's lines in the same three games")
+    func nhl() throws {
+        // nhl_gamelog_5080145.json (Cutter Gauthier) and
+        // nhl_gamelog_4588165.json (Lukas Dostal): 2026-27, October.
+        let skater = parseGameLog(from: try Fixture.json("nhl_gamelog_5080145"))
+        #expect(skater.rows.map(\.opponentAbbreviation) == ["EDM", "FLA", "VGK"])
+        let latest = try #require(skater.rows.first)
+        #expect(latest.date == utc(1_791_424_800))  // 2026-10-08T02:00:00.000+00:00
+        #expect(latest.isHome && latest.resultSummary == "L 5-2")
+        #expect(latest.stats["plusMinus"] == "-2")
+        #expect(latest.stats["timeOnIcePerGame"] == "24:10")
+        #expect(skater.rows[1].resultSummary == "W 3-2 OT")
+        #expect(skater.rows[1].stats["goals"] == "2")
+        #expect(skater.headlineColumns.map(\.id) == ["goals", "assists", "points", "plusMinus"])
+
+        let goalie = parseGameLog(from: try Fixture.json("nhl_gamelog_4588165"))
+        #expect(goalie.rows.first?.stats["saves"] == "12")
+        #expect(goalie.rows.first?.stats["savePct"] == ".706")
+        #expect(goalie.headlineColumns.map(\.id) == ["saves", "goalsAgainst", "savePct"])
+    }
+
+    @Test("EPL: five league matches with goals, assists and shots")
+    func epl() throws {
+        // epl_gamelog_280555.json (Bukayo Saka): 2026-27 English Premier League.
+        let log = parseGameLog(from: try Fixture.json("epl_gamelog_280555"))
+        #expect(log.rows.map(\.opponentAbbreviation) == ["BHA", "SUN", "CHE", "AVL", "COV"])
+        let latest = try #require(log.rows.first)
+        #expect(latest.date == utc(1_789_826_400))  // 2026-09-19T14:00:00.000+00:00
+        #expect(latest.opponentID == "331" && latest.opponentName == "Brighton & Hove Albion")
+        #expect(!latest.isHome)
+        #expect(latest.resultSummary == "L 3-0")
+        #expect(latest.stats["totalShots"] == "2")
+        #expect(log.rows[1].stats["totalGoals"] == "1")
+        #expect(log.headlineColumns.map(\.id) == ["totalGoals", "goalAssists", "totalShots", "shotsOnTarget"])
+    }
+
+    @Test("A failed fetch is a loaded, empty log; an unknown line shows its first columns")
+    func edges() {
+        let failed = parseGameLog(from: .null)
+        #expect(failed.loaded && failed.rows.isEmpty && failed.headlineColumns.isEmpty)
+
+        let document = JSON(data: Data("""
+        {"names": ["a", "b", "c", "d", "e"], "labels": ["A", "B", "C", "D", "E"],
+         "events": {"1": {"atVs": "@", "gameDate": "2026-10-04T20:25Z", "score": "1-1", "gameResult": "D"}},
+         "seasonTypes": [{"displayName": "S", "categories": [
+           {"type": "event", "events": [{"eventId": "1", "stats": ["1", "2", "3", "4", "5"]},
+                                        {"eventId": "1", "stats": ["9", "9", "9", "9", "9"]},
+                                        {"eventId": "2", "stats": ["9", "9", "9", "9", "9"]}]},
+           {"type": "total", "totals": ["1", "2", "3", "4", "5"]}]}]}
+        """.utf8))
+        let log = parseGameLog(from: document)
+        // The repeat of game 1 and game 2, missing from `events`, are dropped.
+        #expect(log.rows.count == 1)
+        #expect(log.rows.first?.stats["a"] == "1")
+        #expect(log.rows.first?.date == utc(1_791_145_500))
+        #expect(log.rows.first?.resultSummary == "D 1-1")
+        #expect(log.headlineColumns.map(\.label) == ["A", "B", "C", "D"])
+    }
+}
