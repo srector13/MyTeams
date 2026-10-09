@@ -123,6 +123,12 @@ enum WidgetScheduleLoader {
     /// How soon a widget showing a game under way looks again.
     static let liveRefreshInterval: TimeInterval = 5 * 60
 
+    /// How old a stored schedule (`FeedCache`, R-4) may be and still be used
+    /// without asking ESPN: a timeline reload within it reads the disk. Older,
+    /// the network is asked, and the stored copy answers when it can't be
+    /// reached.
+    static let scheduleCacheMaxAge: TimeInterval = 5 * 60
+
     /// Loads the game a team's widget features: the one under way, else
     /// today's result, else the next fixture (`WidgetFeaturedGame.pick`).
     ///
@@ -132,7 +138,9 @@ enum WidgetScheduleLoader {
     /// repeating it, which is what the per-team loaders here used to do with
     /// a thousand lines of hand-written models apiece.
     static func featuredGame(for team: TeamRef, now: Date = Date()) async -> WidgetLoadResult {
-        let result = await downloadScheduleData(team: team)
+        let result = await HTTPClient.withFeedCache(.preferCache(maxAge: scheduleCacheMaxAge)) {
+            await downloadScheduleData(team: team)
+        }.value
         let schedule: [Game]?
         if case .success(let games) = result {
             schedule = games
