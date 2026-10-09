@@ -26,14 +26,26 @@ struct TeamEntity: AppEntity {
     /// `TeamRef.id`, e.g. `"football/nfl:12"`.
     let id: String
     let team: TeamRef
+    /// A status line added to the subtitle: the widget's configuration
+    /// sheet is drawn by the system, and its suggestions are the one place
+    /// it can say the shared data is unreachable (`SharedDataStatus`).
+    let note: String?
 
     init(team: TeamRef) {
+        self.init(team: team, note: nil)
+    }
+
+    init(team: TeamRef, note: String?) {
         self.id = team.id
         self.team = team
+        self.note = note
     }
 
     var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(team.displayName)", subtitle: "\(team.league.badge)")
+        if let note {
+            return DisplayRepresentation(title: "\(team.displayName)", subtitle: "\(team.league.badge) · \(note)")
+        }
+        return DisplayRepresentation(title: "\(team.displayName)", subtitle: "\(team.league.badge)")
     }
 }
 
@@ -53,8 +65,19 @@ struct TeamEntityQuery: EntityStringQuery {
         return entities
     }
 
+    /// The favorites; without the App Group, the bundled teams, each
+    /// marked "Shared data unavailable", since the favorites cannot be read.
+    /// A team chosen here is kept by the system, so the widget still shows
+    /// it.
     func suggestedEntities() async throws -> [TeamEntity] {
-        await WidgetTeams.favorites().map(TeamEntity.init(team:))
+        let note = Self.suggestionNote(SharedContainer.live.status)
+        return await WidgetTeams.favorites().map { TeamEntity(team: $0, note: note) }
+    }
+
+    /// The status line the suggestions carry: none while the shared data
+    /// can be read.
+    static func suggestionNote(_ status: SharedDataStatus) -> String? {
+        status.isAvailable ? nil : SharedDataStatus.unavailableCaption
     }
 
     /// Searches the leagues of the reader's favorites, plus every listed

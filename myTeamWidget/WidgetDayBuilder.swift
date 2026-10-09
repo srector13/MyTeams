@@ -14,8 +14,8 @@ import Foundation
 
 /// One game in the "My Day" widget: a favorite's game under way, today's, or
 /// the next one.
-struct WidgetDayRow: Identifiable, Hashable, Sendable {
-    enum Kind: Hashable, Sendable {
+struct WidgetDayRow: Identifiable, Hashable, Sendable, Codable {
+    enum Kind: Hashable, Sendable, Codable {
         /// Under way, from a fresh scoreboard snapshot.
         case live
         /// Today's: finished, or still to start.
@@ -302,5 +302,109 @@ struct WidgetDayBuilder: Sendable {
     static func broadcast(_ channel: String) -> String? {
         let channel = channel.trimmingCharacters(in: .whitespacesAndNewlines)
         return channel.isEmpty || channel == "TBD" ? nil : channel
+    }
+}
+
+// MARK: - Degrading
+
+/// The Team Schedule tile's text as last built from real data, kept so a
+/// reload that fails shows it, dated, rather than nothing. The crests are
+/// read again from `LogoStore` when it is shown.
+struct WidgetCachedGame: Codable, Hashable, Sendable {
+    var teamName: String
+    var gameDate: String
+    var gameTime: String
+    var gameChannel: String?
+    var message: String?
+    var inline: String
+}
+
+/// A widget's last content built from real data, and when.
+struct WidgetLastGood<Value: Codable>: Codable {
+    var value: Value
+    var savedAt: Date
+}
+
+/// Keeps each widget's last good content in the widget process's own
+/// defaults (`.standard`), never the App Group's, so it is there whether or
+/// not the install's signing profile carries the group.
+enum WidgetLastGoodStore {
+    static let dayKey = "widgetLastGood.day"
+
+    static func teamKey(_ id: TeamRef.ID) -> String {
+        "widgetLastGood.team.\(id)"
+    }
+
+    static func save<Value: Codable>(_ value: Value, at date: Date, key: String, in defaults: UserDefaults = .standard) {
+        guard let data = try? JSONEncoder().encode(WidgetLastGood(value: value, savedAt: date)) else { return }
+        defaults.set(data, forKey: key)
+    }
+
+    /// The content saved under `key`; `nil` when none was, or it no longer
+    /// decodes.
+    static func load<Value: Codable>(
+        _ type: Value.Type,
+        key: String,
+        from defaults: UserDefaults = .standard
+    ) -> WidgetLastGood<Value>? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(WidgetLastGood<Value>.self, from: data)
+    }
+}
+
+/// Where a widget's content came from.
+enum WidgetContentSource: Hashable, Sendable {
+    /// Built just now from real data.
+    case fresh
+    /// The last good copy, built at `since`.
+    case cached(since: Date)
+    /// Nothing to show: the caller draws its own labelled placeholder
+    /// ("Couldn't update", "Shared data unavailable").
+    case placeholder
+}
+
+/// What a widget's timeline shows: real data, else the last good copy with
+/// its age, else the caller's labelled placeholder; never blank, and never
+/// passing a copy or a guess off as current. `note` is the caption-sized
+/// line the widget draws under its content.
+struct WidgetContent<Value: Codable> {
+    var value: Value?
+    var source: WidgetContentSource
+    var note: String?
+
+    static func plan(
+        fresh: Value?,
+        lastGood: WidgetLastGood<Value>?,
+        shared: SharedDataStatus,
+        now: Date,
+        calendar: Calendar = .autoupdatingCurrent
+    ) -> WidgetContent {
+        // Without the group the app's live scores never reach the widget,
+        // so even fresh content says so.
+        let sharedNote = shared.isAvailable ? nil : SharedDataStatus.unavailableCaption
+        if let fresh {
+            return WidgetContent(value: fresh, source: .fresh, note: sharedNote)
+        }
+        if let lastGood {
+            return WidgetContent(
+                value: lastGood.value,
+                source: .cached(since: lastGood.savedAt),
+                note: SharedDataStatus.dataFrom(lastGood.savedAt, now: now, calendar: calendar)
+            )
+        }
+        return WidgetContent(value: nil, source: .placeholder, note: sharedNote)
+    }
+}
+
+/// Why a widget has no team to show.
+enum WidgetMissingTeam: Hashable, Sendable {
+    /// None chosen and none followed: the widget asks for one.
+    case noneFollowed
+    /// None chosen, and the favorites cannot be read: the App Group is
+    /// unreachable, so "Add Teams" would be wrong.
+    case sharedUnavailable
+
+    init(shared: SharedDataStatus) {
+        self = shared.isAvailable ? .noneFollowed : .sharedUnavailable
     }
 }

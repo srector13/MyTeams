@@ -46,6 +46,11 @@ struct WidgetGame: Sendable {
     /// (R-9): "KC 21–17 Q3", "KC vs BUF 7:20 PM" (`WidgetDayBuilder`).
     var inline: String = ""
 
+    /// A caption-sized line under the content, when it is not the whole
+    /// story: "Data from 3:42 PM" for a kept copy, or the App Group being
+    /// unreachable (`WidgetContent.note`).
+    var note: String? = nil
+
     /// The followed team's colour, or a stable fallback when the feed gives
     /// none: the fill `teamInk(on:)` picks its ink against.
     var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
@@ -84,6 +89,37 @@ struct WidgetGame: Sendable {
     /// none (`GameCardContent.broadcast(of:)`).
     static func broadcast(_ channel: String) -> String? {
         WidgetDayBuilder.broadcast(channel)
+    }
+}
+
+// In an extension, so the memberwise initializer stays.
+extension WidgetGame {
+    /// The text kept as the tile's last good copy (`WidgetLastGoodStore`).
+    var cached: WidgetCachedGame {
+        WidgetCachedGame(
+            teamName: teamName,
+            gameDate: gameDate,
+            gameTime: gameTime,
+            gameChannel: gameChannel,
+            message: message,
+            inline: inline
+        )
+    }
+
+    /// A kept copy, drawn again over the followed team's stored crest. The
+    /// opponent's crest is not kept; the tiles do without it.
+    init(cached: WidgetCachedGame, team: TeamRef) {
+        self.init(
+            backgroundLogo: WidgetScheduleLoader.storedCrest(for: team),
+            teamName: cached.teamName,
+            gameDate: cached.gameDate,
+            gameTime: cached.gameTime,
+            gameChannel: cached.gameChannel,
+            teamLogo: nil,
+            team: team,
+            message: cached.message,
+            inline: cached.inline
+        )
     }
 }
 
@@ -147,7 +183,7 @@ enum WidgetScheduleLoader {
 
         let featured = WidgetFeaturedGame.pick(
             teamID: team.id,
-            snapshots: WidgetScoreboardCodec.read(),
+            snapshots: SharedContainer.live.scoreboardSnapshots(),
             schedule: schedule ?? [],
             now: now
         )
@@ -242,6 +278,24 @@ enum WidgetScheduleLoader {
         }
     }
 
+    /// The favorites' seasons, giving up after `deadline` with none, so a
+    /// stalled network cannot outlast the extension's time to build a
+    /// timeline. The caller treats none as a failed load.
+    static func seasons(for teams: [TeamRef], within deadline: Duration) async -> [TeamRef.ID: [Game]] {
+        await withTaskGroup(of: [TeamRef.ID: [Game]]?.self) { group in
+            group.addTask {
+                await WidgetScheduleLoader.seasons(for: teams)
+            }
+            group.addTask {
+                try? await Task.sleep(for: deadline)
+                return nil
+            }
+            let first = await group.next()
+            group.cancelAll()
+            return (first ?? nil) ?? [:]
+        }
+    }
+
     /// The pixel size "My Day" reads crests at: its rows draw them at 28 pt,
     /// and a large timeline holds up to twelve, so the stored 256 px
     /// (`LogoStore.maxPixelSize`) would spend the widget's memory budget for
@@ -280,10 +334,10 @@ enum WidgetScheduleLoader {
     ///
     /// The widget gallery wants its snapshot back within moments; a slow
     /// network should fall back to sample data rather than hold it up.
-    static func featuredGame(for team: TeamRef, within deadline: Duration) async -> WidgetLoadResult {
+    static func featuredGame(for team: TeamRef, now: Date = Date(), within deadline: Duration) async -> WidgetLoadResult {
         await withTaskGroup(of: WidgetLoadResult.self) { group in
             group.addTask {
-                await WidgetScheduleLoader.featuredGame(for: team)
+                await WidgetScheduleLoader.featuredGame(for: team, now: now)
             }
             group.addTask {
                 try? await Task.sleep(for: deadline)
