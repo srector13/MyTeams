@@ -248,6 +248,14 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
     /// widget.
     var logoAsset: String?
 
+    /// The college conference the team plays in, `"Big 12 Conference"`, as
+    /// the league's standings tree names it; `nil` for a pro team, a college
+    /// team the tree does not list (another division), or a catalog cached
+    /// before conferences were read. The teams feed carries no group data, so
+    /// `RemoteTeamCatalog` fills this in from the standings (R-5). Defaulted,
+    /// so a cache file or favorite written without it decodes unchanged.
+    var conference: String? = nil
+
     /// The stable key for persistence and widgets: `"<leaguePath>:<espnID>"`,
     /// e.g. `"football/nfl:12"`.
     var id: String { Self.id(league: league, espnID: espnID) }

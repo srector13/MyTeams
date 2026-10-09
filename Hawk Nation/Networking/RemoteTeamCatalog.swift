@@ -162,13 +162,21 @@ actor RemoteTeamCatalog {
 
     private func load(_ league: LeagueID) async -> [TeamRef] {
         let disk = cached[league] ?? readCache(league)
-        if let disk, isFresh(disk) {
+        // A college list with no conferences (cached before they were read,
+        // or when the standings could not be had) is refetched once a
+        // session rather than served for the rest of its week, so the
+        // browser's conference sections don't wait that long. Offline, the
+        // fetch fails and the cached list is served below as before.
+        if let disk, isFresh(disk), !Self.lacksConferences(disk.teams, league: league) {
             cached[league] = disk
             return disk.teams
         }
 
         if let document = await client.fetch(league.teamsURL).document {
-            let teams = Self.withSeedAssets(Self.parseTeams(document, league: league))
+            var teams = Self.withSeedAssets(Self.parseTeams(document, league: league))
+            if !teams.isEmpty, league.isCollege {
+                teams = Self.withConferences(teams, from: await conferences(for: league))
+            }
             if !teams.isEmpty {
                 let file = CacheFile(fetchedAt: now(), teams: teams)
                 cached[league] = file
@@ -185,6 +193,15 @@ actor RemoteTeamCatalog {
             return disk.teams
         }
         return TeamCatalog.all.filter { $0.league == league }
+    }
+
+    /// Each college team's conference, by ESPN id, from the league's
+    /// standings (`LeagueID.standingsURL`, the descriptor's division group,
+    /// current season). Empty when the standings can't be had; the list is
+    /// then cached without conferences, one section as before.
+    private func conferences(for league: LeagueID) async -> [String: String] {
+        guard let document = await client.fetch(league.standingsURL()).document else { return [:] }
+        return Self.parseConferences(document)
     }
 
     private func refreshSeeds(from teams: [TeamRef]) {
@@ -220,6 +237,54 @@ actor RemoteTeamCatalog {
                 logoAsset: nil
             )
         }
+    }
+
+    /// Reads a standings tree (`parseStandings`' document) as each team's
+    /// conference: every team id anywhere under one of the root's
+    /// `children`, mapped to that child's `name`.
+    ///
+    /// The conference is the root's child, not the node holding the table:
+    /// college football's Sun Belt keeps its teams a level down, in
+    /// `"Sun Belt - East"` and `"Sun Belt - West"`, and both are the
+    /// `"Sun Belt Conference"`. A team listed twice keeps its first
+    /// conference.
+    static func parseConferences(_ document: JSON) -> [String: String] {
+        var conferences: [String: String] = [:]
+
+        func collect(_ node: JSON, into name: String) {
+            for (_, entry) in node["standings"]["entries"] {
+                let id = entry["team"]["id"].stringValue
+                if !id.isEmpty, conferences[id] == nil {
+                    conferences[id] = name
+                }
+            }
+            for (_, child) in node["children"] {
+                collect(child, into: name)
+            }
+        }
+
+        for (_, conference) in document["children"] {
+            let name = conference["name"].stringValue
+            guard !name.isEmpty else { continue }
+            collect(conference, into: name)
+        }
+        return conferences
+    }
+
+    /// `teams`, each with its conference from `conferences` (by ESPN id),
+    /// or `nil` where none is listed.
+    static func withConferences(_ teams: [TeamRef], from conferences: [String: String]) -> [TeamRef] {
+        teams.map { team in
+            var team = team
+            team.conference = conferences[team.espnID]
+            return team
+        }
+    }
+
+    /// Whether a college list predates conferences: not one team has one.
+    /// A pro list never has any and is never short of them.
+    static func lacksConferences(_ teams: [TeamRef], league: LeagueID) -> Bool {
+        league.isCollege && !teams.isEmpty && teams.allSatisfy { $0.conference == nil }
     }
 
     /// Gives the seed teams in a fetched list their bundled crest name, so

@@ -449,6 +449,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 /// divisions) offers the others from the header's menu. A soccer table marks
 /// the zones its feed notes (qualification, relegation) in their colours,
 /// with a legend beneath.
+///
+/// The header names the season the tables are for (`"2026-27"`), which is
+/// not always the one under way. A college league's rows prefix ranked
+/// teams with their poll rank, `"#7 Kansas"` (`PollRanks`, R-5).
 struct StandingsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let team: TeamRef
@@ -456,6 +460,9 @@ struct StandingsSection<Player: RosterPlayer>: View {
     /// The table on show, when the reader has picked one other than the
     /// team's own.
     @State private var selectedGroupID: StandingsGroup.ID?
+
+    /// The league's poll, for a college league; empty otherwise.
+    @State private var pollRanks = PollRanks.empty
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -467,6 +474,8 @@ struct StandingsSection<Player: RosterPlayer>: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .accessibilityLabel("Season \(season)")
+                        .accessibilityIdentifier("standings.season")
                 }
                 if let standings = model.standings, standings.groups.count > 1 {
                     GlassEffectContainer(spacing: Theme.Spacing.s) {
@@ -490,7 +499,8 @@ struct StandingsSection<Player: RosterPlayer>: View {
                     group: group,
                     league: team.league,
                     followedID: team.espnID,
-                    teamColor: team.color
+                    teamColor: team.color,
+                    pollRanks: pollRanks
                 )
                 .padding([.horizontal, .bottom])
             } else {
@@ -511,6 +521,9 @@ struct StandingsSection<Player: RosterPlayer>: View {
             }
         }
         .contentCard()
+        .task(id: team.league) {
+            pollRanks = await PollRankStore.shared.ranks(for: team.league)
+        }
     }
 
     /// The reader's pick, else the team's own table, else the first — a
@@ -530,8 +543,12 @@ private struct StandingsTable: View {
     let league: LeagueID
     let followedID: String
     let teamColor: Color
+    /// The league's poll, whose ranks prefix the team names (R-5). A poll
+    /// table already ranks its rows in the # column, so it prefixes none.
+    var pollRanks: PollRanks = .empty
 
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Opens a row's team page (t_8d15e070); absent in previews.
     @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
@@ -561,7 +578,8 @@ private struct StandingsTable: View {
                 points,
             ]
         case .records where group.entries.first?.record.format == .winLossOvertimeLoss:
-            return [wins, losses, Column(title: "OTL") { "\($0.record.overtimeLosses)" }, points]
+            let otl = Column(title: "OTL") { "\($0.record.overtimeLosses)" }
+            return [wins, losses, otl, points] + extraColumns
         case .records:
             var columns = [wins, losses]
             // Ties only where someone has one (an NFL or college season).
@@ -569,9 +587,23 @@ private struct StandingsTable: View {
                 columns.append(Column(title: "T") { "\($0.record.ties)" })
             }
             columns.append(Column(title: "GB") { $0.gamesBehind })
-            return columns
+            return columns + extraColumns
         case .rankings:
             return [Column(title: "Record") { $0.record.summary }]
+        }
+    }
+
+    /// The conference-record and streak columns, after the table's own,
+    /// where the feed fills them in (R-5). See
+    /// `StandingsGroup.extraColumns(kind:isAccessibilitySize:)`.
+    private var extraColumns: [Column] {
+        group.extraColumns(kind: kind, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize).map { extra -> Column in
+            switch extra {
+            case .conferenceRecord:
+                return Column(title: "Conf") { $0.conferenceRecord }
+            case .streak:
+                return Column(title: "Strk") { $0.streak }
+            }
         }
     }
 
@@ -645,7 +677,7 @@ private struct StandingsTable: View {
                         }
                     HStack(spacing: Theme.Spacing.s) {
                         TeamLogo(team: crestTeam(for: entry), size: crestSize)
-                        Text(entry.shortName.isEmpty ? entry.name : entry.shortName)
+                        Text(rowName(entry))
                             .lineLimit(1)
                         // After the name, so the names stay in one column.
                         if followed {
@@ -680,6 +712,14 @@ private struct StandingsTable: View {
                 }
             }
         }
+    }
+
+    /// The row's team name, `"#7 Kansas"` when the league's poll ranks it.
+    /// A poll's own table shows the rank in its # column instead.
+    private func rowName(_ entry: StandingsEntry) -> String {
+        let name = entry.shortName.isEmpty ? entry.name : entry.shortName
+        guard kind != .rankings else { return name }
+        return pollRanks.prefixed(name, teamID: entry.teamID)
     }
 
     /// Whether a tap on the row opens its team's page: any team but the
@@ -736,7 +776,33 @@ extension StandingsEntry {
     }
 }
 
+/// A standings column a table draws only where the feed fills it in (R-5).
+enum StandingsExtraColumn: Hashable, Sendable {
+    /// The record against the team's own conference, "Conf": `"8-10"`.
+    case conferenceRecord
+    /// The current run, "Strk": `"W4"`.
+    case streak
+}
+
 extension StandingsGroup {
+    /// The optional columns this table draws after its own, in order:
+    /// conference record, then streak, each only when some row has a value
+    /// for it. A record table only (basketball, football, hockey): a soccer
+    /// table already fills the width with its five, and a poll keeps no
+    /// such columns. None at accessibility text sizes, where the table
+    /// keeps today's columns and already scrolls sideways.
+    func extraColumns(kind: StandingsKind, isAccessibilitySize: Bool) -> [StandingsExtraColumn] {
+        guard kind == .records, !isAccessibilitySize else { return [] }
+        var columns: [StandingsExtraColumn] = []
+        if entries.contains(where: { !$0.conferenceRecord.isEmpty }) {
+            columns.append(.conferenceRecord)
+        }
+        if entries.contains(where: { !$0.streak.isEmpty }) {
+            columns.append(.streak)
+        }
+        return columns
+    }
+
     /// The table's zones for its legend: each note once, in the order the
     /// rows first reach it, top of the table first.
     var zones: [StandingsZone] {
@@ -837,22 +903,35 @@ struct TeamHeaderSummary: Equatable, Sendable {
     var standing: String?
     /// The next game still to be played, `"vs Raiders · Sun, Oct 12"`.
     var nextGame: String?
+    /// The last five decided league games, oldest first, drawn as W/D/L
+    /// capsules beside the record (`scheduleForm`, R-5). Empty before any.
+    var form: [Record.Outcome]
 
-    init(record: String? = nil, standing: String? = nil, nextGame: String? = nil) {
+    init(record: String? = nil, standing: String? = nil, nextGame: String? = nil, form: [Record.Outcome] = []) {
         self.record = record
         self.standing = standing
         self.nextGame = nextGame
+        self.form = form
     }
 
     /// The summary from a team page's model: `record` as the schedule
-    /// section counts it, the team's row in `standings`, and
-    /// `games[nextGame]` if it's still to be played.
+    /// section counts it, the team's row in `standings`, `games[nextGame]`
+    /// if it's still to be played, and the form from the same games the
+    /// record is counted from.
     init(team: TeamRef, games: [Game], nextGame: Int, record: Record, standings: Standings?) {
         self.record = games.isEmpty ? nil : record.summary
         self.standing = standings.flatMap {
             Self.standing(of: team.espnID, in: $0, leagueName: team.league.descriptor.displayName)
         }
         self.nextGame = Self.upcoming(games: games, nextGame: nextGame)
+        self.form = scheduleForm(games: games, league: team.league)
+    }
+
+    /// `"Last 5: won, won, lost, drew, won"`, oldest first, for VoiceOver;
+    /// `nil` with no form.
+    var formAccessibilityLabel: String? {
+        guard !form.isEmpty else { return nil }
+        return "Last \(form.count): " + form.map(\.spokenName).joined(separator: ", ")
     }
 
     /// The record and standing on one line, `"10-6 · 3rd in AFC West"`.
@@ -894,16 +973,35 @@ struct TeamHeaderSummary: Equatable, Sendable {
 /// name (`TeamBarTitle`): the team's record, standing and next game. Drawn
 /// in the ink for the team colour (`teamInk(on:)`). Plain scrolling
 /// content: it scrolls under the bar with the cards, never over them.
+///
+/// A college team in its league's poll leads the record with its rank,
+/// `"#7"`, and the last five results follow it as W/D/L capsules (R-5);
+/// where the line can't hold both, the capsules go beneath it.
 struct TeamPageHeader: View {
     let team: TeamRef
     let summary: TeamHeaderSummary
 
+    /// The league's poll, for a college team; empty otherwise.
+    @State private var pollRanks = PollRanks.empty
+
+    /// The team's poll rank, or `nil` unranked.
+    private var pollRank: Int? {
+        pollRanks.rank(of: team.espnID)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            if let recordLine = summary.recordLine {
-                Text(recordLine)
-                    .font(.headline)
-                    .monospacedDigit()
+            if summary.recordLine != nil || pollRank != nil || !summary.form.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Spacing.s) {
+                        rankAndRecord
+                        formGuide
+                    }
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        rankAndRecord
+                        formGuide
+                    }
+                }
             }
 
             if let nextGame = summary.nextGame {
@@ -918,6 +1016,75 @@ struct TeamPageHeader: View {
         .padding(.bottom, Theme.Spacing.xl)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("teamPage.summary")
+        .task(id: team.id) {
+            pollRanks = await PollRankStore.shared.ranks(for: team.league)
+        }
+    }
+
+    /// `"#7 4-0 · 16th in Big 12 Conference"`: the poll rank, where there
+    /// is one, before the record line.
+    @ViewBuilder
+    private var rankAndRecord: some View {
+        let recordLine = summary.recordLine
+        if pollRank != nil || recordLine != nil {
+            HStack(spacing: Theme.Spacing.xs) {
+                if let pollRank {
+                    Text(PollRanks.badge(rank: pollRank) ?? "")
+                        .fontWeight(.heavy)
+                        .accessibilityLabel(
+                            pollRanks.pollName.isEmpty
+                                ? "Ranked number \(pollRank)"
+                                : "Ranked number \(pollRank) in \(pollRanks.pollName)"
+                        )
+                }
+                if let recordLine {
+                    Text(recordLine)
+                }
+            }
+            .font(.headline)
+            .monospacedDigit()
+        }
+    }
+
+    /// The last five results as capsules, oldest first. The letter carries
+    /// the result; the fill only echoes it (a win solid, a draw faint, a
+    /// loss outlined), in the header's ink so it reads on any team colour.
+    @ViewBuilder
+    private var formGuide: some View {
+        if let label = summary.formAccessibilityLabel {
+            HStack(spacing: 3) {
+                ForEach(Array(summary.form.enumerated()), id: \.offset) { _, outcome in
+                    FormCapsule(outcome: outcome)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("teamPage.form")
+        }
+    }
+}
+
+/// One result in a form guide: its letter in a small capsule.
+private struct FormCapsule: View {
+    let outcome: Record.Outcome
+
+    var body: some View {
+        Text(outcome.letter)
+            .font(.caption2.weight(.bold))
+            .monospaced()
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            // An unstyled shape takes the foreground style: the header's ink.
+            .background {
+                switch outcome {
+                case .win:
+                    Capsule().opacity(0.3)
+                case .draw:
+                    Capsule().opacity(0.12)
+                case .loss:
+                    Capsule().strokeBorder(lineWidth: 1).opacity(0.5)
+                }
+            }
     }
 }
 

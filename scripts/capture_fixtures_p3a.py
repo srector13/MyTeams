@@ -55,6 +55,11 @@ KEEP_STANDINGS_CHILDREN = {
     "ncaaw": ["aeast", "big12"],
 }
 
+# A rankings document carries every poll (five for FBS), each with a $ref
+# season blob per rank. Keep the AP poll plus the first other poll, each
+# cut to this many ranks.
+KEEP_RANKS = 25
+
 _last_request = 0.0
 
 
@@ -123,6 +128,21 @@ def trim_standings(document, keep_abbreviations):
     return f"{len(children)} → {len(kept)} children"
 
 
+def trim_rankings(document):
+    """Keeps the AP poll (`type == "ap"`) and the first other poll, in feed
+    order, each cut to its first KEEP_RANKS ranks; every key is kept."""
+    polls = document["rankings"]
+    ap = next((p for p in polls if p.get("type") == "ap"), None)
+    other = next((p for p in polls if p is not ap), None)
+    kept = [p for p in polls if p is ap or p is other]
+    ranks_before = sum(len(p.get("ranks", [])) for p in kept)
+    for poll in kept:
+        poll["ranks"] = poll.get("ranks", [])[:KEEP_RANKS]
+    document["rankings"] = kept
+    ranks_after = sum(len(p["ranks"]) for p in kept)
+    return f"{len(polls)} → {len(kept)} polls, {ranks_before} → {ranks_after} ranks"
+
+
 def summary_phase(document):
     state = document.get("header", {}).get("competitions", [{}])[0].get("status", {}).get("type", {}).get("state")
     return {"pre": "pregame", "in": "live", "post": "final"}.get(state, "unknown")
@@ -153,6 +173,11 @@ def validate(name, document, endpoint):
         def entries(node):
             return len(node.get("standings", {}).get("entries", [])) + sum(entries(c) for c in node.get("children", []))
         return f"children={len(children)} entries={entries(document)}"
+    if endpoint == "rankings":
+        polls = document["rankings"]
+        ranked = [p for p in polls if p.get("ranks")]
+        assert ranked, name
+        return "polls=" + ",".join(f"{p.get('type')}:{len(p.get('ranks', []))}" for p in polls)
     if endpoint == "summary":
         assert "header" in document and "boxscore" in document, name
         return f"phase={summary_phase(document)}"
@@ -174,6 +199,8 @@ def capture(key):
         ("standings", f"{key}_standings", f"{STANDINGS}/{path}/standings{standings_query}"),
         ("summary", None, f"{SITE}/{path}/summary?event={event}"),
     ]
+    if "college" in path:
+        requests.append(("rankings", f"{key}_rankings", f"{SITE}/{path}/rankings"))
     rows = []
     for endpoint, name, url in requests:
         body = fetch(url)
@@ -188,6 +215,8 @@ def capture(key):
             note = trim_events(document, KEEP_SCHEDULE_EVENTS, {event})
         elif endpoint == "standings" and key in KEEP_STANDINGS_CHILDREN:
             note = trim_standings(document, KEEP_STANDINGS_CHILDREN[key])
+        elif endpoint == "rankings":
+            note = trim_rankings(document)
         elif endpoint == "summary":
             name = f"{key}_summary_{summary_phase(document)}_{event}"
         data = compact(document) if note else body

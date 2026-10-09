@@ -218,3 +218,126 @@ struct ScheduleRecordTests {
         #expect(scheduleRecord(games: games, league: .premierLeague).summary == "4-0-0")
     }
 }
+
+// MARK: - Form
+
+@Suite("Form guide")
+struct FormGuideTests {
+    /// Noon UTC on day `day` of October 2026.
+    private func october(_ day: Int) -> Date {
+        Date(timeIntervalSince1970: 1_790_856_000 + Double(day - 1) * 86_400)
+    }
+
+    /// A completed league game on `day`, `score`–`opponentScore`, won if
+    /// `won`.
+    private func game(day: Int, won: Bool = false, score: String = "", opponentScore: String = "") -> Game {
+        Game(
+            team: "Team", opponent: "Opponent \(day)", score: score, opponentScore: opponentScore,
+            time: "", date: "", dateAsDate: october(day), opponentLogo: "", channel: "",
+            location: "", gameHome: true, gameID: "\(day)", pointer: day,
+            gameWin: won, completed: true, competitionName: "",
+            cancelled: false, postponed: false, gameClock: "",
+            gamePeriod: "", gameHalftime: false
+        )
+    }
+
+    private func win(_ day: Int) -> Game { game(day: day, won: true, score: "24", opponentScore: "10") }
+    private func loss(_ day: Int) -> Game { game(day: day, score: "10", opponentScore: "24") }
+    private func draw(_ day: Int) -> Game { game(day: day, score: "20", opponentScore: "20") }
+
+    @Test("The last five decided games, oldest first, most recent last")
+    func lastFiveOldestFirst() {
+        // W L D W W L W over seven days: the last five are D W W L W.
+        let games = [win(1), loss(2), draw(3), win(4), win(5), loss(6), win(7)]
+        let form = scheduleForm(games: games, league: .nfl)
+        #expect(form == [.draw, .win, .win, .loss, .win])
+        #expect(form.map(\.letter).joined() == "DWWLW")
+        #expect(form.last == .win)  // day 7, the most recent
+
+        // Fewer than five decided games give what there is; none gives none.
+        #expect(scheduleForm(games: [loss(1), win(2)], league: .nfl) == [.loss, .win])
+        #expect(scheduleForm(games: [], league: .nfl).isEmpty)
+        #expect(scheduleForm(games: games, league: .nfl, last: 3) == [.win, .loss, .win])
+        #expect(scheduleForm(games: games, league: .nfl, last: 0).isEmpty)
+    }
+
+    @Test("Games are read in date order, whatever order the feed lists them in")
+    func dateOrder() {
+        let games = [win(5), loss(1), draw(3), win(2), loss(4)]
+        #expect(scheduleForm(games: games, league: .nfl) == [.loss, .win, .draw, .loss, .win])
+    }
+
+    @Test("Undecided games are skipped: unplayed, live, cancelled, postponed, exhibitions and cup ties")
+    func skippedGames() {
+        var upcoming = game(day: 8)
+        upcoming.completed = false
+        var cancelled = loss(9)
+        cancelled.completed = false
+        cancelled.cancelled = true
+        var postponed = loss(10)
+        postponed.completed = false
+        postponed.postponed = true
+        var preseason = loss(11)
+        preseason.seasonType = 1
+        var allStar = loss(12)
+        allStar.seasonType = 4
+
+        let decided = [win(1), loss(2), win(3), draw(4), win(5)]
+        let skipped = [upcoming, cancelled, postponed, preseason, allStar]
+        #expect(scheduleForm(games: decided + skipped, league: .nfl) == [.win, .loss, .win, .draw, .win])
+
+        // MLB counts an abandoned game as a loss in its record, but it has
+        // no result to show in the form.
+        #expect(scheduleForm(games: [win(1), cancelled, postponed], league: .mlb) == [.win])
+
+        // A soccer cup tie is on the schedule but not in the league's form.
+        var cupTie = loss(6)
+        cupTie.competition = .soccer("eng.league_cup")
+        #expect(scheduleForm(games: [win(1), cupTie], league: .premierLeague) == [.win])
+    }
+
+    @Test("A hockey overtime loss is an L, as in the record's losses")
+    func overtimeLoss() {
+        var overtime = loss(2)
+        overtime.gamePeriod = "4"
+        #expect(scheduleForm(games: [win(1), overtime], league: .nhl) == [.win, .loss])
+    }
+
+    @Test("MLS: a past fixture the feed never completed counts as played, as in the record")
+    func soccerPastDates() {
+        var unflagged = draw(3)
+        unflagged.completed = false
+        let now = october(4)
+        #expect(scheduleForm(games: [win(1), unflagged], league: .mls, now: now) == [.win, .draw])
+        // Not yet four hours past kickoff: still live, so not in the form.
+        #expect(scheduleForm(games: [win(1), unflagged], league: .mls, now: october(3).addingTimeInterval(3600)) == [.win])
+        // Without MLS's rule the completion flag is trusted.
+        #expect(scheduleForm(games: [win(1), unflagged], league: .nfl, now: now) == [.win])
+    }
+
+    @Test("The Dream's form from the captured schedule, from the games the record counts")
+    func dreamFromFixture() throws {
+        // wnba_schedule: two preseason games (left out), then ten regular
+        // season ones, 7-3: W W L W W L W W L W. The last five, oldest
+        // first: L (Lynx, May 28), W, W, L (Fever), W (Mystics, Jun 6).
+        let team = TeamRef(
+            league: .wnba, espnID: "20",
+            displayName: "20", shortName: "20", abbreviation: "", location: "",
+            colorHex: "", alternateColorHex: "",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+        let dream = parseSchedule(from: try Fixture.json("wnba_schedule"), team: team)
+        #expect(scheduleRecord(games: dream, league: .wnba).summary == "7-3")
+        #expect(scheduleForm(games: dream, league: .wnba) == [.loss, .win, .win, .loss, .win])
+        #expect(scheduleForm(games: dream, league: .wnba, last: 10).map(\.letter).joined() == "WWLWWLWWLW")
+
+        // The header carries the same five, oldest first.
+        let summary = TeamHeaderSummary(
+            team: team, games: dream, nextGame: dream.count,
+            record: scheduleRecord(games: dream, league: .wnba), standings: nil
+        )
+        #expect(summary.form == [.loss, .win, .win, .loss, .win])
+        #expect(summary.formAccessibilityLabel == "Last 5: lost, won, won, lost, won")
+        #expect(TeamHeaderSummary().formAccessibilityLabel == nil)
+    }
+}

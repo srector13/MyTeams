@@ -285,9 +285,10 @@ func parseRecordSummary(_ summary: String) -> [Int] {
 /// group: the AP poll if the document has one, else its first poll with any
 /// teams. Each rank carries `current`, a `team` and a `recordSummary`.
 ///
-/// The fallback for a college standings tree with no table in it. The
-/// registry's captured trees all have tables, so this shape is exercised
-/// only by the tests' hand-built document.
+/// The fallback for a college standings tree with no table in it, and the
+/// source of the poll ranks college team names are prefixed with
+/// (`PollRanks`). Tested against the live FBS and women's captures
+/// (`ncaaf_rankings`, `ncaaw_rankings`; FIXTURES.md).
 func parseRankings(from json: JSON, league: LeagueID) -> Standings {
     let polls = json["rankings"].arrayValue.filter { !$0["ranks"].arrayValue.isEmpty }
     guard let poll = polls.first(where: { $0["type"].stringValue == "ap" }) ?? polls.first else {
@@ -336,6 +337,121 @@ func parseRankings(from json: JSON, league: LeagueID) -> Standings {
             entries: rankedInOrder(entries)
         )]
     )
+}
+
+// MARK: - Poll ranks
+
+/// A college league's poll, as the ranks its teams' names are prefixed
+/// with: `"#7 Kansas"` on the team page's header and in the standings rows
+/// (R-5).
+///
+/// Read from the rankings document by `parseRankings`, so it is the same
+/// poll the standings fall back to: the AP poll, else the first poll with
+/// any teams.
+struct PollRanks: Hashable, Sendable {
+    /// The poll's name, `"AP Top 25"`, or empty.
+    let pollName: String
+    /// Each ranked team's place, by ESPN team id.
+    let ranks: [String: Int]
+
+    /// No poll: no team ranked.
+    static let empty = PollRanks(pollName: "", ranks: [:])
+
+    init(pollName: String, ranks: [String: Int]) {
+        self.pollName = pollName
+        self.ranks = ranks
+    }
+
+    /// The ranks in a poll `parseRankings` read. Standings of any other kind
+    /// rank by table, not poll, and give none.
+    init(_ standings: Standings) {
+        let poll = standings.kind == .rankings ? standings.groups.first : nil
+        var ranks: [String: Int] = [:]
+        for entry in poll?.entries ?? [] {
+            if let rank = entry.rank, ranks[entry.teamID] == nil {
+                ranks[entry.teamID] = rank
+            }
+        }
+        self.init(pollName: poll?.name ?? "", ranks: ranks)
+    }
+
+    /// Reads a rankings document (`LeagueID.rankingsURL`).
+    static func parse(from json: JSON, league: LeagueID) -> PollRanks {
+        PollRanks(parseRankings(from: json, league: league))
+    }
+
+    var isEmpty: Bool { ranks.isEmpty }
+
+    /// The team's place in the poll, or `nil` when it is unranked.
+    func rank(of teamID: String) -> Int? {
+        ranks[teamID]
+    }
+
+    /// `name` with the team's poll rank before it, `"#7 Kansas"`, or
+    /// `name` unchanged for an unranked team.
+    func prefixed(_ name: String, teamID: String) -> String {
+        Self.prefixed(name, rank: rank(of: teamID))
+    }
+
+    /// `"#7 Kansas"` for a rank, else `name`.
+    static func prefixed(_ name: String, rank: Int?) -> String {
+        guard let badge = badge(rank: rank) else { return name }
+        return "\(badge) \(name)"
+    }
+
+    /// `"#7"`, or `nil` for no rank (or a feed's 0, which ranks no one).
+    static func badge(rank: Int?) -> String? {
+        guard let rank, rank > 0 else { return nil }
+        return "#\(rank)"
+    }
+}
+
+/// Each college league's poll ranks, fetched once and kept for an hour —
+/// polls change weekly — and shared by every view that prefixes a name.
+///
+/// A league that is not a college one is never asked for: it has no polls,
+/// so its ranks are `.empty` without a request. A failed fetch is `.empty`
+/// too, and is retried on the next ask rather than kept.
+actor PollRankStore {
+    static let shared = PollRankStore()
+
+    /// How long a league's poll is served without asking again.
+    static let timeToLive: TimeInterval = 60 * 60
+
+    private let client: HTTPClient
+    private let now: @Sendable () -> Date
+
+    private var cached: [LeagueID: (fetchedAt: Date, ranks: PollRanks)] = [:]
+    /// Loads in flight, so concurrent callers share one request.
+    private var loads: [LeagueID: Task<PollRanks?, Never>] = [:]
+
+    init(client: HTTPClient = .shared, now: @escaping @Sendable () -> Date = { Date() }) {
+        self.client = client
+        self.now = now
+    }
+
+    /// The league's poll ranks, from the last hour's fetch or a new one.
+    func ranks(for league: LeagueID) async -> PollRanks {
+        guard league.isCollege else { return .empty }
+        if let entry = cached[league], now().timeIntervalSince(entry.fetchedAt) < Self.timeToLive {
+            return entry.ranks
+        }
+        if let existing = loads[league] {
+            return await existing.value ?? .empty
+        }
+        let client = client
+        let task = Task<PollRanks?, Never> {
+            guard let document = await client.fetch(league.rankingsURL).document else { return nil }
+            return PollRanks.parse(from: document, league: league)
+        }
+        loads[league] = task
+        let ranks = await task.value
+        loads[league] = nil
+        if let ranks {
+            cached[league] = (now(), ranks)
+        }
+        return ranks ?? .empty
+    }
 }
 
 // MARK: - Loading

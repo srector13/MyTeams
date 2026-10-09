@@ -225,3 +225,187 @@ struct RemoteTeamCatalogTests {
         #expect(await empty.team(id: "not-an-id") == nil)
     }
 }
+
+// MARK: - College conferences (R-5)
+
+/// Conferences read from the standings tree onto each college `TeamRef`,
+/// and the browser's sections built from them.
+@Suite("College conferences")
+struct CollegeConferenceTests {
+    private func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appending(path: "CollegeConferenceTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+    }
+
+    @Test("A TeamRef written before conferences decodes with none, and round-trips one")
+    func decodesWithoutConference() throws {
+        // A cached Kansas as the catalog wrote it before R-5: no `conference`.
+        let old = Data(#"""
+        {"league": "football/college-football", "espnID": "2305",
+         "displayName": "Kansas Jayhawks", "shortName": "Kansas", "abbreviation": "KU",
+         "location": "Kansas", "colorHex": "0051ba", "alternateColorHex": "e8000d",
+         "logoURL": "https://a.espncdn.com/i/teamlogos/ncaa/500/2305.png"}
+        """#.utf8)
+        let kansas = try JSONDecoder().decode(TeamRef.self, from: old)
+        #expect(kansas.id == "football/college-football:2305")
+        #expect(kansas.conference == nil)
+
+        // A nil conference is left out of what is written, so a file stays
+        // as it was; a set one is kept.
+        let rewritten = try JSONSerialization.jsonObject(with: JSONEncoder().encode(kansas)) as? [String: Any]
+        #expect(rewritten?["conference"] == nil)
+        var big12 = kansas
+        big12.conference = "Big 12 Conference"
+        let decoded = try JSONDecoder().decode(TeamRef.self, from: JSONEncoder().encode(big12))
+        #expect(decoded.conference == "Big 12 Conference")
+
+        // The bundled seeds have none.
+        #expect(TeamCatalog.all.allSatisfy { $0.conference == nil })
+    }
+
+    @Test("Each team's conference is the standings root's child, even a division down")
+    func parseConferences() throws {
+        let conferences = RemoteTeamCatalog.parseConferences(try Fixture.json("ncaaf_standings"))
+        // Big 12's 16, and Sun Belt's 14 from its East and West tables.
+        #expect(conferences.count == 30)
+        #expect(conferences["2305"] == "Big 12 Conference")       // Kansas
+        #expect(conferences["2026"] == "Sun Belt Conference")     // App State, East
+        #expect(conferences["309"] == "Sun Belt Conference")      // Louisiana, West
+        #expect(Set(conferences.values) == ["Big 12 Conference", "Sun Belt Conference"])
+
+        let ncaaw = RemoteTeamCatalog.parseConferences(try Fixture.json("ncaaw_standings"))
+        #expect(ncaaw.count == 25)
+        #expect(ncaaw["261"] == "America East Conference")       // Vermont
+        #expect(RemoteTeamCatalog.parseConferences(.null).isEmpty)
+    }
+
+    @Test("A college catalog load reads the standings for conferences; a pro one does not")
+    func catalogLoad() async throws {
+        let league = LeagueID.womensCollegeBasketball
+        let teamsURL = league.teamsURL
+        let standingsURL = league.standingsURL()
+        let teams = try RecordingTransport.Reply.fixture("ncaaw_teams")
+        let standings = try RecordingTransport.Reply.fixture("ncaaw_standings")
+        let transport = RecordingTransport { url, _ in
+            switch url.absoluteString {
+            case teamsURL: teams
+            case standingsURL: standings
+            default: .status(404)
+            }
+        }
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let catalog = RemoteTeamCatalog(client: HTTPClient(transport: transport), directory: directory)
+
+        let loaded = await catalog.teams(for: league)
+        #expect(loaded.count == 15)
+        #expect(transport.urls.map(\.absoluteString) == [teamsURL, standingsURL])
+        // Arizona State (9), Arizona (12) and Kansas (2305) are the Big 12
+        // teams among the fixture's fifteen; the rest are in no captured
+        // conference.
+        let big12 = loaded.filter { $0.conference == "Big 12 Conference" }.map(\.espnID)
+        #expect(Set(big12) == ["9", "12", "2305"])
+        #expect(loaded.filter { $0.conference == nil }.count == 12)
+
+        // The conferences are cached with the list: a new catalog on the
+        // same directory serves them without asking again.
+        let offline = RecordingTransport(always: .status(503))
+        let cached = RemoteTeamCatalog(client: HTTPClient(transport: offline), directory: directory)
+        #expect(await cached.team(id: "basketball/womens-college-basketball:2305")?.conference == "Big 12 Conference")
+        #expect(offline.requestCount == 0)
+
+        // A pro league asks only for its teams.
+        let nflTeams = try RecordingTransport.Reply.fixture("nfl_teams")
+        let pro = RecordingTransport { _, _ in nflTeams }
+        let proCatalog = RemoteTeamCatalog(client: HTTPClient(transport: pro), directory: temporaryDirectory())
+        #expect(await proCatalog.teams(for: .nfl).allSatisfy { $0.conference == nil })
+        #expect(pro.urls.map(\.absoluteString) == [LeagueID.nfl.teamsURL])
+    }
+
+    @Test("Without standings the list loads conference-less; a fresh cache of such a list is refetched")
+    func standingsUnavailable() async throws {
+        let league = LeagueID.womensCollegeBasketball
+        let teamsURL = league.teamsURL
+        let teams = try RecordingTransport.Reply.fixture("ncaaw_teams")
+        let noStandings = RecordingTransport { url, _ in
+            url.absoluteString == teamsURL ? teams : .status(503)
+        }
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = RemoteTeamCatalog(client: HTTPClient(transport: noStandings), directory: directory)
+        let loaded = await first.teams(for: league)
+        #expect(loaded.count == 15)
+        #expect(loaded.allSatisfy { $0.conference == nil })
+        #expect(RemoteTeamCatalog.lacksConferences(loaded, league: league))
+        #expect(!RemoteTeamCatalog.lacksConferences(loaded, league: .nfl))
+
+        // Next session, offline: the fresh but conference-less cache is
+        // asked about again, and served when the network can't be reached.
+        let offline = RecordingTransport(always: .status(503))
+        let second = RemoteTeamCatalog(client: HTTPClient(transport: offline), directory: directory)
+        #expect(await second.teams(for: league).map(\.id) == loaded.map(\.id))
+        #expect(offline.urls.map(\.absoluteString) == [teamsURL])
+
+        // The session after, standings back: refetched, and it gains its
+        // conferences, which the next session serves from the cache.
+        let standings = try RecordingTransport.Reply.fixture("ncaaw_standings")
+        let online = RecordingTransport { url, _ in
+            url.absoluteString == teamsURL ? teams : standings
+        }
+        let third = RemoteTeamCatalog(client: HTTPClient(transport: online), directory: directory)
+        #expect(await third.teams(for: league).contains { $0.conference != nil })
+        #expect(online.requestCount == 2)
+
+        let fourth = RemoteTeamCatalog(client: HTTPClient(transport: offline), directory: directory)
+        #expect(await fourth.teams(for: league).contains { $0.conference != nil })
+        #expect(offline.requestCount == 1)
+    }
+
+    @Test("Browser sections: conference-less teams first, then conferences alphabetically, order kept within")
+    func sections() throws {
+        func team(_ id: String, _ conference: String?) -> TeamRef {
+            var team = TeamRef(
+                league: .collegeFootball, espnID: id,
+                displayName: id, shortName: id, abbreviation: "", location: id,
+                colorHex: "", alternateColorHex: "",
+                logoURL: nil, logoDarkURL: nil, logoAsset: nil
+            )
+            team.conference = conference
+            return team
+        }
+        let teams = [
+            team("Abilene Christian", nil),
+            team("Air Force", "Mountain West Conference"),
+            team("Arizona", "Big 12 Conference"),
+            team("Arkansas State", "Sun Belt Conference"),
+            team("Adrian", nil),
+            team("Kansas", "Big 12 Conference"),
+        ]
+        let sections = ConferenceSection.sections(teams)
+        #expect(sections.map(\.conference) == [nil, "Big 12 Conference", "Mountain West Conference", "Sun Belt Conference"])
+        #expect(sections.map { $0.teams.map(\.espnID) } == [
+            ["Abilene Christian", "Adrian"],
+            ["Arizona", "Kansas"],
+            ["Air Force"],
+            ["Arkansas State"],
+        ])
+        #expect(Set(sections.map(\.id)).count == sections.count)
+
+        // Every team in a conference: no leading conference-less section.
+        #expect(ConferenceSection.sections(teams.filter { $0.conference != nil }).first?.conference == "Big 12 Conference")
+
+        // No conferences at all (a pro list, or standings that never came):
+        // no sections, so the browser keeps its one list.
+        #expect(ConferenceSection.sections(teams.map { team($0.espnID, nil) }).isEmpty)
+        #expect(ConferenceSection.sections([]).isEmpty)
+
+        // From the captured catalog and standings: the women's Big 12 trio.
+        let ncaaw = RemoteTeamCatalog.withConferences(
+            RemoteTeamCatalog.parseTeams(try Fixture.json("ncaaw_teams"), league: .womensCollegeBasketball),
+            from: RemoteTeamCatalog.parseConferences(try Fixture.json("ncaaw_standings"))
+        )
+        let captured = ConferenceSection.sections(ncaaw)
+        #expect(captured.map(\.conference) == [nil, "Big 12 Conference"])
+        #expect(captured[1].teams.map(\.espnID) == ["9", "12", "2305"])
+    }
+}
