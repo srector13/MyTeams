@@ -719,16 +719,14 @@ func shouldPollLiveScore(game: Game, now: Date = Date(), networkFresh: Bool = tr
 /// "Updated 2 days ago".
 func updatedAgoText(since updatedAt: Date, now: Date) -> String {
     guard now.timeIntervalSince(updatedAt) >= 60 else { return "Updated just now" }
-    return "Updated \(updatedAgoFormatter.localizedString(for: updatedAt, relativeTo: now))"
-}
-
-/// "5 min. ago", in the reader's language.
-private let updatedAgoFormatter: RelativeDateTimeFormatter = {
+    // "5 min. ago", in the reader's language. Built per call: a shared
+    // `RelativeDateTimeFormatter` isn't `Sendable`, and this runs at most
+    // once a minute per caption.
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
     formatter.dateTimeStyle = .numeric
-    return formatter
-}()
+    return "Updated \(formatter.localizedString(for: updatedAt, relativeTo: now))"
+}
 
 /// The "Updated … ago" line for a section whose content may be old: see
 /// `TeamModel.scheduleUpdatedAt` and `HomeViewModel.headlinesCachedAt`.
