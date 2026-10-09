@@ -265,12 +265,15 @@ final class ScoreAlertEngine {
     nonisolated static let teamLinkKey = "teamLink"
 
     /// The team whose page a tapped alert opens: the `TeamRef.id` its
-    /// `userInfo` links to, or `nil` without a well-formed team link.
+    /// `userInfo` links to, or `nil` without a well-formed team or game
+    /// link.
     nonisolated static func teamID(in userInfo: [AnyHashable: Any]) -> TeamRef.ID? {
-        guard let link = userInfo[teamLinkKey] as? String,
-              let url = URL(string: link)
-        else { return nil }
-        return WidgetDeepLink.teamID(from: url)
+        link(in: userInfo).flatMap(WidgetDeepLink.linkedTeamID(from:))
+    }
+
+    /// The `WidgetDeepLink` an alert's `userInfo` carries, if any.
+    nonisolated static func link(in userInfo: [AnyHashable: Any]) -> URL? {
+        (userInfo[teamLinkKey] as? String).flatMap { URL(string: $0) }
     }
 
     #if canImport(UserNotifications)
@@ -298,7 +301,9 @@ final class ScoreAlertEngine {
             content.interruptionLevel = .passive
         }
         content.threadIdentifier = event.gameID
-        if let url = teamID.flatMap(WidgetDeepLink.url(forTeamID:)) {
+        // The game's sheet over the team's page (R-3).
+        if let teamID, let team = TeamRef.parse(id: teamID),
+           let url = WidgetDeepLink.url(forGame: event.gameID, league: team.league, teamID: teamID) {
             content.userInfo = [teamLinkKey: url.absoluteString]
         }
         return UNNotificationRequest(
@@ -338,15 +343,15 @@ final class ScoreAlertEngine {
     #endif
 }
 
-/// The team a tapped score alert asked for, until `MyTeamsApp` hands it to
+/// The link a tapped score alert carries, until `MyTeamsApp` hands it to
 /// `Home` — the notification's counterpart of a widget link's `onOpenURL`,
-/// feeding the same `deepLinkedTeamID`.
+/// opened the same way.
 @MainActor
 @Observable
 final class ScoreAlertTaps {
     static let shared = ScoreAlertTaps()
 
-    var teamID: TeamRef.ID?
+    var link: URL?
 }
 
 /// How loud a score alert is.
@@ -399,10 +404,11 @@ private final class ForegroundPresenter: NSObject, UNUserNotificationCenterDeleg
         didReceive response: UNNotificationResponse
     ) async {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let teamID = ScoreAlertEngine.teamID(in: response.notification.request.content.userInfo)
+              let link = ScoreAlertEngine.link(in: response.notification.request.content.userInfo),
+              WidgetDeepLink.linkedTeamID(from: link) != nil
         else { return }
         await MainActor.run {
-            ScoreAlertTaps.shared.teamID = teamID
+            ScoreAlertTaps.shared.link = link
         }
     }
 }

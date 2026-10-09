@@ -14,11 +14,16 @@ import UserNotifications
 
 @testable import myTeams
 
-/// The `myteams://team/<TeamRef.id>` links the widget opens the app with.
+/// The `myteams://team/<TeamRef.id>` links the widget opens the app with,
+/// and the `myteams://game/` links to one game's sheet (R-3).
 @Suite("Widget deep links")
 struct WidgetDeepLinkTests {
     private func teamID(_ string: String) throws -> TeamRef.ID? {
         WidgetDeepLink.teamID(from: try #require(URL(string: string)))
+    }
+
+    private func game(_ string: String) throws -> WidgetDeepLink.GameTarget? {
+        WidgetDeepLink.game(from: try #require(URL(string: string)))
     }
 
     @Test("A team link yields its TeamRef.id")
@@ -51,9 +56,67 @@ struct WidgetDeepLinkTests {
 
     @Test("Other hosts are ignored")
     func wrongHost() throws {
+        // A game link is no team link: it routes to the game's sheet.
         #expect(try teamID("myteams://game/football/nfl:12") == nil)
+        #expect(try game("myteams://game/football/nfl:12") == WidgetDeepLink.GameTarget(league: .nfl, eventID: "12", teamID: nil))
         #expect(try teamID("myteams://teams/football/nfl:12") == nil)
         #expect(try teamID("myteams:///football/nfl:12") == nil)
+        #expect(try game("myteams://games/football/nfl:12") == nil)
+        #expect(try game("myteams://team/football/nfl:12") == nil)
+        #expect(try game("https://game/football/nfl:12") == nil)
+    }
+
+    @Test("A game link yields its league, event and team")
+    func gameLink() throws {
+        let chiefs = TeamRef.id(league: .nfl, espnID: "12")
+        let linked = try #require(try game("myteams://game/football/nfl:401?team=football/nfl:12"))
+        #expect(linked == WidgetDeepLink.GameTarget(league: .nfl, eventID: "401", teamID: chiefs))
+        #expect(WidgetDeepLink.linkedTeamID(from: try #require(URL(string: "myteams://game/football/nfl:401?team=football/nfl:12"))) == chiefs)
+
+        // Encoded, and scheme and host in any case: a cup tie, on the
+        // cup's board, for the team in its home league.
+        #expect(try game("MyTeams://GAME/soccer%2Fuefa.champions:401915423?team=soccer%2Feng.1%3A359")
+            == WidgetDeepLink.GameTarget(league: .championsLeague, eventID: "401915423", teamID: "soccer/eng.1:359"))
+
+        // A team that is not an id is read as none.
+        #expect(try game("myteams://game/football/nfl:401?team=not-a-team")?.teamID == nil)
+        #expect(try game("myteams://game/football/nfl:401?other=football/nfl:12")?.teamID == nil)
+
+        // Malformed games.
+        #expect(try game("myteams://game") == nil)
+        #expect(try game("myteams://game/") == nil)
+        #expect(try game("myteams://game/football/nfl") == nil)
+        #expect(try game("myteams://game/football/nfl:") == nil)
+        #expect(try game("myteams://game/nfl:401") == nil)
+        #expect(try game("myteams://game/football/nfl:401/extra") == nil)
+    }
+
+    @Test("Game links the alerts and Live Activities build read back to the same game")
+    func gameRoundTrip() throws {
+        let arsenal = TeamRef.id(league: .premierLeague, espnID: "359")
+        let url = try #require(WidgetDeepLink.url(forGame: "401915423", league: .championsLeague, teamID: arsenal))
+        #expect(url.scheme == "myteams")
+        #expect(url.host() == "game")
+        #expect(WidgetDeepLink.game(from: url) == WidgetDeepLink.GameTarget(league: .championsLeague, eventID: "401915423", teamID: arsenal))
+        #expect(WidgetDeepLink.teamID(from: url) == nil)
+        #expect(WidgetDeepLink.linkedTeamID(from: url) == arsenal)
+
+        let teamless = try #require(WidgetDeepLink.url(forGame: "401", league: .nfl, teamID: nil))
+        #expect(teamless.absoluteString == "myteams://game/football/nfl:401")
+        #expect(WidgetDeepLink.game(from: teamless)?.teamID == nil)
+
+        #expect(WidgetDeepLink.url(forGame: "", league: .nfl, teamID: nil) == nil)
+        #expect(WidgetDeepLink.url(forGame: "4/01", league: .nfl, teamID: nil) == nil)
+        #expect(WidgetDeepLink.url(forGame: "4:01", league: .nfl, teamID: nil) == nil)
+        #expect(WidgetDeepLink.url(forGame: "401", league: .nfl, teamID: "not-a-team") == nil)
+    }
+
+    @Test("A shared game links to its page on espn.com")
+    func gameWebURL() {
+        #expect(LeagueID.nfl.gameWebURL(gameID: "401")?.absoluteString == "https://www.espn.com/nfl/game/_/gameId/401")
+        #expect(LeagueID.mensCollegeBasketball.gameWebURL(gameID: "401")?.absoluteString
+            == "https://www.espn.com/mens-college-basketball/game/_/gameId/401")
+        #expect(LeagueID.premierLeague.gameWebURL(gameID: "401")?.absoluteString == "https://www.espn.com/soccer/match/_/gameId/401")
     }
 
     @Test("A cup tie's Live Activity and alert link to the team in its home league, not the cup")
@@ -98,6 +161,8 @@ struct WidgetDeepLinkTests {
     func alertUserInfo() throws {
         let link = try #require(WidgetDeepLink.url(forTeamID: "football/nfl:7")).absoluteString
         #expect(ScoreAlertEngine.teamID(in: [ScoreAlertEngine.teamLinkKey: link]) == "football/nfl:7")
+        let gameLink = try #require(WidgetDeepLink.url(forGame: "401872962", league: .nfl, teamID: "football/nfl:7"))
+        #expect(ScoreAlertEngine.teamID(in: [ScoreAlertEngine.teamLinkKey: gameLink.absoluteString]) == "football/nfl:7")
         #expect(ScoreAlertEngine.teamID(in: [:]) == nil)
         #expect(ScoreAlertEngine.teamID(in: [ScoreAlertEngine.teamLinkKey: "myteams://team/not-a-team"]) == nil)
         #expect(ScoreAlertEngine.teamID(in: [ScoreAlertEngine.teamLinkKey: 7]) == nil)
@@ -107,7 +172,10 @@ struct WidgetDeepLinkTests {
         let snapshot = ScoreSnapshot(homeName: "Broncos", awayName: "Rams", homeScore: 23, awayScore: 26, period: 4, state: .inProgress)
         let event = ScoreEvent.gameStart(gameID: "401872962", snapshot: snapshot)
         let linked = ScoreAlertEngine.request(for: event, teamID: "football/nfl:7")
-        #expect(linked.content.userInfo[ScoreAlertEngine.teamLinkKey] as? String == link)
+        // The game's sheet over the team's page (R-3).
+        #expect(linked.content.userInfo[ScoreAlertEngine.teamLinkKey] as? String == gameLink.absoluteString)
+        #expect(ScoreAlertEngine.link(in: linked.content.userInfo).flatMap(WidgetDeepLink.game(from:))
+            == WidgetDeepLink.GameTarget(league: .nfl, eventID: "401872962", teamID: "football/nfl:7"))
         // No team, or one that is not an id: no link.
         #expect(ScoreAlertEngine.request(for: event).content.userInfo.isEmpty)
         #expect(ScoreAlertEngine.request(for: event, teamID: "not-a-team").content.userInfo.isEmpty)

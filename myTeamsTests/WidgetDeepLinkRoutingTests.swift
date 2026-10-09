@@ -38,10 +38,16 @@ private struct HomeDriver {
         self.favoriteIDs = favoriteIDs
     }
 
-    /// `MyTeamsApp.onOpenURL`: only a well-formed team link is passed on.
+    /// `MyTeamsApp.open`: only a well-formed team link, or game link with
+    /// a team, is passed on; a team link clears any game waiting.
     mutating func open(_ url: URL) {
-        guard let id = WidgetDeepLink.teamID(from: url) else { return }
-        setLink(id)
+        if let id = WidgetDeepLink.teamID(from: url) {
+            state.pendingGame = nil
+            setLink(id)
+        } else if let game = WidgetDeepLink.game(from: url), let id = game.teamID {
+            state.pendingGame = game
+            setLink(id)
+        }
     }
 
     mutating func setLink(_ id: TeamRef.ID?) {
@@ -70,6 +76,13 @@ private struct HomeDriver {
 
 private func link(_ teamID: TeamRef.ID) throws -> URL {
     try #require(WidgetDeepLink.url(forTeamID: teamID))
+}
+
+/// A game link's target, and its URL, for `teamID`'s game `eventID`.
+private func gameLink(_ eventID: String, _ teamID: TeamRef.ID) throws -> (WidgetDeepLink.GameTarget, URL) {
+    let league = try #require(TeamRef.parse(id: teamID)).league
+    let url = try #require(WidgetDeepLink.url(forGame: eventID, league: league, teamID: teamID))
+    return (WidgetDeepLink.GameTarget(league: league, eventID: eventID, teamID: teamID), url)
 }
 
 @Suite("Widget deep links: routing in Home")
@@ -167,5 +180,80 @@ struct WidgetDeepLinkRoutingTests {
         let idle = HomeRouting.State(selection: royals, pendingLink: nil)
         let unchanged = HomeRouting.linkChanged(idle, teams: [chiefs, royals], favoriteIDs: [chiefs, royals])
         #expect(unchanged == idle)
+    }
+
+    // MARK: Game links (R-3)
+
+    @Test("Foreground: a game link selects its team and opens the game's sheet")
+    func gameLinkForeground() throws {
+        let favorites = [chiefs, royals, sporting]
+        var home = HomeDriver(selection: HomeTabs.homeID, teams: favorites, favoriteIDs: favorites)
+        let (target, url) = try gameLink("401", royals)
+        home.open(url)
+        #expect(home.state == HomeRouting.State(selection: royals, pendingLink: nil, openGame: target))
+    }
+
+    @Test("Cold launch: a game link waits for its team to resolve, then opens the game's sheet")
+    func gameLinkColdLaunch() throws {
+        let favorites = [chiefs, royals, blues]
+        var home = HomeDriver(selection: "", teams: [], favoriteIDs: favorites)
+        let (target, url) = try gameLink("401", blues)
+        home.open(url)
+        #expect(home.state == HomeRouting.State(selection: "", pendingLink: blues, pendingGame: target))
+
+        home.resolve(favorites)
+        #expect(home.state == HomeRouting.State(selection: blues, pendingLink: nil, openGame: target))
+    }
+
+    @Test("A cup tie's game link opens over the team's page in its home league")
+    func gameLinkCupTie() throws {
+        let arsenal = TeamRef.id(league: .premierLeague, espnID: "359")
+        var home = HomeDriver(selection: chiefs, teams: [chiefs, arsenal], favoriteIDs: [chiefs, arsenal])
+        let url = try #require(WidgetDeepLink.url(forGame: "401915423", league: .championsLeague, teamID: arsenal))
+        home.open(url)
+        #expect(home.state.selection == arsenal)
+        #expect(home.state.openGame == WidgetDeepLink.GameTarget(league: .championsLeague, eventID: "401915423", teamID: arsenal))
+    }
+
+    @Test("A game link whose team is not a favorite, or never resolves, opens nothing")
+    func gameLinkDropped() throws {
+        let favorites = [chiefs, royals]
+        var home = HomeDriver(selection: royals, teams: favorites, favoriteIDs: favorites)
+        home.open(try gameLink("401", sporting).1)
+        #expect(home.state == HomeRouting.State(selection: royals, pendingLink: nil))
+
+        var loading = HomeDriver(selection: royals, teams: favorites, favoriteIDs: favorites + [blues])
+        loading.open(try gameLink("402", blues).1)
+        #expect(loading.state.pendingGame != nil)
+        loading.resolve(favorites)
+        #expect(loading.state == HomeRouting.State(selection: royals, pendingLink: nil))
+
+        // No team named: nowhere to open it over.
+        let teamless = try #require(WidgetDeepLink.url(forGame: "403", league: .nfl, teamID: nil))
+        home.open(teamless)
+        #expect(home.state == HomeRouting.State(selection: royals, pendingLink: nil))
+    }
+
+    @Test("A team link after a held game link opens the team alone")
+    func teamLinkReplacesGame() throws {
+        let favorites = [chiefs, royals, blues]
+        var home = HomeDriver(selection: chiefs, teams: [chiefs, royals], favoriteIDs: favorites)
+        home.open(try gameLink("401", blues).1)
+        #expect(home.state.pendingGame != nil)
+
+        home.open(try link(royals))
+        #expect(home.state == HomeRouting.State(selection: royals, pendingLink: nil))
+        home.resolve(favorites)
+        #expect(home.state == HomeRouting.State(selection: royals, pendingLink: nil))
+    }
+
+    @Test("Team links still route as before: no game opens")
+    func teamLinkOpensNoGame() throws {
+        let favorites = [chiefs, royals]
+        var home = HomeDriver(selection: chiefs, teams: favorites, favoriteIDs: favorites)
+        home.open(try link(royals))
+        #expect(home.state.openGame == nil)
+        #expect(home.state.pendingGame == nil)
+        #expect(home.state.selection == royals)
     }
 }

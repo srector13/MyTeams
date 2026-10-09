@@ -185,6 +185,14 @@ struct LeagueID: Hashable, Sendable, CustomStringConvertible {
     func athleteSplitsURL(athleteID: String) -> String {
         "\(athleteURL(athleteID: athleteID))/splits"
     }
+
+    /// The game's page on espn.com, which a shared game links to (R-3):
+    /// `https://www.espn.com/nfl/game/_/gameId/401`. Soccer's are matches,
+    /// under the sport rather than the competition.
+    func gameWebURL(gameID: String) -> URL? {
+        let section = sport == "soccer" ? "soccer/match" : "\(league)/game"
+        return URL(string: "https://www.espn.com/\(section)/_/gameId/\(gameID)")
+    }
 }
 
 extension LeagueID: Codable {
@@ -313,12 +321,31 @@ struct TeamRef: Codable, Identifiable, Hashable, Sendable {
 /// `myteams://team/football/nfl:12`. Built by the widget, the Live Activity
 /// (`GameActivityInfo.deepLink`) and the score alerts, read by the app.
 ///
+/// Or one game's sheet, over its team's page (R-3):
+/// `myteams://game/<league path>:<event id>?team=<TeamRef.id>`, e.g.
+/// `myteams://game/football/nfl:401?team=football/nfl:12`.
+///
 /// Always built from the team's own `TeamRef.id`, in its home league: a cup
 /// tie is listed under the cup's board (`"soccer/uefa.champions"`), which is
 /// no league the team is filed under.
 enum WidgetDeepLink {
     static let scheme = "myteams"
     static let teamHost = "team"
+    static let gameHost = "game"
+    /// The game link's query item naming the team whose page it opens over.
+    static let teamQueryName = "team"
+
+    /// What a game link names: the event, the league or cup whose
+    /// scoreboard lists it, and the favorite whose page its sheet opens
+    /// over.
+    struct GameTarget: Hashable, Sendable {
+        let league: LeagueID
+        /// ESPN's event id, `Game.gameID`.
+        let eventID: String
+        /// The team's `TeamRef.id`, in its home league; `nil` when the link
+        /// names none, or none well formed.
+        let teamID: TeamRef.ID?
+    }
 
     /// The link that opens `teamID`'s page. `nil` for anything
     /// `TeamRef.parse(id:)` rejects.
@@ -341,6 +368,52 @@ enum WidgetDeepLink {
         // `parse` would take "football/nfl:12/extra" as ESPN id "12/extra".
         guard let parsed = TeamRef.parse(id: id), !parsed.espnID.contains("/") else { return nil }
         return id
+    }
+
+    /// The link that opens game `eventID`'s sheet over `teamID`'s page.
+    /// `nil` for an empty event id or one holding a `/` or `:`, or for a
+    /// `teamID` that `TeamRef.parse(id:)` rejects.
+    static func url(forGame eventID: String, league: LeagueID, teamID: TeamRef.ID?) -> URL? {
+        guard !eventID.isEmpty, !eventID.contains("/"), !eventID.contains(":"),
+              let path = TeamRef.id(league: league, espnID: eventID)
+                  .addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+        else { return nil }
+        var link = "\(scheme)://\(gameHost)/\(path)"
+        if let teamID {
+            guard TeamRef.parse(id: teamID) != nil,
+                  let team = teamID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+            else { return nil }
+            link += "?\(teamQueryName)=\(team)"
+        }
+        return URL(string: link)
+    }
+
+    /// The game a link names, or `nil` unless it is a `myteams://game/` link
+    /// to `<league path>:<event id>`. A `team` that is not a well-formed id
+    /// is read as none. Scheme and host match case-insensitively.
+    static func game(from url: URL) -> GameTarget? {
+        guard url.scheme?.lowercased() == scheme,
+              url.host()?.lowercased() == gameHost
+        else { return nil }
+        let path = url.path(percentEncoded: false)
+        guard path.hasPrefix("/"),
+              let parsed = TeamRef.parse(id: String(path.dropFirst())),
+              !parsed.espnID.contains("/")
+        else { return nil }
+        let team = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first { $0.name == teamQueryName }?
+            .value
+        var teamID: TeamRef.ID?
+        if let team, let named = TeamRef.parse(id: team), !named.espnID.contains("/") {
+            teamID = team
+        }
+        return GameTarget(league: parsed.league, eventID: parsed.espnID, teamID: teamID)
+    }
+
+    /// The team whose page a team or game link opens.
+    static func linkedTeamID(from url: URL) -> TeamRef.ID? {
+        teamID(from: url) ?? game(from: url)?.teamID
     }
 }
 

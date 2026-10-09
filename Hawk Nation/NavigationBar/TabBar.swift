@@ -27,6 +27,17 @@ struct Home: View {
     /// once handled; a team that is not a favorite is ignored.
     @Binding var deepLinkedTeamID: TeamRef.ID?
 
+    /// A game a link asked for, with `deepLinkedTeamID` its team: its
+    /// sheet opens over the team's page (R-3). Cleared with the team link.
+    @Binding var deepLinkedGame: WidgetDeepLink.GameTarget?
+
+    /// A game link whose team is selected, until its game is found in the
+    /// team's schedule (`HomeRouting.State.openGame`).
+    @State private var openGame: WidgetDeepLink.GameTarget?
+
+    /// The linked game's sheet.
+    @State private var linkedGame: LinkedGame?
+
     /// The favorites as teams. Starts with those the bundled catalog knows,
     /// so the first frame has any bundled teams followed, then fills in from
     /// the catalog.
@@ -73,8 +84,9 @@ struct Home: View {
     @Environment(\.displayScale) private var displayScale
 
     // Spelled out: the private state makes the memberwise init private.
-    init(deepLinkedTeamID: Binding<TeamRef.ID?>) {
+    init(deepLinkedTeamID: Binding<TeamRef.ID?>, deepLinkedGame: Binding<WidgetDeepLink.GameTarget?> = .constant(nil)) {
         self._deepLinkedTeamID = deepLinkedTeamID
+        self._deepLinkedGame = deepLinkedGame
     }
 
     private var routing: HomeRouting.State {
@@ -82,7 +94,9 @@ struct Home: View {
             selection: selection,
             pendingLink: deepLinkedTeamID,
             showsSettings: showsSettings,
-            visits: visits
+            visits: visits,
+            pendingGame: deepLinkedGame,
+            openGame: openGame
         )
     }
 
@@ -99,6 +113,27 @@ struct Home: View {
         if visits != routed.visits {
             visits = routed.visits
         }
+        if deepLinkedGame != routed.pendingGame {
+            deepLinkedGame = routed.pendingGame
+        }
+        if openGame != routed.openGame {
+            openGame = routed.openGame
+        }
+    }
+
+    /// Finds the linked game in its team's schedule and opens its sheet,
+    /// then forgets the link. A game the schedule does not list opens
+    /// nothing; the team's page is already on screen.
+    private func presentOpenGame() async {
+        guard let target = openGame else { return }
+        // Unless a newer link has replaced it meanwhile.
+        defer { if openGame == target { openGame = nil } }
+        guard let team = teams.first(where: { $0.id == target.teamID }),
+              case .success(let games) = await downloadScheduleData(team: team),
+              !Task.isCancelled,
+              let game = games.first(where: { $0.gameID == target.eventID })
+        else { return }
+        linkedGame = LinkedGame(game: game, team: team)
     }
 
     /// The other teams' pages pushed over `teamID`'s page.
@@ -170,6 +205,14 @@ struct Home: View {
         }
         .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
             apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
+        }
+        // A game link's team is selected: its sheet, once the schedule
+        // names the game (R-3).
+        .task(id: openGame) {
+            await presentOpenGame()
+        }
+        .sheet(item: $linkedGame) { linked in
+            GameDetailView(game: linked.game, team: linked.team)
         }
         // A tab item takes a finished image, not a view that loads one, so
         // the crests are fetched here and the items redrawn as each lands.
@@ -309,6 +352,21 @@ enum HomeRouting {
         /// Other teams' pages pushed over each favorite's page, by the
         /// favorite's id (`teamOpened`); none for most.
         var visits: [TeamRef.ID: [TeamVisit]] = [:]
+        /// A game link's game, waiting on `pendingLink`, its team
+        /// (`Home.deepLinkedGame`, R-3). Handled and cleared with it.
+        var pendingGame: WidgetDeepLink.GameTarget? = nil
+        /// The game whose sheet `Home` opens over its team's page, now
+        /// selected (`Home.openGame`).
+        var openGame: WidgetDeepLink.GameTarget? = nil
+    }
+
+    /// The link's team has been selected (`selected`), or dropped: a game
+    /// waiting on it is to open over the team's page, or is dropped too.
+    private static func linkHandled(_ state: inout State, selected: Bool) {
+        if selected, let game = state.pendingGame, game.teamID == state.selection {
+            state.openGame = game
+        }
+        state.pendingGame = nil
     }
 
     /// The favorites have been resolved to `teams`, in order. Home stays
@@ -328,6 +386,7 @@ enum HomeRouting {
             if teams.contains(id) {
                 next.selection = id
             }
+            linkHandled(&next, selected: teams.contains(id))
         }
         return next
     }
@@ -374,17 +433,29 @@ enum HomeRouting {
     /// team is selected at once and a team that is not a favorite is
     /// dropped; a favorite still resolving stays pending for
     /// `favoritesResolved`.
+    /// A game waiting on the link opens with its team, or goes with it.
     static func linkChanged(_ state: State, teams: [TeamRef.ID], favoriteIDs: [TeamRef.ID]) -> State {
         guard let id = state.pendingLink else { return state }
         var next = state
         if teams.contains(id) {
             next.selection = id
             next.pendingLink = nil
+            linkHandled(&next, selected: true)
         } else if !favoriteIDs.contains(id) {
             next.pendingLink = nil
+            linkHandled(&next, selected: false)
         }
         return next
     }
+}
+
+/// A game a link opened, with the favorite whose page its sheet is over
+/// (`Home.linkedGame`, R-3).
+struct LinkedGame: Identifiable {
+    let game: Game
+    let team: TeamRef
+
+    var id: String { game.gameID }
 }
 
 /// Another team's page pushed over a favorite's (`HomeRouting.teamOpened`):
