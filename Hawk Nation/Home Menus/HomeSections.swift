@@ -314,6 +314,12 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     @State private var selectedGame: Game?
 
+    /// The game whose new-event sheet is up, from its card's menu (R-7).
+    @State private var calendarDraft: EventDraft?
+
+    /// What the last season sync did, or why it couldn't (R-7).
+    @State private var calendarMessage: String?
+
     /// Where a game's sheet zooms from: its card (X-13).
     @Namespace private var cardZoom
 
@@ -341,6 +347,22 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 Text(record)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if !seasonDrafts.isEmpty {
+                    GlassEffectContainer(spacing: Theme.Spacing.s) {
+                        SectionHeaderMenu(
+                            title: "Calendar",
+                            systemImage: "calendar.badge.plus",
+                            identifier: "schedule.calendar"
+                        ) {
+                            Button {
+                                syncSeason()
+                            } label: {
+                                Label("Add Remaining Games", systemImage: "calendar.badge.plus")
+                            }
+                            .accessibilityIdentifier("schedule.calendar.season")
+                        }
+                    }
+                }
             }
             .padding([.leading, .top, .trailing])
 
@@ -357,6 +379,42 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
         .sheet(item: $selectedGame) { game in
             detail(game)
                 .zoomTransition(sourceID: game.id, in: cardZoom)
+        }
+        .sheet(item: $calendarDraft) { draft in
+            EventEditSheet(draft: draft) { calendarDraft = nil }
+                .ignoresSafeArea()
+        }
+        .alert(
+            "Calendar",
+            isPresented: Binding(
+                get: { calendarMessage != nil },
+                set: { if !$0 { calendarMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(calendarMessage ?? "")
+        }
+    }
+
+    /// The games a season sync would write: those still to come with a
+    /// real start time (`CalendarEventBuilder.seasonDrafts`).
+    private var seasonDrafts: [EventDraft] {
+        CalendarEventBuilder.seasonDrafts(for: model.games, team: model.team)
+    }
+
+    /// Adds the remaining games to the team's own calendar, or brings the
+    /// ones added before up to date: a rescheduled game is moved, never
+    /// added twice (R-7).
+    private func syncSeason() {
+        let drafts = seasonDrafts
+        let title = CalendarEventBuilder.calendarTitle(for: model.team)
+        Task {
+            do {
+                calendarMessage = try await CalendarWriter.syncSeason(drafts, calendarTitle: title).message
+            } catch {
+                calendarMessage = error.localizedDescription
+            }
         }
     }
 
@@ -434,6 +492,15 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                     Label(game.opponent.isEmpty ? "Opponent's Page" : game.opponent, systemImage: "person.3")
                 }
                 .accessibilityIdentifier("schedule.opponent.\(game.opponentID)")
+            }
+            // A game still to come can go on the calendar (R-7).
+            if CalendarEventBuilder.isUpcoming(game) {
+                Button {
+                    calendarDraft = CalendarEventBuilder.draft(for: game, team: model.team)
+                } label: {
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus")
+                }
+                .accessibilityIdentifier("schedule.calendar.\(game.id)")
             }
         }
     }
