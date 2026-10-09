@@ -88,6 +88,9 @@ struct MyTeamsApp: App {
                     // Pick up favorites edited on other devices meanwhile.
                     if phase == .active {
                         FavoritesStore.shared.synchronize()
+                        // The widgets read the favorites from the store the
+                        // signature names; write it on every launch.
+                        FavoritesStore.shared.publishToWidgets()
                     }
                     // Ask for the first background look, timed by the
                     // favorites' seasons as last loaded.

@@ -55,18 +55,36 @@ struct TeamEntityQuery: EntityStringQuery {
     /// The most teams a search returns.
     private static let searchLimit = 30
 
-    /// The teams a placed widget or a shortcut names. Each is resolved again
-    /// every timeline, so the lookup is bounded: the app's copy of the
-    /// favorites first, then the bundle, then the catalog within
-    /// `WidgetTeams.resolveDeadline`.
+    /// The teams a placed widget or a shortcut names
+    /// (`configured(_:mirrored:remembered:resolve:)`).
     func entities(for identifiers: [TeamEntity.ID]) async throws -> [TeamEntity] {
-        let mirrored = SharedContainer.live.favoritesMirror()?.teams ?? []
+        await Self.configured(identifiers, mirrored: SharedContainer.live.favoritesMirror()?.teams ?? [])
+    }
+
+    /// The teams `identifiers` name. Each is resolved again every timeline,
+    /// so the lookup is bounded: the app's copy of the favorites first, then
+    /// the teams this process offered or resolved before (`remembered`, its
+    /// own defaults, so no App Group or keychain is needed), then the bundle
+    /// and the catalog within `WidgetTeams.resolveDeadline`, and last a
+    /// placeholder named for the league. A chosen id is never dropped: the
+    /// system keeps it in the widget's configuration, and dropping it here
+    /// is what turned a configured widget back into its first favorite, or
+    /// the sample teams, whenever sharing failed.
+    static func configured(
+        _ identifiers: [TeamEntity.ID],
+        mirrored: [TeamRef],
+        remembered: UserDefaults = .standard,
+        resolve: (TeamRef.ID) async -> TeamRef? = { await WidgetTeams.resolve($0, within: WidgetTeams.resolveDeadline) }
+    ) async -> [TeamEntity] {
         var entities: [TeamEntity] = []
         for id in identifiers {
-            if let team = mirrored.first(where: { $0.id == id }) {
+            if let team = mirrored.first(where: { $0.id == id }) ?? WidgetConfigTeams.team(id: id, in: remembered) {
                 entities.append(TeamEntity(team: team))
-            } else if let team = await WidgetTeams.resolve(id, within: WidgetTeams.resolveDeadline) {
+            } else if let team = await resolve(id) {
+                WidgetConfigTeams.remember([team], in: remembered)
                 entities.append(TeamEntity(team: team))
+            } else if let placeholder = TeamRef.placeholder(id: id) {
+                entities.append(TeamEntity(team: placeholder))
             }
         }
         return entities
@@ -75,19 +93,24 @@ struct TeamEntityQuery: EntityStringQuery {
     /// The reader's favorites, as the app shares them
     /// (`suggestions(in:resolve:samples:)`).
     func suggestedEntities() async throws -> [TeamEntity] {
-        await Self.suggestions(in: .live)
+        let entities = await Self.suggestions(in: .live, chosen: WidgetConfigTeams.chosen())
+        WidgetConfigTeams.remember(entities.map(\.team))
+        return entities
     }
 
     /// The configuration's suggestions: the favorites the app shares, in
     /// order, noted with the store when it is not the project's App Group.
     ///
-    /// With none to offer, the bundled `samples`, each subtitled as a sample
-    /// and why: none followed, or the favorites unreadable and from which
-    /// store. Never the bundled teams passed off as the reader's own, which
-    /// is what an unreadable store used to look like. A team chosen here is
-    /// kept by the system, so the widget still shows it.
+    /// With none to offer, the teams already `chosen` for a widget on this
+    /// device, then the bundled `samples`, each subtitled as what it is and
+    /// why the favorites are missing: none followed, or unreadable and from
+    /// which store. Never the bundled teams passed off as the reader's own,
+    /// which is what an unreadable store used to look like. A team chosen
+    /// here is kept by the system and remembered by this process
+    /// (`WidgetConfigTeams`), so the widget still shows it.
     static func suggestions(
         in container: SharedContainer,
+        chosen: [TeamRef] = [],
         resolve: (TeamRef.ID) async -> TeamRef? = { await WidgetTeams.resolve($0, within: WidgetTeams.resolveDeadline) },
         samples: [TeamRef] = FavoriteTeams.teams
     ) async -> [TeamEntity] {
@@ -97,8 +120,20 @@ struct TeamEntityQuery: EntityStringQuery {
             let note = suggestionNote(status)
             return favorites.map { TeamEntity(team: $0, note: note) }
         }
+        let chosenNote = self.chosenNote(status)
         let note = sampleNote(status)
-        return samples.map { TeamEntity(team: $0, note: note) }
+        let chosenIDs = Set(chosen.map(\.id))
+        return chosen.map { TeamEntity(team: $0, note: chosenNote) }
+            + samples.filter { !chosenIDs.contains($0.id) }.map { TeamEntity(team: $0, note: note) }
+    }
+
+    /// The subtitle of a team offered because a widget here showed it
+    /// before, with no favorites to offer.
+    static func chosenNote(_ status: SharedDataStatus) -> String {
+        guard let note = status.note, !status.isAvailable else {
+            return "Chosen before · no favorites in myTeams"
+        }
+        return "Chosen before · \(note)"
     }
 
     /// The status line the favorites carry: none while the project's group
@@ -118,8 +153,14 @@ struct TeamEntityQuery: EntityStringQuery {
     /// Searches the leagues of the reader's favorites, plus every listed
     /// league whose catalog is already cached, by the same folded matching
     /// as the app's picker.
+    ///
+    /// Without the app's favorites or caches (a store the widget can't
+    /// read), the bundled teams, those this process remembers, and the
+    /// small professional leagues are searched too, so any of them can still
+    /// be chosen; the college leagues' catalogs are too large to load here.
     func entities(matching string: String) async throws -> [TeamEntity] {
         let catalog = RemoteTeamCatalog.shared
+        var matches = (TeamCatalog.all + WidgetConfigTeams.known()).filter { TeamSearch.matches($0, query: string) }
         var leagues: [LeagueID] = []
         for id in SharedPaths.favoriteTeamIDs() {
             if let league = TeamRef.parse(id: id)?.league, !leagues.contains(league) {
@@ -133,14 +174,28 @@ struct TeamEntityQuery: EntityStringQuery {
             }
         }
 
-        var matches: [TeamRef] = []
-        for league in leagues {
-            for team in await catalog.teams(for: league) where TeamSearch.matches(team, query: string) {
-                matches.append(team)
-            }
+        for league in Self.searchedWithoutCache where !leagues.contains(league) {
+            leagues.append(league)
         }
-        return Self.entities(for: matches)
+        let searched = leagues
+        let found = await Deadline.value(within: WidgetTeams.resolveDeadline) { () async -> [TeamRef]? in
+            var found: [TeamRef] = []
+            for league in searched {
+                for team in await catalog.teams(for: league) where TeamSearch.matches(team, query: string) {
+                    found.append(team)
+                }
+            }
+            return found
+        } ?? []
+        let bundled = Set(matches.map(\.id))
+        matches += found.filter { !bundled.contains($0.id) }
+        let entities = Self.entities(for: matches)
+        WidgetConfigTeams.remember(entities.map(\.team))
+        return entities
     }
+
+    /// Leagues a few dozen teams long, searched even when not cached.
+    static let searchedWithoutCache: [LeagueID] = [.nfl, .nba, .mlb, .nhl, .mls, .wnba, .nwsl]
 
     /// One entity per club, as the app's search lists them
     /// (`TeamSearch.canonicalClubs(from:)`), at most `searchLimit`.
@@ -230,5 +285,65 @@ enum WidgetTeams {
             return first
         }
         return container.favoriteTeamIDs().lazy.compactMap(TeamCatalog.team(id:)).first ?? fallback
+    }
+}
+
+// MARK: - Widget configuration teams
+
+/// The teams this process has offered, resolved or shown for a widget's
+/// configuration, in its own `UserDefaults` (the widget extension's own
+/// container): what lets a configured widget show its team with no App
+/// Group or keychain shared with the app. The system keeps only the chosen
+/// team's id in the configuration (`TeamEntity.id`); this keeps the team
+/// that id names.
+enum WidgetConfigTeams {
+    static let knownKey = "widgetConfig.knownTeams.v1"
+    static let chosenKey = "widgetConfig.chosenTeams.v1"
+    /// The most teams kept: a search offers up to 30 at a time.
+    static let knownLimit = 120
+    static let chosenLimit = 12
+
+    /// A team remembered under `id`.
+    static func team(id: TeamRef.ID, in defaults: UserDefaults = .standard) -> TeamRef? {
+        chosen(in: defaults).first { $0.id == id } ?? known(in: defaults).first { $0.id == id }
+    }
+
+    /// Every team remembered, most recent first.
+    static func known(in defaults: UserDefaults = .standard) -> [TeamRef] {
+        read(knownKey, from: defaults)
+    }
+
+    /// The teams widgets here have shown, most recent first.
+    static func chosen(in defaults: UserDefaults = .standard) -> [TeamRef] {
+        read(chosenKey, from: defaults)
+    }
+
+    /// Remembers `teams`, most recent first; placeholders are left out.
+    static func remember(_ teams: [TeamRef], in defaults: UserDefaults = .standard) {
+        write(teams, to: knownKey, limit: knownLimit, in: defaults)
+    }
+
+    /// Records that a widget shows `team`: it is offered first when the
+    /// favorites can't be read, and resolves from here.
+    static func markChosen(_ team: TeamRef, in defaults: UserDefaults = .standard) {
+        write([team], to: chosenKey, limit: chosenLimit, in: defaults)
+    }
+
+    private static func read(_ key: String, from defaults: UserDefaults) -> [TeamRef] {
+        guard let data = defaults.data(forKey: key) else { return [] }
+        return (try? JSONDecoder().decode([TeamRef].self, from: data)) ?? []
+    }
+
+    private static func write(_ teams: [TeamRef], to key: String, limit: Int, in defaults: UserDefaults) {
+        let fresh = teams.filter { $0 != TeamRef.placeholder(id: $0.id) }
+        guard !fresh.isEmpty else { return }
+        let current = read(key, from: defaults)
+        var merged: [TeamRef] = []
+        for team in fresh + current where !merged.contains(where: { $0.id == team.id }) {
+            merged.append(team)
+        }
+        merged = Array(merged.prefix(limit))
+        guard merged != current, let data = try? JSONEncoder().encode(merged) else { return }
+        defaults.set(data, forKey: key)
     }
 }

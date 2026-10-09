@@ -37,6 +37,9 @@ extension WidgetTeams {
     /// not share, which the entry then says (`WidgetMissingTeam`).
     static func team(for configuration: SelectTeamIntent) async -> TeamRef? {
         if let chosen = configuration.team?.team {
+            // Kept in the extension's own defaults, so the team resolves
+            // again with nothing shared with the app (`WidgetConfigTeams`).
+            WidgetConfigTeams.markChosen(chosen)
             return chosen
         }
         let container = SharedContainer.live

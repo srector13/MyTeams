@@ -326,6 +326,21 @@ final class FavoritesStore {
         }
     }
 
+    /// Shares the favorites with the widgets now, with the teams already
+    /// known without a lookup (the last copy shared, else the bundle's):
+    /// at launch and each time the app comes to the foreground, so a store
+    /// the widget reads is written before any team page loads.
+    /// `shareWithWidgets` fills in the rest as lookups finish.
+    func publishToWidgets() {
+        let shared = SharedFavoritesMirror.decode(defaults.data(forKey: SharedFavoritesMirror.defaultsKey))?.teams
+            ?? SharedContainer.live.favoritesMirror()?.teams
+            ?? []
+        let teams = teamIDs.compactMap { id in shared.first { $0.id == id } ?? TeamCatalog.team(id: id) }
+        if SharedFavoritesMirror.publish(ids: teamIDs, teams: teams, at: now(), defaults: defaults) {
+            reloadWidgets()
+        }
+    }
+
     private func didChange() {
         seedIsProvisional = false
         FavoritesCodec.save(favorites + tombstones, orderChangedAt: orderChangedAt, defaults: defaults, cloud: cloud)
