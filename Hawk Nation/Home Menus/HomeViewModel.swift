@@ -216,6 +216,9 @@ final class HomeViewModel {
     private var articles: [TeamRef.ID: [News]] = [:]
     private var newsStates: [TeamRef.ID: SectionLoadState] = [:]
     @ObservationIgnored private var newsLoadedAt: [TeamRef.ID: Date] = [:]
+    /// When each favorite's news on screen was fetched, for the feeds served
+    /// from the `FeedCache` (R-4).
+    private var newsCachedAt: [TeamRef.ID: Date] = [:]
 
     private let scoreboards: LeagueScoreboardCenter
     private let loadNews: @Sendable (String) async -> Result<[News], NetworkError>
@@ -285,6 +288,13 @@ final class HomeViewModel {
         HomeFeed.combinedState(teams.map { newsStates[$0.id] ?? .loading })
     }
 
+    /// When the oldest news feed on screen was fetched, when any came from
+    /// the `FeedCache` because the network could not be reached; `nil` when
+    /// every one is the network's own. For an `UpdatedCaption`.
+    var headlinesCachedAt: Date? {
+        teams.compactMap { newsCachedAt[$0.id] }.min()
+    }
+
     /// `game`'s live score for `team` on the scoreboard, for a game in
     /// Upcoming that has got under way since the last `refreshInterval`.
     func liveScore(for game: Game, team: TeamRef) -> LiveGameScore? {
@@ -301,6 +311,7 @@ final class HomeViewModel {
         articles = articles.filter { ids.contains($0.key) }
         newsStates = newsStates.filter { ids.contains($0.key) }
         newsLoadedAt = newsLoadedAt.filter { ids.contains($0.key) }
+        newsCachedAt = newsCachedAt.filter { ids.contains($0.key) }
 
         while !Task.isCancelled {
             now = clock()
@@ -350,36 +361,40 @@ final class HomeViewModel {
 
         let load = loadNews
         let answers = await withTaskGroup(
-            of: (TeamRef.ID, Result<[News], NetworkError>).self,
-            returning: [(TeamRef.ID, Result<[News], NetworkError>)].self
+            of: (TeamRef.ID, Result<[News], NetworkError>, Date?).self,
+            returning: [(TeamRef.ID, Result<[News], NetworkError>, Date?)].self
         ) { group in
             for team in due {
                 let id = team.id
                 let url = team.newsURL
                 group.addTask {
-                    (id, await load(url))
+                    // Stored as it loads, and read back offline (R-4).
+                    let (result, cachedAt) = await HTTPClient.withFeedCache(.persist) { await load(url) }
+                    return (id, result, cachedAt)
                 }
             }
-            var answers: [(TeamRef.ID, Result<[News], NetworkError>)] = []
+            var answers: [(TeamRef.ID, Result<[News], NetworkError>, Date?)] = []
             for await answer in group {
                 answers.append(answer)
             }
             return answers
         }
 
-        for (id, result) in answers {
-            apply(news: result, for: id)
+        for (id, result, cachedAt) in answers {
+            apply(news: result, cachedAt: cachedAt, for: id)
         }
     }
 
     /// Publishes a news fetch. A failure keeps what is already on screen,
     /// and a cancelled fetch (Home went away mid-load) changes nothing, as
-    /// on a team page (`TeamModel`).
-    private func apply(news result: Result<[News], NetworkError>, for id: TeamRef.ID) {
+    /// on a team page (`TeamModel`). News served from the cache is shown but
+    /// not counted as loaded, so the next `refreshInterval` asks again.
+    private func apply(news result: Result<[News], NetworkError>, cachedAt: Date?, for id: TeamRef.ID) {
         switch result {
         case .success(let loaded):
             newsStates[id] = .loaded
-            newsLoadedAt[id] = clock()
+            newsLoadedAt[id] = cachedAt == nil ? clock() : nil
+            newsCachedAt[id] = cachedAt
             articles[id] = loaded
         case .failure(let error):
             if case .cancelled = error { return }

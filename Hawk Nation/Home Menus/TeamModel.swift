@@ -141,6 +141,21 @@ final class TeamModel<Player: RosterPlayer> {
     /// going final made it stale (A-3). See `needsRefresh(_:)`.
     @ObservationIgnored private var loadedAt: [TeamFeed: Date] = [:]
 
+    /// When the schedule on screen was fetched, when it came from the
+    /// `FeedCache` because the network could not be reached (R-4); `nil`
+    /// when it is the network's own. Cached scores are not live, so no live
+    /// score is polled while it is set.
+    private(set) var scheduleCachedAt: Date?
+
+    /// When the schedule on screen was fetched — just now from the network,
+    /// or `scheduleCachedAt` — for an "Updated … ago" caption
+    /// (`UpdatedCaption`). `nil` until a schedule has loaded.
+    private(set) var scheduleUpdatedAt: Date?
+
+    /// When each of the other feeds on screen was fetched, for the feeds
+    /// served from the `FeedCache`; a feed absent here is the network's own.
+    private(set) var feedCachedAt: [TeamFeed: Date] = [:]
+
     /// Live scores for the games in the live window, keyed by `Game.gameID`,
     /// as the league's scoreboard reports them (`LeagueScoreboardCenter`).
     /// Schedule cards render from this instead of each card fetching its own
@@ -148,8 +163,9 @@ final class TeamModel<Player: RosterPlayer> {
     /// or too old) drops out; its score comes from the schedule feed itself.
     var liveScores: [String: LiveGameScore] {
         let now = Date()
+        let networkFresh = scheduleCachedAt == nil
         var scores: [String: LiveGameScore] = [:]
-        for game in games where shouldPollLiveScore(game: game, now: now) {
+        for game in games where shouldPollLiveScore(game: game, now: now, networkFresh: networkFresh) {
             if let score = scoreboards.liveScore(for: game, team: team) {
                 scores[game.gameID] = score
             }
@@ -270,7 +286,7 @@ final class TeamModel<Player: RosterPlayer> {
 
         // The schedule first: a game it shows going final marks the other
         // feeds stale, and their answers here are the fresh ones.
-        apply(schedule: loadedSchedule)
+        apply(schedule: loadedSchedule.result, cachedAt: loadedSchedule.cachedAt)
         updateScoreboardSubscription()
         if let loadedRoster { apply(roster: loadedRoster) }
         if let loadedNews { apply(news: loadedNews) }
@@ -333,8 +349,8 @@ final class TeamModel<Player: RosterPlayer> {
 
     /// Publishes a schedule fetch, and when it shows a followed game gone
     /// final, refetches the feeds that changed with it straight away (A-3).
-    private func publish(schedule result: Result<[Game], NetworkError>) async {
-        if apply(schedule: result) {
+    private func publish(schedule fetched: Fetched<[Game]>) async {
+        if apply(schedule: fetched.result, cachedAt: fetched.cachedAt) {
             await refreshExpiredFeeds()
         }
     }
@@ -384,8 +400,12 @@ final class TeamModel<Player: RosterPlayer> {
     /// `competition` that qualify under `shouldPollLiveScore`: the ones its
     /// scoreboard is polled for.
     private func liveScoreboardDays(in competition: LeagueID, now: Date = Date()) -> Set<String> {
-        Set(games
-            .filter { ($0.competition ?? team.league) == competition && shouldPollLiveScore(game: $0, now: now) }
+        let networkFresh = scheduleCachedAt == nil
+        return Set(games
+            .filter {
+                ($0.competition ?? team.league) == competition
+                    && shouldPollLiveScore(game: $0, now: now, networkFresh: networkFresh)
+            }
             .map { scoreboardDay(for: $0.dateAsDate) })
     }
 
@@ -412,7 +432,7 @@ final class TeamModel<Player: RosterPlayer> {
     /// Refetches the roster after a failed load.
     func reloadRoster() async {
         rosterState = .loading
-        apply(roster: await loadRoster(team))
+        if let loaded = await fetchRoster(if: true) { apply(roster: loaded) }
     }
 
     /// Refetches the schedule after a failed load, without waiting for the
@@ -426,59 +446,83 @@ final class TeamModel<Player: RosterPlayer> {
     /// Refetches the news after a failed load.
     func reloadNews() async {
         newsState = .loading
-        apply(news: await loadNews(newsURL))
+        if let loaded = await fetchNews(if: true) { apply(news: loaded) }
     }
 
     /// Refetches the standings after a failed load.
     func reloadStandings() async {
         standingsState = .loading
-        apply(standings: await loadStandings(team.league))
+        if let loaded = await fetchStandings(if: true) { apply(standings: loaded) }
     }
 
     /// Refetches the leaders, after a failed load or on request.
     func reloadLeaders() async {
         leadersState = .loading
-        apply(leaders: await loadLeaders(team))
+        if let loaded = await fetchLeaders(if: true) { apply(leaders: loaded) }
     }
 
     // MARK: - Applying results
 
-    private func fetchSchedule() async -> Result<[Game], NetworkError> {
-        await loadSchedule(team)
+    /// A feed's answer, and when it was fetched when it came from the
+    /// `FeedCache` rather than the network (R-4).
+    typealias Fetched<Value> = (result: Result<Value, NetworkError>, cachedAt: Date?)
+
+    /// Runs `load` with its requests under `.persist`: a good answer is
+    /// stored, and one that cannot reach the network is answered from the
+    /// last stored one.
+    private func persisting<Value: Sendable>(
+        _ load: @escaping @Sendable () async -> Result<Value, NetworkError>
+    ) async -> Fetched<Value> {
+        let (result, cachedAt) = await HTTPClient.withFeedCache(.persist, operation: load)
+        return (result, cachedAt)
+    }
+
+    private func fetchSchedule() async -> Fetched<[Game]> {
+        await persisting { [load = self.loadSchedule, team = self.team] in await load(team) }
     }
 
     /// The roster, or `nil` when it is not `due`.
-    private func fetchRoster(if due: Bool) async -> Result<[Player], NetworkError>? {
+    private func fetchRoster(if due: Bool) async -> Fetched<[Player]>? {
         guard due else { return nil }
-        return await loadRoster(team)
+        return await persisting { [load = self.loadRoster, team = self.team] in await load(team) }
     }
 
     /// The news, or `nil` when it is not `due`.
-    private func fetchNews(if due: Bool) async -> Result<[News], NetworkError>? {
+    private func fetchNews(if due: Bool) async -> Fetched<[News]>? {
         guard due else { return nil }
-        return await loadNews(newsURL)
+        return await persisting { [load = self.loadNews, url = self.newsURL] in await load(url) }
     }
 
     /// The standings, or `nil` when they are not `due`.
-    private func fetchStandings(if due: Bool) async -> Result<Standings, NetworkError>? {
+    private func fetchStandings(if due: Bool) async -> Fetched<Standings>? {
         guard due else { return nil }
-        return await loadStandings(team.league)
+        return await persisting { [load = self.loadStandings, league = self.team.league] in await load(league) }
     }
 
     /// The leaders, or `nil` when they are not `due`.
-    private func fetchLeaders(if due: Bool) async -> Result<StatLeaders, NetworkError>? {
+    private func fetchLeaders(if due: Bool) async -> Fetched<StatLeaders>? {
         guard due else { return nil }
-        return await loadLeaders(team)
+        return await persisting { [load = self.loadLeaders, team = self.team] in await load(team) }
+    }
+
+    /// Records when `feed` loaded. One served from the cache is shown but
+    /// not counted as loaded, so the page's next appearance asks the
+    /// network again (`needsRefresh(_:)`).
+    private func markLoaded(_ feed: TeamFeed, cachedAt: Date?) {
+        loadedAt[feed] = cachedAt == nil ? now() : nil
+        feedCachedAt[feed] = cachedAt
     }
 
     /// Publishes a schedule fetch. A failure keeps what is already on screen
     /// rather than blanking the carousel; it only shows as an error when
     /// there is nothing else to show.
     ///
+    /// - Parameter cachedAt: when the schedule was fetched, for one served
+    ///   from the `FeedCache`.
     /// - Returns: whether a game on screen went final with this fetch, which
     ///   marks the feeds it changes stale (A-3).
     @discardableResult
-    private func apply(schedule result: Result<[Game], NetworkError>) -> Bool {
+    private func apply(schedule result: Result<[Game], NetworkError>, cachedAt: Date?) -> Bool {
         switch result {
         case .success(let schedule):
             scheduleState = .loaded
@@ -486,6 +530,8 @@ final class TeamModel<Player: RosterPlayer> {
             // hiccup than a cleared schedule, so games on screen stay put.
             guard !schedule.isEmpty else { return false }
 
+            scheduleCachedAt = cachedAt
+            scheduleUpdatedAt = cachedAt ?? now()
             let wentFinal = gameWentFinal(from: games, to: schedule)
             games = schedule
             nextGame = getNextGame(
@@ -504,11 +550,11 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
-    private func apply(roster result: Result<[Player], NetworkError>) {
-        switch result {
+    private func apply(roster fetched: Fetched<[Player]>) {
+        switch fetched.result {
         case .success(let roster):
             rosterState = .loaded
-            loadedAt[.roster] = now()
+            markLoaded(.roster, cachedAt: fetched.cachedAt)
             allPlayers = roster
             applyFilterAndSort()
         case .failure(let error):
@@ -516,33 +562,33 @@ final class TeamModel<Player: RosterPlayer> {
         }
     }
 
-    private func apply(standings result: Result<Standings, NetworkError>) {
-        switch result {
+    private func apply(standings fetched: Fetched<Standings>) {
+        switch fetched.result {
         case .success(let loaded):
             standingsState = .loaded
-            loadedAt[.standings] = now()
+            markLoaded(.standings, cachedAt: fetched.cachedAt)
             standings = loaded
         case .failure(let error):
             fail(&standingsState, with: error, hasContent: standings.map { !$0.isEmpty } ?? false)
         }
     }
 
-    private func apply(leaders result: Result<StatLeaders, NetworkError>) {
-        switch result {
+    private func apply(leaders fetched: Fetched<StatLeaders>) {
+        switch fetched.result {
         case .success(let loaded):
             leadersState = .loaded
-            loadedAt[.leaders] = now()
+            markLoaded(.leaders, cachedAt: fetched.cachedAt)
             leaders = leaderBoards(from: loaded, kind: team.league.descriptor.kind, depth: 1)
         case .failure(let error):
             fail(&leadersState, with: error, hasContent: !leaders.isEmpty)
         }
     }
 
-    private func apply(news result: Result<[News], NetworkError>) {
-        switch result {
+    private func apply(news fetched: Fetched<[News]>) {
+        switch fetched.result {
         case .success(let loaded):
             newsState = .loaded
-            loadedAt[.news] = now()
+            markLoaded(.news, cachedAt: fetched.cachedAt)
             articles = loaded
         case .failure(let error):
             fail(&newsState, with: error, hasContent: !articles.isEmpty)
@@ -654,9 +700,47 @@ func seasonRecord(
 ///     matched on a scoreboard or addressed at the summary endpoint, so it
 ///     never qualifies.
 ///   - now: the current instant.
-func shouldPollLiveScore(game: Game, now: Date = Date()) -> Bool {
+///   - networkFresh: whether the schedule `game` came from was just fetched
+///     from the network. One served from the `FeedCache` (R-4) means the network
+///     is out of reach, so there is no live score to poll for, and the
+///     cached game's state may be days old.
+func shouldPollLiveScore(game: Game, now: Date = Date(), networkFresh: Bool = true) -> Bool {
+    guard networkFresh else { return false }
     guard !game.gameID.isEmpty else { return false }
     if game.completed || game.cancelled || game.postponed { return false }
     return game.dateAsDate.addingTimeInterval(-15 * 60) <= now
         && now <= game.dateAsDate.addingTimeInterval(8 * 3600)
+}
+
+// MARK: - Last updated
+
+/// How long ago `updatedAt` was, as a caption under a section shown from
+/// the `FeedCache` (R-4): "Updated just now", "Updated 5 min. ago",
+/// "Updated 2 days ago".
+func updatedAgoText(since updatedAt: Date, now: Date) -> String {
+    guard now.timeIntervalSince(updatedAt) >= 60 else { return "Updated just now" }
+    return "Updated \(updatedAgoFormatter.localizedString(for: updatedAt, relativeTo: now))"
+}
+
+/// "5 min. ago", in the reader's language.
+private let updatedAgoFormatter: RelativeDateTimeFormatter = {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    formatter.dateTimeStyle = .numeric
+    return formatter
+}()
+
+/// The "Updated … ago" line for a section whose content may be old: see
+/// `TeamModel.scheduleUpdatedAt` and `HomeViewModel.headlinesCachedAt`.
+/// Moves on with the clock once a minute.
+struct UpdatedCaption: View {
+    let updatedAt: Date
+
+    var body: some View {
+        TimelineView(.everyMinute) { context in
+            Text(updatedAgoText(since: updatedAt, now: context.date))
+                .font(Theme.Typography.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }

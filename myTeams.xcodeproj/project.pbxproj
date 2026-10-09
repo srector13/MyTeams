@@ -47,6 +47,7 @@
 		0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF854E8FC1231BAD448D63BA /* TeamModel.swift */; };
 		2F614A3B78950C035DC9E0B7 /* TabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB0281FE48582B84C0A01766 /* TabBar.swift */; };
 		443BDD6E8DE6AD6663C2B878 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF333D024A94AD1329FBDD78 /* HTTPClient.swift */; };
+		3F7C2A91D4E8B6051C9A7E21 /* FeedCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7C2A91D4E8B6051C9A7E20 /* FeedCache.swift */; };
 		E20E73EDC856843862B6F1BA /* JSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF2740419E81BD1C7945B6A /* JSON.swift */; };
 		78C5D3C2CC114C8CA479A89C /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2FB2E1805F644DD405F129 /* RemoteImage.swift */; };
 		76207EC0BBD446E30AD3ABCE /* Sport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CBF316BA698A3A7672774F /* Sport.swift */; };
@@ -75,6 +76,7 @@
 		477887CC8A151717D679F0BE /* WidgetScheduleLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D7E42B65C657DF94CC0AE71 /* WidgetScheduleLoader.swift */; };
 		BC4F15C17EBC1A2178883B7D /* myTeamWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC25799C101CA0E983D6E0BA /* myTeamWidget.swift */; };
 		021E035614A3AA570735F9A7 /* HTTPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF333D024A94AD1329FBDD78 /* HTTPClient.swift */; };
+		3F7C2A91D4E8B6051C9A7E22 /* FeedCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7C2A91D4E8B6051C9A7E20 /* FeedCache.swift */; };
 		718FAF95DE8AE3A64D948680 /* JSON.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCF2740419E81BD1C7945B6A /* JSON.swift */; };
 		4D7FF57D679FF80CBAC28F6D /* Sport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CBF316BA698A3A7672774F /* Sport.swift */; };
 		43F1053E017CE0ACD2513F5F /* TeamRef.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95678F04274EC3A4BFC7B89B /* TeamRef.swift */; };
@@ -213,6 +215,7 @@
 		79C7A63F34A9A6D50AA82504 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
 		DB0281FE48582B84C0A01766 /* TabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabBar.swift"; sourceTree = "<group>"; };
 		FF333D024A94AD1329FBDD78 /* HTTPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HTTPClient.swift"; sourceTree = "<group>"; };
+		3F7C2A91D4E8B6051C9A7E20 /* FeedCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FeedCache.swift"; sourceTree = "<group>"; };
 		FCF2740419E81BD1C7945B6A /* JSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "JSON.swift"; sourceTree = "<group>"; };
 		CA2FB2E1805F644DD405F129 /* RemoteImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteImage.swift"; sourceTree = "<group>"; };
 		F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WikidataHeadshotStore.swift"; sourceTree = "<group>"; };
@@ -423,6 +426,7 @@
 			isa = PBXGroup;
 			children = (
 				FF333D024A94AD1329FBDD78 /* HTTPClient.swift */,
+				3F7C2A91D4E8B6051C9A7E20 /* FeedCache.swift */,
 				FCF2740419E81BD1C7945B6A /* JSON.swift */,
 				CA2FB2E1805F644DD405F129 /* RemoteImage.swift */,
 				F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */,
@@ -848,6 +852,7 @@
 				0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */,
 				2F614A3B78950C035DC9E0B7 /* TabBar.swift in Sources */,
 				443BDD6E8DE6AD6663C2B878 /* HTTPClient.swift in Sources */,
+				3F7C2A91D4E8B6051C9A7E21 /* FeedCache.swift in Sources */,
 				E20E73EDC856843862B6F1BA /* JSON.swift in Sources */,
 				78C5D3C2CC114C8CA479A89C /* RemoteImage.swift in Sources */,
 				2D20D4F0D14F95669B9634EF /* WikidataHeadshotStore.swift in Sources */,
@@ -895,6 +900,7 @@
 				1E8316B9F16A72268EABA039 /* GameLiveActivity.swift in Sources */,
 				0A4AA99692227A8E12A7FB45 /* GameActivityAttributes.swift in Sources */,
 				021E035614A3AA570735F9A7 /* HTTPClient.swift in Sources */,
+				3F7C2A91D4E8B6051C9A7E22 /* FeedCache.swift in Sources */,
 				718FAF95DE8AE3A64D948680 /* JSON.swift in Sources */,
 				4D7FF57D679FF80CBAC28F6D /* Sport.swift in Sources */,
 				43F1053E017CE0ACD2513F5F /* TeamRef.swift in Sources */,

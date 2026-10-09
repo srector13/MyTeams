@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Synchronization
 import Testing
 
 @testable import myTeams
@@ -157,6 +158,140 @@ struct HTTPClientTests {
             return
         }
         #expect(status == 503)
+    }
+}
+
+/// A clock a test moves by hand, for `FeedCache`'s ages and eviction order.
+private final class TestClock: Sendable {
+    private let current: Mutex<Date>
+
+    init(_ start: Date) {
+        current = Mutex(start)
+    }
+
+    var now: Date { current.withLock { $0 } }
+
+    func advance(by interval: TimeInterval) {
+        current.withLock { $0 = $0.addingTimeInterval(interval) }
+    }
+}
+
+/// Covers the on-disk feed cache (R-4): a good response is kept and answers
+/// the same request offline; the folder holds to its size cap, least
+/// recently used out first; and nothing older than 14 days is served.
+@Suite("Feed cache")
+struct FeedCacheTests {
+    private let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/12/schedule")!
+    /// 2026-09-21T14:13:20Z.
+    private let start = Date(timeIntervalSince1970: 1_790_000_000)
+
+    /// A fresh folder under the temporary directory, removed by `body`'s end.
+    private func withTemporaryDirectory(_ body: (URL) async throws -> Void) async rethrows {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "FeedCacheTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await body(directory)
+    }
+
+    @Test("A response kept under .persist answers the same request offline")
+    func persistServesOffline() async {
+        await withTemporaryDirectory { directory in
+            let clock = TestClock(start)
+            let cache = FeedCache(directory: directory, clock: { clock.now })
+            let online = HTTPClient(transport: StubTransport.status(200, body: #"{"events": [{"id": "401"}]}"#), feedCache: cache)
+            let offline = HTTPClient(transport: StubTransport.failing(.notConnectedToInternet), feedCache: cache)
+
+            let fresh = await online.fetchResponse(url, cache: .persist)
+            #expect(fresh.result.document?["events", 0, "id"].stringValue == "401")
+            #expect(fresh.cachedAt == nil)
+
+            clock.advance(by: 60 * 60)
+            let served = await offline.fetchResponse(url, cache: .persist)
+            #expect(served.result.document?["events", 0, "id"].stringValue == "401")
+            #expect(served.cachedAt == start)
+
+            // A loader opts in by running in a scope, which reports the age.
+            let scoped = await HTTPClient.withFeedCache(.persist) {
+                await offline.fetch(url)
+            }
+            #expect(scoped.value.document?["events", 0, "id"].stringValue == "401")
+            #expect(scoped.cachedAt == start)
+        }
+    }
+
+    @Test("Under .networkOnly an offline request still fails, cache or no cache")
+    func networkOnlyStaysOffline() async {
+        await withTemporaryDirectory { directory in
+            let cache = FeedCache(directory: directory, clock: { Date(timeIntervalSince1970: 1_790_000_000) })
+            let online = HTTPClient(transport: StubTransport.status(200, body: #"{"events": []}"#), feedCache: cache)
+            let offline = HTTPClient(transport: StubTransport.failing(.notConnectedToInternet), feedCache: cache)
+            _ = await online.fetch(url, cache: .persist)
+
+            let response = await offline.fetchResponse(url, cache: .networkOnly)
+            guard case .failure(.offline(let error)) = response.result else {
+                Issue.record("Expected .offline, got \(response.result)")
+                return
+            }
+            #expect(error.code == .notConnectedToInternet)
+            #expect(response.cachedAt == nil)
+
+            // Outside any `withFeedCache` scope the default is .networkOnly.
+            let unscoped = await offline.fetch(url)
+            guard case .failure(.offline) = unscoped else {
+                Issue.record("Expected .offline, got \(unscoped)")
+                return
+            }
+        }
+    }
+
+    @Test("Past its size cap the folder evicts the least recently used entry")
+    func evictsLeastRecentlyUsed() async {
+        await withTemporaryDirectory { directory in
+            let clock = TestClock(start)
+            // Room for two 1,000-byte bodies with their records, not three.
+            let cache = FeedCache(directory: directory, capacity: 2_500, clock: { clock.now })
+            let first = URL(string: "https://example.com/first")!
+            let second = URL(string: "https://example.com/second")!
+            let third = URL(string: "https://example.com/third")!
+            let body = Data(repeating: UInt8(ascii: "a"), count: 1_000)
+
+            await cache.write(body, for: first)
+            clock.advance(by: 60)
+            await cache.write(body, for: second)
+            clock.advance(by: 60)
+            // Reading the first makes the second the least recently used.
+            #expect(await cache.read(first) != nil)
+            clock.advance(by: 60)
+            await cache.write(body, for: third)
+
+            #expect(await cache.read(first) != nil)
+            #expect(await cache.read(second) == nil)
+            #expect(await cache.read(third) != nil)
+        }
+    }
+
+    @Test("An entry older than 14 days is never served")
+    func expiresAfterFourteenDays() async {
+        await withTemporaryDirectory { directory in
+            let clock = TestClock(start)
+            let cache = FeedCache(directory: directory, clock: { clock.now })
+            let online = HTTPClient(transport: StubTransport.status(200, body: #"{"events": []}"#), feedCache: cache)
+            let offline = HTTPClient(transport: StubTransport.failing(.notConnectedToInternet), feedCache: cache)
+            _ = await online.fetch(url, cache: .persist)
+
+            clock.advance(by: 14 * 24 * 60 * 60 - 1)
+            let lastDay = await offline.fetchResponse(url, cache: .persist)
+            #expect(lastDay.cachedAt == start)
+
+            clock.advance(by: 2)
+            let expired = await offline.fetchResponse(url, cache: .persist)
+            guard case .failure(.offline) = expired.result else {
+                Issue.record("Expected .offline once expired, got \(expired.result)")
+                return
+            }
+            #expect(expired.cachedAt == nil)
+            #expect(await cache.read(url) == nil)
+        }
     }
 }
 
