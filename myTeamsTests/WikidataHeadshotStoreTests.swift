@@ -43,11 +43,16 @@ struct WikidataHeadshotStoreTests {
         }
     }
 
-    private func makeStore(_ transport: RecordingTransport, directory: URL) -> WikidataHeadshotStore {
+    private func makeStore(
+        _ transport: RecordingTransport,
+        directory: URL,
+        now: @escaping () -> Date = { Date() }
+    ) -> WikidataHeadshotStore {
         WikidataHeadshotStore(
             client: HTTPClient(transport: transport),
             directory: directory,
             debounce: .milliseconds(20),
+            now: now,
             enabled: true
         )
     }
@@ -324,6 +329,95 @@ struct WikidataHeadshotStoreTests {
         await store.settle()
         #expect(failing.requestCount == 1)
         #expect(store.record(espnID: "34873", league: .mlb) == nil)
+    }
+
+    @Test("A \"no photo\" 30 days old is asked about again, in one batch; a fresh one and a photo never are")
+    func negativeRecheck() async throws {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // 2026-10-07 12:00 UTC.
+        let checked = Date(timeIntervalSince1970: 1_791_374_400)
+        let lugo = CommonsPhoto(
+            qid: "Q16605329", fileTitle: "Lugo.jpg", licenseShortName: nil, artist: nil,
+            descriptionPage: WikidataHeadshots.descriptionPage(fileTitle: "Lugo.jpg")
+        )
+        let cached: [String: HeadshotRecord] = [
+            "5136077": HeadshotRecord(photo: nil, checked: checked),
+            "40718": HeadshotRecord(photo: nil, checked: checked),
+            "34873": HeadshotRecord(photo: lugo, checked: checked),
+        ]
+        try JSONEncoder().encode(cached).write(to: directory.appending(path: "P3571.json"))
+        let ids = ["5136077", "40718", "34873"]
+        let empty = RecordingTransport(always: .init(body: Data(#"{"results":{"bindings":[]}}"#.utf8)))
+        var now = checked.addingTimeInterval(29 * 86_400)
+
+        // 29 days on: every answer stands.
+        let fresh = makeStore(empty, directory: directory) { now }
+        fresh.prefetch(espnIDs: ids, league: .mlb)
+        await fresh.settle()
+        #expect(empty.requestCount == 0)
+
+        // 31 days on: both "no photo"s go out in one query; the photo does not.
+        now = checked.addingTimeInterval(31 * 86_400)
+        let stale = makeStore(empty, directory: directory) { now }
+        // Still drawn as "no photo" until Wikidata answers again.
+        #expect(stale.record(espnID: "5136077", league: .mlb)?.photo == nil)
+        #expect(stale.record(espnID: "5136077", league: .mlb) != nil)
+        stale.prefetch(espnIDs: ids, league: .mlb)
+        await stale.settle()
+        #expect(empty.requestCount == 1)
+        let sparql = try #require(empty.urls.first)
+        let query = try #require(
+            URLComponents(url: sparql, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "query" }?.value
+        )
+        #expect(query.contains("\"5136077\""))
+        #expect(query.contains("\"40718\""))
+        #expect(!query.contains("\"34873\""))
+        // Answered again, on the store's clock: fresh for another 30 days.
+        #expect(stale.record(espnID: "5136077", league: .mlb)?.checked == now)
+        #expect(stale.photo(espnID: "34873", league: .mlb) == lugo)
+        stale.prefetch(espnIDs: ids, league: .mlb)
+        await stale.settle()
+        #expect(empty.requestCount == 1)
+
+        // A photo is never asked about again, however old.
+        now = checked.addingTimeInterval(400 * 86_400)
+        let later = makeStore(empty, directory: directory) { now }
+        later.request(espnID: "34873", league: .mlb)
+        await later.settle()
+        #expect(empty.requestCount == 1)
+    }
+
+    @Test("Tier 3 may stand in once Wikidata answers none, backs off, or stays silent past the wait")
+    func lacksPhoto() async {
+        let directory = scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Backing off: no record, yet tier 3 need not wait.
+        let failing = RecordingTransport(always: .status(500))
+        let backingOff = makeStore(failing, directory: directory)
+        #expect(!backingOff.lacksPhoto(espnID: "34873", league: .mlb, waited: false))
+        backingOff.request(espnID: "34873", league: .mlb)
+        await backingOff.settle()
+        #expect(backingOff.record(espnID: "34873", league: .mlb) == nil)
+        #expect(backingOff.isBackingOff)
+        #expect(backingOff.lacksPhoto(espnID: "34873", league: .mlb, waited: false))
+
+        // Silent past the view's wait: no record, no back-off.
+        let silent = makeStore(RecordingTransport(always: .status(500)), directory: scratchDirectory())
+        #expect(!silent.lacksPhoto(espnID: "34873", league: .mlb, waited: false))
+        #expect(silent.lacksPhoto(espnID: "34873", league: .mlb, waited: true))
+
+        // Answered: "none" lets tier 3 in; a photo keeps it out, waited or not.
+        let answered = makeStore(
+            makeTransport(sparql: "wikidata_p3571_royals_partial", commons: "commons_imageinfo_royals"),
+            directory: directory
+        )
+        answered.prefetch(espnIDs: ["5136077", "34873"], league: .mlb)
+        await answered.settle()
+        #expect(answered.lacksPhoto(espnID: "5136077", league: .mlb, waited: false))
+        #expect(!answered.lacksPhoto(espnID: "34873", league: .mlb, waited: true))
     }
 
     @Test("Ids that cannot be ESPN's, and leagues with no property, are never queried")

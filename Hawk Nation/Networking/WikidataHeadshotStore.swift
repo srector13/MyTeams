@@ -69,7 +69,8 @@ struct CommonsPhoto: Codable, Hashable, Sendable {
 }
 
 /// What the store knows of one athlete: a photo, or that Wikidata has none
-/// for them. Either way the athlete is never looked up again.
+/// for them. A photo is never looked up again; "none" is, once it is
+/// `WikidataHeadshotStore.recheckInterval` old.
 struct HeadshotRecord: Codable, Hashable, Sendable {
     var photo: CommonsPhoto?
     /// When Wikidata answered.
@@ -292,8 +293,9 @@ enum WikidataHeadshots {
 ///
 /// Every answer is cached on disk by ESPN athlete id, one file per
 /// Wikidata property under Caches/Headshots: a photo, with its attribution
-/// once known, or "no photo". A cached athlete is never asked about again.
-/// Any failure is silent: nothing is cached, the view keeps its monogram
+/// once known, or "no photo". A cached photo is never asked about again; a
+/// "no photo" 30 days old is, in the same batches, since Commons may have
+/// one by then. Any failure is silent: nothing is cached, the view keeps its monogram
 /// (or a photo its generic credit), and the store waits a minute (or the
 /// server's `Retry-After`) before asking again.
 @MainActor
@@ -311,6 +313,8 @@ final class WikidataHeadshotStore {
     @ObservationIgnored private let client: HTTPClient
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let debounce: Duration
+    /// Now, for a "no photo" answer's age.
+    @ObservationIgnored private let now: () -> Date
     /// `false` keeps the store off the network: fixture launches.
     @ObservationIgnored private let enabled: Bool
 
@@ -343,6 +347,9 @@ final class WikidataHeadshotStore {
     static let maxWait: Duration = .seconds(2)
     /// How long the store keeps quiet after a failed query.
     static let failureBackoff: Duration = .seconds(60)
+    /// How long a "no photo" answer stands before the athlete is asked
+    /// about again.
+    static let recheckInterval: TimeInterval = 30 * 24 * 60 * 60
 
     /// The store's own directory: Caches/Headshots, beside LogoStore's crests.
     static var defaultDirectory: URL {
@@ -371,11 +378,13 @@ final class WikidataHeadshotStore {
         client: HTTPClient = HTTPClient(transport: WikidataHeadshotStore.session),
         directory: URL = WikidataHeadshotStore.defaultDirectory,
         debounce: Duration = WikidataHeadshotStore.defaultDebounce,
+        now: @escaping () -> Date = { Date() },
         enabled: Bool = !HTTPClient.servesFixtures
     ) {
         self.client = client
         self.directory = directory
         self.debounce = debounce
+        self.now = now
         self.enabled = enabled
         // Read every cached answer now, so no view's body reads the disk or
         // changes `records` while SwiftUI is drawing.
@@ -396,10 +405,18 @@ final class WikidataHeadshotStore {
         record(espnID: espnID, league: league)?.photo
     }
 
+    /// Whether a later tier may stand in for Wikidata on the athlete: it has
+    /// answered with no photo, or it is not answering — backing off after a
+    /// failure, or still silent once the view has `waited` (`maxWait`).
+    func lacksPhoto(espnID: String, league: LeagueID, waited: Bool) -> Bool {
+        if let record = record(espnID: espnID, league: league) { return record.photo == nil }
+        return waited || isBackingOff
+    }
+
     // MARK: Requesting
 
     /// Asks for the athlete's photo in the next batch, after the debounce,
-    /// unless the answer is cached, already asked for, or the sport has no
+    /// unless the answer is cached (and not a stale "no photo"), already asked for, or the sport has no
     /// Wikidata property. For a headshot drawn without its roster.
     func request(espnID: String, league: LeagueID) {
         guard enqueue(espnID, league: league) else { return }
@@ -429,7 +446,7 @@ final class WikidataHeadshotStore {
               let property = WikidataHeadshots.property(for: league)
         else { return false }
         let key = Self.key(property, espnID)
-        guard records[property]?[espnID] == nil,
+        guard records[property]?[espnID].map(isStale) ?? true,
               !inFlight.contains(key),
               !(pending[property]?.contains(espnID) ?? false)
         else { return false }
@@ -437,6 +454,12 @@ final class WikidataHeadshotStore {
         pending[property, default: []].append(espnID)
         if oldestPending == nil { oldestPending = ContinuousClock.now }
         return true
+    }
+
+    /// Whether `record` is a "no photo" old enough to ask about again. A
+    /// photo never is.
+    private func isStale(_ record: HeadshotRecord) -> Bool {
+        record.photo == nil && now().timeIntervalSince(record.checked) >= Self.recheckInterval
     }
 
     private func startBatches() {
@@ -593,7 +616,7 @@ final class WikidataHeadshotStore {
         }
         let matches = WikidataHeadshots.parseMatches(document)
 
-        let now = Date()
+        let checked = now()
         var resolved = records[property] ?? [:]
         for id in ids {
             var photo: CommonsPhoto?
@@ -608,14 +631,15 @@ final class WikidataHeadshotStore {
                 if let license = licenses[title] { found.apply(license) }
                 photo = found
             }
-            resolved[id] = HeadshotRecord(photo: photo, checked: now)
+            resolved[id] = HeadshotRecord(photo: photo, checked: checked)
         }
         records[property] = resolved
         save(property)
         logger.debug("Resolved \(ids.count) \(property) ids, \(matches.count) on Wikidata")
     }
 
-    private var isBackingOff: Bool {
+    /// Whether a failed query has the store keeping quiet.
+    var isBackingOff: Bool {
         retryNotBefore.map { ContinuousClock.now < $0 } ?? false
     }
 
