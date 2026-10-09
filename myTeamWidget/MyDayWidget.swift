@@ -37,6 +37,9 @@ struct DayEntry: TimelineEntry {
     /// App Group being unreachable (`WidgetContent.note`).
     var note: String? = nil
     var source: WidgetContentSource = .fresh
+    /// This process's sharing diagnostics, as the Team Schedule widget
+    /// draws them (`WidgetEntry.diagnostics`).
+    var diagnostics: SharedStoreDiagnostics? = nil
 }
 
 /// Builds the "My Day" entries.
@@ -101,7 +104,8 @@ enum DayTimelines {
     /// Looks again every few minutes while a game is under way, else at the
     /// next start, else hourly; never sooner than a minute.
     static func timeline(now: Date = .now) async -> Timeline<DayEntry> {
-        let current = await Self.entry(now: now)
+        var current = await Self.entry(now: now)
+        current.diagnostics = SharedStoreDiagnostics.shown(.current())
         var reload = now + WidgetTimelines.refreshInterval
         if current.source != .fresh && SharedContainer.live.status != .unavailable {
             // A failed load, or a store the app has yet to write to, is
@@ -142,7 +146,9 @@ struct DayTimelineProvider: AppIntentTimelineProvider {
             // The gallery shows what the widget does, on sample games.
             return .preview
         }
-        return await DayTimelines.entry()
+        var entry = await DayTimelines.entry()
+        entry.diagnostics = SharedStoreDiagnostics.shown(.current())
+        return entry
     }
 
     func timeline(for configuration: MyDayIntent, in context: Context) async -> Timeline<DayEntry> {
@@ -166,13 +172,13 @@ struct MyDayView: View {
 
     var body: some View {
         if entry.needsTeam {
-            NoTeamView(family: family, missing: entry.missing)
+            NoTeamView(family: family, missing: entry.missing, diagnostics: entry.diagnostics)
         } else {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("My Day")
                     .font(Theme.Typography.cardTitle)
                     .widgetAccentable()
-                if let note = entry.note {
+                if let note = TileNote.line(entry.note, entry.diagnostics?.compact) {
                     Text(note)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

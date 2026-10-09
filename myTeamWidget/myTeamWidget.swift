@@ -25,6 +25,10 @@ struct WidgetEntry: TimelineEntry {
     /// store reachable, or one holding nothing from the app), so the widget
     /// says that rather than "Add Teams".
     var missing: WidgetMissingTeam = .noneFollowed
+    /// This process's sharing diagnostics (`SharedStoreDiagnostics`), drawn
+    /// while the project's App Group does not carry the app's data, so a
+    /// re-signed install's widget says what it was signed with and read.
+    var diagnostics: SharedStoreDiagnostics? = nil
 }
 
 /// Builds a team's entries for the configurable widget's provider.
@@ -66,6 +70,14 @@ enum WidgetTimelines {
     static func missingTeam(_ shared: SharedDataStatus) -> WidgetEntry {
         var entry = noTeam
         entry.missing = WidgetMissingTeam(shared: shared)
+        return entry
+    }
+
+    /// `entry` with this process's diagnostics, unless the project's App
+    /// Group carries the app's data.
+    static func diagnosed(_ entry: WidgetEntry) -> WidgetEntry {
+        var entry = entry
+        entry.diagnostics = SharedStoreDiagnostics.shown(.current())
         return entry
     }
 
@@ -167,9 +179,10 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
             // The gallery shows what the widget does, on its sample team.
             return context.isPreview
                 ? WidgetTimelines.placeholder(for: WidgetTeams.fallback)
-                : WidgetTimelines.missingTeam(SharedContainer.live.status)
+                : WidgetTimelines.diagnosed(WidgetTimelines.missingTeam(SharedContainer.live.status))
         }
-        return await WidgetTimelines.snapshot(for: team, isPreview: context.isPreview)
+        let entry = await WidgetTimelines.snapshot(for: team, isPreview: context.isPreview)
+        return context.isPreview ? entry : WidgetTimelines.diagnosed(entry)
     }
 
     func timeline(for configuration: SelectTeamIntent, in context: Context) async -> Timeline<WidgetEntry> {
@@ -178,10 +191,13 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
             // the hourly refresh only backs that up.
             // Without the App Group, no favorite can be read: the entry says
             // so, rather than asking for a team the reader already follows.
-            let entry = WidgetTimelines.missingTeam(SharedContainer.live.status)
-            return Timeline(entries: [entry], policy: .after(.now + WidgetTimelines.refreshInterval))
+            let entry = WidgetTimelines.diagnosed(WidgetTimelines.missingTeam(SharedContainer.live.status))
+            // A store the app has yet to write to is looked at again soon.
+            let reload = entry.missing == .noneFollowed ? WidgetTimelines.refreshInterval : WidgetTimelines.retryInterval
+            return Timeline(entries: [entry], policy: .after(.now + reload))
         }
-        let timeline = await WidgetTimelines.timeline(for: team)
+        let loaded = await WidgetTimelines.timeline(for: team)
+        let timeline = Timeline(entries: loaded.entries.map(WidgetTimelines.diagnosed), policy: loaded.policy)
         // Only for a team the app's copy of the favorites and the bundle
         // don't describe: the league's team list (megabytes for college
         // leagues) parsed here, while WidgetKit renders the entry in the
@@ -212,7 +228,7 @@ struct WidgetEntryView: View {
     var body: some View {
         Group {
             if entry.needsTeam {
-                NoTeamView(family: family, missing: entry.missing)
+                NoTeamView(family: family, missing: entry.missing, diagnostics: entry.diagnostics)
             } else {
                 switch family {
                 #if os(iOS)
@@ -220,9 +236,9 @@ struct WidgetEntryView: View {
                     AccessoryEntryView(entry: entry, family: family)
                 #endif
                 case .systemMedium:
-                    MediumScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
+                    MediumScheduleTile(game: entry.tempGame, renderingMode: renderingMode, diagnostics: entry.diagnostics?.compact)
                 default:
-                    ScheduleTile(game: entry.tempGame, renderingMode: renderingMode)
+                    ScheduleTile(game: entry.tempGame, renderingMode: renderingMode, diagnostics: entry.diagnostics?.compact)
                 }
             }
         }
@@ -246,6 +262,8 @@ struct WidgetEntryView: View {
 struct ScheduleTile: View {
     var game: WidgetGame
     var renderingMode: WidgetRenderingMode
+    /// The process's sharing diagnostics, one line (`TileNote`).
+    var diagnostics: String? = nil
 
     var body: some View {
         VStack(spacing: 1) {
@@ -281,8 +299,8 @@ struct ScheduleTile: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
 
-            if let note = game.note {
-                TileNote(note: note)
+            if let line = TileNote.line(game.note, diagnostics) {
+                TileNote(note: line)
             }
         }
         // The small tile can't grow, so its text scales only as far as the
@@ -303,6 +321,8 @@ struct ScheduleTile: View {
 struct MediumScheduleTile: View {
     var game: WidgetGame
     var renderingMode: WidgetRenderingMode
+    /// The process's sharing diagnostics, one line (`TileNote`).
+    var diagnostics: String? = nil
 
     var body: some View {
         HStack(spacing: Theme.Spacing.m) {
@@ -336,8 +356,8 @@ struct MediumScheduleTile: View {
                     }
                     .font(Theme.Typography.footnote)
                 }
-                if let note = game.note {
-                    TileNote(note: note)
+                if let line = TileNote.line(game.note, diagnostics) {
+                    TileNote(note: line)
                 }
             }
             .lineLimit(1)
@@ -373,6 +393,12 @@ struct MediumScheduleTile: View {
 /// the App Group being unreachable (`WidgetGame.note`).
 struct TileNote: View {
     var note: String
+
+    /// The note, then the diagnostics, on one caption.
+    static func line(_ note: String?, _ diagnostics: String?) -> String? {
+        let parts = [note, diagnostics].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
     var body: some View {
         Text(note)
@@ -457,6 +483,8 @@ private struct TileInk: ViewModifier {
 struct NoTeamView: View {
     var family: WidgetFamily
     var missing: WidgetMissingTeam = .noneFollowed
+    /// This process's sharing diagnostics, drawn in full under the message.
+    var diagnostics: SharedStoreDiagnostics? = nil
 
     private var symbol: String {
         missing.isSharingProblem ? "exclamationmark.triangle" : "plus"
@@ -511,7 +539,15 @@ struct NoTeamView: View {
                 .font(Theme.Typography.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            if missing.isSharingProblem {
+            if let diagnostics {
+                // What this process was signed with, which store it chose
+                // and what it read, to compare with the app's Settings.
+                Text(diagnostics.lines.joined(separator: "\n"))
+                    .font(.system(size: 8))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(8)
+            } else if missing.isSharingProblem {
                 // Which store the install was signed with, so the reader
                 // (and a bug report) can tell a missing group from one the
                 // app doesn't write to.

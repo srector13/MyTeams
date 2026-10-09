@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Security
 import Testing
 
 @testable import myTeams
@@ -97,7 +98,7 @@ struct WidgetSharedDataTests {
 
     @Test func statusCaptions() {
         #expect(SharedDataStatus.unavailable.caption(now: Self.now, calendar: Self.calendar)
-            == "Shared data unavailable — reinstall via app to repair")
+            == "Shared data unavailable — signature has no App Group or keychain group")
         #expect(SharedDataStatus.available(lastShared: nil).caption(now: Self.now, calendar: Self.calendar)
             == "Shared data: OK")
         let caption = SharedDataStatus.available(lastShared: Self.now.addingTimeInterval(-60))
@@ -317,7 +318,11 @@ struct WidgetSharedDataTests {
         let plist = try Self.entitlementsPlist(groups: [Self.featherGroup], keychain: ["ABCDE12345.*"])
         let found = try #require(MachOSignature.entitlements(read: Self.reader(Self.machO(entitlements: plist))))
         let signed = try #require(SigningEntitlements(plist: found))
-        #expect(signed == SigningEntitlements(appGroups: [Self.featherGroup], keychainAccessGroups: ["ABCDE12345.*"]))
+        #expect(signed == SigningEntitlements(
+            appGroups: [Self.featherGroup],
+            keychainAccessGroups: ["ABCDE12345.*"],
+            applicationIdentifier: "ABCDE12345.PolarReailty.Hawk-Nation"
+        ))
     }
 
     @Test func entitlementsAreReadFromAUniversalBinarysARM64Slice() throws {
@@ -360,9 +365,11 @@ struct WidgetSharedDataTests {
         // AltStore-style renaming: the one named for the app.
         #expect(SharedStoreIdentity.appGroup(in: ["group.z", "group.PolarReailty.Hawk-Nation.ABCDE12345"])
             == "group.PolarReailty.Hawk-Nation.ABCDE12345")
-        // A wildcard profile: no group, and the keychain under its team.
+        // A wildcard profile: no group, and the keychain group exactly as
+        // signed; securityd grants `TEAMID.*` literally, nothing under it
+        // (t_684fd0fb).
         let wildcard = SharedStoreIdentity.resolve(SigningEntitlements(appGroups: [], keychainAccessGroups: ["ABCDE12345.*"]))
-        #expect(wildcard == SharedStoreIdentity(appGroup: nil, keychainGroup: "ABCDE12345.PolarReailty.Hawk-Nation.shared"))
+        #expect(wildcard == SharedStoreIdentity(appGroup: nil, keychainGroup: "ABCDE12345.*"))
         #expect(wildcard.summary.contains("No App Group"))
         #expect(SharedStoreIdentity.keychainGroup(in: ["ABCDE12345.com.example"]) == "ABCDE12345.com.example")
         #expect(SharedStoreIdentity.keychainGroup(in: []) == nil)
@@ -506,5 +513,279 @@ struct WidgetSharedDataTests {
         #expect(nothing.note == "re-signed App Group has no data from the app — open myTeams")
         #expect(SharedDataStatus.fallback(.appGroup(Self.featherGroup), lastShared: nil).caption(now: Self.now, calendar: Self.calendar)
             == "Shared data: OK via re-signed App Group")
+    }
+}
+
+// MARK: - Feather re-signing (t_684fd0fb)
+
+/// The keychain as securityd judges it: an item's access group must be one
+/// of the client's entitlement strings exactly, or the client holds the
+/// bare `"*"` (`SecServerAccessGroupsAllows`). Items are shared between the
+/// "processes" that pass the same `items` box.
+private final class FakeKeychainItems: @unchecked Sendable {
+    var items: [String: Data] = [:]
+}
+
+private struct FakeKeychain: SharedSecretStore {
+    let accessGroup: String
+    /// The client's `keychain-access-groups` (and application identifier).
+    let entitled: [String]
+    let box: FakeKeychainItems
+
+    private var allowed: Bool {
+        entitled.contains(accessGroup) || entitled.contains("*")
+    }
+
+    func read(_ account: String) -> (data: Data?, status: OSStatus) {
+        guard allowed else { return (nil, errSecMissingEntitlement) }
+        guard let data = box.items["\(accessGroup)/\(account)"] else { return (nil, errSecItemNotFound) }
+        return (data, errSecSuccess)
+    }
+
+    func write(_ data: Data, for account: String) -> OSStatus {
+        guard allowed else { return errSecMissingEntitlement }
+        box.items["\(accessGroup)/\(account)"] = data
+        return errSecSuccess
+    }
+}
+
+@Suite("Widget sharing under Feather")
+struct WidgetFeatherSharingTests {
+    static let now = Date(timeIntervalSince1970: 1_791_302_400)
+    static let team = "ABCDE12345"
+    static let canonical = SharedStoreIdentity.canonicalGroup
+
+    private let chiefs = TeamCatalog.seeded(league: .nfl, espnID: "12")!
+    private let blues = TeamRef(
+        league: .nhl, espnID: "19", displayName: "St. Louis Blues", shortName: "Blues",
+        abbreviation: "STL", location: "St. Louis", colorHex: "002F87", alternateColorHex: "FCB514"
+    )
+
+    private func scratch() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "WidgetFeatherSharingTests.\(UUID().uuidString)"))
+    }
+
+    // MARK: Store selection
+
+    struct SelectionCase: CustomTestStringConvertible, Sendable {
+        var name: String
+        var signed: SigningEntitlements?
+        var appGroup: String?
+        var keychainGroup: String?
+        var testDescription: String { name }
+    }
+
+    static let selectionCases: [SelectionCase] = [
+        SelectionCase(name: "unsigned (Simulator)", signed: nil, appGroup: canonical, keychainGroup: nil),
+        SelectionCase(
+            name: "Xcode-signed",
+            signed: SigningEntitlements(appGroups: [canonical], applicationIdentifier: "\(team).PolarReailty.Hawk-Nation"),
+            appGroup: canonical, keychainGroup: "\(team).PolarReailty.Hawk-Nation"
+        ),
+        SelectionCase(
+            name: "Feather, profile with its own group",
+            signed: SigningEntitlements(appGroups: ["group.com.example.feather"], keychainAccessGroups: ["\(team).*"], applicationIdentifier: "\(team).*"),
+            appGroup: "group.com.example.feather", keychainGroup: "\(team).*"
+        ),
+        SelectionCase(
+            name: "group in the signature but not the profile",
+            signed: SigningEntitlements(appGroups: [canonical], keychainAccessGroups: ["\(team).*"]),
+            appGroup: canonical, keychainGroup: "\(team).*"
+        ),
+        SelectionCase(
+            name: "Feather, wildcard profile: no App Group",
+            signed: SigningEntitlements(keychainAccessGroups: ["\(team).*"], applicationIdentifier: "\(team).*"),
+            appGroup: nil, keychainGroup: "\(team).*"
+        ),
+        SelectionCase(
+            name: "Feather, merged entitlements: keychain only",
+            signed: SigningEntitlements(keychainAccessGroups: ["\(team).com.feather.myteams"], applicationIdentifier: "\(team).com.feather.myteams"),
+            appGroup: nil, keychainGroup: "\(team).com.feather.myteams"
+        ),
+        SelectionCase(
+            name: "application identifier only",
+            signed: SigningEntitlements(applicationIdentifier: "\(team).*"),
+            appGroup: nil, keychainGroup: "\(team).*"
+        ),
+        SelectionCase(name: "nothing to share through", signed: SigningEntitlements(), appGroup: nil, keychainGroup: nil),
+    ]
+
+    @Test("The store each signature selects", arguments: selectionCases)
+    func storeSelection(_ variant: SelectionCase) {
+        let identity = SharedStoreIdentity.resolve(variant.signed)
+        #expect(identity.appGroup == variant.appGroup)
+        #expect(identity.keychainGroup == variant.keychainGroup)
+    }
+
+    @Test func groupNamesAreMatchedAsSigned() {
+        // The project's group only by its exact name; another case is the
+        // profile's own group, used as signed, never rewritten.
+        #expect(SharedStoreIdentity.appGroup(in: ["group.polarreailty.hawk-nation"]) == "group.polarreailty.hawk-nation")
+        #expect(SharedStoreIdentity.appGroup(in: ["group.a", "group.b"]) == "group.a")
+        #expect(SharedStoreIdentity.keychainGroup(in: [], applicationIdentifier: "") == nil)
+    }
+
+    @Test func bothProcessesSelectTheSameStoreWhenSignedAlike() {
+        // zsign signs the app and the widget with one entitlements blob.
+        let signed = SigningEntitlements(keychainAccessGroups: ["\(Self.team).*"], applicationIdentifier: "\(Self.team).*")
+        #expect(SharedStoreIdentity.resolve(signed) == SharedStoreIdentity.resolve(signed))
+        // Xcode signs each with its own application identifier: the group
+        // is what they share, not the keychain.
+        let app = SharedStoreIdentity.resolve(SigningEntitlements(appGroups: [Self.canonical], applicationIdentifier: "\(Self.team).PolarReailty.Hawk-Nation"))
+        let widget = SharedStoreIdentity.resolve(SigningEntitlements(appGroups: [Self.canonical], applicationIdentifier: "\(Self.team).PolarReailty.Hawk-Nation.myTeamWidget"))
+        #expect(app.appGroup == widget.appGroup)
+        #expect(app.keychainGroup != widget.keychainGroup)
+    }
+
+    // MARK: Publish, then read, per store
+
+    @Test func wildcardKeychainRoundTripsAsSigned() throws {
+        let box = FakeKeychainItems()
+        let entitled = ["\(Self.team).*"]
+        let group = try #require(SharedStoreIdentity.resolve(SigningEntitlements(keychainAccessGroups: entitled)).keychainGroup)
+        let app = FakeKeychain(accessGroup: group, entitled: entitled, box: box)
+        let widget = FakeKeychain(accessGroup: group, entitled: entitled, box: box)
+
+        #expect(SharedFavoritesMirror.publish(ids: [blues.id, chiefs.id], teams: [blues, chiefs], at: Self.now, defaults: try scratch(), keychain: app))
+        let container = SharedContainer(groupDefaults: nil, groupID: nil, keychain: widget, ownDefaults: try scratch())
+        #expect(container.favoriteTeamIDs() == [blues.id, chiefs.id])
+        #expect(container.favoritesMirror()?.teams == [blues, chiefs])
+        #expect(container.status == .fallback(.keychain(group), lastShared: Self.now))
+    }
+
+    @Test func theDerivedKeychainGroupOf1016IsRefused() throws {
+        // What 1.0.16 asked for under a wildcard profile: refused in both
+        // processes, so the widget read nothing and said "unavailable".
+        let box = FakeKeychainItems()
+        let derived = FakeKeychain(accessGroup: "\(Self.team).PolarReailty.Hawk-Nation.shared", entitled: ["\(Self.team).*"], box: box)
+        #expect(derived.write(Data("x".utf8), for: "a") == errSecMissingEntitlement)
+        #expect(derived.read("a").status == errSecMissingEntitlement)
+    }
+
+    @Test func appGroupRoundTrip() throws {
+        let group = try scratch()
+        #expect(SharedFavoritesMirror.publish(ids: [chiefs.id], teams: [chiefs], at: Self.now, defaults: group, keychain: nil))
+        let container = SharedContainer(groupDefaults: group, groupID: "group.com.example.feather")
+        #expect(container.favoriteTeamIDs() == [chiefs.id])
+        #expect(container.status == .fallback(.appGroup("group.com.example.feather"), lastShared: nil))
+    }
+
+    @Test func groupMissingFromTheProfileFallsToTheKeychain() throws {
+        // The signature names a group the OS won't resolve: no group
+        // defaults, and the keychain still carries the favorites.
+        let box = FakeKeychainItems()
+        let app = FakeKeychain(accessGroup: "\(Self.team).*", entitled: ["\(Self.team).*"], box: box)
+        SharedFavoritesMirror.publish(ids: [chiefs.id], teams: [chiefs], at: Self.now, defaults: try scratch(), keychain: app)
+        let widget = SharedContainer(groupDefaults: nil, groupID: nil, keychain: app, ownDefaults: try scratch())
+        #expect(widget.favoriteTeamIDs() == [chiefs.id])
+        #expect(widget.status.isAvailable)
+    }
+
+    @Test func aKeychainTheAppHasNotWrittenIsNotShared() throws {
+        let keychain = FakeKeychain(accessGroup: "\(Self.team).*", entitled: ["\(Self.team).*"], box: FakeKeychainItems())
+        let status = SharedContainer(groupDefaults: nil, groupID: nil, keychain: keychain, ownDefaults: try scratch()).status
+        #expect(status == .unshared(.keychain("\(Self.team).*")))
+        #expect(WidgetMissingTeam(shared: status) == .notShared(.keychain("\(Self.team).*")))
+        // Only with neither store is it unavailable.
+        #expect(SharedContainer(groupDefaults: nil, groupID: nil, ownDefaults: try scratch()).status == .unavailable)
+    }
+
+    // MARK: Widget configuration, with nothing shared
+
+    @Test func aChosenTeamRoundTripsThroughTheWidgetsOwnDefaults() async throws {
+        let own = try scratch()
+        WidgetConfigTeams.remember([blues], in: own)
+        var asked: [TeamRef.ID] = []
+        let entities = await TeamEntityQuery.configured([blues.id], mirrored: [], remembered: own) { id in
+            asked.append(id)
+            return nil
+        }
+        #expect(entities.map(\.team) == [blues])
+        #expect(asked.isEmpty)
+
+        WidgetConfigTeams.markChosen(blues, in: own)
+        #expect(WidgetConfigTeams.chosen(in: own) == [blues])
+        #expect(WidgetConfigTeams.team(id: blues.id, in: own) == blues)
+    }
+
+    @Test func aChosenTeamIsNeverDropped() async throws {
+        let own = try scratch()
+        // Resolved once, then remembered.
+        let resolved = await TeamEntityQuery.configured([blues.id], mirrored: [], remembered: own) { _ in blues }
+        #expect(resolved.map(\.team) == [blues])
+        #expect(WidgetConfigTeams.known(in: own) == [blues])
+        // Unresolvable: its placeholder, keeping the id.
+        let unknown = "hockey/nhl:999"
+        let kept = await TeamEntityQuery.configured([unknown], mirrored: [], remembered: try scratch()) { _ in nil }
+        #expect(kept.map(\.id) == [unknown])
+    }
+
+    @Test func rememberedTeamsAreBoundedAndMostRecentFirst() throws {
+        let own = try scratch()
+        WidgetConfigTeams.remember([chiefs], in: own)
+        WidgetConfigTeams.remember([blues, chiefs], in: own)
+        #expect(WidgetConfigTeams.known(in: own).map(\.id) == [blues.id, chiefs.id])
+        let placeholder = try #require(TeamRef.placeholder(id: "hockey/nhl:25"))
+        WidgetConfigTeams.remember([placeholder], in: own)
+        #expect(WidgetConfigTeams.known(in: own).count == 2)
+        let many = (0..<(WidgetConfigTeams.knownLimit + 5)).map {
+            TeamRef(league: .nhl, espnID: "x\($0)", displayName: "T\($0)", shortName: "T", abbreviation: "T",
+                    location: "", colorHex: "", alternateColorHex: "")
+        }
+        WidgetConfigTeams.remember(many, in: own)
+        #expect(WidgetConfigTeams.known(in: own).count == WidgetConfigTeams.knownLimit)
+    }
+
+    // MARK: Degradation: samples only when labelled
+
+    @Test func samplesAreTheLastResortAndAlwaysLabelled() async throws {
+        let unreadable = SharedContainer(groupDefaults: nil, groupID: nil, ownDefaults: try scratch())
+        let entities = await TeamEntityQuery.suggestions(in: unreadable, chosen: [blues]) { _ in nil }
+        #expect(entities.first?.team == blues)
+        #expect(entities.first?.note?.hasPrefix("Chosen before · ") == true)
+        let samples = entities.dropFirst()
+        #expect(!samples.isEmpty)
+        #expect(samples.allSatisfy { $0.note?.hasPrefix("Sample team · ") == true })
+        #expect(entities.allSatisfy { $0.note != nil })
+    }
+
+    @Test func favoritesReadFromTheKeychainMeanNoSamples() async throws {
+        let box = FakeKeychainItems()
+        let keychain = FakeKeychain(accessGroup: "\(Self.team).*", entitled: ["\(Self.team).*"], box: box)
+        SharedFavoritesMirror.publish(ids: [blues.id], teams: [blues], at: Self.now, defaults: try scratch(), keychain: keychain)
+        let widget = SharedContainer(groupDefaults: nil, groupID: nil, keychain: keychain, ownDefaults: try scratch())
+        let entities = await TeamEntityQuery.suggestions(in: widget, chosen: [chiefs]) { _ in nil }
+        #expect(entities.map(\.id) == [blues.id])
+        #expect(entities.allSatisfy { $0.note == "Shared via Keychain" })
+    }
+
+    // MARK: Diagnostics
+
+    @Test func diagnosticsNameTheSignatureStoreAndCount() {
+        let diagnostics = SharedStoreDiagnostics(
+            process: "widget",
+            bundleID: "com.feather.myteams.myTeamWidget",
+            signed: SigningEntitlements(keychainAccessGroups: ["\(Self.team).*"]),
+            identity: SharedStoreIdentity(appGroup: nil, keychainGroup: "\(Self.team).*"),
+            status: .fallback(.keychain("\(Self.team).*"), lastShared: nil),
+            favoritesCount: 3,
+            keychainRead: errSecSuccess
+        )
+        #expect(diagnostics.lines == [
+            "widget com.feather.myteams.myTeamWidget",
+            "groups: none",
+            "keychain: \(Self.team).*",
+            "store: Keychain \(Self.team).*",
+            "favorites: 3",
+            "keychain \(Self.team).* read 0",
+        ])
+        #expect(diagnostics.compact == "widget · Keychain \(Self.team).* · fav 3")
+        #expect(SharedStoreDiagnostics.shown(diagnostics) == diagnostics)
+
+        var healthy = diagnostics
+        healthy.status = .available(lastShared: nil)
+        #expect(SharedStoreDiagnostics.shown(healthy) == nil)
+        healthy.signed = nil
+        #expect(healthy.lines[1] == "groups: unsigned")
     }
 }

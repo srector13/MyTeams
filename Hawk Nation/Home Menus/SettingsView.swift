@@ -69,6 +69,10 @@ struct SettingsView: View {
     /// so this is the way to follow another (t_fa6748f4).
     @State private var showsAddTeams = false
 
+    /// The app's sharing diagnostics, read as Settings opens, after the
+    /// favorites were published.
+    @State private var sharing: SharedStoreDiagnostics?
+
     var body: some View {
         NavigationStack {
             Form {
@@ -143,6 +147,24 @@ struct SettingsView: View {
                 } footer: {
                     logo
                 }
+
+                // What the app was signed with and where it shares the
+                // favorites, to compare with the widget's face on a
+                // re-signed install (`SharedStoreDiagnostics`).
+                Section {
+                    ForEach(sharing?.lines ?? [], id: \.self) { line in
+                        Text(line)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    }
+                } header: {
+                    Text("Widget Sharing")
+                }
+                .accessibilityIdentifier("settings.widgetSharing")
+            }
+            .onAppear {
+                FavoritesStore.shared.publishToWidgets()
+                sharing = SharedStoreDiagnostics.current()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
