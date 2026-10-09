@@ -460,6 +460,14 @@ struct StandingsSection<Player: RosterPlayer>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "list.number", title: "Standings") {
+                // The season the tables are for, which may not be the one
+                // asked for (`Standings.seasonDisplayName`).
+                if let season = model.standings?.seasonDisplayName, !season.isEmpty {
+                    Text(season)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 if let standings = model.standings, standings.groups.count > 1 {
                     GlassEffectContainer(spacing: Theme.Spacing.s) {
                         SectionHeaderMenu(

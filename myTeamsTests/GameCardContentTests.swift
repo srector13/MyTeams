@@ -297,6 +297,16 @@ struct GameCardContentTests {
         #expect(GameCardContent.competitionLabel(of: game(competition: unknown), league: arsenalLeague) == nil)
     }
 
+    @Test("The women's cups take the short names the men's do")
+    func womensCupLabels() {
+        let wsl = LeagueID.wsl
+        #expect(GameCardContent.competitionLabel(of: game(competition: .soccer("eng.w.fa")), league: wsl) == "FA Cup")
+        #expect(GameCardContent.competitionLabel(of: game(competition: .soccer("eng.w.league_cup")), league: wsl) == "League Cup")
+        #expect(GameCardContent.competitionLabel(
+            of: game(competition: .soccer("uefa.wchampions"), leagueName: "UEFA Women's Champions League"), league: .premiereLigue
+        ) == "Champions League")
+    }
+
     @Test("Season stage outside soccer, whose season ids mean nothing here")
     func seasonStage() {
         #expect(GameCardContent.competitionLabel(of: game(seasonType: 3), league: .mlb) == "Postseason")

@@ -116,6 +116,8 @@ private struct HomeSections: View {
     let model: HomeViewModel
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Opens a team a story is about; absent in previews.
+    @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
 
     @State private var selectedGame: HomeGameSelection?
     @State private var selectedArticle: HomeHeadline?
@@ -294,6 +296,19 @@ private struct HomeSections: View {
                 .buttonStyle(.plain)
                 .zoomSource(id: headline.id, in: cardZoom)
                 .accessibilityIdentifier("home.news.row")
+                // The teams it's about, a long press away, as on a team
+                // page's news (t_8d15e070).
+                .contextMenu {
+                    if let navigator {
+                        ForEach(headline.article.teams) { team in
+                            Button {
+                                navigator.open(teamID: TeamRef.id(league: headline.team.league, espnID: team.espnID))
+                            } label: {
+                                Label(team.name, systemImage: "person.3")
+                            }
+                        }
+                    }
+                }
             }
         }
     }

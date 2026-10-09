@@ -525,6 +525,14 @@ struct DetailSheetHeaderTests {
         #expect(line("Allianz Arena", "Munich", "Bavaria", showsAddress: false) == "Allianz Arena")
     }
 
+    @Test("Attendance shows grouped, and not at all when missing or zero")
+    func attendanceFormatting() {
+        let locale = Locale(identifier: "en_US")
+        #expect(GameDetailView.formatAttendance("73421", locale: locale) == "Att. 73,421")
+        #expect(GameDetailView.formatAttendance("", locale: locale) == nil)
+        #expect(GameDetailView.formatAttendance("0", locale: locale) == nil)
+    }
+
     @Test("Even a white host's wash over the black scrim keeps white text at 4.5:1")
     func scrimClearsContrastOnWhite() throws {
         // The wash blends the host colour into black: white at the wash's

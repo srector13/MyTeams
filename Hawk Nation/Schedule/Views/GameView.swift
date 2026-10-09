@@ -614,6 +614,9 @@ extension LeagueID {
         case "ger.dfb_pokal": return "DFB-Pokal"
         case "ita.coppa_italia": return "Coppa Italia"
         case "fra.coupe_de_france": return "Coupe de France"
+        case "eng.w.fa": return "FA Cup"
+        case "eng.w.league_cup": return "League Cup"
+        case "uefa.wchampions": return "Champions League"
         default: return nil
         }
     }

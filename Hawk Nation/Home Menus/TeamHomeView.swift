@@ -27,7 +27,9 @@ struct TeamHomeView: View {
         case .baseball: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadBaseballRoster(team:)))
         case .soccer: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadSoccerRoster(team:)))
         case .hockey: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: downloadHockeyRoster(team:)))
-        case .other: EmptyView()
+        // No roster or player sheets for a sport the app doesn't know yet:
+        // the page keeps its schedule, standings, leaders and news.
+        case .other: TeamHomeContent(team: team, model: pages.model(for: team, loadRoster: { _ in .success([SoccerPlayer]()) }))
         }
     }
 }
@@ -114,12 +116,21 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
 
     var body: some View {
         TeamHomeLayout {
-            RosterSection(model: model) { player in
-                PlayerCard(player: player, state: model.sort, league: team.league)
-            } detail: { player in
-                PlayerDetailView(player: player, team: team)
-            } filterMenu: {
-                RosterFilterMenu(model: model, entries: team.league.descriptor.rosterFilters)
+            if team.league.descriptor.kind == .other {
+                ContentUnavailableView(
+                    "Not Supported Yet",
+                    systemImage: "sportscourt",
+                    description: Text("Rosters for this sport aren't supported yet.")
+                )
+                .contentCard()
+            } else {
+                RosterSection(model: model) { player in
+                    PlayerCard(player: player, state: model.sort, league: team.league)
+                } detail: { player in
+                    PlayerDetailView(player: player, team: team)
+                } filterMenu: {
+                    RosterFilterMenu(model: model, entries: team.league.descriptor.rosterFilters)
+                }
             }
 
             // The league's `RecordRule` decides how abandoned and unflagged
