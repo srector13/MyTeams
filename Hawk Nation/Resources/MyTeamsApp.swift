@@ -6,7 +6,12 @@
 //  Copyright © 2020 Stephen Rector. All rights reserved.
 //
 
+import BackgroundTasks
+import OSLog
 import SwiftUI
+import UIKit
+
+private let logger = Logger(subsystem: "com.myTeams", category: "backgroundRefresh")
 
 @main
 struct MyTeamsApp: App {
@@ -72,6 +77,13 @@ struct MyTeamsApp: App {
                     if phase == .active {
                         FavoritesStore.shared.synchronize()
                     }
+                    // Ask for the first background look, timed by the
+                    // favorites' seasons as last loaded.
+                    if phase == .background {
+                        BackgroundRefresh.schedule(
+                            at: LeagueScoreboardCenter.shared.nextFollowedRefresh(after: Date())
+                        )
+                    }
                 }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     // Poll every favorite's live games, not only the page
@@ -79,14 +91,79 @@ struct MyTeamsApp: App {
                     LeagueScoreboardCenter.shared.sceneDidChange(to: phase)
                 }
         }
+        // Registers the handler at launch, a launch into the background too.
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            await BackgroundRefresh.run()
+        }
+    }
+}
+
+/// Background app refresh (R-1): with the app in the background, one look
+/// at the favorites' live games per wake, so alerts, the widget and Live
+/// Activities move without the app open.
+///
+/// iOS decides when each wake comes, from how the app is used; the time
+/// asked for is only the earliest. Each run asks for the next: in
+/// `LeagueScoreboardCenter.backgroundLiveInterval` while a favorite's game
+/// is in the live window, else as the next one's window opens.
+@MainActor
+enum BackgroundRefresh {
+    /// Listed under `BGTaskSchedulerPermittedIdentifiers` in Info.plist.
+    static let identifier = "PolarReailty.Hawk-Nation.scoreboard-refresh"
+
+    /// With no favorite's game ahead in the seasons loaded, how long until a
+    /// look anyway: a fixture may be added, or a season loaded.
+    static let idleInterval: TimeInterval = 6 * 60 * 60
+
+    /// One wake's work: the scoreboards of the favorites' live leagues, the
+    /// alerts, widget and Live Activity changes they bring, and the next
+    /// wake asked for.
+    static func run() async {
+        // A launch into the background mounts no view, so `MyTeamsApp`'s
+        // `.task` may not have run. Each starts once, and the alerts
+        // restore their last looks (`ScoreAlertMemory`).
+        ScoreAlertEngine.shared.start()
+        WidgetScoreboardWriter.shared.start()
+        #if canImport(ActivityKit)
+        LiveActivityManager.shared.start()
+        #endif
+
+        let center = LeagueScoreboardCenter.shared
+        let next = await center.refreshFavoritesOnce()
+        // The readers hear of the last change on a later turn; give them
+        // one, then let their alerts and updates land before iOS suspends
+        // the app.
+        try? await Task.sleep(for: .seconds(1))
+        await ScoreAlertEngine.shared.finishPosting()
+        #if canImport(ActivityKit)
+        await LiveActivityManager.shared.finishWork()
+        #endif
+        // Opened meanwhile: the foreground's following carries on.
+        if UIApplication.shared.applicationState != .active {
+            center.stopFollowingFavorites()
+        }
+        schedule(at: next)
+    }
+
+    /// Asks for the next wake no earlier than `date`, or `idleInterval` on
+    /// without one. Replaces any wake asked for before.
+    static func schedule(at date: Date?) {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        request.earliestBeginDate = date ?? Date().addingTimeInterval(idleInterval)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            // Refused in the Simulator, and with Background App Refresh off.
+            logger.error("Could not schedule a background refresh: \(error.localizedDescription)")
+        }
     }
 }
 
 extension LeagueScoreboardCenter {
     /// Follows the favorites (`startFollowingFavorites()`) from the moment
     /// the app is active until it goes to the background. A passing
-    /// `.inactive` — the app switcher, a system sheet — changes nothing, and
-    /// nothing polls in the background.
+    /// `.inactive` — the app switcher, a system sheet — changes nothing. In
+    /// the background only `BackgroundRefresh` looks, once per wake.
     func sceneDidChange(to phase: ScenePhase) {
         switch phase {
         case .active:

@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Background app refresh (R-1): one look at the favorites' live
+	     games per wake, for alerts, the widget and Live Activities. Spelled
+	     out rather than built from the bundle id, so a re-signed sideload
+	     keeps it matching `BackgroundRefresh.identifier`. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>PolarReailty.Hawk-Nation.scoreboard-refresh</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -36,6 +44,10 @@
 	<true/>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
