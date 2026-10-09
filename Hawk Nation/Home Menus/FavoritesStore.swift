@@ -36,6 +36,10 @@ final class FavoritesStore {
             return FavoritesStore(cloud: nil)
         }
         #endif
+        // A re-signed install shares through the store its signature names
+        // (`SharedStoreIdentity`), which may not be where earlier builds
+        // kept the favorites.
+        SharedStoreMigration.moveFavoritesIfNeeded()
         return FavoritesStore()
     }()
 
@@ -309,6 +313,17 @@ final class FavoritesStore {
         // no fractions), so it wins on every device, however close behind.
         orderChangedAt = max(now(), orderChangedAt.map { $0 + 1 } ?? .distantPast)
         didChange()
+    }
+
+    /// Shares `teams`, the favorites as `teamRefs()` resolved them, with the
+    /// widgets wherever they can read them (`SharedFavoritesMirror`), and
+    /// reloads their timelines when that changed what they read. Ignored if
+    /// the favorites changed since `teams` was resolved.
+    func shareWithWidgets(_ teams: [TeamRef]) {
+        guard teams.map(\.id) == teamIDs else { return }
+        if SharedFavoritesMirror.publish(ids: teamIDs, teams: teams, at: now(), defaults: defaults) {
+            reloadWidgets()
+        }
     }
 
     private func didChange() {

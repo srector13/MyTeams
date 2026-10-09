@@ -31,15 +31,21 @@ struct SelectTeamIntent: WidgetConfigurationIntent {
 
 extension WidgetTeams {
     /// The team a configured widget shows: the chosen one, else the first
-    /// favorite (`fallback` if it does not resolve). `nil` with no team
-    /// chosen and none followed: a fresh install (t_afe5c297).
+    /// favorite, as the app shares it (`favorites(in:)`), so its link opens
+    /// that favorite rather than `fallback`. `nil` with no team chosen and
+    /// none readable: a fresh install (t_afe5c297), or a store the app does
+    /// not share, which the entry then says (`WidgetMissingTeam`).
     static func team(for configuration: SelectTeamIntent) async -> TeamRef? {
         if let chosen = configuration.team?.team {
             return chosen
         }
-        guard let first = SharedPaths.favoriteTeamIDs().first else {
+        let container = SharedContainer.live
+        guard let first = container.favoriteTeamIDs().first else {
             return nil
         }
-        return await resolve(first) ?? fallback
+        if let mirrored = container.favoritesMirror()?.teams.first(where: { $0.id == first }) {
+            return mirrored
+        }
+        return await resolve(first, within: resolveDeadline) ?? TeamRef.placeholder(id: first) ?? fallback
     }
 }

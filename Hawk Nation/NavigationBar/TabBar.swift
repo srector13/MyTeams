@@ -206,6 +206,12 @@ struct Home: View {
         .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
             apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
         }
+        // The widgets read the favorites from the store the app shares
+        // through, as teams (`SharedFavoritesMirror`); again as late
+        // lookups resolve.
+        .task(id: store.resolutionKey) {
+            store.shareWithWidgets(await store.teamRefs())
+        }
         // A game link's team is selected: its sheet, once the schedule
         // names the game (R-3).
         .task(id: openGame) {

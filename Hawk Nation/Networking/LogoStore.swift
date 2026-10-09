@@ -17,13 +17,15 @@ private let logger = Logger(subsystem: "com.myTeams", category: "logos")
 
 /// Where the app and the widget keep files and settings they both read.
 ///
-/// Both targets carry the App Group entitlement, so these resolve to the
-/// group container. A process without the group (a misconfigured signing
-/// profile) gets `nil` from `containerURL(forSecurityApplicationGroupIdentifier:)`
-/// and falls back to its own directories and `UserDefaults.standard`; the
-/// widget asks `SharedContainer` to tell that apart from "nothing shared yet".
+/// Both resolve to the App Group the install was signed with
+/// (`SharedStoreIdentity`): the project's, or a re-signed install's own. A
+/// process without one gets `nil` from
+/// `containerURL(forSecurityApplicationGroupIdentifier:)` and falls back to
+/// its own directories and `UserDefaults.standard`; the widget asks
+/// `SharedContainer` to tell that apart from "nothing shared yet".
 enum SharedPaths {
-    static var appGroup: String { "group.PolarReailty.Hawk-Nation" }
+    /// The App Group shared through; `nil` when the signature carries none.
+    static var appGroup: String? { SharedStoreIdentity.current.appGroup }
 
     /// The App Group's `UserDefaults`, or `.standard` without the group.
     static var defaults: UserDefaults {
@@ -39,7 +41,7 @@ enum SharedPaths {
 
     /// The App Group container, or `fallback` while the process has no group.
     static func container(_ fallback: URL) -> URL {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) ?? fallback
+        appGroup.flatMap { FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: $0) } ?? fallback
     }
 
     /// Files the OS must not purge: favorite teams' crests.
@@ -74,41 +76,63 @@ enum SharedPaths {
 
 // MARK: - Shared container
 
-/// Whether this process can reach the App Group, and the group's defaults
-/// when it can.
+/// The store this process shares with the other: the App Group's defaults
+/// when the group is reachable, and the keychain item the app mirrors the
+/// favorites to.
 ///
-/// A re-signed install (Feather, or any ad-hoc profile) whose provisioning
-/// profile leaves the App Group out still launches, but
-/// `UserDefaults(suiteName:)` then hands back a store in the process's own
-/// container, which the app and the widget do not share: the widget would
-/// read no favorites and no scores, and look like a fresh install. Whatever
-/// must tell "nothing shared yet" from "nothing can be shared" asks here;
-/// tests inject `unavailable`, or a scratch suite, rather than the OS.
+/// A re-signed install (Feather, or any ad-hoc profile) still launches when
+/// its profile leaves the project's group out, but the group then is not
+/// shared: `UserDefaults(suiteName:)` hands back a store in the process's
+/// own container, and a container that resolves is no proof either. So a
+/// group counts as shared only once the widget finds the app's writes in
+/// it (`status`). Whatever must tell "nothing shared yet" from "nothing can
+/// be shared" asks here; tests inject `unavailable`, or a scratch suite,
+/// rather than the OS.
 struct SharedContainer {
     /// The App Group's defaults; `nil` when the group is unreachable.
     let groupDefaults: UserDefaults?
+    /// The group's identifier, for the status line.
+    var groupID: String? = SharedStoreIdentity.canonicalGroup
+    /// The keychain group both processes are signed with, if any.
+    var keychain: SharedKeychain? = nil
+    /// The process's own defaults, `.standard`; tests pass a scratch suite.
+    var ownDefaults: UserDefaults = .standard
 
     var isReachable: Bool { groupDefaults != nil }
 
     /// The group's defaults, or the process's own without the group. In the
     /// app those still hold its own state; in the widget they hold nothing
     /// the app wrote.
-    var defaults: UserDefaults { groupDefaults ?? .standard }
+    var defaults: UserDefaults { groupDefaults ?? ownDefaults }
 
-    /// Asks the OS: the group counts only when its container resolves.
+    /// Asks the OS for the group the signature names (`SharedStoreIdentity`):
+    /// it counts only when its container resolves.
     static var live: SharedContainer {
-        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedPaths.appGroup) != nil,
-              let shared = UserDefaults(suiteName: SharedPaths.appGroup)
-        else { return unavailable }
-        return SharedContainer(groupDefaults: shared)
+        let identity = SharedStoreIdentity.current
+        let keychain = identity.keychainGroup.map(SharedKeychain.init(accessGroup:))
+        guard let group = identity.appGroup,
+              FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil,
+              let shared = UserDefaults(suiteName: group)
+        else { return SharedContainer(groupDefaults: nil, groupID: nil, keychain: keychain) }
+        return SharedContainer(groupDefaults: shared, groupID: group, keychain: keychain)
     }
 
     /// No group, as a profile without it leaves the process.
-    static var unavailable: SharedContainer { SharedContainer(groupDefaults: nil) }
+    static var unavailable: SharedContainer { SharedContainer(groupDefaults: nil, groupID: nil) }
 
-    /// The favorites' `TeamRef.id`s, in order, as stored in `defaults`.
+    /// The favorites' `TeamRef.id`s, in order: as stored in `defaults`,
+    /// else as the app mirrored them (`favoritesMirror()`).
     func favoriteTeamIDs() -> [String] {
-        FavoritesCodec.storedIDs(in: defaults) ?? []
+        FavoritesCodec.storedIDs(in: defaults) ?? favoritesMirror()?.ids ?? []
+    }
+
+    /// The app's copy of the favorites as teams: the group's, else the
+    /// keychain's.
+    func favoritesMirror() -> SharedFavoritesMirror? {
+        if let groupDefaults, let mirror = SharedFavoritesMirror.decode(groupDefaults.data(forKey: SharedFavoritesMirror.defaultsKey)) {
+            return mirror
+        }
+        return keychain.flatMap { SharedFavoritesMirror.decode($0.data(for: SharedFavoritesMirror.keychainAccount)) }
     }
 
     /// The app's scoreboard snapshots (`WidgetScoreboardCodec`); none
@@ -118,39 +142,122 @@ struct SharedContainer {
         groupDefaults.map { WidgetScoreboardCodec.read(from: $0) } ?? []
     }
 
-    /// Whether the widget can read what the app shares, and when the app
-    /// last shared its scoreboard.
+    /// Whether the widget can read what the app shares, through which
+    /// store, and when the app last shared its scoreboard.
     var status: SharedDataStatus {
-        guard let groupDefaults else { return .unavailable }
-        return .available(lastShared: WidgetScoreboardCodec.writtenAt(in: groupDefaults))
+        if let groupDefaults, Self.appHasWritten(to: groupDefaults) {
+            let lastShared = WidgetScoreboardCodec.writtenAt(in: groupDefaults)
+            guard let groupID, groupID != SharedStoreIdentity.canonicalGroup else {
+                return .available(lastShared: lastShared)
+            }
+            return .fallback(.appGroup(groupID), lastShared: lastShared)
+        }
+        if let keychain, let mirror = SharedFavoritesMirror.decode(keychain.data(for: SharedFavoritesMirror.keychainAccount)) {
+            return .fallback(.keychain(keychain.accessGroup), lastShared: mirror.writtenAt)
+        }
+        if groupDefaults != nil {
+            return .unshared(.appGroup(groupID ?? SharedStoreIdentity.canonicalGroup))
+        }
+        return .unavailable
+    }
+
+    /// Whether the app has written to `defaults`: its favorites (or the
+    /// mark that it loaded them), their mirror, or a scoreboard. The widget
+    /// writes none of these.
+    static func appHasWritten(to defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: FavoritesCodec.seededKey) != nil
+            || defaults.data(forKey: FavoritesCodec.key) != nil
+            || defaults.data(forKey: SharedFavoritesMirror.defaultsKey) != nil
+            || WidgetScoreboardCodec.writtenAt(in: defaults) != nil
+    }
+}
+
+/// A store the app and the widget can share through.
+enum SharedStore: Hashable, Sendable {
+    /// An App Group, by identifier.
+    case appGroup(String)
+    /// A keychain access group, by name.
+    case keychain(String)
+
+    /// "App Group", "re-signed App Group" or "Keychain": short enough for a
+    /// tile's caption.
+    var label: String {
+        switch self {
+        case .appGroup(let id):
+            return id == SharedStoreIdentity.canonicalGroup ? "App Group" : "re-signed App Group"
+        case .keychain:
+            return "Keychain"
+        }
+    }
+
+    /// The store and its identifier, for the larger layouts.
+    var detail: String {
+        switch self {
+        case .appGroup(let id): return "App Group \(id)"
+        case .keychain(let group): return "Keychain \(group)"
+        }
     }
 }
 
 /// What the widgets tell the reader about the data the app shares with them.
 enum SharedDataStatus: Hashable, Sendable {
-    /// The App Group is reachable; the app last wrote its scoreboard at
-    /// `lastShared`, `nil` before it ever has.
+    /// The project's App Group holds the app's data; the app last wrote its
+    /// scoreboard at `lastShared`, `nil` before it ever has.
     case available(lastShared: Date?)
-    /// The App Group is unreachable: the install's signing profile left it
-    /// out, and only reinstalling a build signed with it repairs that.
+    /// The app's data reaches the widget through another store: a
+    /// re-signed install's own App Group, or the keychain. `lastShared` is
+    /// the group's last scoreboard, or the keychain copy's write.
+    case fallback(SharedStore, lastShared: Date?)
+    /// A store is reachable but holds nothing the app wrote: the app and
+    /// the widget are not reading the same one, or the app has not been
+    /// opened since it was installed.
+    case unshared(SharedStore)
+    /// No store is reachable: the install's signing profile left them out,
+    /// and only reinstalling a build signed with one repairs that.
     case unavailable
 
-    var isAvailable: Bool { self != .unavailable }
+    /// Whether the app's data reaches the widget.
+    var isAvailable: Bool {
+        switch self {
+        case .available, .fallback: return true
+        case .unshared, .unavailable: return false
+        }
+    }
 
     static let unavailableTitle = "Shared data unavailable"
     static let repairHint = "Reinstall via the app to repair."
     /// The one caption-sized line a widget or its settings show.
     static let unavailableCaption = "Shared data unavailable — reinstall via app to repair"
 
-    /// "Shared data: OK · 3:42 PM", or `unavailableCaption`.
+    /// The caption-sized line a widget draws under its content: which store
+    /// it reads and whether that works. `nil` while the project's group
+    /// carries the app's data.
+    var note: String? {
+        switch self {
+        case .available:
+            return nil
+        case .fallback(let store, _):
+            return "Shared via \(store.label)"
+        case .unshared(let store):
+            return "\(store.label) has no data from the app — open myTeams"
+        case .unavailable:
+            return Self.unavailableCaption
+        }
+    }
+
+    /// "Shared data: OK · 3:42 PM", or the status's `note`.
     func caption(now: Date = .now, calendar: Calendar = .autoupdatingCurrent) -> String {
         switch self {
         case .available(let lastShared?):
             return "Shared data: OK · \(Self.when(lastShared, now: now, calendar: calendar))"
         case .available(nil):
             return "Shared data: OK"
-        case .unavailable:
-            return Self.unavailableCaption
+        case .fallback(let store, let lastShared?):
+            return "Shared data: OK via \(store.label) · \(Self.when(lastShared, now: now, calendar: calendar))"
+        case .fallback(let store, nil):
+            return "Shared data: OK via \(store.label)"
+        case .unshared, .unavailable:
+            return note ?? Self.unavailableCaption
         }
     }
 

@@ -101,7 +101,9 @@
 		7A1D0C3E5B9F2A4C6E8D1B35 /* GlassUIScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B34 /* GlassUIScreenshotTests.swift */; };
 		5457AB9FB521F7F7EF0268A3 /* myTeamWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
+		5E1A7C33D9B04F2A8C6E1F02 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A7C33D9B04F2A8C6E1F01 /* SharedStore.swift */; };
 		BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
+		5E1A7C33D9B04F2A8C6E1F03 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A7C33D9B04F2A8C6E1F01 /* SharedStore.swift */; };
 		056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
 		CA55107148FE3854E9BE41FF /* RemoteTeamCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */; };
 		357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */; };
@@ -299,6 +301,7 @@
 		E02A90D9643568EA39115CFB /* myTeamsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2DC2D7827160987765974061 /* myTeamsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5883C4F774D9544E81195578 /* LogoStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LogoStore.swift"; sourceTree = "<group>"; };
+		5E1A7C33D9B04F2A8C6E1F01 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SharedStore.swift"; sourceTree = "<group>"; };
 		A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalog.swift"; sourceTree = "<group>"; };
 		A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogo.swift"; sourceTree = "<group>"; };
 		82D2B7B76E0770278F858496 /* RemoteTeamCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RemoteTeamCatalogTests.swift"; sourceTree = "<group>"; };
@@ -477,6 +480,7 @@
 				A1CBF316BA698A3A7672774F /* Sport.swift */,
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
 				5883C4F774D9544E81195578 /* LogoStore.swift */,
+				5E1A7C33D9B04F2A8C6E1F01 /* SharedStore.swift */,
 				A6C3E169CF585D33F00B7811 /* RemoteTeamCatalog.swift */,
 				A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */,
 			);
@@ -955,6 +959,7 @@
 				6799744107ABFA081D1BD126 /* BoxScoreTables.swift in Sources */,
 				D1EA2D61099BBE43E8394516 /* GameStoryView.swift in Sources */,
 				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
+				5E1A7C33D9B04F2A8C6E1F02 /* SharedStore.swift in Sources */,
 				056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */,
 				357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */,
 				9E5A1C0B7D2F4A6E8B3C9011 /* HomeFeedWindow.swift in Sources */,
@@ -985,6 +990,7 @@
 				2129690FEF4C818C0D034221 /* ConvertColor.swift in Sources */,
 				6560ECADCC6B530EAB4FC234 /* DownloadScheduleData.swift in Sources */,
 				BB4B82EF0DBC7B7610CB57D8 /* LogoStore.swift in Sources */,
+				5E1A7C33D9B04F2A8C6E1F03 /* SharedStore.swift in Sources */,
 				D5AA8797C95A8144528026A4 /* WidgetScoreboardSnapshot.swift in Sources */,
 				CA55107148FE3854E9BE41FF /* RemoteTeamCatalog.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B41 /* Theme.swift in Sources */,
