@@ -20,7 +20,7 @@ struct LiveGameControl: ControlWidget {
 
     /// Where the control opens the app with no game under way. The app reads
     /// no route from it, and opens as it was: Home, on a launch.
-    static let homeURL = URL(string: "\(WidgetDeepLink.scheme)://home")!
+    nonisolated static let homeURL = URL(string: "\(WidgetDeepLink.scheme)://home")!
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind, provider: LiveGameControlProvider()) { url in
@@ -49,10 +49,15 @@ struct LiveGameControlProvider: ControlValueProvider {
         LiveGameControl.homeURL
     }
 
+    /// Opens Home when the App Group is unreachable: with no favorites or
+    /// scores to read, the control cannot know of a game, and the app says
+    /// the rest.
     func currentValue() async throws -> URL {
-        WidgetDayBuilder.liveGameURL(
-            favoriteIDs: SharedPaths.favoriteTeamIDs(),
-            snapshots: WidgetScoreboardCodec.read(),
+        let shared = SharedContainer.live
+        guard shared.isReachable else { return LiveGameControl.homeURL }
+        return WidgetDayBuilder.liveGameURL(
+            favoriteIDs: shared.favoriteTeamIDs(),
+            snapshots: shared.scoreboardSnapshots(),
             now: .now
         ) ?? LiveGameControl.homeURL
     }

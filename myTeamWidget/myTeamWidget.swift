@@ -21,6 +21,9 @@ struct WidgetEntry: TimelineEntry {
     /// Whether there is no team to show: none chosen and none followed.
     /// The widget then asks for one (`NoTeamView`) and `tempGame` is unused.
     var needsTeam = false
+    /// With `needsTeam`: the favorites could not be read, as the App Group
+    /// is unreachable, so the widget says that rather than "Add Teams".
+    var sharedUnavailable = false
 }
 
 /// Builds a team's entries for the configurable widget's provider.
@@ -42,6 +45,10 @@ enum WidgetTimelines {
     /// preview most of all.
     static let previewDeadline: Duration = .seconds(3)
     static let snapshotDeadline: Duration = .seconds(10)
+    /// How long a timeline waits for its loads before showing the last
+    /// good copy. The request timeout is shorter; the resource timeout is a
+    /// minute, longer than an extension is given.
+    static let timelineDeadline: Duration = .seconds(25)
 
     static func placeholder(for team: TeamRef) -> WidgetEntry {
         WidgetEntry(date: .now, tempGame: .placeholder(for: team), followedTeam: team.shortName, teamID: team.id)
@@ -53,6 +60,14 @@ enum WidgetTimelines {
         WidgetEntry(date: .now, tempGame: .placeholder(for: WidgetTeams.fallback), needsTeam: true)
     }
 
+    /// The entry with no team to show: `noTeam`, or, with the App Group
+    /// unreachable, one saying the favorites cannot be read.
+    static func missingTeam(_ shared: SharedDataStatus) -> WidgetEntry {
+        var entry = noTeam
+        entry.sharedUnavailable = WidgetMissingTeam(shared: shared) == .sharedUnavailable
+        return entry
+    }
+
     /// The one line a tile shows when there is no game to show (B-16).
     static let seasonOverMessage = "No upcoming games"
     static let failedMessage = "Couldn't update"
@@ -61,46 +76,80 @@ enum WidgetTimelines {
     /// waits only briefly before falling back to the placeholder.
     static func snapshot(for team: TeamRef, isPreview: Bool) async -> WidgetEntry {
         let deadline = isPreview ? previewDeadline : snapshotDeadline
-        let result = await WidgetScheduleLoader.featuredGame(for: team, within: deadline)
+        let now = Date.now
+        let result = await WidgetScheduleLoader.featuredGame(for: team, now: now, within: deadline)
 
-        let game: WidgetGame
+        let fresh: WidgetGame?
         switch result {
         case .game(let featured, _):
-            game = featured
+            fresh = featured
         case .seasonOver:
-            game = .notice(seasonOverMessage, for: team)
+            fresh = .notice(seasonOverMessage, for: team)
         case .failed:
             // The gallery shows sample data rather than a failure.
-            game = isPreview ? .placeholder(for: team) : .notice(failedMessage, for: team)
+            guard !isPreview else {
+                return WidgetEntry(date: now, tempGame: .placeholder(for: team), followedTeam: team.shortName, teamID: team.id)
+            }
+            fresh = nil
         }
-        return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
+        let game = self.game(fresh, for: team, now: now, shared: SharedContainer.live.status)
+        return WidgetEntry(date: now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
     }
 
     static func timeline(for team: TeamRef) async -> Timeline<WidgetEntry> {
         let now = Date.now
-        let game: WidgetGame
+        let fresh: WidgetGame?
         let reload: Date
 
-        let result = await WidgetScheduleLoader.featuredGame(for: team, now: now)
+        let result = await WidgetScheduleLoader.featuredGame(for: team, now: now, within: timelineDeadline)
         switch result {
         case .game(let featured, let refresh):
-            game = featured
+            fresh = featured
             // A fixture reloads at its kickoff, to show it under way; a game
             // under way, every few minutes; a result, at midnight. Never
             // sooner than a minute, nor later than the hourly refresh.
             reload = min(now + refreshInterval, max(refresh, now + 60))
         case .seasonOver:
-            game = .notice(seasonOverMessage, for: team)
+            fresh = .notice(seasonOverMessage, for: team)
             reload = now + refreshInterval
         case .failed:
-            game = .notice(failedMessage, for: team)
+            fresh = nil
             reload = now + retryInterval
         }
+        let game = self.game(fresh, for: team, now: now, shared: SharedContainer.live.status)
 
         return Timeline(
             entries: [WidgetEntry(date: now, tempGame: game, followedTeam: team.shortName, teamID: team.id)],
             policy: .after(reload)
         )
+    }
+
+    /// The tile for what a load found (`WidgetContent.plan`): the fresh
+    /// game, kept as the last good copy; else that copy, dated; else
+    /// "Couldn't update". Noted when the App Group is unreachable, as the
+    /// app's live scores then never reach the widget.
+    static func game(
+        _ fresh: WidgetGame?,
+        for team: TeamRef,
+        now: Date,
+        shared: SharedDataStatus,
+        lastGood defaults: UserDefaults = .standard
+    ) -> WidgetGame {
+        let key = WidgetLastGoodStore.teamKey(team.id)
+        if let fresh {
+            WidgetLastGoodStore.save(fresh.cached, at: now, key: key, in: defaults)
+        }
+        let content = WidgetContent<WidgetCachedGame>.plan(
+            fresh: fresh?.cached,
+            lastGood: fresh == nil ? WidgetLastGoodStore.load(WidgetCachedGame.self, key: key, from: defaults) : nil,
+            shared: shared,
+            now: now
+        )
+        var game = fresh
+            ?? content.value.map { WidgetGame(cached: $0, team: team) }
+            ?? WidgetGame.notice(failedMessage, for: team)
+        game.note = content.note
+        return game
     }
 }
 
@@ -115,7 +164,9 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
     func snapshot(for configuration: SelectTeamIntent, in context: Context) async -> WidgetEntry {
         guard let team = await WidgetTeams.team(for: configuration) else {
             // The gallery shows what the widget does, on its sample team.
-            return context.isPreview ? WidgetTimelines.placeholder(for: WidgetTeams.fallback) : WidgetTimelines.noTeam
+            return context.isPreview
+                ? WidgetTimelines.placeholder(for: WidgetTeams.fallback)
+                : WidgetTimelines.missingTeam(SharedContainer.live.status)
         }
         return await WidgetTimelines.snapshot(for: team, isPreview: context.isPreview)
     }
@@ -124,7 +175,10 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
         guard let team = await WidgetTeams.team(for: configuration) else {
             // Following a team reloads every timeline (`FavoritesStore`);
             // the hourly refresh only backs that up.
-            return Timeline(entries: [WidgetTimelines.noTeam], policy: .after(.now + WidgetTimelines.refreshInterval))
+            // Without the App Group, no favorite can be read: the entry says
+            // so, rather than asking for a team the reader already follows.
+            let entry = WidgetTimelines.missingTeam(SharedContainer.live.status)
+            return Timeline(entries: [entry], policy: .after(.now + WidgetTimelines.refreshInterval))
         }
         let timeline = await WidgetTimelines.timeline(for: team)
         // After the timeline is built, so the league's team list (up to a
@@ -151,7 +205,7 @@ struct WidgetEntryView: View {
     var body: some View {
         Group {
             if entry.needsTeam {
-                NoTeamView(family: family)
+                NoTeamView(family: family, sharedUnavailable: entry.sharedUnavailable)
             } else {
                 switch family {
                 #if os(iOS)
@@ -219,6 +273,10 @@ struct ScheduleTile: View {
             .font(Theme.Typography.caption)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
+
+            if let note = game.note {
+                TileNote(note: note)
+            }
         }
         // The small tile can't grow, so its text scales only as far as the
         // crest and four lines still fit (W-2).
@@ -271,6 +329,9 @@ struct MediumScheduleTile: View {
                     }
                     .font(Theme.Typography.footnote)
                 }
+                if let note = game.note {
+                    TileNote(note: note)
+                }
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
@@ -298,6 +359,20 @@ struct MediumScheduleTile: View {
                 .aspectRatio(contentMode: .fit)
                 .accessibilityHidden(true)
         }
+    }
+}
+
+/// The caption-sized line under a tile's content: the age of a kept copy, or
+/// the App Group being unreachable (`WidgetGame.note`).
+struct TileNote: View {
+    var note: String
+
+    var body: some View {
+        Text(note)
+            .font(.caption2)
+            .lineLimit(2)
+            .minimumScaleFactor(0.7)
+            .opacity(0.8)
     }
 }
 
@@ -368,30 +443,43 @@ private struct TileInk: ViewModifier {
 /// followed in the app (t_afe5c297). Asks for one rather than showing a team
 /// the reader never picked; a tap opens the app, on its "Add Teams". "My
 /// Day" (`MyDayView`) shows it too.
+///
+/// With `sharedUnavailable`, the favorites could not be read at all (the App
+/// Group is unreachable under the install's signing profile), and it says
+/// that, with how to repair it, rather than asking for a team.
 struct NoTeamView: View {
     var family: WidgetFamily
+    var sharedUnavailable = false
+
+    private var title: String {
+        sharedUnavailable ? SharedDataStatus.unavailableTitle : "Add Teams"
+    }
+
+    private var detail: String {
+        sharedUnavailable ? SharedDataStatus.repairHint : "Open myTeams to follow a team."
+    }
 
     var body: some View {
         Group {
             #if os(iOS)
             if family == .accessoryInline {
-                Text("Add Teams in myTeams")
+                Text(sharedUnavailable ? "myTeams: shared data unavailable" : "Add Teams in myTeams")
             } else if family == .accessoryCircular {
                 ZStack {
                     AccessoryWidgetBackground()
-                    Image(systemName: "plus")
+                    Image(systemName: sharedUnavailable ? "exclamationmark.triangle" : "plus")
                         .font(.title3.weight(.semibold))
                         .widgetAccentable()
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Add Teams")
+                .accessibilityLabel(title)
                 .containerBackground(for: .widget) { Color.clear }
             } else if family == .accessoryRectangular {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("Add Teams")
+                    Text(title)
                         .font(.headline)
                         .widgetAccentable()
-                    Text("Open myTeams to follow a team.")
+                    Text(detail)
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(2)
@@ -409,14 +497,14 @@ struct NoTeamView: View {
 
     private var tile: some View {
         VStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "plus.circle")
+            Image(systemName: sharedUnavailable ? "exclamationmark.triangle" : "plus.circle")
                 .font(.title)
                 .widgetAccentable()
                 .accessibilityHidden(true)
-            Text("Add Teams")
+            Text(title)
                 .font(Theme.Typography.cardTitle)
                 .widgetAccentable()
-            Text("Open myTeams to follow a team.")
+            Text(detail)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -480,6 +568,11 @@ private struct AccessoryEntryView: View {
                     } else {
                         Text("vs \(entry.tempGame.teamName)")
                         Text("\(entry.tempGame.gameDate) \(entry.tempGame.gameTime)")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let note = entry.tempGame.note {
+                        Text(note)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -634,4 +727,5 @@ extension WidgetEntry {
     TeamScheduleWidget()
 } timeline: {
     WidgetTimelines.noTeam
+    WidgetTimelines.missingTeam(.unavailable)
 }

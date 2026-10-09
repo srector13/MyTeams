@@ -158,6 +158,7 @@
 		9E5A1C0B7D2F4A6E8B3C9031 /* MyDayWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9003 /* MyDayWidget.swift */; };
 		9E5A1C0B7D2F4A6E8B3C9041 /* LiveGameControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9004 /* LiveGameControl.swift */; };
 		9E5A1C0B7D2F4A6E8B3C9051 /* WidgetDayBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */; };
+		5D7A3E91C4B2068F1A9E7C31 /* WidgetSharedDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7A3E91C4B2068F1A9E7C30 /* WidgetSharedDataTests.swift */; };
 		0A805DB94612CAEBA90C1517 /* TeamEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293381D72B47893F6410908F /* TeamEntity.swift */; };
 		C80C113AED809292E84C5721 /* NextGameIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C982C2579AA2F3355E3A66BF /* NextGameIntent.swift */; };
 		2C4FE1622D9CB92BAEDC3AB7 /* OpenTeamIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C56B639CE3118984028C7D8E /* OpenTeamIntent.swift */; };
@@ -348,6 +349,7 @@
 		9E5A1C0B7D2F4A6E8B3C9003 /* MyDayWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MyDayWidget.swift"; sourceTree = "<group>"; };
 		9E5A1C0B7D2F4A6E8B3C9004 /* LiveGameControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveGameControl.swift"; sourceTree = "<group>"; };
 		9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDayBuilderTests.swift"; sourceTree = "<group>"; };
+		5D7A3E91C4B2068F1A9E7C30 /* WidgetSharedDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetSharedDataTests.swift"; sourceTree = "<group>"; };
 		C982C2579AA2F3355E3A66BF /* NextGameIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NextGameIntent.swift"; sourceTree = "<group>"; };
 		C56B639CE3118984028C7D8E /* OpenTeamIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OpenTeamIntent.swift"; sourceTree = "<group>"; };
 		0413F6DB2844D1BDC96309DC /* MyTeamsShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MyTeamsShortcuts.swift"; sourceTree = "<group>"; };
@@ -688,6 +690,7 @@
 				7D3F2A1B9C4E5F60718293A5 /* SplashTests.swift */,
 				F8908C7681C6E71A212FCEB6 /* WidgetDeepLinkRoutingTests.swift */,
 				9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */,
+				5D7A3E91C4B2068F1A9E7C30 /* WidgetSharedDataTests.swift */,
 				B7F60AA0D8EF82D1A1FA0AEB /* AppIntentsTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
@@ -1043,6 +1046,7 @@
 				7D3F2A1B9C4E5F60718293A4 /* SplashTests.swift in Sources */,
 				9C03DD85FE7B79019A43612D /* WidgetDeepLinkRoutingTests.swift in Sources */,
 				9E5A1C0B7D2F4A6E8B3C9051 /* WidgetDayBuilderTests.swift in Sources */,
+				5D7A3E91C4B2068F1A9E7C31 /* WidgetSharedDataTests.swift in Sources */,
 				9CB5EB5FC172B7F73C64554C /* AppIntentsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

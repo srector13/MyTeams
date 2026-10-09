@@ -95,13 +95,27 @@ enum WidgetScoreboardCodec {
         return (try? JSONDecoder().decode([WidgetScoreboardSnapshot].self, from: data)) ?? []
     }
 
-    static func write(_ snapshots: [WidgetScoreboardSnapshot], to defaults: UserDefaults = SharedPaths.defaults) {
+    /// When the app last wrote the snapshots, for the widget's "Shared
+    /// data" line (`SharedDataStatus`).
+    static let writtenAtKey = "widgetScoreboardSnapshots.writtenAt"
+
+    static func write(
+        _ snapshots: [WidgetScoreboardSnapshot],
+        to defaults: UserDefaults = SharedPaths.defaults,
+        at date: Date = Date()
+    ) {
         guard let data = encode(snapshots) else { return }
         defaults.set(data, forKey: defaultsKey)
+        defaults.set(date, forKey: writtenAtKey)
     }
 
     static func read(from defaults: UserDefaults = SharedPaths.defaults) -> [WidgetScoreboardSnapshot] {
         decode(defaults.data(forKey: defaultsKey))
+    }
+
+    /// When the snapshots in `defaults` were written; `nil` before any were.
+    static func writtenAt(in defaults: UserDefaults) -> Date? {
+        defaults.object(forKey: writtenAtKey) as? Date
     }
 
     /// Whether `snapshot` was written within `staleAfter` of `now`. One

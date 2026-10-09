@@ -73,7 +73,7 @@ final class WidgetScoreboardWriter {
         guard !games.isEmpty else { return }
         let stamp = now()
         let snapshots = Self.snapshots(in: games, favoriteIDs: favorites().map(\.teamID), updated: stamp)
-        WidgetScoreboardCodec.write(snapshots, to: defaults)
+        WidgetScoreboardCodec.write(snapshots, to: defaults, at: stamp)
 
         let unstamped = snapshots.map { snapshot -> WidgetScoreboardSnapshot in
             var snapshot = snapshot

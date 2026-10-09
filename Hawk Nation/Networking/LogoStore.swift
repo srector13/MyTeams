@@ -20,23 +20,21 @@ private let logger = Logger(subsystem: "com.myTeams", category: "logos")
 /// Both targets carry the App Group entitlement, so these resolve to the
 /// group container. A process without the group (a misconfigured signing
 /// profile) gets `nil` from `containerURL(forSecurityApplicationGroupIdentifier:)`
-/// and falls back to its own directories and `UserDefaults.standard`.
+/// and falls back to its own directories and `UserDefaults.standard`; the
+/// widget asks `SharedContainer` to tell that apart from "nothing shared yet".
 enum SharedPaths {
     static var appGroup: String { "group.PolarReailty.Hawk-Nation" }
 
     /// The App Group's `UserDefaults`, or `.standard` without the group.
     static var defaults: UserDefaults {
-        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil,
-              let shared = UserDefaults(suiteName: appGroup)
-        else { return .standard }
-        return shared
+        SharedContainer.live.defaults
     }
 
     /// The favorites' `TeamRef.id`s, in order, as the app last saved them.
     /// Empty when none are stored. The widget reads favorites through this,
     /// not through the app's `FavoritesStore`.
     static func favoriteTeamIDs() -> [String] {
-        FavoritesCodec.storedIDs(in: defaults) ?? []
+        SharedContainer.live.favoriteTeamIDs()
     }
 
     /// The App Group container, or `fallback` while the process has no group.
@@ -71,6 +69,101 @@ enum SharedPaths {
         let local = FileManager.default.urls(for: directory, in: .userDomainMask)[0]
         let root = container(local)
         return root == local ? local : root.appending(path: subpath, directoryHint: .isDirectory)
+    }
+}
+
+// MARK: - Shared container
+
+/// Whether this process can reach the App Group, and the group's defaults
+/// when it can.
+///
+/// A re-signed install (Feather, or any ad-hoc profile) whose provisioning
+/// profile leaves the App Group out still launches, but
+/// `UserDefaults(suiteName:)` then hands back a store in the process's own
+/// container, which the app and the widget do not share: the widget would
+/// read no favorites and no scores, and look like a fresh install. Whatever
+/// must tell "nothing shared yet" from "nothing can be shared" asks here;
+/// tests inject `unavailable`, or a scratch suite, rather than the OS.
+struct SharedContainer {
+    /// The App Group's defaults; `nil` when the group is unreachable.
+    let groupDefaults: UserDefaults?
+
+    var isReachable: Bool { groupDefaults != nil }
+
+    /// The group's defaults, or the process's own without the group. In the
+    /// app those still hold its own state; in the widget they hold nothing
+    /// the app wrote.
+    var defaults: UserDefaults { groupDefaults ?? .standard }
+
+    /// Asks the OS: the group counts only when its container resolves.
+    static var live: SharedContainer {
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedPaths.appGroup) != nil,
+              let shared = UserDefaults(suiteName: SharedPaths.appGroup)
+        else { return unavailable }
+        return SharedContainer(groupDefaults: shared)
+    }
+
+    /// No group, as a profile without it leaves the process.
+    static var unavailable: SharedContainer { SharedContainer(groupDefaults: nil) }
+
+    /// The favorites' `TeamRef.id`s, in order, as stored in `defaults`.
+    func favoriteTeamIDs() -> [String] {
+        FavoritesCodec.storedIDs(in: defaults) ?? []
+    }
+
+    /// The app's scoreboard snapshots (`WidgetScoreboardCodec`); none
+    /// without the group, rather than whatever the process's own defaults
+    /// hold.
+    func scoreboardSnapshots() -> [WidgetScoreboardSnapshot] {
+        groupDefaults.map { WidgetScoreboardCodec.read(from: $0) } ?? []
+    }
+
+    /// Whether the widget can read what the app shares, and when the app
+    /// last shared its scoreboard.
+    var status: SharedDataStatus {
+        guard let groupDefaults else { return .unavailable }
+        return .available(lastShared: WidgetScoreboardCodec.writtenAt(in: groupDefaults))
+    }
+}
+
+/// What the widgets tell the reader about the data the app shares with them.
+enum SharedDataStatus: Hashable, Sendable {
+    /// The App Group is reachable; the app last wrote its scoreboard at
+    /// `lastShared`, `nil` before it ever has.
+    case available(lastShared: Date?)
+    /// The App Group is unreachable: the install's signing profile left it
+    /// out, and only reinstalling a build signed with it repairs that.
+    case unavailable
+
+    var isAvailable: Bool { self != .unavailable }
+
+    static let unavailableTitle = "Shared data unavailable"
+    static let repairHint = "Reinstall via the app to repair."
+    /// The one caption-sized line a widget or its settings show.
+    static let unavailableCaption = "Shared data unavailable — reinstall via app to repair"
+
+    /// "Shared data: OK · 3:42 PM", or `unavailableCaption`.
+    func caption(now: Date = .now, calendar: Calendar = .autoupdatingCurrent) -> String {
+        switch self {
+        case .available(let lastShared?):
+            return "Shared data: OK · \(Self.when(lastShared, now: now, calendar: calendar))"
+        case .available(nil):
+            return "Shared data: OK"
+        case .unavailable:
+            return Self.unavailableCaption
+        }
+    }
+
+    /// "Data from 3:42 PM": what a widget showing a copy it kept says.
+    static func dataFrom(_ date: Date, now: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
+        "Data from \(when(date, now: now, calendar: calendar))"
+    }
+
+    /// The time alone today, else with the date.
+    private static func when(_ date: Date, now: Date, calendar: Calendar) -> String {
+        calendar.isDate(date, inSameDayAs: now)
+            ? date.formatted(date: .omitted, time: .shortened)
+            : date.formatted(date: .abbreviated, time: .shortened)
     }
 }
 
