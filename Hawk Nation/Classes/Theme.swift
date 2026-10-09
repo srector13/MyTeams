@@ -537,7 +537,7 @@ struct SheetCloseButton: View {
 }
 
 #Preview {
-    let team = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
+    let team = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!
     VStack(spacing: Theme.Spacing.l) {
         Text("Section title").font(Theme.Typography.sectionTitle)
         Text("102").font(Theme.Typography.statFigure)

@@ -15,10 +15,10 @@ import Testing
 /// The four seeded teams, looked up in the bundled catalog, so tests can
 /// keep writing `team: .jayhawks`.
 extension TeamRef {
-    static var jayhawks: TeamRef { TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305") }
-    static var chiefs: TeamRef { TeamCatalog.seeded(league: .nfl, espnID: "12") }
-    static var royals: TeamRef { TeamCatalog.seeded(league: .mlb, espnID: "7") }
-    static var sporting: TeamRef { TeamCatalog.seeded(league: .mls, espnID: "186") }
+    static var jayhawks: TeamRef { TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")! }
+    static var chiefs: TeamRef { TeamCatalog.seeded(league: .nfl, espnID: "12")! }
+    static var royals: TeamRef { TeamCatalog.seeded(league: .mlb, espnID: "7")! }
+    static var sporting: TeamRef { TeamCatalog.seeded(league: .mls, espnID: "186")! }
 }
 
 @Suite("Team catalog")

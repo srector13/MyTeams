@@ -182,7 +182,7 @@ struct FixtureTransportTests {
     @Test("A routed URL answers with its fixture")
     func routedURL() async throws {
         let client = HTTPClient(transport: FixtureTransport(directory: try Fixture.directory()))
-        let team = TeamCatalog.seeded(league: .nfl, espnID: "12")
+        let team = TeamCatalog.seeded(league: .nfl, espnID: "12")!
         let result = await client.fetch(team.scheduleURL)
 
         let events = result.document?["events"].arrayValue ?? []
@@ -223,10 +223,10 @@ struct FixtureTransportTests {
         }
 
         let seeds = [
-            TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305"),
-            TeamCatalog.seeded(league: .nfl, espnID: "12"),
-            TeamCatalog.seeded(league: .mlb, espnID: "7"),
-            TeamCatalog.seeded(league: .mls, espnID: "186"),
+            TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!,
+            TeamCatalog.seeded(league: .nfl, espnID: "12")!,
+            TeamCatalog.seeded(league: .mlb, espnID: "7")!,
+            TeamCatalog.seeded(league: .mls, espnID: "186")!,
         ]
         for team in seeds {
             #expect(FixtureTransport.routes[team.scheduleURL] != nil, "No route for \(team.scheduleURL)")

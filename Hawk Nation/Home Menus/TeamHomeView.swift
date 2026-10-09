@@ -229,5 +229,5 @@ private struct RosterFilterMenu<Player: RosterPlayer>: View {
 }
 
 #Preview {
-    TeamHomeView(team: TeamCatalog.seeded(league: .nfl, espnID: "12"), pages: TeamPages())
+    TeamHomeView(team: TeamCatalog.seeded(league: .nfl, espnID: "12")!, pages: TeamPages())
 }

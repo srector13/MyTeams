@@ -25,8 +25,8 @@ struct HomeFeedTests {
         return calendar
     }()
 
-    private let jayhawks = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
-    private let chiefs = TeamCatalog.seeded(league: .nfl, espnID: "12")
+    private let jayhawks = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!
+    private let chiefs = TeamCatalog.seeded(league: .nfl, espnID: "12")!
 
     private func game(
         id: String,

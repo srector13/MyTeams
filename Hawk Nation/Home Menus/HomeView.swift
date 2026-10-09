@@ -688,8 +688,8 @@ private struct HomeGameRow: View {
 #Preview("Bundled teams") {
     HomeView(
         teams: [
-            TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305"),
-            TeamCatalog.seeded(league: .nfl, espnID: "12"),
+            TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!,
+            TeamCatalog.seeded(league: .nfl, espnID: "12")!,
         ],
         addTeams: {},
         showSettings: {}

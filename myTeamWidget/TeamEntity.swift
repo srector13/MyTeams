@@ -110,8 +110,18 @@ struct SelectTeamIntent: WidgetConfigurationIntent {
 enum WidgetTeams {
     /// The team a widget shows when a favorite does not resolve, and the
     /// gallery's sample: the Jayhawks, the original widget's team. Never
-    /// shown for a reader who follows no team (`team(for:)`).
-    static let fallback = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
+    /// shown for a reader who follows no team (`team(for:)`). Spelled out
+    /// here too, so a broken bundled catalog can't leave the widget teamless.
+    static let fallback = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305") ?? TeamRef(
+        league: .mensCollegeBasketball,
+        espnID: "2305",
+        displayName: "Kansas Jayhawks",
+        shortName: "Jayhawks",
+        abbreviation: "KU",
+        location: "Kansas",
+        colorHex: "0051BA",
+        alternateColorHex: "E8000D"
+    )
 
     /// A team by `TeamRef.id`. Seed teams resolve from the bundle without
     /// reading a catalog; any other goes through `RemoteTeamCatalog`, which
