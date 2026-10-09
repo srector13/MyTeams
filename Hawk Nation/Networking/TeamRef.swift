@@ -340,6 +340,9 @@ enum WidgetDeepLink {
     static let scheme = "myteams"
     static let teamHost = "team"
     static let gameHost = "game"
+    /// `myteams://home`: the app's Home, which the "Open Live Game" control
+    /// opens with no game under way.
+    static let homeHost = "home"
     /// The game link's query item naming the team whose page it opens over.
     static let teamQueryName = "team"
 
@@ -422,6 +425,15 @@ enum WidgetDeepLink {
     /// The team whose page a team or game link opens.
     static func linkedTeamID(from url: URL) -> TeamRef.ID? {
         teamID(from: url) ?? game(from: url)?.teamID
+    }
+
+    /// The link to the app's Home.
+    static let homeURL = URL(string: "\(scheme)://\(homeHost)")!
+
+    /// Whether `url` is the link to the app's Home. Scheme and host match
+    /// case-insensitively.
+    static func isHome(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == scheme && url.host()?.lowercased() == homeHost
     }
 }
 

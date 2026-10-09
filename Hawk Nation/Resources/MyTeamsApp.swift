@@ -110,9 +110,12 @@ struct MyTeamsApp: App {
     }
 
     /// A team link opens its page; a game link with a team, the game's
-    /// sheet over that page. Anything else is ignored.
+    /// sheet over that page; the Home link, Home. Anything else is ignored.
     private func open(_ url: URL) {
-        if let teamID = WidgetDeepLink.teamID(from: url) {
+        if WidgetDeepLink.isHome(url) {
+            deepLinkedGame = nil
+            deepLinkedTeamID = HomeTabs.homeID
+        } else if let teamID = WidgetDeepLink.teamID(from: url) {
             deepLinkedGame = nil
             deepLinkedTeamID = teamID
         } else if let game = WidgetDeepLink.game(from: url), let teamID = game.teamID {
