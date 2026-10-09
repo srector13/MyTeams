@@ -535,3 +535,21 @@ struct GameLogTests {
         #expect(log.headlineColumns.map(\.label) == ["A", "B", "C", "D"])
     }
 }
+
+// MARK: - Baseball slash line
+
+@Suite("Player stats: the baseball slash line")
+struct BaseballSlashLineTests {
+    @Test("Rates read as the box score prints them")
+    func format() {
+        var stats = BaseballPlayerStats.empty
+        stats.Avg = 0.281
+        stats.OnBasePct = 0.357
+        stats.SlugAvg = 0.455
+        #expect(baseballSlashLine(stats) == ".281/.357/.455")
+
+        stats.SlugAvg = 1
+        #expect(baseballSlashLine(stats) == ".281/.357/1.000")
+        #expect(baseballSlashLine(.empty) == ".000/.000/.000")
+    }
+}
