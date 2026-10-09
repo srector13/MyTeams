@@ -6,6 +6,7 @@
 //  Copyright © 2026 Stephen Rector. All rights reserved.
 //
 
+import AppIntents
 import WidgetKit
 import SwiftUI
 import UIKit
@@ -72,26 +73,31 @@ enum DayTimelines {
     }
 }
 
-struct DayTimelineProvider: TimelineProvider {
+/// The "My Day" widget has no settings; an intent without parameters lets
+/// its provider use the async methods, as `TeamTimelineProvider` does,
+/// rather than hold completion handlers across a task.
+struct MyDayIntent: WidgetConfigurationIntent {
+    static let title: LocalizedStringResource = "My Day"
+    static let description = IntentDescription("Your favorites' live games, today's games and what's next.")
+
+    init() {}
+}
+
+struct DayTimelineProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> DayEntry {
         .preview
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (DayEntry) -> Void) {
+    func snapshot(for configuration: MyDayIntent, in context: Context) async -> DayEntry {
         if context.isPreview {
             // The gallery shows what the widget does, on sample games.
-            completion(.preview)
-            return
+            return .preview
         }
-        Task {
-            completion(await DayTimelines.entry())
-        }
+        return await DayTimelines.entry()
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<DayEntry>) -> Void) {
-        Task {
-            completion(await DayTimelines.timeline())
-        }
+    func timeline(for configuration: MyDayIntent, in context: Context) async -> Timeline<DayEntry> {
+        await DayTimelines.timeline()
     }
 }
 
@@ -215,7 +221,7 @@ private struct DayRowView: View {
 /// favorite, so six favorites need one widget rather than six.
 struct MyDayWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "myTeamsDay", provider: DayTimelineProvider()) { entry in
+        AppIntentConfiguration(kind: "myTeamsDay", intent: MyDayIntent.self, provider: DayTimelineProvider()) { entry in
             MyDayEntryView(entry: entry)
         }
         .configurationDisplayName("My Day")
