@@ -9,16 +9,6 @@
 import Foundation
 import Observation
 
-/// A favorite's game on Home: the game as its schedule lists it, and the
-/// favorite whose schedule that is.
-struct HomeGame: Identifiable, Hashable, Sendable {
-    let team: TeamRef
-    let game: Game
-
-    /// The game's id, so two favorites playing each other are one game.
-    var id: String { game.gameID.isEmpty ? "\(team.id)|\(game.id)" : game.gameID }
-}
-
 /// A favorite's game under way, as the league's scoreboard has it now: the
 /// same reading of the board a Live Activity takes
 /// (`LiveActivityStateMapper`), so Home and the Lock Screen agree.
@@ -37,16 +27,6 @@ struct HomeLiveGame: Identifiable, Hashable, Sendable {
     var id: String { info.gameID }
 }
 
-/// A day of the favorites' upcoming games, under its date header.
-struct HomeDay: Identifiable, Equatable, Sendable {
-    /// The day's start.
-    let date: Date
-    /// In start order.
-    let games: [HomeGame]
-
-    var id: Date { date }
-}
-
 /// A story from a favorite's news feed, with the favorite it came from.
 struct HomeHeadline: Identifiable, Hashable, Sendable {
     let team: TeamRef
@@ -55,16 +35,10 @@ struct HomeHeadline: Identifiable, Hashable, Sendable {
     var id: String { article.id }
 }
 
-/// What Home shows, worked out from the favorites' seasons, the league
-/// scoreboards and the news feeds as plain values, so the tests can drive
-/// it.
-enum HomeFeed {
-    /// How far ahead Upcoming reaches.
-    static let upcomingWindow: TimeInterval = 7 * 24 * 60 * 60
-
-    /// How far back Recent Results reaches.
-    static let resultsWindow: TimeInterval = 7 * 24 * 60 * 60
-
+// `HomeGame`, `HomeDay` and Home's ±7-day window (`upcomingWindow`,
+// `games`, `upcomingDays`, `results`) live in HomeFeedWindow.swift, which
+// the widget compiles too (R-9).
+extension HomeFeed {
     /// The favorites' games under way on `boards`, in favorites order, each
     /// game once however many favorites play in it. A favorite's games are
     /// read from its league's board and its cups'.
@@ -99,61 +73,6 @@ enum HomeFeed {
             }
         }
         return result
-    }
-
-    /// Every favorite's games, in favorites order, each game once.
-    static func games(teams: [TeamRef], seasons: [TeamRef.ID: [Game]]) -> [HomeGame] {
-        var seen: Set<String> = []
-        var result: [HomeGame] = []
-        for team in teams {
-            for game in seasons[team.id] ?? [] {
-                let entry = HomeGame(team: team, game: game)
-                if seen.insert(entry.id).inserted {
-                    result.append(entry)
-                }
-            }
-        }
-        return result
-    }
-
-    /// The favorites' games still to start within the next
-    /// `upcomingWindow`, by day, soonest first; none when there are none.
-    /// Games without a date are left out, and a game under way is Live
-    /// Now's.
-    static func upcomingDays(_ games: [HomeGame], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [HomeDay] {
-        let latest = now.addingTimeInterval(upcomingWindow)
-        let upcoming = games
-            .filter { entry in
-                let game = entry.game
-                return !game.completed && !game.date.isEmpty
-                    && game.dateAsDate >= now && game.dateAsDate <= latest
-            }
-            .sorted { $0.game.dateAsDate < $1.game.dateAsDate }
-
-        var days: [HomeDay] = []
-        for entry in upcoming {
-            let day = calendar.startOfDay(for: entry.game.dateAsDate)
-            if let last = days.last, last.date == day {
-                days[days.count - 1] = HomeDay(date: day, games: last.games + [entry])
-            } else {
-                days.append(HomeDay(date: day, games: [entry]))
-            }
-        }
-        return days
-    }
-
-    /// The favorites' games played out in the last `resultsWindow`, newest
-    /// first. A game called off is not a result.
-    static func results(_ games: [HomeGame], now: Date) -> [HomeGame] {
-        let earliest = now.addingTimeInterval(-resultsWindow)
-        return games
-            .filter { entry in
-                let game = entry.game
-                return game.completed && !game.cancelled && !game.postponed
-                    && !game.date.isEmpty
-                    && game.dateAsDate >= earliest && game.dateAsDate <= now
-            }
-            .sorted { $0.game.dateAsDate > $1.game.dateAsDate }
     }
 
     /// Every story across the favorites' feeds, newest first, each story
@@ -216,6 +135,9 @@ final class HomeViewModel {
     private var articles: [TeamRef.ID: [News]] = [:]
     private var newsStates: [TeamRef.ID: SectionLoadState] = [:]
     @ObservationIgnored private var newsLoadedAt: [TeamRef.ID: Date] = [:]
+    /// When each favorite's news on screen was fetched, for the feeds served
+    /// from the `FeedCache` (R-4).
+    private var newsCachedAt: [TeamRef.ID: Date] = [:]
 
     private let scoreboards: LeagueScoreboardCenter
     private let loadNews: @Sendable (String) async -> Result<[News], NetworkError>
@@ -285,6 +207,13 @@ final class HomeViewModel {
         HomeFeed.combinedState(teams.map { newsStates[$0.id] ?? .loading })
     }
 
+    /// When the oldest news feed on screen was fetched, when any came from
+    /// the `FeedCache` because the network could not be reached; `nil` when
+    /// every one is the network's own. For an `UpdatedCaption`.
+    var headlinesCachedAt: Date? {
+        teams.compactMap { newsCachedAt[$0.id] }.min()
+    }
+
     /// `game`'s live score for `team` on the scoreboard, for a game in
     /// Upcoming that has got under way since the last `refreshInterval`.
     func liveScore(for game: Game, team: TeamRef) -> LiveGameScore? {
@@ -301,6 +230,7 @@ final class HomeViewModel {
         articles = articles.filter { ids.contains($0.key) }
         newsStates = newsStates.filter { ids.contains($0.key) }
         newsLoadedAt = newsLoadedAt.filter { ids.contains($0.key) }
+        newsCachedAt = newsCachedAt.filter { ids.contains($0.key) }
 
         while !Task.isCancelled {
             now = clock()
@@ -350,36 +280,40 @@ final class HomeViewModel {
 
         let load = loadNews
         let answers = await withTaskGroup(
-            of: (TeamRef.ID, Result<[News], NetworkError>).self,
-            returning: [(TeamRef.ID, Result<[News], NetworkError>)].self
+            of: (TeamRef.ID, Result<[News], NetworkError>, Date?).self,
+            returning: [(TeamRef.ID, Result<[News], NetworkError>, Date?)].self
         ) { group in
             for team in due {
                 let id = team.id
                 let url = team.newsURL
                 group.addTask {
-                    (id, await load(url))
+                    // Stored as it loads, and read back offline (R-4).
+                    let (result, cachedAt) = await HTTPClient.withFeedCache(.persist) { await load(url) }
+                    return (id, result, cachedAt)
                 }
             }
-            var answers: [(TeamRef.ID, Result<[News], NetworkError>)] = []
+            var answers: [(TeamRef.ID, Result<[News], NetworkError>, Date?)] = []
             for await answer in group {
                 answers.append(answer)
             }
             return answers
         }
 
-        for (id, result) in answers {
-            apply(news: result, for: id)
+        for (id, result, cachedAt) in answers {
+            apply(news: result, cachedAt: cachedAt, for: id)
         }
     }
 
     /// Publishes a news fetch. A failure keeps what is already on screen,
     /// and a cancelled fetch (Home went away mid-load) changes nothing, as
-    /// on a team page (`TeamModel`).
-    private func apply(news result: Result<[News], NetworkError>, for id: TeamRef.ID) {
+    /// on a team page (`TeamModel`). News served from the cache is shown but
+    /// not counted as loaded, so the next `refreshInterval` asks again.
+    private func apply(news result: Result<[News], NetworkError>, cachedAt: Date?, for id: TeamRef.ID) {
         switch result {
         case .success(let loaded):
             newsStates[id] = .loaded
-            newsLoadedAt[id] = clock()
+            newsLoadedAt[id] = cachedAt == nil ? clock() : nil
+            newsCachedAt[id] = cachedAt
             articles[id] = loaded
         case .failure(let error):
             if case .cancelled = error { return }

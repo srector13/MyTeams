@@ -7,8 +7,22 @@
 
 import Foundation
 import OSLog
+import Synchronization
 
 private let logger = Logger(subsystem: "com.myTeams", category: "network")
+
+/// Whether a request reads and writes the on-disk `FeedCache` (R-4).
+enum FeedCachePolicy: Sendable, Equatable {
+    /// The network only, as every request was before the cache.
+    case networkOnly
+    /// The network first. A good JSON response is stored; a request that
+    /// gets no response (`.offline`) is answered with the stored copy.
+    case persist
+    /// The stored copy when it is at most `maxAge` seconds old, else as
+    /// `.persist`. For the widget, whose timeline reloads need not ask ESPN
+    /// every time.
+    case preferCache(maxAge: TimeInterval)
+}
 
 /// Why a request produced no document.
 enum NetworkError: Error, Sendable {
@@ -64,11 +78,15 @@ struct FetchResponse: Sendable {
     var retryAfter: Duration?
     /// The response's `Cache-Control: max-age`: how long it stays fresh.
     var maxAge: Duration?
+    /// When the document was fetched, for one served from the `FeedCache`;
+    /// `nil` for a response that just came from the network.
+    var cachedAt: Date?
 
-    init(result: FetchResult, retryAfter: Duration? = nil, maxAge: Duration? = nil) {
+    init(result: FetchResult, retryAfter: Duration? = nil, maxAge: Duration? = nil, cachedAt: Date? = nil) {
         self.result = result
         self.retryAfter = retryAfter
         self.maxAge = maxAge
+        self.cachedAt = cachedAt
     }
 
     /// Whether the server is asking the client to slow down: 403 or 429,
@@ -222,8 +240,13 @@ struct FixtureTransport: HTTPTransport {
 /// have, as suits each screen.
 struct HTTPClient: Sendable {
     /// The client every loader uses: the network, unless a Debug build was
-    /// launched to serve fixtures (`launchTransport(environment:)`).
-    static let shared = HTTPClient(transport: HTTPClient.launchTransport(environment: ProcessInfo.processInfo.environment))
+    /// launched to serve fixtures (`launchTransport(environment:)`). It keeps
+    /// the shared `FeedCache`, except in a fixture launch, which stays
+    /// hermetic.
+    static let shared = HTTPClient(
+        transport: HTTPClient.launchTransport(environment: ProcessInfo.processInfo.environment),
+        feedCache: HTTPClient.servesFixtures ? nil : FeedCache.shared
+    )
 
     /// The transport a launch environment asks for: `FixtureTransport` over
     /// the folder named by `MYTEAMS_FIXTURES_DIR`, else `defaultSession`.
@@ -270,35 +293,145 @@ struct HTTPClient: Sendable {
     }()
 
     private let transport: any HTTPTransport
+    /// Where `.persist` and `.preferCache` requests keep their bodies; `nil`
+    /// for a client that never touches the disk, whatever its policy.
+    private let feedCache: FeedCache?
 
-    init(transport: any HTTPTransport = HTTPClient.defaultSession) {
+    init(transport: any HTTPTransport = HTTPClient.defaultSession, feedCache: FeedCache? = nil) {
         self.transport = transport
+        self.feedCache = feedCache
     }
 
+    // MARK: Feed cache scope
+
+    /// The cache policy, and the report of what was served from the cache,
+    /// for the requests inside a `withFeedCache` scope.
+    struct FeedCacheContext: Sendable {
+        let policy: FeedCachePolicy
+        let report: FeedCacheReport
+    }
+
+    /// Collects when the oldest document served from the cache in a
+    /// `withFeedCache` scope was fetched. Requests in the scope may run
+    /// concurrently (`async let`, task groups), hence the lock.
+    final class FeedCacheReport: Sendable {
+        private let oldest = Mutex<Date?>(nil)
+
+        /// The oldest `cachedAt` recorded, or `nil` when every document came
+        /// from the network.
+        var oldestCachedAt: Date? { oldest.withLock { $0 } }
+
+        func record(_ cachedAt: Date) {
+            oldest.withLock { current in
+                current = min(current ?? cachedAt, cachedAt)
+            }
+        }
+    }
+
+    /// The scope a request runs in, set by `withFeedCache`. The loaders
+    /// (`downloadScheduleData` and the rest) take no cache parameter; their
+    /// callers opt their requests in by running them in a scope.
+    @TaskLocal static var feedCacheContext: FeedCacheContext?
+
+    /// The policy of the scope the current task runs in: `.networkOnly`
+    /// outside any `withFeedCache`. The default of every fetch.
+    static var taskCachePolicy: FeedCachePolicy {
+        feedCacheContext?.policy ?? .networkOnly
+    }
+
+    /// Runs `operation` with its requests under `policy`, returning its value
+    /// and, when any document it was given came from the cache, when the
+    /// oldest such was fetched. The scope reaches child tasks too.
+    static func withFeedCache<Value: Sendable>(
+        _ policy: FeedCachePolicy,
+        operation: @escaping @Sendable () async -> Value
+    ) async -> (value: Value, cachedAt: Date?) {
+        let report = FeedCacheReport()
+        let value = await $feedCacheContext.withValue(FeedCacheContext(policy: policy, report: report)) {
+            await operation()
+        }
+        return (value, report.oldestCachedAt)
+    }
+
+    // MARK: Fetching
+
     /// Fetches `url` and parses the response body.
-    func fetch(_ url: URL) async -> FetchResult {
-        await fetchResponse(url).result
+    func fetch(_ url: URL, cache policy: FeedCachePolicy = HTTPClient.taskCachePolicy) async -> FetchResult {
+        await fetchResponse(url, cache: policy).result
     }
 
     /// Fetches a URL written as a string. A string that is not a valid URL
     /// fails with `.invalidURL`.
-    func fetch(_ urlString: String) async -> FetchResult {
-        await fetchResponse(urlString).result
+    func fetch(_ urlString: String, cache policy: FeedCachePolicy = HTTPClient.taskCachePolicy) async -> FetchResult {
+        await fetchResponse(urlString, cache: policy).result
     }
 
     /// Fetches `url` and parses the response body, keeping the headers a
     /// poller paces itself by: `Retry-After` and `Cache-Control: max-age`.
     /// See `PollBackoff`.
     ///
-    /// - Parameter now: the instant an HTTP-date `Retry-After` counts from.
-    func fetchResponse(_ url: URL, now: Date = Date()) async -> FetchResponse {
+    /// Under `.persist` or `.preferCache` a good JSON response is stored in
+    /// the `FeedCache`, and a request that gets no response at all is
+    /// answered from it, with `cachedAt` set. Any other failure — a 404, a
+    /// 429 — passes through: the server answered, and said no.
+    ///
+    /// - Parameters:
+    ///   - now: the instant an HTTP-date `Retry-After` counts from.
+    ///   - policy: whether to use the `FeedCache`; by default, the policy of
+    ///     the surrounding `withFeedCache` scope.
+    func fetchResponse(_ url: URL, now: Date = Date(), cache policy: FeedCachePolicy = HTTPClient.taskCachePolicy) async -> FetchResponse {
+        guard let feedCache, policy != .networkOnly else {
+            return await networkResponse(url, now: now).response
+        }
+
+        if case .preferCache(let maxAge) = policy,
+           let cached = await cachedResponse(url, from: feedCache, maxAge: maxAge) {
+            return cached
+        }
+
+        let (response, body) = await networkResponse(url, now: now)
+        if let body {
+            await feedCache.write(body, for: url)
+            return response
+        }
+        guard case .failure(.offline) = response.result,
+              let cached = await cachedResponse(url, from: feedCache, maxAge: nil)
+        else { return response }
+        return cached
+    }
+
+    /// Fetches a URL written as a string, keeping its pacing headers. A
+    /// string that is not a valid URL fails with `.invalidURL`.
+    func fetchResponse(_ urlString: String, now: Date = Date(), cache policy: FeedCachePolicy = HTTPClient.taskCachePolicy) async -> FetchResponse {
+        guard let url = URL(string: urlString) else {
+            // Log the host only, matching the other failure paths above.
+            let host = URLComponents(string: urlString)?.host ?? "unknown host"
+            logger.error("Malformed URL for host \(host)")
+            return FetchResponse(result: .failure(.invalidURL))
+        }
+        return await fetchResponse(url, now: now, cache: policy)
+    }
+
+    /// `url`'s stored document, when the cache has a readable one, recorded
+    /// in the surrounding `withFeedCache` scope's report.
+    private func cachedResponse(_ url: URL, from feedCache: FeedCache, maxAge: TimeInterval?) async -> FetchResponse? {
+        guard let entry = await feedCache.read(url, maxAge: maxAge),
+              let raw = try? JSONSerialization.jsonObject(with: entry.body, options: [.fragmentsAllowed])
+        else { return nil }
+        Self.feedCacheContext?.report.record(entry.fetchedAt)
+        return FetchResponse(result: .success(JSON(raw)), cachedAt: entry.fetchedAt)
+    }
+
+    /// Asks the network for `url`. The body comes back too when it parsed as
+    /// JSON from a 2xx response, the only kind worth storing.
+    private func networkResponse(_ url: URL, now: Date) async -> (response: FetchResponse, body: Data?) {
         do {
             let (data, response) = try await transport.load(url)
             let http = response as? HTTPURLResponse
             let retryAfter = Self.retryAfter(http?.value(forHTTPHeaderField: "Retry-After"), now: now)
             let maxAge = Self.maxAge(http?.value(forHTTPHeaderField: "Cache-Control"))
-            func respond(_ result: FetchResult) -> FetchResponse {
-                FetchResponse(result: result, retryAfter: retryAfter, maxAge: maxAge)
+            func respond(_ result: FetchResult, body: Data? = nil) -> (response: FetchResponse, body: Data?) {
+                (FetchResponse(result: result, retryAfter: retryAfter, maxAge: maxAge), body)
             }
 
             if let http, !(200..<300).contains(http.statusCode) {
@@ -312,32 +445,20 @@ struct HTTPClient: Sendable {
                 logger.error("\(url.host() ?? "request") returned a body that is not JSON")
                 return respond(.failure(.decodeError))
             }
-            return respond(.success(JSON(raw)))
+            return respond(.success(JSON(raw)), body: data)
         } catch is CancellationError {
-            return FetchResponse(result: .failure(.cancelled))
+            return (FetchResponse(result: .failure(.cancelled)), nil)
         } catch let error as URLError where error.code == .cancelled {
-            return FetchResponse(result: .failure(.cancelled))
+            return (FetchResponse(result: .failure(.cancelled)), nil)
         } catch let error as URLError {
             logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
-            return FetchResponse(result: .failure(.offline(error)))
+            return (FetchResponse(result: .failure(.offline(error))), nil)
         } catch {
             // Anything a transport throws that is not a URLError still means
             // no response arrived.
             logger.error("Request to \(url.host() ?? "host") failed: \(error.localizedDescription)")
-            return FetchResponse(result: .failure(.offline(URLError(.unknown))))
+            return (FetchResponse(result: .failure(.offline(URLError(.unknown)))), nil)
         }
-    }
-
-    /// Fetches a URL written as a string, keeping its pacing headers. A
-    /// string that is not a valid URL fails with `.invalidURL`.
-    func fetchResponse(_ urlString: String, now: Date = Date()) async -> FetchResponse {
-        guard let url = URL(string: urlString) else {
-            // Log the host only, matching the other failure paths above.
-            let host = URLComponents(string: urlString)?.host ?? "unknown host"
-            logger.error("Malformed URL for host \(host)")
-            return FetchResponse(result: .failure(.invalidURL))
-        }
-        return await fetchResponse(url, now: now)
     }
 
     // MARK: Pacing headers
