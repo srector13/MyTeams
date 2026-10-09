@@ -30,9 +30,9 @@ private let logger = Logger(subsystem: "com.myTeams", category: "alerts")
 /// (`ScoreAlertDelivery.quiet`), to Notification Center only.
 ///
 /// Hybrid limitation, accepted for now: the trigger is the scoreboard
-/// center's polling, which runs only while the app is in the foreground and a
-/// team page wants a live day. With the app suspended or closed, no alert
-/// fires. The server upgrade (P4-e: APNs pushes from a poller of our own)
+/// center's polling, which follows every favorite's live games but runs only
+/// while the app is in the foreground. With the app suspended or closed, no
+/// alert fires. The server upgrade (P4-e: APNs pushes from a poller of our own)
 /// replaces only that trigger source; `ScoreSnapshot`, `ScoreEvent` and the
 /// debounce stay the event model on both sides.
 ///
@@ -361,11 +361,9 @@ enum ScoreAlertDelivery: Equatable, Sendable {
 /// the system calls off the main actor. Locked, so any thread may read it.
 ///
 /// Set by whoever owns the tab bar's selection, `nil` while no team page is
-/// foremost. The selection lives in `Home` (`NavigationBar/TabBar.swift`),
-/// which this change does not own, so the hook is not wired there yet: it
-/// needs `.onChange(of: selection, initial: true) {
-/// ScoreAlertForeground.shared.teamID = $1 }` on the tab view. Until then it
-/// stays `nil`, and every alert shows as a banner, as before.
+/// foremost: `Home` (`NavigationBar/TabBar.swift`) sets it from the tab
+/// view's `.onChange(of: selection, initial: true)`, and leaves it `nil` on
+/// the Home tab, so every alert shows as a banner there.
 final class ScoreAlertForeground: @unchecked Sendable {
     static let shared = ScoreAlertForeground()
 

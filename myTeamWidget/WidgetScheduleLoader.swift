@@ -83,8 +83,7 @@ struct WidgetGame: Sendable {
 }
 
 // The team a widget covers comes from its configuration (`SelectTeamIntent`)
-// or the reader's favorites, resolved by `WidgetTeams` (TeamEntity.swift);
-// the legacy fixed-team widgets pin a seed team from `TeamCatalog`.
+// or the reader's favorites, resolved by `WidgetTeams` (TeamEntity.swift).
 
 /// The date with its day of the week, in the reader's own order (A-13), e.g.
 /// "Mon, Jan 18, 2021" or "Mon 18 Jan 2021".

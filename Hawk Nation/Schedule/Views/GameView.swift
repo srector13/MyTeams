@@ -496,7 +496,7 @@ struct GameCardContent: Equatable {
         var period = league.liveCardPeriodLabel(game.gamePeriod)
         // Innings go unnamed in the linescore, but the card can say which.
         if period.isEmpty, league.kind == .baseball, let inning = Int(game.gamePeriod), inning > 0 {
-            period = "\(ScoreSnapshot.ordinal(inning)) Inning"
+            period = "\(ordinalString(inning)) Inning"
         }
         guard !period.isEmpty else { return nil }
         // Baseball keeps no clock; its feeds' "0:00" means nothing.
@@ -614,6 +614,9 @@ extension LeagueID {
         case "ger.dfb_pokal": return "DFB-Pokal"
         case "ita.coppa_italia": return "Coppa Italia"
         case "fra.coupe_de_france": return "Coupe de France"
+        case "eng.w.fa": return "FA Cup"
+        case "eng.w.league_cup": return "League Cup"
+        case "uefa.wchampions": return "Champions League"
         default: return nil
         }
     }

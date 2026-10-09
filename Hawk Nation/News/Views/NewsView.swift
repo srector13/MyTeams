@@ -94,6 +94,13 @@ struct NewsView: View {
                 Text(article.title)
                     .foregroundStyle(.primary)
                     .font(Theme.Typography.cardTitle)
+                // The feed's byline, where it gives one.
+                if let author = article.author {
+                    Text(author)
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .lineLimit(1)
+                }
                 Text(article.articleDescription ?? "")
                     .foregroundStyle(.secondary)
                     .font(.subheadline)

@@ -31,8 +31,8 @@ extension AlertsSettingsModel {
 /// Activities; then which kinds of alert go out, and quiet hours
 /// (`AlertPreferences`).
 ///
-/// Reached from the team browser, so readers who never followed a new team
-/// (whose seeded teams never prompted) can still turn alerts on.
+/// Reached from Settings, so readers who never followed a new team (and so
+/// were never prompted) can still turn alerts on.
 struct AlertsSettingsView: View {
     @Environment(\.scenePhase) private var scenePhase
 

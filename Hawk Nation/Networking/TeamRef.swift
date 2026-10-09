@@ -499,20 +499,21 @@ extension LeagueID {
 
 /// The teams the app knows about, read from the bundled `teams.json`.
 ///
-/// A static seed of the four teams the app has always followed. Loading
-/// catalogs from ESPN is Phase 2; the file's `teams` key leaves room for that
-/// without a format change.
+/// A static seed of the four teams the app has always followed. Full league
+/// catalogs come from ESPN through `RemoteTeamCatalog`; this file is the
+/// offline seed.
 enum TeamCatalog {
     /// Every catalogued team, in the file's order.
     ///
     /// The file ships in the app and widget bundles; one that is missing or
-    /// malformed is a packaging error, so it traps rather than launching with
-    /// no teams.
+    /// malformed is a packaging error. Debug builds assert; Release launches
+    /// with an empty seed and leaves the teams to `RemoteTeamCatalog`.
     static let all: [TeamRef] = {
         do {
             return try load()
         } catch {
-            fatalError("The bundled teams.json could not be read: \(error)")
+            assertionFailure("The bundled teams.json could not be read: \(error)")
+            return []
         }
     }()
 
@@ -526,11 +527,12 @@ enum TeamCatalog {
         team(id: TeamRef.id(league: league, espnID: espnID))
     }
 
-    /// A team the app ships with. Traps if the catalog lacks it, which only a
-    /// broken build can cause.
-    static func seeded(league: LeagueID, espnID: String) -> TeamRef {
+    /// A team the app ships with. `nil` (and an assertion in Debug) if the
+    /// catalog lacks it, which only a broken build can cause.
+    static func seeded(league: LeagueID, espnID: String) -> TeamRef? {
         guard let team = team(league: league, espnID: espnID) else {
-            fatalError("teams.json has no \(TeamRef.id(league: league, espnID: espnID))")
+            assertionFailure("teams.json has no \(TeamRef.id(league: league, espnID: espnID))")
+            return nil
         }
         return team
     }

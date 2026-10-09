@@ -266,7 +266,7 @@ extension BaseballPlayer: PlayerSheetDescribing {
                 ],
                 [
                     .stat(title: "Saves", info: "\(stats.saves)"),
-                    .stat(title: "Save Opportunites", info: "\(stats.saveOpportunities)"),
+                    .stat(title: "Save Opportunities", info: "\(stats.saveOpportunities)"),
                     .stat(title: "Opp. Batting Avg.", info: "\(stats.opponentAvg)"),
                 ],
                 [

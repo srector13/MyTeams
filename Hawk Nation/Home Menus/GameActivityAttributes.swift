@@ -91,24 +91,9 @@ struct GameActivityState: Codable, Hashable, Sendable {
         case .ended: return "Final"
         case .calledOff: return "Called off"
         case .live:
-            let period = periodLabel ?? (self.period > 0 ? Self.ordinal(self.period) : "Live")
+            let period = periodLabel ?? (self.period > 0 ? ordinalString(self.period) : "Live")
             return clock.isEmpty ? period : "\(period) · \(clock)"
         }
-    }
-
-    /// "1st", "2nd", "3rd", "4th", … "11th", "21st". The widget cannot see
-    /// the app's `ScoreSnapshot.ordinal`, so the Live Activity keeps its own,
-    /// for a state without a `periodLabel`.
-    static func ordinal(_ number: Int) -> String {
-        let suffix: String
-        switch (number % 10, number % 100) {
-        case (_, 11...13): suffix = "th"
-        case (1, _): suffix = "st"
-        case (2, _): suffix = "nd"
-        case (3, _): suffix = "rd"
-        default: suffix = "th"
-        }
-        return "\(number)\(suffix)"
     }
 }
 

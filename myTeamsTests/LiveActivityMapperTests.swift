@@ -174,8 +174,6 @@ struct LiveActivityMapperTests {
         // The app's label wins over the ordinal; only live shows it.
         #expect(state(.live, period: 4, clock: "3:12", label: "OT").stage == "OT · 3:12")
         #expect(state(.ended, period: 4, label: "OT").stage == "Final")
-        #expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(GameActivityState.ordinal)
-            == [1, 2, 3, 4, 11, 12, 13, 21, 22].map(ScoreSnapshot.ordinal))
     }
 
     @Test("Golden: Sunday night's NFL game, 0:48 left in the 4th")

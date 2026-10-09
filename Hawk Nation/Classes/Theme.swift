@@ -71,10 +71,11 @@ enum Theme {
         static var pageShape: UnevenRoundedRectangle {
             UnevenRoundedRectangle(topLeadingRadius: page, topTrailingRadius: page, style: .continuous)
         }
-        // TODO(GlassUI): try `ConcentricRectangle` here once confirmed in the
-        // SDK the CI image ships; a capsule is always correct meanwhile.
-        /// League chips, pills and the crest picker.
-        static var chip: Capsule { Capsule() }
+        /// League chips, pills and the crest picker: concentric with the
+        /// container they sit in, and never squarer than `inner`.
+        static var chip: ConcentricRectangle {
+            ConcentricRectangle(corners: .concentric(minimum: .fixed(inner)), isUniform: true)
+        }
     }
 
     /// Which layer is glass (principle B1): content sits on grouped
@@ -244,7 +245,7 @@ extension View {
         return glassEffect(glass, in: shape)
     }
 
-    /// `glassChrome(in:tint:interactive:)` in a capsule.
+    /// `glassChrome(in:tint:interactive:)` in a `Radius.chip`.
     func glassChrome(tint: Color? = nil, interactive: Bool = false) -> some View {
         glassChrome(in: Theme.Radius.chip, tint: tint, interactive: interactive)
     }
@@ -537,7 +538,7 @@ struct SheetCloseButton: View {
 }
 
 #Preview {
-    let team = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
+    let team = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!
     VStack(spacing: Theme.Spacing.l) {
         Text("Section title").font(Theme.Typography.sectionTitle)
         Text("102").font(Theme.Typography.statFigure)

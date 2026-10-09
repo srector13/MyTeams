@@ -5,16 +5,20 @@ followed team gets its own page — roster, schedule, league standings, stat
 leaders and news — with live scores, score alerts, Live Activities and a
 home-screen and Lock Screen widget for its next game.
 
-Built with SwiftUI against ESPN's public site API. No API keys are needed.
+Built with SwiftUI against ESPN's public site API. No API keys are needed;
+an optional API-Football key of your own, entered in Settings, adds soccer
+player photos.
 
 ## Features
 
-- **Any team, many leagues.** The team picker lists ten leagues: NFL, NBA,
-  MLB, NHL, MLS, WNBA, NCAA Football, NCAA Men's and Women's Basketball, and
-  the Premier League (`LeagueID.browsable`). Its search matches every league
-  it has loaded and then falls back to ESPN's own search, so teams elsewhere
-  can be followed too. LALIGA, Liga MX and NWSL have their own league
-  descriptors as well; any other league gets one derived from its path.
+- **Any team, many leagues.** The team picker lists eighteen leagues: NFL,
+  NBA, MLB, NHL, MLS, WNBA, NCAA Football, NCAA Men's and Women's
+  Basketball, the Premier League, LALIGA, Bundesliga, Serie A, Ligue 1, the
+  Champions League, NWSL, WSL and Première Ligue (`LeagueID.browsable`). Its
+  search matches every league it has loaded and then falls back to ESPN's
+  own search, so teams elsewhere can be followed too. Nineteen leagues have
+  their own descriptors (`LeagueID.knownLeagues`, Liga MX the one not
+  browsable); any other league gets one derived from its path.
 - **Team pages.** One page per followed team: a roster carousel with filter
   and sort menus and a player sheet with season stats; a schedule carousel
   opened at the next game, whose sheet shows the box score and refreshes
@@ -138,8 +142,9 @@ matched on the ESPN id every competitor node carries, never on names.
 - `LeagueDescriptor` (`Networking/Sport.swift`) holds what differs by
   league: sport kind, roster shape, record rule, period names, standings
   and season naming.
-- `FavoritesStore` is the user's list of followed teams, in crest-bar order;
-  `FavoriteTeams.seedIDs` seeds it on a fresh install.
+- `FavoritesStore` is the user's list of followed teams, in crest-bar order.
+  A fresh install starts empty (its `seedIDs` default to none); teams are
+  added from Home's empty state or Settings.
 
 The retired `Team` enum's raw values (`"jayhawk"`, `"chiefs"`, `"royals"`,
 `"sporting"`) survive only as `TeamCatalog.legacyTeamIDs`, for migrating

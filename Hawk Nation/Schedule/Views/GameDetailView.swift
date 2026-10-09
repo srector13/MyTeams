@@ -262,14 +262,25 @@ struct GameDetailView: View {
     }
 
     /// The venue, then its city and state where the league's summaries give
-    /// them cleanly. See `LeagueDescriptor.venueBackdropAsset`.
+    /// them cleanly. See `LeagueDescriptor.venueBackdropAsset`. A finished
+    /// game adds its attendance where the summary gives one.
     private var venueLine: String {
-        Self.formatVenueLine(
+        let line = Self.formatVenueLine(
             location: game.location,
             city: gameInfo.city,
             state: gameInfo.state,
             showsAddress: league.venueBackdropAsset == nil
         )
+        guard GameStatus.shown(refreshed: refreshedStatus, tapped: game).completed,
+              let attendance = Self.formatAttendance(gameInfo.attendance) else { return line }
+        return line.isEmpty ? attendance : "\(line) | \(attendance)"
+    }
+
+    /// "Att. 73,421" from the summary's attendance; `nil` when it is
+    /// missing, zero or not a number.
+    nonisolated static func formatAttendance(_ attendance: String, locale: Locale = .current) -> String? {
+        guard let count = Int(attendance.trimmingCharacters(in: .whitespacesAndNewlines)), count > 0 else { return nil }
+        return "Att. \(count.formatted(.number.locale(locale)))"
     }
 
     /// "Venue | City, State" from the parts that aren't empty (A-19), so a

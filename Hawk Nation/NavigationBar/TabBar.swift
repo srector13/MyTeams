@@ -13,10 +13,10 @@ import UIKit
 // resolved through `RemoteTeamCatalog` and shown in favorites order.
 
 /// The app's root screen: the system tab bar, Home first — every
-/// favorite's live games, today's games, results and headlines together
-/// (`HomeView`, t_0b94af11) — then one tab per favorite team, each showing
-/// that team's scrolling page. The app opens on Home. Teams are added from
-/// Settings (t_fa6748f4), or from Home's empty state.
+/// favorite's live games, the week's upcoming games and results, and
+/// headlines together (`HomeView`, t_0b94af11) — then one tab per favorite
+/// team, each showing that team's scrolling page. The app opens on Home.
+/// Teams are added from Settings (t_fa6748f4), or from Home's empty state.
 ///
 /// A standard `TabView`, so the platform draws the bar: its Liquid Glass,
 /// selection indicator and animation, the large content viewer, minimizing
@@ -231,8 +231,8 @@ struct Home: View {
         }
     }
 
-    /// Home: the favorites' live games, today's games, results and
-    /// headlines (`HomeView`). First in the bar, and where the app opens.
+    /// Home: the favorites' live games, the week's upcoming games and
+    /// results, and headlines (`HomeView`). First in the bar, and where the app opens.
     private var homeTab: some TabContent<TeamRef.ID> {
         Tab(value: HomeTabs.homeID) {
             HomeView(

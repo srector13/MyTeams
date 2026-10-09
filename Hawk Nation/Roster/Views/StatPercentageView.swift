@@ -49,7 +49,7 @@ struct StatPercentageView: View {
 #Preview {
     StatPercentageView(
         progress: 0.6,
-        color: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305").color,
+        color: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!.color,
         title: "Test"
     )
 }
