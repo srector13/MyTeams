@@ -147,6 +147,13 @@
 		2E825ADE480647DDFA960E08 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */; };
 		8E448D8B9624B4E9D70E14E1 /* HomeFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE1F007B80803106A72D80C /* HomeFeedTests.swift */; };
 		38C1E734968CF889E3E20FBC /* HomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F3D58A2369AEB7973BCAE1 /* HomeUITests.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9011 /* HomeFeedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9001 /* HomeFeedWindow.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9012 /* HomeFeedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9001 /* HomeFeedWindow.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9021 /* WidgetDayBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9002 /* WidgetDayBuilder.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9022 /* WidgetDayBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9002 /* WidgetDayBuilder.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9031 /* MyDayWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9003 /* MyDayWidget.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9041 /* LiveGameControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9004 /* LiveGameControl.swift */; };
+		9E5A1C0B7D2F4A6E8B3C9051 /* WidgetDayBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -321,6 +328,11 @@
 		D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeViewModel.swift"; sourceTree = "<group>"; };
 		EDE1F007B80803106A72D80C /* HomeFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeFeedTests.swift"; sourceTree = "<group>"; };
 		A8F3D58A2369AEB7973BCAE1 /* HomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeUITests.swift"; sourceTree = "<group>"; };
+		9E5A1C0B7D2F4A6E8B3C9001 /* HomeFeedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeFeedWindow.swift"; sourceTree = "<group>"; };
+		9E5A1C0B7D2F4A6E8B3C9002 /* WidgetDayBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDayBuilder.swift"; sourceTree = "<group>"; };
+		9E5A1C0B7D2F4A6E8B3C9003 /* MyDayWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "MyDayWidget.swift"; sourceTree = "<group>"; };
+		9E5A1C0B7D2F4A6E8B3C9004 /* LiveGameControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LiveGameControl.swift"; sourceTree = "<group>"; };
+		9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetDayBuilderTests.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -414,6 +426,7 @@
 				295F3B13CE1F1A66438291C3 /* HomeSections.swift */,
 				8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */,
 				D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */,
+				9E5A1C0B7D2F4A6E8B3C9001 /* HomeFeedWindow.swift */,
 				381D9063F8712266EC82966C /* HomeView.swift */,
 				BF854E8FC1231BAD448D63BA /* TeamModel.swift */,
 			);
@@ -596,6 +609,9 @@
 				2D7E42B65C657DF94CC0AE71 /* WidgetScheduleLoader.swift */,
 				CC25799C101CA0E983D6E0BA /* myTeamWidget.swift */,
 				F1CD8C6BEDB944DE40AC4899 /* GameLiveActivity.swift */,
+				9E5A1C0B7D2F4A6E8B3C9002 /* WidgetDayBuilder.swift */,
+				9E5A1C0B7D2F4A6E8B3C9003 /* MyDayWidget.swift */,
+				9E5A1C0B7D2F4A6E8B3C9004 /* LiveGameControl.swift */,
 				66D254FAC09DB6A6C8499C7E /* myTeamWidget.entitlements */,
 			);
 			path = "myTeamWidget";
@@ -645,6 +661,7 @@
 				3B30D538B4BCB2BEB36F253C /* SettingsTests.swift */,
 				7D3F2A1B9C4E5F60718293A5 /* SplashTests.swift */,
 				F8908C7681C6E71A212FCEB6 /* WidgetDeepLinkRoutingTests.swift */,
+				9E5A1C0B7D2F4A6E8B3C9005 /* WidgetDayBuilderTests.swift */,
 				80F9C2C0E4436B9A7E6740B8 /* FixtureLoader.swift */,
 				0016D8946325BE560D66E257 /* Fixtures */,
 				BD5786509BA63FD87FE7AD03 /* FIXTURES.md */,
@@ -895,6 +912,8 @@
 				228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */,
 				056AACA5441E8DC1508CA63A /* RemoteTeamCatalog.swift in Sources */,
 				357A65122050D95EFC46FEA4 /* TeamLogo.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9011 /* HomeFeedWindow.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9021 /* WidgetDayBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -921,6 +940,10 @@
 				7A1D0C3E5B9F2A4C6E8D1B41 /* Theme.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B42 /* TeamLogo.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B43 /* RemoteImage.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9012 /* HomeFeedWindow.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9022 /* WidgetDayBuilder.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9031 /* MyDayWidget.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9041 /* LiveGameControl.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -970,6 +993,7 @@
 				F2E7868DFDCDCB49AEEE8A4D /* SettingsTests.swift in Sources */,
 				7D3F2A1B9C4E5F60718293A4 /* SplashTests.swift in Sources */,
 				9C03DD85FE7B79019A43612D /* WidgetDeepLinkRoutingTests.swift in Sources */,
+				9E5A1C0B7D2F4A6E8B3C9051 /* WidgetDayBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

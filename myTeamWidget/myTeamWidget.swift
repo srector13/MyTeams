@@ -132,6 +132,11 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
         // is in memory.
         Task {
             await WidgetScheduleLoader.refreshCatalog(for: team)
+            #if os(iOS)
+            // The app reloads the timelines when its scoreboard snapshot
+            // changes; the "Open Live Game" control reads the same snapshot.
+            await LiveGameControl.reload()
+            #endif
         }
         return timeline
     }
@@ -150,7 +155,7 @@ struct WidgetEntryView: View {
             } else {
                 switch family {
                 #if os(iOS)
-                case .accessoryRectangular, .accessoryCircular:
+                case .accessoryRectangular, .accessoryCircular, .accessoryInline:
                     AccessoryEntryView(entry: entry, family: family)
                 #endif
                 case .systemMedium:
@@ -361,14 +366,17 @@ private struct TileInk: ViewModifier {
 
 /// The widget with no team to show: none chosen in its settings and none
 /// followed in the app (t_afe5c297). Asks for one rather than showing a team
-/// the reader never picked; a tap opens the app, on its "Add Teams".
-private struct NoTeamView: View {
+/// the reader never picked; a tap opens the app, on its "Add Teams". "My
+/// Day" (`MyDayView`) shows it too.
+struct NoTeamView: View {
     var family: WidgetFamily
 
     var body: some View {
         Group {
             #if os(iOS)
-            if family == .accessoryCircular {
+            if family == .accessoryInline {
+                Text("Add Teams in myTeams")
+            } else if family == .accessoryCircular {
                 ZStack {
                     AccessoryWidgetBackground()
                     Image(systemName: "plus")
@@ -431,7 +439,11 @@ private struct AccessoryEntryView: View {
 
     var body: some View {
         Group {
-            if family == .accessoryCircular {
+            if family == .accessoryInline {
+                // The line above the clock (R-9): "KC 21–17 Q3" or
+                // "KC vs BUF 7:20 PM". The system draws one line of text.
+                Text(entry.tempGame.inline.isEmpty ? entry.followedTeam : entry.tempGame.inline)
+            } else if family == .accessoryCircular {
                 // One glanceable value, the start time, under the opponent
                 // that names it (AC-1). The opponent is the accented line,
                 // as the team name is on the rectangular widget.
@@ -489,7 +501,7 @@ private struct AccessoryEntryView: View {
 struct TeamScheduleWidget: Widget {
     private var families: [WidgetFamily] {
         #if os(iOS)
-        return [.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular]
+        return [.systemSmall, .systemMedium, .accessoryRectangular, .accessoryCircular, .accessoryInline]
         #else
         return [.systemSmall, .systemMedium]
         #endif
@@ -516,8 +528,12 @@ struct TeamScheduleWidget: Widget {
 struct ScheduleWidgets: WidgetBundle {
     var body: some Widget {
         TeamScheduleWidget()
+        MyDayWidget()
         #if canImport(ActivityKit) && os(iOS)
         GameLiveActivity()
+        #endif
+        #if os(iOS)
+        LiveGameControl()
         #endif
     }
 }
@@ -540,7 +556,8 @@ extension WidgetEntry {
             gameTime: "7:00 PM",
             gameChannel: "ESPN",
             teamLogo: crest,
-            team: team
+            team: team,
+            inline: "\(WidgetDayBuilder.label(of: team)) vs MIZ Sat 7:00 PM"
         )
         return WidgetEntry(date: .now, tempGame: game, followedTeam: team.shortName, teamID: team.id)
     }
@@ -603,6 +620,13 @@ extension WidgetEntry {
     TeamScheduleWidget()
 } timeline: {
     WidgetEntry.preview
+}
+
+#Preview("Lock Screen · inline", as: .accessoryInline) {
+    TeamScheduleWidget()
+} timeline: {
+    WidgetEntry.preview
+    WidgetEntry.notice
 }
 #endif
 
