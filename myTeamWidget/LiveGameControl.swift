@@ -20,7 +20,7 @@ struct LiveGameControl: ControlWidget {
 
     /// Where the control opens the app with no game under way. The app reads
     /// no route from it, and opens as it was: Home, on a launch.
-    static let homeURL = URL(string: "\(WidgetDeepLink.scheme)://home")!
+    nonisolated static let homeURL = URL(string: "\(WidgetDeepLink.scheme)://home")!
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind, provider: LiveGameControlProvider()) { url in
