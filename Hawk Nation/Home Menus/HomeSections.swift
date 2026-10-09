@@ -314,6 +314,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     @State private var selectedGame: Game?
 
+    /// The card at the carousel's leading edge: the last result when the
+    /// schedule lands, then wherever the reader scrolls.
+    @State private var openingGame: Game.ID?
+
     /// The game whose new-event sheet is up, from its card's menu (R-7).
     @State private var calendarDraft: EventDraft?
 
@@ -420,43 +424,46 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
 
     private var scheduleCarousel: some View {
         ScrollView(.horizontal) {
-            ScrollViewReader { scrollView in
-                // Realised on demand: every schedule card mounted eagerly
-                // was the reason a quiet Home screen still made hundreds
-                // of requests a minute.
-                LazyHStack(spacing: Theme.Spacing.m) {
-                    if model.games.isEmpty {
-                        switch model.scheduleState {
-                        case .loading:
-                            ForEach(0..<5, id: \.self) { _ in
-                                LoadingGameView()
-                            }
-                        case .loaded:
-                            SectionStatusView(message: "Nothing scheduled")
-                                .containerRelativeFrame(.horizontal)
-                        case .failed:
-                            SectionStatusView(message: "Couldn't load the schedule") {
-                                Task { await model.reloadSchedule() }
-                            }
+            // Realised on demand: every schedule card mounted eagerly
+            // was the reason a quiet Home screen still made hundreds
+            // of requests a minute.
+            LazyHStack(spacing: Theme.Spacing.m) {
+                if model.games.isEmpty {
+                    switch model.scheduleState {
+                    case .loading:
+                        ForEach(0..<5, id: \.self) { _ in
+                            LoadingGameView()
+                        }
+                    case .loaded:
+                        SectionStatusView(message: "Nothing scheduled")
                             .containerRelativeFrame(.horizontal)
+                    case .failed:
+                        SectionStatusView(message: "Couldn't load the schedule") {
+                            Task { await model.reloadSchedule() }
                         }
-                    } else {
-                        ForEach(model.games) { game in
-                            gameButton(game)
-                                .id(game.pointer)
-                        }
+                        .containerRelativeFrame(.horizontal)
+                    }
+                } else {
+                    ForEach(model.games) { game in
+                        gameButton(game)
                     }
                 }
-                .scrollTargetLayout()
-                .frame(height: cardHeight)
-                .padding(.bottom, Theme.Spacing.l)
-                // Open on the last result rather than the next fixture, so
-                // the most recent score is the first thing in view.
-                .onChange(of: model.nextGame, initial: true) { _, nextGame in
-                    guard !model.games.isEmpty else { return }
-                    scrollView.scrollTo(max(nextGame - 1, 0), anchor: .leading)
-                }
             }
+            .scrollTargetLayout()
+            .frame(height: cardHeight)
+            .padding(.bottom, Theme.Spacing.l)
+        }
+        // Open on the last result rather than the next fixture, so the
+        // most recent score is the first thing in view. Through the scroll
+        // position, which the lazy stack lays out around in its first pass
+        // with the cards, rather than `ScrollViewReader.scrollTo` after it:
+        // that jump left the card peeking in ahead of the last result a
+        // grey shell until it was scrolled off and back (t_c3f79052).
+        .scrollPosition(id: $openingGame, anchor: .leading)
+        .onChange(of: model.nextGame, initial: true) { _, nextGame in
+            let opening = max(nextGame - 1, 0)
+            guard model.games.indices.contains(opening) else { return }
+            openingGame = model.games[opening].id
         }
         .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
         // A flick comes to rest on a card's leading edge, not mid-card (T-8).
