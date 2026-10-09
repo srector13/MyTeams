@@ -18,9 +18,9 @@ import WidgetKit
 struct LiveGameControl: ControlWidget {
     static let kind = "myTeamsLiveGame"
 
-    /// Where the control opens the app with no game under way. The app reads
-    /// no route from it, and opens as it was: Home, on a launch.
-    nonisolated static let homeURL = URL(string: "\(WidgetDeepLink.scheme)://home")!
+    /// Where the control opens the app with no game under way: Home, which
+    /// the app selects (`WidgetDeepLink.isHome`), from whatever it showed.
+    nonisolated static let homeURL = WidgetDeepLink.homeURL
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind, provider: LiveGameControlProvider()) { url in

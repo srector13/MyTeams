@@ -24,7 +24,8 @@ import UIKit
 /// holds.
 struct Home: View {
     /// A team to switch to, set when a widget link opens the app. Cleared
-    /// once handled; a team that is not a favorite is ignored.
+    /// once handled; a team that is not a favorite opens over a favorite's
+    /// page (`HomeRouting.linkedTeamResolved`).
     @Binding var deepLinkedTeamID: TeamRef.ID?
 
     /// A game a link asked for, with `deepLinkedTeamID` its team: its
@@ -37,6 +38,10 @@ struct Home: View {
 
     /// The linked game's sheet.
     @State private var linkedGame: LinkedGame?
+
+    /// A linked team that is not a favorite, until it resolves and its page
+    /// opens (`HomeRouting.State.pendingVisit`).
+    @State private var pendingVisit: TeamRef.ID?
 
     /// The favorites as teams. Starts with those the bundled catalog knows,
     /// so the first frame has any bundled teams followed, then fills in from
@@ -96,7 +101,8 @@ struct Home: View {
             showsSettings: showsSettings,
             visits: visits,
             pendingGame: deepLinkedGame,
-            openGame: openGame
+            openGame: openGame,
+            pendingVisit: pendingVisit
         )
     }
 
@@ -119,6 +125,9 @@ struct Home: View {
         if openGame != routed.openGame {
             openGame = routed.openGame
         }
+        if pendingVisit != routed.pendingVisit {
+            pendingVisit = routed.pendingVisit
+        }
     }
 
     /// Finds the linked game in its team's schedule and opens its sheet,
@@ -128,7 +137,9 @@ struct Home: View {
         guard let target = openGame else { return }
         // Unless a newer link has replaced it meanwhile.
         defer { if openGame == target { openGame = nil } }
-        guard let team = teams.first(where: { $0.id == target.teamID }),
+        // A favorite's, or a linked team's opened over one.
+        let visited = visits.values.flatMap { $0.map(\.team) }
+        guard let team = teams.first(where: { $0.id == target.teamID }) ?? visited.first(where: { $0.id == target.teamID }),
               case .success(let games) = await downloadScheduleData(team: team),
               !Task.isCancelled,
               let game = games.first(where: { $0.gameID == target.eventID })
@@ -205,6 +216,20 @@ struct Home: View {
         }
         .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
             apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
+        }
+        // A linked team that is not a favorite: its page, over a
+        // favorite's, once the team resolves.
+        .task(id: pendingVisit) {
+            guard let id = pendingVisit else { return }
+            let team = await WidgetTeams.resolve(id, within: .seconds(10))
+            guard !Task.isCancelled else { return }
+            apply(HomeRouting.linkedTeamResolved(routing, id: id, team: team, teams: teams.map(\.id)))
+        }
+        // The widgets read the favorites from the store the app shares
+        // through, as teams (`SharedFavoritesMirror`); again as late
+        // lookups resolve.
+        .task(id: store.resolutionKey) {
+            store.shareWithWidgets(await store.teamRefs())
         }
         // A game link's team is selected: its sheet, once the schedule
         // names the game (R-3).
@@ -358,6 +383,10 @@ enum HomeRouting {
         /// The game whose sheet `Home` opens over its team's page, now
         /// selected (`Home.openGame`).
         var openGame: WidgetDeepLink.GameTarget? = nil
+        /// A linked team that is not a favorite, for `Home` to resolve and
+        /// open over a favorite's page (`linkedTeamResolved`); a game
+        /// waiting on it stays in `pendingGame`.
+        var pendingVisit: TeamRef.ID? = nil
     }
 
     /// The link's team has been selected (`selected`), or dropped: a game
@@ -429,22 +458,70 @@ enum HomeRouting {
         return next
     }
 
-    /// A widget link arrived (or `Home` appeared with one). A resolved
-    /// team is selected at once and a team that is not a favorite is
-    /// dropped; a favorite still resolving stays pending for
-    /// `favoritesResolved`.
+    /// A widget link arrived (or `Home` appeared with one). Home's own
+    /// link (`HomeTabs.homeID`) selects Home. A resolved team is selected at
+    /// once; a favorite still resolving stays pending for
+    /// `favoritesResolved`; a team that is not a favorite waits in
+    /// `pendingVisit` for `Home` to resolve it, and opens over a favorite's
+    /// page (`linkedTeamResolved`). It used to be dropped, leaving the app
+    /// on whatever it showed last, which is where a widget showing a team
+    /// the reader doesn't follow took them.
     /// A game waiting on the link opens with its team, or goes with it.
     static func linkChanged(_ state: State, teams: [TeamRef.ID], favoriteIDs: [TeamRef.ID]) -> State {
         guard let id = state.pendingLink else { return state }
         var next = state
-        if teams.contains(id) {
+        if id == HomeTabs.homeID {
+            next.selection = HomeTabs.homeID
+            next.pendingLink = nil
+            next.pendingVisit = nil
+            linkHandled(&next, selected: false)
+        } else if teams.contains(id) {
             next.selection = id
             next.pendingLink = nil
+            next.pendingVisit = nil
             linkHandled(&next, selected: true)
         } else if !favoriteIDs.contains(id) {
             next.pendingLink = nil
-            linkHandled(&next, selected: false)
+            next.pendingVisit = id
+            // A game for another team waits no longer.
+            if next.pendingGame?.teamID != id {
+                next.pendingGame = nil
+            }
         }
+        return next
+    }
+
+    /// A linked team that is not a favorite (`pendingVisit`) resolved to
+    /// `team`, or to `nil`. Its page is pushed over the selected favorite's,
+    /// or, from Home, over the first favorite's, and a game waiting on it
+    /// opens there. With no favorite to open it over, or no team, the link
+    /// is dropped. A favorite by now is simply selected. Ignored if another
+    /// link replaced it meanwhile.
+    static func linkedTeamResolved(_ state: State, id: TeamRef.ID, team: TeamRef?, teams: [TeamRef.ID]) -> State {
+        guard state.pendingVisit == id else { return state }
+        var next = state
+        next.pendingVisit = nil
+        guard let team else {
+            linkHandled(&next, selected: false)
+            return next
+        }
+        if teams.contains(team.id) {
+            next.selection = team.id
+            linkHandled(&next, selected: true)
+            return next
+        }
+        if !teams.contains(next.selection) {
+            guard let first = teams.first else {
+                linkHandled(&next, selected: false)
+                return next
+            }
+            next.selection = first
+        }
+        next = teamOpened(next, team: team, teams: teams)
+        if let game = next.pendingGame, game.teamID == team.id {
+            next.openGame = game
+        }
+        next.pendingGame = nil
         return next
     }
 }

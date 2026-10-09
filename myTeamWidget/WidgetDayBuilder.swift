@@ -379,9 +379,10 @@ struct WidgetContent<Value: Codable> {
         now: Date,
         calendar: Calendar = .autoupdatingCurrent
     ) -> WidgetContent {
-        // Without the group the app's live scores never reach the widget,
-        // so even fresh content says so.
-        let sharedNote = shared.isAvailable ? nil : SharedDataStatus.unavailableCaption
+        // Read through any store but the project's group, or none, the
+        // app's live scores never reach the widget, so even fresh content
+        // says which store it has.
+        let sharedNote = shared.note
         if let fresh {
             return WidgetContent(value: fresh, source: .fresh, note: sharedNote)
         }
@@ -396,15 +397,58 @@ struct WidgetContent<Value: Codable> {
     }
 }
 
-/// Why a widget has no team to show.
+/// Why a widget has no team to show, and what it says instead.
 enum WidgetMissingTeam: Hashable, Sendable {
     /// None chosen and none followed: the widget asks for one.
     case noneFollowed
-    /// None chosen, and the favorites cannot be read: the App Group is
-    /// unreachable, so "Add Teams" would be wrong.
+    /// None chosen, and no store the app shares through is reachable, so
+    /// "Add Teams" would be wrong.
     case sharedUnavailable
+    /// None chosen, and the store the widget reaches holds nothing from
+    /// the app: the two are not sharing one, so the favorites can't be
+    /// read and "Add Teams" would be wrong too.
+    case notShared(SharedStore)
 
     init(shared: SharedDataStatus) {
-        self = shared.isAvailable ? .noneFollowed : .sharedUnavailable
+        switch shared {
+        case .available, .fallback:
+            self = .noneFollowed
+        case .unshared(let store):
+            self = .notShared(store)
+        case .unavailable:
+            self = .sharedUnavailable
+        }
     }
+
+    var title: String {
+        switch self {
+        case .noneFollowed: return "Add Teams"
+        case .sharedUnavailable: return SharedDataStatus.unavailableTitle
+        case .notShared: return "No data from myTeams"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .noneFollowed:
+            return "Open myTeams to follow a team."
+        case .sharedUnavailable:
+            return SharedDataStatus.repairHint
+        case .notShared(let store):
+            return "\(store.label) reachable but empty. Open myTeams; reinstall if this stays."
+        }
+    }
+
+    /// The Lock Screen's one line.
+    var inline: String {
+        switch self {
+        case .noneFollowed: return "Add Teams in myTeams"
+        case .sharedUnavailable: return "myTeams: shared data unavailable"
+        case .notShared: return "myTeams: no shared data"
+        }
+    }
+
+    /// Whether the widget says why it can't read the favorites, rather than
+    /// asking for one.
+    var isSharingProblem: Bool { self != .noneFollowed }
 }

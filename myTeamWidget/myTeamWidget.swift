@@ -21,9 +21,10 @@ struct WidgetEntry: TimelineEntry {
     /// Whether there is no team to show: none chosen and none followed.
     /// The widget then asks for one (`NoTeamView`) and `tempGame` is unused.
     var needsTeam = false
-    /// With `needsTeam`: the favorites could not be read, as the App Group
-    /// is unreachable, so the widget says that rather than "Add Teams".
-    var sharedUnavailable = false
+    /// With `needsTeam`: why, when the favorites could not be read (no
+    /// store reachable, or one holding nothing from the app), so the widget
+    /// says that rather than "Add Teams".
+    var missing: WidgetMissingTeam = .noneFollowed
 }
 
 /// Builds a team's entries for the configurable widget's provider.
@@ -60,11 +61,11 @@ enum WidgetTimelines {
         WidgetEntry(date: .now, tempGame: .placeholder(for: WidgetTeams.fallback), needsTeam: true)
     }
 
-    /// The entry with no team to show: `noTeam`, or, with the App Group
-    /// unreachable, one saying the favorites cannot be read.
+    /// The entry with no team to show: `noTeam`, or, with the favorites
+    /// unreadable, one saying so and which store the widget reached.
     static func missingTeam(_ shared: SharedDataStatus) -> WidgetEntry {
         var entry = noTeam
-        entry.sharedUnavailable = WidgetMissingTeam(shared: shared) == .sharedUnavailable
+        entry.missing = WidgetMissingTeam(shared: shared)
         return entry
     }
 
@@ -181,11 +182,17 @@ struct TeamTimelineProvider: AppIntentTimelineProvider {
             return Timeline(entries: [entry], policy: .after(.now + WidgetTimelines.refreshInterval))
         }
         let timeline = await WidgetTimelines.timeline(for: team)
-        // After the timeline is built, so the league's team list (up to a
-        // megabyte for college leagues) is never parsed while the schedule
-        // is in memory.
+        // Only for a team the app's copy of the favorites and the bundle
+        // don't describe: the league's team list (megabytes for college
+        // leagues) parsed here, while WidgetKit renders the entry in the
+        // same process, can take the extension past its memory limit, and
+        // the widget then never leaves its placeholder.
+        let needsCatalog = TeamCatalog.team(id: team.id) == nil
+            && SharedContainer.live.favoritesMirror()?.teams.contains(where: { $0.id == team.id }) != true
         Task {
-            await WidgetScheduleLoader.refreshCatalog(for: team)
+            if needsCatalog {
+                await WidgetScheduleLoader.refreshCatalog(for: team)
+            }
             #if os(iOS)
             // The app reloads the timelines when its scoreboard snapshot
             // changes; the "Open Live Game" control reads the same snapshot.
@@ -205,7 +212,7 @@ struct WidgetEntryView: View {
     var body: some View {
         Group {
             if entry.needsTeam {
-                NoTeamView(family: family, sharedUnavailable: entry.sharedUnavailable)
+                NoTeamView(family: family, missing: entry.missing)
             } else {
                 switch family {
                 #if os(iOS)
@@ -444,42 +451,38 @@ private struct TileInk: ViewModifier {
 /// the reader never picked; a tap opens the app, on its "Add Teams". "My
 /// Day" (`MyDayView`) shows it too.
 ///
-/// With `sharedUnavailable`, the favorites could not be read at all (the App
-/// Group is unreachable under the install's signing profile), and it says
-/// that, with how to repair it, rather than asking for a team.
+/// When the favorites could not be read at all (`missing`: no store
+/// reachable, or one holding nothing from the app) it says that, with which
+/// store the signature offers, rather than asking for a team.
 struct NoTeamView: View {
     var family: WidgetFamily
-    var sharedUnavailable = false
+    var missing: WidgetMissingTeam = .noneFollowed
 
-    private var title: String {
-        sharedUnavailable ? SharedDataStatus.unavailableTitle : "Add Teams"
-    }
-
-    private var detail: String {
-        sharedUnavailable ? SharedDataStatus.repairHint : "Open myTeams to follow a team."
+    private var symbol: String {
+        missing.isSharingProblem ? "exclamationmark.triangle" : "plus"
     }
 
     var body: some View {
         Group {
             #if os(iOS)
             if family == .accessoryInline {
-                Text(sharedUnavailable ? "myTeams: shared data unavailable" : "Add Teams in myTeams")
+                Text(missing.inline)
             } else if family == .accessoryCircular {
                 ZStack {
                     AccessoryWidgetBackground()
-                    Image(systemName: sharedUnavailable ? "exclamationmark.triangle" : "plus")
+                    Image(systemName: symbol)
                         .font(.title3.weight(.semibold))
                         .widgetAccentable()
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(title)
+                .accessibilityLabel(missing.title)
                 .containerBackground(for: .widget) { Color.clear }
             } else if family == .accessoryRectangular {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(title)
+                    Text(missing.title)
                         .font(.headline)
                         .widgetAccentable()
-                    Text(detail)
+                    Text(missing.detail)
                         .foregroundStyle(.secondary)
                 }
                 .lineLimit(2)
@@ -497,17 +500,26 @@ struct NoTeamView: View {
 
     private var tile: some View {
         VStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: sharedUnavailable ? "exclamationmark.triangle" : "plus.circle")
+            Image(systemName: missing.isSharingProblem ? "exclamationmark.triangle" : "plus.circle")
                 .font(.title)
                 .widgetAccentable()
                 .accessibilityHidden(true)
-            Text(title)
+            Text(missing.title)
                 .font(Theme.Typography.cardTitle)
                 .widgetAccentable()
-            Text(detail)
+            Text(missing.detail)
                 .font(Theme.Typography.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            if missing.isSharingProblem {
+                // Which store the install was signed with, so the reader
+                // (and a bug report) can tell a missing group from one the
+                // app doesn't write to.
+                Text(SharedStoreIdentity.current.summary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .lineLimit(2)
         .minimumScaleFactor(0.7)

@@ -27,9 +27,9 @@ struct DayEntry: TimelineEntry {
     var rows: [Row]
     /// Whether no team is followed: the widget then asks for one.
     var needsTeam = false
-    /// With `needsTeam`: the favorites could not be read, as the App Group
-    /// is unreachable (`NoTeamView`).
-    var sharedUnavailable = false
+    /// With `needsTeam`: why, when the favorites could not be read
+    /// (`NoTeamView`).
+    var missing: WidgetMissingTeam = .noneFollowed
     /// The line shown in place of rows when there are none; "No games in
     /// the next 7 days" when `nil`.
     var message: String? = nil
@@ -53,16 +53,17 @@ enum DayTimelines {
     /// and the app's scoreboard snapshot; else the last good rows, dated;
     /// else a labelled failure (`WidgetContent.plan`).
     ///
-    /// Without the App Group no favorite can be read, so nothing is loaded:
-    /// the last good rows, or the widget says the shared data is
-    /// unavailable. It never falls back to the bundled teams' games.
+    /// The favorites come from whichever store the app shares through
+    /// (`SharedContainer`); with none readable nothing is loaded: the last
+    /// good rows, or the widget says which store it reached and that it
+    /// holds nothing from the app. It never falls back to the bundled
+    /// teams' games.
     static func entry(now: Date = .now) async -> DayEntry {
         let shared = SharedContainer.live
+        let status = shared.status
         var fresh: [WidgetDayRow]?
-        if shared.isReachable {
-            guard !shared.favoriteTeamIDs().isEmpty else { return noTeam }
-            let teams = await WidgetTeams.favorites()
-            guard !teams.isEmpty else { return noTeam }
+        if !shared.favoriteTeamIDs().isEmpty {
+            let teams = await WidgetTeams.favorites(in: shared)
             let seasons = await WidgetScheduleLoader.seasons(for: teams, within: WidgetTimelines.timelineDeadline)
             let rows = WidgetDayBuilder().rows(
                 teams: teams,
@@ -75,6 +76,9 @@ enum DayTimelines {
             if !seasons.isEmpty || !rows.isEmpty {
                 fresh = rows
             }
+        } else if status.isAvailable {
+            // The app's store is read, and it follows no team.
+            return noTeam
         }
 
         if let fresh {
@@ -83,13 +87,13 @@ enum DayTimelines {
         let content = WidgetContent<[WidgetDayRow]>.plan(
             fresh: fresh,
             lastGood: fresh == nil ? WidgetLastGoodStore.load([WidgetDayRow].self, key: WidgetLastGoodStore.dayKey) : nil,
-            shared: shared.status,
+            shared: status,
             now: now
         )
         guard let rows = content.value else {
-            return shared.isReachable
-                ? DayEntry(date: now, rows: [], message: WidgetTimelines.failedMessage, source: .placeholder)
-                : DayEntry(date: now, rows: [], needsTeam: true, sharedUnavailable: true, source: .placeholder)
+            return fresh != nil || status.isAvailable
+                ? DayEntry(date: now, rows: [], message: WidgetTimelines.failedMessage, note: content.note, source: .placeholder)
+                : DayEntry(date: now, rows: [], needsTeam: true, missing: WidgetMissingTeam(shared: status), source: .placeholder)
         }
         return DayEntry(date: now, rows: rows.map(WidgetScheduleLoader.dayRow), note: content.note, source: content.source)
     }
@@ -99,9 +103,10 @@ enum DayTimelines {
     static func timeline(now: Date = .now) async -> Timeline<DayEntry> {
         let current = await Self.entry(now: now)
         var reload = now + WidgetTimelines.refreshInterval
-        if current.source != .fresh && SharedContainer.live.isReachable {
-            // A failed load is tried again soon, as the Team Schedule
-            // widget's is. Without the App Group nothing would change.
+        if current.source != .fresh && SharedContainer.live.status != .unavailable {
+            // A failed load, or a store the app has yet to write to, is
+            // tried again soon, as the Team Schedule widget's is. With no
+            // store reachable nothing would change.
             reload = now + WidgetTimelines.retryInterval
         } else if current.rows.contains(where: { $0.row.kind == .live }) {
             reload = now + WidgetScheduleLoader.liveRefreshInterval
@@ -161,7 +166,7 @@ struct MyDayView: View {
 
     var body: some View {
         if entry.needsTeam {
-            NoTeamView(family: family, sharedUnavailable: entry.sharedUnavailable)
+            NoTeamView(family: family, missing: entry.missing)
         } else {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text("My Day")
@@ -328,7 +333,7 @@ extension DayEntry {
     DayEntry.preview
     DayEntry(date: .now, rows: [])
     DayTimelines.noTeam
-    DayEntry(date: .now, rows: [], needsTeam: true, sharedUnavailable: true)
+    DayEntry(date: .now, rows: [], needsTeam: true, missing: .sharedUnavailable)
 }
 
 #Preview("Large · Clear/Tinted (accented)", traits: .fixedLayout(width: 364, height: 382)) {
