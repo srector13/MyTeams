@@ -10,10 +10,12 @@ import SwiftUI
 
 /// Settings → API-Football: the reader's own key, checked once on save and
 /// kept in the Keychain, and the toggle that lets it find soccer photos
-/// ESPN and Wikimedia Commons lack (`ApiFootballHeadshotStore`). The key is
-/// never shown again, only its last four characters.
+/// ESPN and Wikimedia Commons lack (`ApiFootballHeadshotStore`), and what
+/// the key has done today. The key is never shown again, only its last
+/// four characters.
 struct ApiFootballSettingsSection: View {
     private var settings: ApiFootballSettings { .shared }
+    private var store: ApiFootballHeadshotStore { .shared }
 
     /// The key being typed or pasted; cleared once saved.
     @State private var draft = ""
@@ -59,6 +61,18 @@ struct ApiFootballSettingsSection: View {
             .disabled(!settings.hasKey)
             .accessibilityHint("Looks up soccer player photos ESPN and Wikimedia Commons don't have.")
             .accessibilityIdentifier("settings.apiFootball.enabled")
+
+            if settings.hasKey {
+                let usage = store.usage
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text("API-Football Usage")
+                    Text(usage.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("settings.apiFootball.usage")
+            }
 
             if let dashboard = ApiFootball.dashboardURL {
                 Link(destination: dashboard) {

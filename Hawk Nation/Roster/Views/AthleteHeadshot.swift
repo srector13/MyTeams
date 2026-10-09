@@ -35,6 +35,9 @@ struct AthleteHeadshot<Placeholder: View>: View {
     @State private var espnFailed = false
     @State private var commonsImage: UIImage?
     @State private var apiFootballImage: UIImage?
+    /// Whether Wikidata has had `WikidataHeadshotStore.maxWait` to answer
+    /// since ESPN failed: past it, its silence counts as no photo.
+    @State private var wikidataWaited = false
 
     private var store: WikidataHeadshotStore { .shared }
 
@@ -67,10 +70,11 @@ struct AthleteHeadshot<Placeholder: View>: View {
     }
 
     /// The API-Football photo: only once Wikidata has answered with none,
-    /// and only while the reader's key is in use.
+    /// or is backing off, or has not answered within `maxWait` — and only
+    /// while the reader's key is in use.
     private var apiFootballPhoto: ApiFootballPhoto? {
         guard needsFallback, let league,
-              let record = store.record(espnID: espnID, league: league), record.photo == nil
+              store.lacksPhoto(espnID: espnID, league: league, waited: wikidataWaited)
         else { return nil }
         return ApiFootballHeadshotStore.shared.photo(espnID: espnID, league: league)
     }
@@ -116,6 +120,20 @@ struct AthleteHeadshot<Placeholder: View>: View {
             else { return }
             commonsImage = image
             store.noteShown(photo)
+        }
+        // Wikidata's grace: tier 3 need not wait on a lookup that is slow,
+        // backing off or never sent.
+        .task(id: needsFallback) {
+            guard needsFallback else {
+                wikidataWaited = false
+                return
+            }
+            do {
+                try await Task.sleep(for: WikidataHeadshotStore.maxWait)
+            } catch {
+                return
+            }
+            wikidataWaited = true
         }
         // Tier 3, after Wikidata has none. Gone again if the key is.
         .task(id: apiFootballPhoto?.imageURL) {

@@ -100,7 +100,7 @@ struct ApiFootballParserTests {
         let (teams, errors) = ApiFootball.parseTeams(try Fixture.json("apifootball_teams_epl_live"))
         #expect(errors.isEmpty)
         #expect(teams.count == 20)
-        #expect(teams.contains(ApiFootballTeam(id: 42, name: "Arsenal")))
+        #expect(teams.contains(ApiFootballTeam(id: 42, name: "Arsenal", code: "ARS")))
         #expect(ApiFootball.teamID(for: "Arsenal", in: teams) == 42)
         #expect(ApiFootball.teamID(for: "Chelsea", in: teams) == 49)
         #expect(ApiFootball.teamID(for: "Manchester City", in: teams) == 50)
@@ -108,6 +108,30 @@ struct ApiFootballParserTests {
         #expect(ApiFootball.teamID(for: "Tottenham Hotspur", in: teams) == 47)
         // No match: that club gets no tier 3.
         #expect(ApiFootball.teamID(for: "Sunderland", in: teams) == nil)
+    }
+
+    @Test("Aliases find the clubs teamsMatch cannot; the club code is the last resort")
+    func aliasesAndCodes() throws {
+        let (teams, _) = ApiFootball.parseTeams(try Fixture.json("apifootball_teams_epl_live"))
+        #expect(teams.first { $0.id == 39 }?.code == "WOL")
+        // The live diagnostic's known gap.
+        #expect(!ApiFootball.teamsMatch("Wolverhampton Wanderers", "Wolves"))
+        #expect(ApiFootball.teamID(for: "Wolverhampton Wanderers", in: teams) == 39)
+        #expect(ApiFootball.teamID(for: "Brighton & Hove Albion", in: teams) == 51)
+        // No name match: ESPN's abbreviation against the club code.
+        #expect(ApiFootball.teamID(for: "Spurs", in: teams) == nil)
+        #expect(ApiFootball.teamID(for: "Spurs", abbreviation: "TOT", in: teams) == 47)
+        #expect(ApiFootball.teamID(for: "Spurs", abbreviation: "tot", in: teams) == 47)
+        #expect(ApiFootball.teamID(for: "Spurs", abbreviation: "XYZ", in: teams) == nil)
+        // A name match wins over a code that says otherwise.
+        #expect(ApiFootball.teamID(for: "Arsenal", abbreviation: "CHE", in: teams) == 42)
+        // Maps on disk from before codes were kept still decode, codeless.
+        let legacy = try JSONDecoder().decode(
+            ApiFootballTeamMap.self,
+            from: Data(#"{"season":2026,"served":2024,"teams":[{"id":39,"name":"Wolves"}]}"#.utf8)
+        )
+        #expect(legacy.teams == [ApiFootballTeam(id: 39, name: "Wolves")])
+        #expect(ApiFootball.teamID(for: "Wolverhampton Wanderers", in: legacy.teams) == 39)
     }
 
     @Test("/status: a good key's plan and usage; a bad key's errors")
@@ -245,6 +269,25 @@ struct ApiFootballJoinTests {
             "188448": 910002,  // Lucy Bronze ↔ L. Bronze
             "312460": 910003,  // Hannah Hampton
         ])
+    }
+
+    @Test("An aliased club joins its rows by name and team; the alias never joins a player by id")
+    func aliasJoin() {
+        let rows = [
+            ApiFootballPlayer(id: 1001, name: "José Sá", firstname: "José", lastname: "Sá", photo: nil, teams: ["Wolves"], league: 39),
+            ApiFootballPlayer(id: 1002, name: "M. Cunha", firstname: "Matheus", lastname: "Cunha", photo: nil, teams: ["Wolves"], league: 39),
+            ApiFootballPlayer(id: 1003, name: "J. Sá", firstname: "João", lastname: "Sá", photo: nil, teams: ["Brighton"], league: 39),
+        ]
+        let roster = [
+            ApiFootballRosterEntry(espnID: "1001", name: "Someone Else"),
+            ApiFootballRosterEntry(espnID: "w-sa", name: "José Sá"),
+            ApiFootballRosterEntry(espnID: "w-cunha", name: "Matheus Cunha"),
+        ]
+        let joined = ApiFootball.join(roster: roster, team: "Wolverhampton Wanderers", league: .premierLeague, players: rows)
+            .mapValues(\.id)
+        #expect(joined == ["w-sa": 1001, "w-cunha": 1002])
+        // Sharing an id with a row is no match.
+        #expect(joined["1001"] == nil)
     }
 
     @Test("Two candidate rows for one player are left unmatched")
@@ -750,5 +793,257 @@ struct ApiFootballGatingTests {
         #expect(transport.urls == [photo])
         // Plain URL loads: no keyed request was ever made.
         #expect(transport.requests.isEmpty)
+    }
+}
+
+// MARK: - Coverage
+
+/// Answers `/players` with `rows` as one page.
+private func playersReply(_ rows: [(id: Int, first: String, last: String, team: String)]) -> RecordingTransport.Reply {
+    let response = rows.map { row in
+        #"{"player":{"id":\#(row.id),"name":"\#(row.first) \#(row.last)","firstname":"\#(row.first)","#
+            + #""lastname":"\#(row.last)","photo":"https://media.api-sports.io/football/players/\#(row.id).png"},"#
+            + #""statistics":[{"team":{"name":"\#(row.team)"}}]}"#
+    }
+    let body = #"{"errors":[],"paging":{"current":1,"total":1},"response":["# + response.joined(separator: ",") + "]}"
+    return RecordingTransport.Reply(body: Data(body.utf8))
+}
+
+/// A transport that notes the day's count as each request goes out, then
+/// fails with no answer or answers `status`.
+private final class BudgetProbeTransport: KeyedHTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [Int] = []
+    private let defaults: UserDefaults
+    private let status: Int?
+
+    /// - Parameter status: the answer's status; `nil` for no answer at all.
+    init(defaults: UserDefaults, status: Int?) {
+        self.defaults = defaults
+        self.status = status
+    }
+
+    /// The day's count as each request went out.
+    var countsAtSend: [Int] { lock.withLock { counts } }
+
+    func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let used = ApiFootballBudget(defaults: defaults).used
+        lock.withLock { counts.append(used) }
+        guard let status, let url = request.url,
+              let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)
+        else { throw URLError(.notConnectedToInternet) }
+        return (Data(), response)
+    }
+}
+
+/// Club aliases and codes, the budget spent on answers, the persisted
+/// pause and the usage readout (R-11).
+@Suite("API-Football coverage", .serialized)
+@MainActor
+struct ApiFootballCoverageTests {
+    private static let key = "test-key-not-real-0000"
+
+    private func scratch() throws -> (directory: URL, defaults: UserDefaults, suite: String) {
+        let suite = "ApiFootballCoverageTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "ApiFootballCoverageTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        return (directory, defaults, suite)
+    }
+
+    private func makeStore(
+        _ transport: any KeyedHTTPTransport,
+        directory: URL,
+        defaults: UserDefaults,
+        now: @escaping () -> Date = { october7 }
+    ) -> ApiFootballHeadshotStore {
+        ApiFootballHeadshotStore(
+            transport: transport,
+            directory: directory,
+            credentials: { Self.key },
+            budget: ApiFootballBudget(defaults: defaults, now: now),
+            spacing: .zero,
+            now: now,
+            enabled: true
+        )
+    }
+
+    /// The EPL's live club map, and Wolves' players (team 39).
+    private static func wolvesTransport() -> RecordingTransport {
+        RecordingTransport { url, _ in
+            if url.path() == "/teams" {
+                return (try? RecordingTransport.Reply.fixture("apifootball_teams_epl_live")) ?? .status(404)
+            }
+            guard query("team", of: url) == "39" else { return .status(404) }
+            return playersReply([(1001, "José", "Sá", "Wolves"), (1002, "Matheus", "Cunha", "Wolves")])
+        }
+    }
+
+    @Test("ESPN's \"Wolverhampton Wanderers\" sweeps API-Football's \"Wolves\" and joins its rows")
+    func wolvesAlias() async throws {
+        let (directory, defaults, suite) = try scratch()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let transport = Self.wolvesTransport()
+        let store = makeStore(transport, directory: directory, defaults: defaults)
+        let roster = [
+            ApiFootballRosterEntry(espnID: "w-sa", name: "José Sá"),
+            ApiFootballRosterEntry(espnID: "w-cunha", name: "Matheus Cunha"),
+        ]
+
+        store.prefetch(roster: roster, team: "Wolverhampton Wanderers", league: .premierLeague)
+        await store.settle()
+        #expect(transport.urls.map(\.absoluteString) == [
+            "https://v3.football.api-sports.io/teams?league=39&season=2026",
+            "https://v3.football.api-sports.io/players?team=39&season=2026&page=1",
+        ])
+        #expect(store.photo(espnID: "w-sa", league: .premierLeague)?.playerID == 1001)
+        #expect(store.photo(espnID: "w-cunha", league: .premierLeague)?.playerID == 1002)
+        #expect(store.unmatchedClubs[.premierLeague] == nil)
+    }
+
+    @Test("A club no name matches is found by ESPN's abbreviation, and joined under API-Football's name")
+    func codeFallback() async throws {
+        let (directory, defaults, suite) = try scratch()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let transport = RecordingTransport { url, _ in
+            if url.path() == "/teams" {
+                return (try? RecordingTransport.Reply.fixture("apifootball_teams_epl_live")) ?? .status(404)
+            }
+            guard query("team", of: url) == "47" else { return .status(404) }
+            return playersReply([(2001, "Heung-min", "Son", "Tottenham")])
+        }
+        let store = makeStore(transport, directory: directory, defaults: defaults)
+        let roster = [ApiFootballRosterEntry(espnID: "s-son", name: "Heung-min Son")]
+
+        store.prefetch(roster: roster, team: "Spurs", abbreviation: "TOT", league: .premierLeague)
+        await store.settle()
+        #expect(transport.urls.last?.absoluteString == "https://v3.football.api-sports.io/players?team=47&season=2026&page=1")
+        // The rows name "Tottenham", not "Spurs": joined by the club the code found.
+        #expect(store.photo(espnID: "s-son", league: .premierLeague)?.playerID == 2001)
+    }
+
+    @Test("A club nothing matches is logged once and never swept")
+    func unmatchedClubLogged() async throws {
+        let (directory, defaults, suite) = try scratch()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let transport = Self.wolvesTransport()
+        let store = makeStore(transport, directory: directory, defaults: defaults)
+        let roster = [ApiFootballRosterEntry(espnID: "1", name: "Some One")]
+
+        store.prefetch(roster: roster, team: "Sunderland", abbreviation: "SUN", league: .premierLeague)
+        await store.settle()
+        #expect(transport.urls.map { $0.path() } == ["/teams"])
+        #expect(store.unmatchedClubs[.premierLeague] == ["Sunderland"])
+        store.prefetch(roster: roster, team: "Sunderland", league: .premierLeague)
+        await store.settle()
+        #expect(transport.requestCount == 1)
+        #expect(store.unmatchedClubs[.premierLeague] == ["Sunderland"])
+    }
+
+    @Test("The budget is spent once API-Football answers, error or not; no answer spends nothing")
+    func budgetAfterResponse() async throws {
+        let (roster, team) = try espnRoster("epl_roster")
+        for (status, spent) in [(500, 1), (nil, 0)] as [(Int?, Int)] {
+            let (directory, defaults, suite) = try scratch()
+            defer {
+                try? FileManager.default.removeItem(at: directory)
+                defaults.removePersistentDomain(forName: suite)
+            }
+            let transport = BudgetProbeTransport(defaults: defaults, status: status)
+            let store = makeStore(transport, directory: directory, defaults: defaults, now: { Date() })
+
+            store.prefetch(roster: roster, team: team, league: .premierLeague)
+            await store.settle()
+            // Nothing was counted as the request went out…
+            #expect(transport.countsAtSend == [0])
+            // …the answer was; a request that got none was not.
+            #expect(ApiFootballBudget(defaults: defaults).used == spent)
+            // Either way the store pauses.
+            #expect(store.isPaused)
+        }
+    }
+
+    @Test("The failure pause outlives a relaunch and ends an hour later on the injected clock")
+    func persistedPause() async throws {
+        let (directory, defaults, suite) = try scratch()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let (roster, team) = try espnRoster("epl_roster")
+        let clock = TestClock(october7)
+
+        let failing = RecordingTransport(always: .status(500))
+        let first = makeStore(failing, directory: directory, defaults: defaults) { clock.now }
+        first.prefetch(roster: roster, team: team, league: .premierLeague)
+        await first.settle()
+        #expect(failing.requestCount == 1)
+        #expect(defaults.object(forKey: ApiFootballBudget.pauseKey) as? Date == october7.addingTimeInterval(3600))
+
+        // Relaunched 59 minutes on: still paused, nothing asked.
+        clock.now = october7.addingTimeInterval(59 * 60)
+        let transport = EPLReplies.epl()
+        let relaunched = makeStore(transport, directory: directory, defaults: defaults) { clock.now }
+        #expect(relaunched.isPaused)
+        relaunched.prefetch(roster: roster, team: team, league: .premierLeague)
+        await relaunched.settle()
+        #expect(transport.requestCount == 0)
+
+        // 61 minutes on: the sweep runs.
+        clock.now = october7.addingTimeInterval(61 * 60)
+        #expect(!relaunched.isPaused)
+        relaunched.prefetch(roster: roster, team: team, league: .premierLeague)
+        await relaunched.settle()
+        #expect(transport.urls.first?.absoluteString == "https://v3.football.api-sports.io/teams?league=39&season=2026")
+    }
+
+    @Test("Usage: today's requests of 40, clubs swept and photos found; the count starts again each UTC day")
+    func usage() async throws {
+        let (directory, defaults, suite) = try scratch()
+        defer {
+            try? FileManager.default.removeItem(at: directory)
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let (roster, team) = try espnRoster("epl_roster")
+        let clock = TestClock(october7)
+        let transport = EPLReplies.epl()
+        let store = makeStore(transport, directory: directory, defaults: defaults) { clock.now }
+        #expect(store.usage == ApiFootballUsage(requestsToday: 0, cap: 40, clubsSwept: 0, photosFound: 0))
+
+        store.prefetch(roster: roster, team: team, league: .premierLeague)
+        await store.settle()
+        // The map and Arsenal's two pages; Arsenal's seven joined players.
+        #expect(store.usage == ApiFootballUsage(requestsToday: 3, cap: 40, clubsSwept: 1, photosFound: 7))
+        #expect(store.usage.summary == "3/40 requests today · 1 club swept · 7 photos found")
+
+        // Past UTC midnight: a new day's count; the sweep and photos stay.
+        clock.now = october7.addingTimeInterval(12 * 3600)
+        #expect(store.usage == ApiFootballUsage(requestsToday: 0, cap: 40, clubsSwept: 1, photosFound: 7))
+        #expect(
+            ApiFootballUsage(requestsToday: 12, cap: 40, clubsSwept: 3, photosFound: 1).summary
+                == "12/40 requests today · 3 clubs swept · 1 photo found"
+        )
+    }
+}
+
+/// `/teams` with the EPL's clubs and each `/players` page from its fixture,
+/// as `ApiFootballGatingTests` answers.
+private enum EPLReplies {
+    static func epl() -> RecordingTransport {
+        RecordingTransport { url, _ in
+            let name = url.path() == "/teams"
+                ? "apifootball_teams_epl_live"
+                : page(of: url) == "2" ? "apifootball_players_epl_p2" : "apifootball_players_epl_p1"
+            return (try? RecordingTransport.Reply.fixture(name)) ?? .status(404)
+        }
     }
 }

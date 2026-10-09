@@ -120,6 +120,9 @@ extension ApiFootballSweep {
 struct ApiFootballTeam: Codable, Hashable, Sendable {
     var id: Int
     var name: String
+    /// The club's three-letter code, e.g. `WOL`; `nil` when the answer gave
+    /// none, and in maps written before codes were kept.
+    var code: String? = nil
 }
 
 /// A league's clubs, by API-Football id: how a roster's team finds the
@@ -319,19 +322,40 @@ enum ApiFootball {
         let teams = json["response"].arrayValue.compactMap { row -> ApiFootballTeam? in
             let team = row["team"]
             guard let id = team["id"].int, id > 0, !team["name"].stringValue.isEmpty else { return nil }
-            return ApiFootballTeam(id: id, name: team["name"].stringValue)
+            let code = team["code"].stringValue
+            return ApiFootballTeam(id: id, name: team["name"].stringValue, code: code.isEmpty ? nil : code)
         }
         return (teams, errorMessages(json))
     }
 
+    /// ESPN club names API-Football writes in a way `teamsMatch` cannot
+    /// bridge, by ESPN's `displayName`: API-Football's name. Clubs only —
+    /// players are still joined by name and team, never by id.
+    static let teamAliases: [String: String] = [
+        "Wolverhampton Wanderers": "Wolves",
+        "Brighton & Hove Albion": "Brighton",
+        "Sheffield United": "Sheffield Utd",
+        "Bayern Munich": "Bayern München",
+    ]
+
+    /// ESPN's `team` as API-Football names it: its alias, else itself.
+    static func apiTeamName(_ team: String) -> String {
+        teamAliases[team] ?? team
+    }
+
     /// The API-Football id of ESPN's `team`: the one club `teamsMatch`
-    /// finds, or, of several, the one whose name has the same words.
-    /// `nil` when none, or several, fit.
-    static func teamID(for team: String, in teams: [ApiFootballTeam]) -> Int? {
-        let found = teams.filter { teamsMatch(team, $0.name) }
+    /// finds for its name (aliased), or, of several, the one whose name
+    /// has the same words; failing any, the one club whose `code` is ESPN's
+    /// `abbreviation`. `nil` when none, or several, fit.
+    static func teamID(for team: String, abbreviation: String? = nil, in teams: [ApiFootballTeam]) -> Int? {
+        let name = apiTeamName(team)
+        let found = teams.filter { teamsMatch(name, $0.name) }
         if found.count == 1 { return found[0].id }
-        let same = found.filter { Set(tokens($0.name)) == Set(tokens(team)) }
-        return same.count == 1 ? same[0].id : nil
+        let same = found.filter { Set(tokens($0.name)) == Set(tokens(name)) }
+        if same.count == 1 { return same[0].id }
+        guard found.isEmpty, let abbreviation, !abbreviation.isEmpty else { return nil }
+        let coded = teams.filter { $0.code?.caseInsensitiveCompare(abbreviation) == .orderedSame }
+        return coded.count == 1 ? coded[0].id : nil
     }
 
     /// Whether `data` is one of the CDN's "no photo" images.
@@ -417,6 +441,7 @@ enum ApiFootball {
         players: [ApiFootballPlayer]
     ) -> [String: ApiFootballPlayer] {
         guard let apiLeague = leagueID(for: league) else { return [:] }
+        let team = apiTeamName(team)
         let candidates = players.filter { player in
             player.league == apiLeague
                 && (player.teams.isEmpty || player.teams.contains { teamsMatch(team, $0) })
@@ -515,6 +540,10 @@ struct ApiFootballBudget {
 
     var canSpend: Bool { used < cap }
 
+    /// Where `ApiFootballHeadshotStore` keeps its failure pause, beside the
+    /// count, so it outlives a relaunch.
+    static let pauseKey = "apiFootball.pausedUntil"
+
     /// Counts one request. `false`, counting nothing, once today's cap is reached.
     @discardableResult
     func spend() -> Bool {
@@ -523,6 +552,23 @@ struct ApiFootballBudget {
         let entry: [String: Any] = ["day": Self.day(now()), "count": used + 1]
         defaults.set(entry, forKey: Self.defaultsKey)
         return true
+    }
+}
+
+/// What the reader's key has done, for Settings → API-Football.
+struct ApiFootballUsage: Hashable, Sendable {
+    /// Requests made this UTC day (`ApiFootballBudget.used`), of `cap`.
+    var requestsToday: Int
+    var cap: Int
+    /// Clubs with swept rows on disk.
+    var clubsSwept: Int
+    /// Athletes on the rosters seen this launch matched to a photo.
+    var photosFound: Int
+
+    /// `12/40 requests today · 3 clubs swept · 41 photos found`.
+    var summary: String {
+        "\(requestsToday)/\(cap) requests today · \(clubsSwept) \(clubsSwept == 1 ? "club" : "clubs") swept · "
+            + "\(photosFound) \(photosFound == 1 ? "photo" : "photos") found"
     }
 }
 
@@ -538,7 +584,9 @@ struct ApiFootballBudget {
 /// few seconds, never more than `ApiFootball.dailyRequestCap` a UTC day
 /// (`ApiFootballBudget`); a sweep cut short by the cap resumes on a later
 /// day where it stopped. Rows are joined to ESPN's roster by name and
-/// team, never by id.
+/// team, never by id. ESPN's club name finds API-Football's through
+/// `ApiFootball.teamAliases` and `teamsMatch`, then the club code; a club
+/// still unmatched is logged once (`unmatchedClubs`) and gets no tier 3.
 ///
 /// By club, not by league: the free plan refuses any page past 3, and a
 /// league's first three pages (by ascending player id) are its longest-
@@ -549,7 +597,8 @@ struct ApiFootballBudget {
 /// from the old whole-league sweep, still drawn from) under
 /// Caches/ApiFootball, so photos survive without spending quota. Nothing
 /// is asked, and no photo is given, without `credentials()`: the toggle on
-/// and a key saved. Failure is silent and pauses the sweep for an hour.
+/// and a key saved. Failure is silent and pauses the sweep for an hour, on
+/// the injected clock, kept in the budget's defaults across relaunches.
 @MainActor
 @Observable
 final class ApiFootballHeadshotStore {
@@ -581,8 +630,15 @@ final class ApiFootballHeadshotStore {
     @ObservationIgnored private var teamMaps: [Int: ApiFootballTeamMap]
     /// The rosters seen, by league and team name, to join each new page to.
     @ObservationIgnored private var rosters: [LeagueID: [String: [ApiFootballRosterEntry]]] = [:]
+    /// ESPN's abbreviation of each roster's team, where the page gave it,
+    /// by league and team name: the club-code fallback.
+    @ObservationIgnored private var abbreviations: [LeagueID: [String: String]] = [:]
+    /// ESPN team names no club in their league's map matched, by league:
+    /// each is logged once a launch.
+    @ObservationIgnored private(set) var unmatchedClubs: [LeagueID: Set<String>] = [:]
     @ObservationIgnored private var sweepTasks: [Int: Task<Void, Never>] = [:]
-    /// After a failure, no request before this.
+    /// After a failure, no request before this. Read from and written to
+    /// `ApiFootballBudget.pauseKey`.
     @ObservationIgnored private var pausedUntil: Date?
 
     /// How long the store keeps quiet after a failed request.
@@ -613,6 +669,7 @@ final class ApiFootballHeadshotStore {
         teamSweeps = cache.teams
         leagueSweeps = cache.leagues
         teamMaps = cache.maps
+        pausedUntil = budget.defaults.object(forKey: ApiFootballBudget.pauseKey) as? Date
     }
 
     // MARK: Reading
@@ -630,15 +687,36 @@ final class ApiFootballHeadshotStore {
         shownThisSession.append(photo)
     }
 
+    /// Today's requests, the clubs swept and the photos found, for Settings.
+    /// "Today" is the budget's UTC day, on its clock.
+    var usage: ApiFootballUsage {
+        ApiFootballUsage(
+            requestsToday: budget.used,
+            cap: budget.cap,
+            clubsSwept: teamSweeps.values.filter { !$0.players.isEmpty }.count,
+            photosFound: matches.values.reduce(0) { $0 + $1.count }
+        )
+    }
+
+    /// Whether a failed request has the store keeping quiet, on its clock.
+    var isPaused: Bool {
+        pausedUntil.map { now() < $0 } ?? false
+    }
+
     // MARK: Requesting
 
     /// Joins a roster that has just loaded to the cached rows, and starts
     /// its club's sweep if it is due and today's budget allows. Without a
     /// key the roster is only remembered, for `resume()`; nothing is asked.
     /// Does nothing for a league with no API-Football id.
-    func prefetch(roster: [ApiFootballRosterEntry], team: String, league: LeagueID) {
+    /// - Parameter abbreviation: ESPN's abbreviation of `team` (`TeamRef.abbreviation`),
+    ///   matched against API-Football's club code when the name finds no club.
+    func prefetch(roster: [ApiFootballRosterEntry], team: String, abbreviation: String? = nil, league: LeagueID) {
         guard enabled, !roster.isEmpty, ApiFootball.leagueID(for: league) != nil else { return }
         rosters[league, default: [:]][team] = roster
+        if let abbreviation, !abbreviation.isEmpty {
+            abbreviations[league, default: [:]][team] = abbreviation
+        }
         resume(league)
     }
 
@@ -685,11 +763,22 @@ final class ApiFootballHeadshotStore {
     /// week old. A club the map does not name is never due: it gets no
     /// tier 3.
     private func dueTeam(_ league: LeagueID, map: ApiFootballTeamMap) -> Int? {
-        let teams = (rosters[league] ?? [:]).keys.sorted().compactMap { ApiFootball.teamID(for: $0, in: map.teams) }
+        let teams = (rosters[league] ?? [:]).keys.sorted().compactMap { club($0, league: league, in: map)?.id }
         return teams.first { team in
             guard let completed = teamSweeps[team]?.completed else { return true }
             return now().timeIntervalSince(completed) >= ApiFootball.sweepInterval
         }
+    }
+
+    /// The club in `map` that ESPN's `team` is (`ApiFootball.teamID`), or
+    /// `nil`, logged the first time, when none is.
+    private func club(_ team: String, league: LeagueID, in map: ApiFootballTeamMap) -> ApiFootballTeam? {
+        let id = ApiFootball.teamID(for: team, abbreviation: abbreviations[league]?[team], in: map.teams)
+        if let club = map.teams.first(where: { $0.id == id }) { return club }
+        if unmatchedClubs[league, default: []].insert(team).inserted {
+            logger.notice("No API-Football club matches \(team, privacy: .public) in \(league.description, privacy: .public): no tier 3")
+        }
+        return nil
     }
 
     /// Asks for the league's club map if it has none of this season, then
@@ -828,8 +917,9 @@ final class ApiFootballHeadshotStore {
         case answered(status: Int, JSON)
     }
 
-    /// Sends `url` with the key, counted against the day's budget — after
-    /// `spacing`, unless it is the sweep's first request.
+    /// Sends `url` with the key, counted against the day's budget once
+    /// API-Football answers, whatever the status — after `spacing`, unless
+    /// it is the sweep's first request. No answer, no count.
     private func ask(_ url: URL?, spaced: inout Bool) async -> Answer {
         if spaced {
             do { try await Task.sleep(for: spacing) } catch { return .stopped }
@@ -838,8 +928,8 @@ final class ApiFootballHeadshotStore {
         guard let url, let key = credentials(), budget.canSpend,
               let request = ApiFootball.keyedRequest(url, key: key)
         else { return .stopped }
-        budget.spend()
         guard let answer = await load(request) else { return .failed }
+        budget.spend()
         return .answered(status: answer.0, answer.1)
     }
 
@@ -862,7 +952,10 @@ final class ApiFootballHeadshotStore {
         guard !players.isEmpty else { return }
         var joined = matches[league] ?? [:]
         for (team, roster) in rosters[league] ?? [:] {
-            let found = ApiFootball.join(roster: roster, team: team, league: league, players: players)
+            // The club the map found, by API-Football's own name, so a club
+            // found by alias or code still meets its rows; else ESPN's.
+            let name = teamMaps[apiLeague].flatMap { club(team, league: league, in: $0)?.name }
+            let found = ApiFootball.join(roster: roster, team: name ?? team, league: league, players: players)
             for entry in roster {
                 joined[entry.espnID] = found[entry.espnID].map { ApiFootballPhoto($0) }
             }
@@ -872,12 +965,10 @@ final class ApiFootballHeadshotStore {
         }
     }
 
-    private var isPaused: Bool {
-        pausedUntil.map { Date() < $0 } ?? false
-    }
-
     private func pause() {
-        pausedUntil = Date().addingTimeInterval(Self.failurePause)
+        let until = now().addingTimeInterval(Self.failurePause)
+        pausedUntil = until
+        budget.defaults.set(until, forKey: ApiFootballBudget.pauseKey)
     }
 
     // MARK: Disk
