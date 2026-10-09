@@ -392,7 +392,7 @@ struct CollegeConferenceTests {
         #expect(Set(sections.map(\.id)).count == sections.count)
 
         // Every team in a conference: no leading conference-less section.
-        #expect(ConferenceSection.sections(Array(teams.dropFirst())).first?.conference == "Big 12 Conference")
+        #expect(ConferenceSection.sections(teams.filter { $0.conference != nil }).first?.conference == "Big 12 Conference")
 
         // No conferences at all (a pro list, or standings that never came):
         // no sections, so the browser keeps its one list.
