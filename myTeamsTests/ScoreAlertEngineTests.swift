@@ -219,11 +219,19 @@ private final class Alarm: @unchecked Sendable {
 
 /// The engine's inputs a test changes as it goes: the favorites, the clock
 /// the debounce reads, and the reader's alert preferences.
+///
+/// Close-game alerts start off: the captured Broncos game is a 3-point game
+/// with 0:48 left in the 4th, so every look at it would be one (R-6). The
+/// tests of those turn them on.
 @MainActor
 private final class Inputs {
     var favorites: [FavoriteTeam]
     var now = Date(timeIntervalSince1970: 1_790_000_000)
-    var preferences = AlertPreferences()
+    var preferences: AlertPreferences = {
+        var preferences = AlertPreferences()
+        preferences.sendsCloseGames = false
+        return preferences
+    }()
 
     init(favorites: [FavoriteTeam]) {
         self.favorites = favorites
@@ -1032,6 +1040,112 @@ struct ScoreAlertEngineTests {
         center.unsubscribe(subscription)
     }
 
+    @Test("A close game late goes out once, Time Sensitive, standing for the score that made it")
+    @MainActor
+    func closeLate() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id)])
+        inputs.preferences.sendsCloseGames = true
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+
+        // Kickoff, as the board has it: 0:48 left in the 4th, but a start
+        // is only a start.
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let kickoff = await nextSteps(3, from: &steps)
+        #expect(kickoff.last == .delivered(.gameStart(gameID: broncosGame, snapshot: broncosSnapshot())))
+        #expect(recorder.delivery(for: broncosGame) == .standard)
+
+        // A touchdown: 30–26 with 0:48 left is close and late, told in
+        // place of the score update.
+        inputs.advance(300)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.closeLate(gameID: broncosGame, snapshot: broncosSnapshot(home: 30))),
+        ])
+        #expect(recorder.delivery(for: broncosGame) == .timeSensitive)
+
+        // Still close, a field goal: a score update, and no second one.
+        inputs.advance(300)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 29), at: url)
+        await center.refresh(.nfl)
+        let fieldGoal = await nextSteps(3, from: &steps)
+        #expect(fieldGoal == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(home: 30),
+                snapshot: broncosSnapshot(home: 30, away: 29)
+            )),
+        ])
+        #expect(recorder.delivery(for: broncosGame) == .standard)
+
+        center.unsubscribe(subscription)
+    }
+
+    @Test("A team's own kinds take precedence over the global ones")
+    @MainActor
+    func teamKindsOverGlobal() async throws {
+        let board = try Fixture.json("nfl_scoreboard_20260927")
+        let url = LeagueID.nfl.scoreboardURL(day: nflDay)
+        let boards = ScriptedBoards()
+        try boards.serve(pregame(broncosGame, in: board), at: url)
+        let recorder = AlertRecorder()
+        var steps = recorder.steps.makeAsyncIterator()
+        // Every kind on globally; the Broncos want scores alone.
+        let inputs = Inputs(favorites: [FavoriteTeam(teamID: broncos.id, alertKinds: .scores)])
+        inputs.preferences = AlertPreferences()
+        let center = makeCenter(boards)
+        let engine = makeEngine(center, recorder, inputs)
+        engine.start()
+        _ = await nextSteps(1, from: &steps)
+
+        let subscription = center.subscribe(broncos, days: [nflDay])
+        _ = await nextSteps(1, from: &steps)
+
+        // Kickoff: starts are on globally, not for the Broncos.
+        inputs.advance(300)
+        try boards.serve(board, at: url)
+        await center.refresh(.nfl)
+        let kickoff = await nextSteps(1, from: &steps)
+        #expect(kickoff == [.looked])
+
+        // A score goes; the close-game alert with it is not theirs, so the
+        // score update stands.
+        inputs.advance(30)
+        try boards.serve(moving(broncosGame, in: board, to: "in", period: 4, home: 30, away: 26), at: url)
+        await center.refresh(.nfl)
+        let touchdown = await nextSteps(3, from: &steps)
+        #expect(touchdown == [
+            .looked,
+            .authorizationChecked(granted: true),
+            .delivered(.scoreChange(
+                gameID: broncosGame,
+                previous: broncosSnapshot(),
+                snapshot: broncosSnapshot(home: 30)
+            )),
+        ])
+
+        center.unsubscribe(subscription)
+    }
+
     @Test("During quiet hours alerts are delivered quietly, not dropped")
     @MainActor
     func quietHours() async throws {
@@ -1166,6 +1280,38 @@ struct ScoreAlertContentTests {
         #expect(endOfFourth.content.title == "End of 4th Quarter")
         #expect(endOfFourth.content.body == "Rams 26 – Broncos 23 (OT)")
     }
+
+    @Test("Finals and close games late are Time Sensitive outside quiet hours, quiet within them")
+    func timeSensitiveDelivery() {
+        let snapshot = ScoreSnapshot(
+            homeName: "Broncos", awayName: "Rams", homeScore: 23, awayScore: 26, period: 4, state: .inProgress
+        )
+        let final = ScoreEvent.final(gameID: broncosGame, snapshot: snapshot)
+        let closeLate = ScoreEvent.closeLate(gameID: broncosGame, snapshot: snapshot)
+        let overtime = ScoreEvent.overtime(gameID: broncosGame, snapshot: snapshot)
+        let score = ScoreEvent.scoreChange(gameID: broncosGame, previous: snapshot, snapshot: snapshot)
+        #expect(ScoreAlertEngine.delivery(for: final, isQuiet: false) == .timeSensitive)
+        #expect(ScoreAlertEngine.delivery(for: closeLate, isQuiet: false) == .timeSensitive)
+        #expect(ScoreAlertEngine.delivery(for: overtime, isQuiet: false) == .standard)
+        #expect(ScoreAlertEngine.delivery(for: score, isQuiet: false) == .standard)
+        #expect(ScoreAlertEngine.delivery(for: final, isQuiet: true) == .quiet)
+        #expect(ScoreAlertEngine.delivery(for: closeLate, isQuiet: true) == .quiet)
+    }
+
+    #if canImport(UserNotifications)
+    @Test("A Time Sensitive alert sounds and says so")
+    func timeSensitiveRequest() {
+        let snapshot = ScoreSnapshot(
+            homeName: "Broncos", awayName: "Rams", homeScore: 23, awayScore: 26, period: 4, state: .final
+        )
+        let content = ScoreAlertEngine.request(
+            for: .final(gameID: broncosGame, snapshot: snapshot), teamID: broncos.id, delivery: .timeSensitive
+        ).content
+        #expect(content.interruptionLevel == .timeSensitive)
+        #expect(content.sound != nil)
+        #expect(ScoreAlertEngine.presentationOptions(for: content, foregroundTeamID: nil) == [.banner, .list, .sound])
+    }
+    #endif
 
     @Test("A quiet alert is passive and silent; a standard one sounds")
     func quietRequest() throws {

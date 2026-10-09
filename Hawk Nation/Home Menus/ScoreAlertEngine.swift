@@ -16,8 +16,8 @@ import UserNotifications
 private let logger = Logger(subsystem: "com.myTeams", category: "alerts")
 
 /// Posts local alerts for the games of favorites that want them
-/// (`FavoriteTeam.notify`): the start, each score, each period's end, and
-/// the final.
+/// (`FavoriteTeam.notify`): the start, each score, each period's end, a
+/// close game late and overtime (R-6), and the final.
 ///
 /// Watches `LeagueScoreboardCenter.games` and, on each change, reduces the
 /// followed games to `ScoreSnapshot`s, diffs them against the last look
@@ -27,7 +27,11 @@ private let logger = Logger(subsystem: "com.myTeams", category: "alerts")
 ///
 /// The reader's `AlertPreferences` apply on top (C-3): kinds turned off are
 /// never posted, and during quiet hours alerts are delivered quietly
-/// (`ScoreAlertDelivery.quiet`), to Notification Center only.
+/// (`ScoreAlertDelivery.quiet`), to Notification Center only. A favorite
+/// with kinds of its own (`FavoriteTeam.alertKinds`, R-6) uses those
+/// instead of the global ones. Outside quiet hours, finals and close games
+/// late are Time Sensitive (`ScoreAlertDelivery.timeSensitive`), where the
+/// system allows it.
 ///
 /// Hybrid limitation, accepted for now: the trigger is the scoreboard
 /// center's polling, which runs while the app is in the foreground and, with
@@ -78,6 +82,9 @@ final class ScoreAlertEngine {
     /// The favorite each followed game was last seen for, by game id: the
     /// `TeamRef.id` in its home league, even for a cup tie.
     private var followers: [String: TeamRef.ID] = [:]
+    /// The kinds of alert each followed game's favorites want, by game id,
+    /// as of its last look.
+    private var gameKinds: [String: FollowedKinds] = [:]
     private var debounce = ScoreAlertDebounce()
     /// Wakes when the first held event's window ends.
     private var releaseTask: Task<Void, Never>?
@@ -151,17 +158,21 @@ final class ScoreAlertEngine {
 
     private func update(_ games: [LeagueID: [ScoreboardGame]]) {
         let now = self.now()
-        let (current, followedBy) = followedSnapshots(in: games)
-        let events = ScoreDiff.diff(previous: snapshots, current: current)
-        snapshots.merge(current) { _, new in new }
+        let (current, followedBy, kinds) = followedSnapshots(in: games)
+        // The looks as the diff leaves them, each carrying whether its game
+        // has had its close-game alert.
+        let (events, looks) = ScoreDiff.advance(previous: snapshots, current: current)
+        snapshots.merge(looks) { _, new in new }
         for gameID in current.keys {
             lastSeen[gameID] = now
         }
         followers.merge(followedBy) { _, new in new }
+        gameKinds.merge(kinds) { _, new in new }
         // Kinds turned off are dropped before the debounce, so they neither
-        // take a game's window nor wait in it.
+        // take a game's window nor wait in it. A close-game or overtime
+        // alert left standing speaks for its game's score in the same look.
         let preferences = self.preferences()
-        let wanted = events.filter { preferences.sends($0) }
+        let wanted = ScoreDiff.headlines(events.filter { wants($0, preferences: preferences) })
         post(debounce.admit(wanted, at: now), preferences: preferences)
         remember(at: now)
         scheduleRelease()
@@ -202,14 +213,22 @@ final class ScoreAlertEngine {
         scheduleRelease()
     }
 
+    /// Whether `event`'s kind goes out for the favorites following its
+    /// game: their own kinds, or the global ones for those without.
+    private func wants(_ event: ScoreEvent, preferences: AlertPreferences) -> Bool {
+        guard let kinds = gameKinds[event.gameID] else { return preferences.sends(event) }
+        return kinds.sends(event, preferences: preferences)
+    }
+
     /// The games of every favorite that wants alerts, in its league and its
-    /// cups, and the favorite each is followed for (the first, for two
-    /// favorites playing each other).
+    /// cups, the favorite each is followed for (the first, for two
+    /// favorites playing each other), and the kinds its favorites want.
     private func followedSnapshots(
         in games: [LeagueID: [ScoreboardGame]]
-    ) -> (snapshots: [String: ScoreSnapshot], followers: [String: TeamRef.ID]) {
+    ) -> (snapshots: [String: ScoreSnapshot], followers: [String: TeamRef.ID], kinds: [String: FollowedKinds]) {
         var result: [String: ScoreSnapshot] = [:]
         var followers: [String: TeamRef.ID] = [:]
+        var kinds: [String: FollowedKinds] = [:]
         for favorite in favorites() where favorite.notify {
             guard let team = TeamRef.parse(id: favorite.teamID) else { continue }
             let competitions = [team.league] + team.league.descriptor.cupCompetitions
@@ -222,10 +241,11 @@ final class ScoreAlertEngine {
                     if followers[game.gameID] == nil {
                         followers[game.gameID] = favorite.teamID
                     }
+                    kinds[game.gameID, default: FollowedKinds()].add(favorite.alertKinds)
                 }
             }
         }
-        return (result, followers)
+        return (result, followers, kinds)
     }
 
     /// A two-team game as the diff sees it. A game called off (`"post"`
@@ -234,7 +254,8 @@ final class ScoreAlertEngine {
     /// - Parameter league: the league or cup whose scoreboard lists the
     ///   game, whose rules name its periods (`PeriodNaming`, A-11): "End of
     ///   OT" after a hockey overtime, not "End of 4th". Without one, periods
-    ///   read as plain ordinals.
+    ///   read as plain ordinals, and there are no close-game or overtime
+    ///   alerts (`LateGameRule`).
     nonisolated static func snapshot(of game: ScoreboardGame, league: LeagueID? = nil) -> ScoreSnapshot? {
         guard game.competitors.count == 2,
               let home = game.competitors.first(where: { $0.homeAway == "home" }),
@@ -257,7 +278,9 @@ final class ScoreAlertEngine {
             awayScore: away.score ?? 0,
             period: game.period,
             state: state,
-            periodNaming: league.map(PeriodNaming.init(league:)) ?? .ordinal
+            periodNaming: league.map(PeriodNaming.init(league:)) ?? .ordinal,
+            clock: game.clock,
+            lateGame: league.flatMap(LateGameRule.init(league:))
         )
     }
 
@@ -269,20 +292,32 @@ final class ScoreAlertEngine {
     private func post(_ events: [ScoreEvent], preferences: AlertPreferences) {
         // Checked again here: a held event may be of a kind turned off
         // since it was held.
-        let events = events.filter { preferences.sends($0) }
+        let events = events.filter { wants($0, preferences: preferences) }
         guard !events.isEmpty else { return }
         let isAuthorized = self.isAuthorized
         let deliver = self.deliver
-        let delivery: ScoreAlertDelivery = preferences.isQuiet(at: now()) ? .quiet : .standard
-        let alerts = events.map { ($0, followers[$0.gameID]) }
+        let isQuiet = preferences.isQuiet(at: now())
+        let alerts = events.map { ($0, followers[$0.gameID], Self.delivery(for: $0, isQuiet: isQuiet)) }
         let previous = posting
         posting = Task {
             await previous?.value
             // Denied or never asked: alerts stay off, silently.
             guard await isAuthorized() else { return }
-            for (event, teamID) in alerts {
+            for (event, teamID, delivery) in alerts {
                 await deliver(event, teamID, delivery)
             }
+        }
+    }
+
+    /// How loud `event` goes out: quietly in quiet hours; otherwise Time
+    /// Sensitive for a final or a close game late (R-6), which a Focus
+    /// should let through, and as usual for the rest. Kept to those two so
+    /// Time Sensitive stays rare.
+    nonisolated static func delivery(for event: ScoreEvent, isQuiet: Bool) -> ScoreAlertDelivery {
+        if isQuiet { return .quiet }
+        switch event {
+        case .final, .closeLate: return .timeSensitive
+        default: return .standard
         }
     }
 
@@ -297,12 +332,36 @@ final class ScoreAlertEngine {
 
     /// Posts `event` through `UNUserNotificationCenter`, opening `teamID`'s
     /// page when tapped.
+    ///
+    /// A Time Sensitive alert goes out as one only where the system says
+    /// Time Sensitive alerts are on for the app
+    /// (`ScoreAlertsPermissions.allowsTimeSensitive()`): a build signed
+    /// without the entitlement, or a reader who turned them off, gets a
+    /// standard alert instead. Should the system still refuse it, it is
+    /// posted again as a standard one, so the alert is never lost to it.
     nonisolated static func systemDeliver(_ event: ScoreEvent, teamID: TeamRef.ID?, delivery: ScoreAlertDelivery = .standard) async {
         #if canImport(UserNotifications)
+        var delivery = delivery
+        if delivery == .timeSensitive {
+            let allowed = await ScoreAlertsPermissions.allowsTimeSensitive()
+            if !allowed {
+                delivery = .standard
+            }
+        }
+        let center = UNUserNotificationCenter.current()
         do {
-            try await UNUserNotificationCenter.current().add(request(for: event, teamID: teamID, delivery: delivery))
+            try await center.add(request(for: event, teamID: teamID, delivery: delivery))
         } catch {
-            logger.error("Could not post a score alert: \(error.localizedDescription)")
+            guard delivery == .timeSensitive else {
+                logger.error("Could not post a score alert: \(error.localizedDescription)")
+                return
+            }
+            logger.notice("Time Sensitive score alert refused, posting a standard one: \(error.localizedDescription)")
+            do {
+                try await center.add(request(for: event, teamID: teamID, delivery: .standard))
+            } catch {
+                logger.error("Could not post a score alert: \(error.localizedDescription)")
+            }
         }
         #endif
     }
@@ -330,7 +389,7 @@ final class ScoreAlertEngine {
     ///
     /// A quiet alert (quiet hours) is passive and silent: it goes to
     /// Notification Center without lighting the screen, sounding or showing
-    /// a banner.
+    /// a banner. A Time Sensitive one sounds, and breaks through a Focus.
     nonisolated static func request(
         for event: ScoreEvent,
         teamID: TeamRef.ID? = nil,
@@ -342,6 +401,9 @@ final class ScoreAlertEngine {
         switch delivery {
         case .standard:
             content.sound = .default
+        case .timeSensitive:
+            content.sound = .default
+            content.interruptionLevel = .timeSensitive
         case .quiet:
             content.sound = nil
             content.interruptionLevel = .passive
@@ -404,8 +466,38 @@ final class ScoreAlertTaps {
 enum ScoreAlertDelivery: Equatable, Sendable {
     /// A banner and a sound.
     case standard
+    /// A banner and a sound that break through a Focus (R-6): finals and
+    /// close games late, outside quiet hours. Posted as `standard` where the
+    /// system does not allow it (`ScoreAlertEngine.systemDeliver`).
+    case timeSensitive
     /// During quiet hours: to Notification Center only, passive and silent.
     case quiet
+}
+
+/// The kinds of alert a followed game's favorites want (R-6): each
+/// favorite's own kinds (`FavoriteTeam.alertKinds`), or the reader's global
+/// ones (`AlertPreferences`) for a favorite without. A game two favorites
+/// play in alerts for whatever either wants.
+struct FollowedKinds: Equatable, Sendable {
+    /// Every kind the favorites with kinds of their own want.
+    var own: AlertMask = []
+    /// Whether any favorite follows the global kinds.
+    var followsGlobal = false
+
+    /// Counts in a favorite whose own kinds are `teamKinds`, `nil` for the
+    /// global ones.
+    mutating func add(_ teamKinds: AlertMask?) {
+        if let teamKinds {
+            own.formUnion(teamKinds)
+        } else {
+            followsGlobal = true
+        }
+    }
+
+    /// Whether `event` goes out under `preferences`, the global kinds.
+    func sends(_ event: ScoreEvent, preferences: AlertPreferences) -> Bool {
+        preferences.sends(event, teamKinds: own) || (followsGlobal && preferences.sends(event))
+    }
 }
 
 /// The alert engine's last look at each followed game, and when each last
