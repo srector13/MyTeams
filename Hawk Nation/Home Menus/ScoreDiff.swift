@@ -294,40 +294,6 @@ extension PeriodNaming: Codable {
     }
 }
 
-// Coded by hand: `LeagueDescriptor.PeriodStyle` is not Codable, and is
-// written here by name.
-extension PeriodNaming: Codable {
-    private enum CodingKeys: String, CodingKey {
-        case style
-        case hasExtraTime
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let style: LeagueDescriptor.PeriodStyle
-        switch try container.decode(String.self, forKey: .style) {
-        case "halves": style = .halves
-        case "quarters": style = .quarters
-        case "periods": style = .periods
-        default: style = .unnamed
-        }
-        self.init(style: style, hasExtraTime: try container.decode(Bool.self, forKey: .hasExtraTime))
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        let name: String
-        switch style {
-        case .halves: name = "halves"
-        case .quarters: name = "quarters"
-        case .periods: name = "periods"
-        case .unnamed: name = "unnamed"
-        }
-        try container.encode(name, forKey: .style)
-        try container.encode(hasExtraTime, forKey: .hasExtraTime)
-    }
-}
-
 /// Something worth an alert, between two looks at a game.
 enum ScoreEvent: Equatable, Sendable {
     case gameStart(gameID: String, snapshot: ScoreSnapshot)
