@@ -97,6 +97,18 @@ struct MyTeamsApp: App {
             await BackgroundRefresh.run()
         }
     }
+
+    /// A team link opens its page; a game link with a team, the game's
+    /// sheet over that page. Anything else is ignored.
+    private func open(_ url: URL) {
+        if let teamID = WidgetDeepLink.teamID(from: url) {
+            deepLinkedGame = nil
+            deepLinkedTeamID = teamID
+        } else if let game = WidgetDeepLink.game(from: url), let teamID = game.teamID {
+            deepLinkedGame = game
+            deepLinkedTeamID = teamID
+        }
+    }
 }
 
 /// Background app refresh (R-1): with the app in the background, one look
@@ -156,18 +168,6 @@ enum BackgroundRefresh {
         } catch {
             // Refused in the Simulator, and with Background App Refresh off.
             logger.error("Could not schedule a background refresh: \(error.localizedDescription)")
-        }
-    }
-
-    /// A team link opens its page; a game link with a team, the game's
-    /// sheet over that page. Anything else is ignored.
-    private func open(_ url: URL) {
-        if let teamID = WidgetDeepLink.teamID(from: url) {
-            deepLinkedGame = nil
-            deepLinkedTeamID = teamID
-        } else if let game = WidgetDeepLink.game(from: url), let teamID = game.teamID {
-            deepLinkedGame = game
-            deepLinkedTeamID = teamID
         }
     }
 }
