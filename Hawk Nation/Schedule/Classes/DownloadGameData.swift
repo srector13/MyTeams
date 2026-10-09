@@ -132,6 +132,10 @@ func competitorScore(_ competitor: JSON) -> Int? {
 /// its last known figures instead of painting a partial response as a 0–0
 /// game. Schedule cards now read their scores from the league scoreboard
 /// (`parseScoreboard`); this reads the same figures from a summary.
+///
+/// Test support only: no production code calls it. The parser tests use it
+/// to pin the summary's score shape (`GoldenParserTests`,
+/// `BoxScoreParsingTests`).
 func parseLiveGameScore(from json: JSON, team: TeamRef, isHome: Bool) -> LiveGameScore? {
     var score: Int?
     var opponentScore: Int?

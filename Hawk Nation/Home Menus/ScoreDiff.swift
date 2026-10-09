@@ -52,18 +52,6 @@ struct ScoreSnapshot: Equatable, Sendable {
         "\(awayName) \(awayScore) – \(homeName) \(homeScore) (\(stageLabel))"
     }
 
-    /// "1st", "2nd", "3rd", "4th", … "11th", "12th", "13th", "21st".
-    static func ordinal(_ number: Int) -> String {
-        let suffix: String
-        switch (number % 10, number % 100) {
-        case (_, 11...13): suffix = "th"
-        case (1, _): suffix = "st"
-        case (2, _): suffix = "nd"
-        case (3, _): suffix = "rd"
-        default: suffix = "th"
-        }
-        return "\(number)\(suffix)"
-    }
 }
 
 /// How a league names its periods in alerts and on the Live Activity:
@@ -133,7 +121,7 @@ struct PeriodNaming: Equatable, Sendable {
             }
             return extra <= 1 ? "OT" : "\(extra)OT"
         }
-        return ScoreSnapshot.ordinal(period)
+        return ordinalString(period)
     }
 }
 

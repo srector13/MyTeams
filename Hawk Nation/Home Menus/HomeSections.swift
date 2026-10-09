@@ -875,7 +875,7 @@ struct TeamHeaderSummary: Equatable, Sendable {
         case .rankings:
             return "No. \(rank) in \(title)"
         case .pointsTable, .records:
-            return "\(ScoreSnapshot.ordinal(rank)) in \(title)"
+            return "\(ordinalString(rank)) in \(title)"
         }
     }
 

@@ -79,6 +79,8 @@ extension SoccerLineups.Player {
             // "68'" and "90'+3'" read as "68" and "90+3", not "prime".
             let minute = substitutedAt.filter { $0 != "'" && $0 != "′" }
             parts.append("\(starter ? "substituted off" : "came on"), minute \(minute)")
+        } else if starter && subbedOut {
+            parts.append("substituted off")
         }
         return parts.joined(separator: ", ")
     }

@@ -142,7 +142,7 @@ struct ScoreDiffTests {
 
     @Test("Ordinals")
     func ordinals() {
-        #expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(ScoreSnapshot.ordinal) == [
+        #expect([1, 2, 3, 4, 11, 12, 13, 21, 22].map(ordinalString) == [
             "1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd",
         ])
     }

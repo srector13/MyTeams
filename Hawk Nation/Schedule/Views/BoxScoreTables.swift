@@ -241,6 +241,12 @@ private struct SoccerLineupRow: View {
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(cameOn ? Color.green : Color.red)
                 BoxScoreText(player.substitutedAt, style: .heading)
+            } else if player.starter && player.subbedOut {
+                // Taken off, though the feed gives no minute.
+                Image(systemName: "arrow.down")
+                    .font(.caption2.bold())
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.red)
             }
         }
         // One element that says what the ball, the cards and the arrow

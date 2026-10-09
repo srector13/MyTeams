@@ -496,7 +496,7 @@ struct GameCardContent: Equatable {
         var period = league.liveCardPeriodLabel(game.gamePeriod)
         // Innings go unnamed in the linescore, but the card can say which.
         if period.isEmpty, league.kind == .baseball, let inning = Int(game.gamePeriod), inning > 0 {
-            period = "\(ScoreSnapshot.ordinal(inning)) Inning"
+            period = "\(ordinalString(inning)) Inning"
         }
         guard !period.isEmpty else { return nil }
         // Baseball keeps no clock; its feeds' "0:00" means nothing.

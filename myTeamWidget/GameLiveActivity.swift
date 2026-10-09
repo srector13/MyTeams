@@ -128,6 +128,9 @@ private struct GameActivityBanner: View {
                     .font(Theme.Typography.cardTitle)
                     .monospacedDigit()
                     .foregroundStyle(nonScoreInk)
+                // Unreachable today: activities start only once a game is
+                // live (`LiveActivityStateMapper`). Kept for R-8's
+                // push-to-start, which starts them before kickoff.
                 if state.phase == .pending, let kickoff = game.kickoff {
                     Text(kickoff, style: .time)
                         .font(Theme.Typography.caption)
