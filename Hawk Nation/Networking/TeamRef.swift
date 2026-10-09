@@ -499,9 +499,9 @@ extension LeagueID {
 
 /// The teams the app knows about, read from the bundled `teams.json`.
 ///
-/// A static seed of the four teams the app has always followed. Loading
-/// catalogs from ESPN is Phase 2; the file's `teams` key leaves room for that
-/// without a format change.
+/// A static seed of the four teams the app has always followed. Full league
+/// catalogs come from ESPN through `RemoteTeamCatalog`; this file is the
+/// offline seed.
 enum TeamCatalog {
     /// Every catalogued team, in the file's order.
     ///

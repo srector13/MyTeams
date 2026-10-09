@@ -181,7 +181,7 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
             )
             // Tier 3, soccer only, with the reader's own key: joins the
             // roster to API-Football by name and team, and starts the
-            // league's weekly sweep if it is due. Nothing without a key.
+            // club's weekly sweep if it is due. Nothing without a key.
             ApiFootballHeadshotStore.shared.prefetch(
                 roster: model.allPlayers.map { ApiFootballRosterEntry(espnID: $0.playerID, name: $0.name) },
                 team: team.displayName,
