@@ -14,13 +14,12 @@ import SwiftUI
 /// `View.splashOverlay()` lays it over the root view until that view's
 /// first frame is up, then fades it away.
 ///
-/// The logo's arches take the reader's brand accent (`BrandAccent`). The
-/// launch screen before it can't: iOS draws `UILaunchScreen` from the
-/// bundle before any of the app's code runs, so it is always the shipped
-/// art, and with another accent the arches change colour as the splash
-/// takes over. `LaunchscreenColor` stays, so the background doesn't. The
-/// same goes for the reader's style of the logo (`BrandIconStyle`): drawn
-/// at the launch screen's size, so only the mark itself changes.
+/// The logo is the reader's brand theme's (`BrandTheme`). The launch
+/// screen before it can't be: iOS draws `UILaunchScreen` from the bundle
+/// before any of the app's code runs, so it is always the shipped art, and
+/// with another theme the logo changes colour as the splash takes over.
+/// `LaunchscreenColor` stays, and every theme's art is drawn at the launch
+/// screen's size, so only the mark's colours change.
 struct SplashView: View {
     var body: some View {
         ZStack {

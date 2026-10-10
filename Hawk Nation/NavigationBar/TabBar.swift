@@ -940,18 +940,14 @@ private struct CrestOutline: ViewModifier {
 /// template in the bar's ink (`teamInk(onHex:)`), white or black, so it
 /// reads on whatever the team colour is, like the title beside it.
 ///
-/// With a brand accent other than the shipped blue, the arches take the
-/// accent and the T's bars keep the ink, as long as every stop of the
-/// accent reads on the team colour (`BarCrest.minimumContrast`); otherwise
-/// the whole mark stays in ink.
-///
-/// A style other than `classic` (`BrandIconStyle`) draws that style, in the
-/// accent on the same terms, otherwise in ink.
+/// With a brand theme other than `classic`, the theme's own art for the
+/// ink's side — the on-dark logo under white ink, the on-light one under
+/// black — as long as its lanes read on the team colour
+/// (`BarCrest.minimumContrast`); otherwise the whole mark stays in ink.
 private struct BrandBarLogo: View {
     let backgroundHex: String
 
-    @Environment(\.brandAccent) private var accent
-    @Environment(\.brandIconStyle) private var iconStyle
+    @Environment(\.brandTheme) private var theme
 
     var body: some View {
         mark
@@ -965,28 +961,28 @@ private struct BrandBarLogo: View {
 
     @ViewBuilder
     private var mark: some View {
-        if !iconStyle.isDefault {
-            // `.foreground` is the ink `teamInk(onHex:)` sets.
-            BrandIconGlyph(
-                style: iconStyle,
-                fill: accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast)
-                    ? accent.fill : AnyShapeStyle(.foreground)
-            )
-        } else if !accent.isDefault, accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast) {
-            // The bars as a template, so they take the ink.
-            Image("myTeamsLogoBars")
-                .renderingMode(.template)
+        if let art = Self.themedArt(theme, onHex: backgroundHex) {
+            Image(art)
                 .resizable()
                 .scaledToFit()
-                .overlay {
-                    BrandArches(fill: accent.fill)
-                }
         } else {
             Image("myTeamsLogoMonoWhite")
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
         }
+    }
+
+    /// The theme's logo to draw on `backgroundHex`, or `nil` for the ink
+    /// mark: `classic`, or lanes that don't read on the team colour.
+    static func themedArt(_ theme: BrandTheme, onHex backgroundHex: String) -> String? {
+        // White ink: a dark bar, so the art drawn for dark backgrounds.
+        let dark = TeamColors.inkHex(on: backgroundHex) == "FFFFFF"
+        guard let palette = theme.palette,
+              let art = theme.logoImageName(for: dark ? .dark : .light) else { return nil }
+        let lanes = dark ? palette.logoOnDark.lanes : palette.logoOnLight.lanes
+        guard (TeamColors.contrastRatio(lanes, backgroundHex) ?? 1) >= BarCrest.minimumContrast else { return nil }
+        return art
     }
 }
 
