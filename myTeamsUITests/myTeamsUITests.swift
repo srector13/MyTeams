@@ -203,7 +203,9 @@ final class myTeamsUITests: XCTestCase {
             gear.tap()
             _ = settingsClose.waitForExistence(timeout: 5)
         }
-        // The accent grid put the row below the sheet's fold (t_e30988b7).
+        // Scrolled to only if the row is below the sheet's fold, which the
+        // list's length decides (t_e30988b7; the brand settings live on
+        // the Theme screen since t_a3f40a9e).
         for _ in 0..<4 where settingsClose.exists && !addTeams.exists {
             app.swipeUp()
             _ = addTeams.waitForExistence(timeout: 2)

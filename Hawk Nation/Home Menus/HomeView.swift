@@ -74,8 +74,7 @@ private struct HomeEmptyState: View {
             Label {
                 Text("No Teams Yet")
             } icon: {
-                // Asset-catalog appearances pick the light/dark art;
-                // the arches take the brand accent.
+                // The brand theme's art, for the scheme on screen.
                 BrandLogoMark()
                     .frame(width: BrandLogo.hero)
                     .accessibilityHidden(true)

@@ -19,6 +19,12 @@ struct MyTeamsApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
+        // Before the favorites first load, which marks even a fresh
+        // install as having run: an install from before the theme step
+        // never sees it (`ThemeOnboarding`).
+        ThemeOnboarding.prepare(
+            isExistingInstall: ThemeOnboarding.isExistingInstall(sharedDefaults: SharedPaths.defaults)
+        )
         // Load (or restore from iCloud) the favorites before anything reads
         // them. A fresh install has none: `Home` shows "Add Teams".
         _ = FavoritesStore.shared
@@ -37,8 +43,11 @@ struct MyTeamsApp: App {
     @State private var intentLinks = AppIntentLinks.shared
     /// Light, dark or the system's, from Settings (`SettingsView`).
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
-    /// The brand accent, from Settings (`BrandAccent`).
-    @AppStorage(BrandAccent.storageKey) private var brandAccent: BrandAccent = .classic
+    /// The brand theme, from Settings or onboarding (`BrandTheme`).
+    @AppStorage(BrandTheme.storageKey) private var brandTheme: BrandTheme = .classic
+    /// Whether the first-launch theme step is done (`ThemeOnboarding`):
+    /// finished, skipped, or passed over for an earlier install.
+    @AppStorage(ThemeOnboarding.completedKey) private var themeOnboardingCompleted = false
 
     var body: some Scene {
         WindowGroup {
@@ -46,14 +55,27 @@ struct MyTeamsApp: App {
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
+                // Once, on a fresh install: the theme step. Inside the
+                // theme's root modifier, so its tiles and logo follow the
+                // choice as it is made.
+                .sheet(isPresented: Binding(
+                    get: { !themeOnboardingCompleted },
+                    set: { presented in
+                        if !presented { themeOnboardingCompleted = true }
+                    }
+                )) {
+                    ThemeOnboardingView {
+                        themeOnboardingCompleted = true
+                    }
+                }
                 // Outside the reader's appearance (B-6): the splash keeps the
                 // system's, as the launch screen before it does, and applies
                 // `appearance` once it has gone.
                 .splashOverlay(preferredColorScheme: appearance.colorScheme)
-                // Outside the splash, so it draws the logo in the accent too.
+                // Outside the splash, so it draws the theme's logo too.
                 // The tint reaches every screen and sheet under the root,
                 // and changes the moment Settings does.
-                .brandAccent(brandAccent)
+                .brandTheme(brandTheme)
                 .onOpenURL { url in
                     open(url)
                 }

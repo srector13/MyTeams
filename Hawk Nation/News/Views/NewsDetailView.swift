@@ -35,8 +35,7 @@ struct NewsDetailView: View {
                 Label {
                     Text("Can't Open This Article")
                 } icon: {
-                    // Asset-catalog appearances pick the light/dark art;
-                    // the arches take the brand accent.
+                    // The brand theme's art, for the scheme on screen.
                     BrandLogoMark()
                         .frame(width: BrandLogo.inline)
                         .accessibilityHidden(true)
