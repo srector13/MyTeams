@@ -50,7 +50,7 @@ enum AboutInfo {
     }
 }
 
-/// The app's settings: appearance and the brand (`BrandSettingsView`), game
+/// The app's settings: appearance and the theme (`ThemeSettingsView`), game
 /// alerts, the reader's teams, photo credits and the API-Football key, and
 /// what build this is.
 ///
@@ -86,16 +86,16 @@ struct SettingsView: View {
                     .accessibilityHint("Choose light, dark, or the system's appearance.")
                     .accessibilityIdentifier("settings.appearance")
 
-                    // The accent and the logo's style, on their own screen:
-                    // the swatch and style grids are too tall for this list.
+                    // The brand theme, on its own screen: the palette grid is
+                    // too tall for this list.
                     NavigationLink {
-                        BrandSettingsView()
+                        ThemeSettingsView()
                     } label: {
-                        Label("Brand", systemImage: "paintpalette")
+                        Label("Theme", systemImage: "paintpalette")
                     }
-                    .accessibilityLabel("Brand")
-                    .accessibilityHint("Choose the accent color and the style of the myTeams logo.")
-                    .accessibilityIdentifier("settings.brand")
+                    .accessibilityLabel("Theme")
+                    .accessibilityHint("Choose the palette for the accent color, the myTeams logo and the app icon.")
+                    .accessibilityIdentifier("settings.theme")
                 } header: {
                     Text("Appearance")
                 }
@@ -201,8 +201,8 @@ struct SettingsView: View {
         }
     }
 
-    /// The brand logo, in the art drawn for the scheme on screen, its
-    /// arches in the brand accent; another style's mark in its place.
+    /// The brand logo, in the art drawn for the scheme on screen: the
+    /// shipped wordmark art for the classic theme, the theme's otherwise.
     private var logo: some View {
         BrandLogoMark(art: colorScheme == .dark ? "myTeamsLogoOnDark" : "myTeamsLogoOnLight")
             .frame(width: BrandLogo.inline)

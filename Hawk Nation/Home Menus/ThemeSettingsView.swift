@@ -1,5 +1,5 @@
 //
-//  BrandSettingsView.swift
+//  ThemeSettingsView.swift
 //  myTeams
 //
 //  Created by Stephen Rector on 10/10/26.
@@ -8,167 +8,142 @@
 
 import SwiftUI
 
-/// The brand: the accent colour (`BrandAccent`) and the style of the logo
-/// (`BrandIconStyle`), each as a grid to pick from.
+/// The brand theme (`BrandTheme`): one grid of the designer's palettes, each
+/// tile showing the theme's logo, accent and app icon. A tap applies all
+/// three together.
 ///
-/// Reached from Settings' Appearance section. Every change applies at once,
-/// app-wide: the root reads the same keys (`MyTeamsApp`).
-struct BrandSettingsView: View {
-    @AppStorage(BrandAccent.storageKey) private var brandAccent: BrandAccent = .classic
-    @AppStorage(BrandIconStyle.storageKey) private var brandIconStyle: BrandIconStyle = .classic
+/// Reached from Settings' Appearance section. The accent and logo change at
+/// once, app-wide: the root reads the same key (`MyTeamsApp`). The app icon
+/// changes through iOS (`AppIconSwitcher`), which confirms it with an alert
+/// of its own.
+struct ThemeSettingsView: View {
+    @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
+    /// Whether iOS refused the last icon change.
+    @State private var iconFailed = false
 
     var body: some View {
         Form {
             Section {
-                LabeledContent("Accent", value: brandAccent.title)
-                    .accessibilityIdentifier("settings.brandAccent.current")
-                BrandAccentPicker(selection: $brandAccent)
+                LabeledContent("Theme", value: theme.title)
+                    .accessibilityIdentifier("settings.theme.current")
+                ThemePicker(selection: $theme, identifierPrefix: "settings.theme")
             } header: {
-                Text("Accent Color")
+                Text("Palette")
             } footer: {
-                Text("Colors the myTeams logo, buttons and highlights.")
+                Text(ThemePicker.iconNote)
             }
 
-            Section {
-                LabeledContent("Icon", value: brandIconStyle.title)
-                    .accessibilityIdentifier("settings.brandIconStyle.current")
-                BrandIconPicker(selection: $brandIconStyle)
-            } header: {
-                Text("Icon Style")
-            } footer: {
-                // iOS limits (`BrandAccent`): the icon is the bundle's, and
-                // the launch screen is drawn before the app runs. Said once,
-                // for both settings.
-                Text("Changes the myTeams logo throughout the app, in the accent color. The App Store icon and the launch screen can't change with these settings.")
+            if iconFailed {
+                Section {
+                    Label("The app icon couldn't change, so the classic icon stays. The theme still applies in the app.", systemImage: "exclamationmark.triangle")
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings.theme.iconFailed")
+                }
             }
         }
-        .navigationTitle("Brand")
+        .navigationTitle("Theme")
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-/// The brand accents as swatches, solids, gradients and specials in turn:
-/// a tap picks one. Each swatch draws its fill, and the chosen one is
-/// ringed and checked.
-private struct BrandAccentPicker: View {
-    @Binding var selection: BrandAccent
-
-    private let columns = [GridItem(.adaptive(minimum: 44, maximum: 56), spacing: Theme.Spacing.m)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            ForEach(BrandAccent.Style.allCases, id: \.self) { style in
-                Text(style.title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityAddTraits(.isHeader)
-                LazyVGrid(columns: columns, spacing: Theme.Spacing.m) {
-                    ForEach(BrandAccent.allCases.filter { $0.style == style }) { accent in
-                        swatch(accent)
-                    }
-                }
+        .onChange(of: theme) { _, theme in
+            Task {
+                iconFailed = !(await AppIconSwitcher.apply(theme))
             }
         }
-        .padding(.vertical, Theme.Spacing.xs)
-    }
-
-    private func swatch(_ accent: BrandAccent) -> some View {
-        let selected = accent == selection
-        return Button {
-            selection = accent
-        } label: {
-            Circle()
-                .fill(accent.fill)
-                .frame(width: 36, height: 36)
-                .overlay {
-                    if selected {
-                        Image(systemName: "checkmark")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.4), radius: 1)
-                    }
-                }
-                .padding(3)
-                .overlay {
-                    Circle()
-                        .strokeBorder(selected ? AnyShapeStyle(accent.fill) : AnyShapeStyle(Color.clear), lineWidth: 2)
-                }
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .contentShape(Rectangle())
-        }
-        // A plain style, so the whole row isn't one tappable cell.
-        .buttonStyle(.plain)
-        .accessibilityLabel(accent.title)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("settings.brandAccent.\(accent.rawValue)")
     }
 }
 
-/// The logo's styles as tiles: a tap picks one. Each tile draws the logo
-/// in its style and the current accent, with the code every logo in the
-/// app is drawn with (`BrandLogoMark`), and the chosen one is ringed and
-/// checked, like the accent's swatches.
-private struct BrandIconPicker: View {
-    @Binding var selection: BrandIconStyle
+/// The brand themes as tiles, classic first: a tap picks one. Each tile
+/// draws the theme's own logo (`BrandLogoMark`), its accent and a preview
+/// of its app icon, with the icon's name; the chosen one is ringed in its
+/// accent and checked.
+///
+/// A lazy grid that grows with its container, so it can sit in a `Form` or
+/// a `ScrollView` and scroll with it; nothing assumes the whole grid fits.
+/// Shared by Settings (`ThemeSettingsView`) and onboarding
+/// (`ThemeOnboardingView`).
+struct ThemePicker: View {
+    @Binding var selection: BrandTheme
+    /// Each tile's accessibility identifier is this, a dot, and the
+    /// theme's id.
+    let identifierPrefix: String
 
-    @Environment(\.brandAccent) private var accent
+    /// What changing the theme does to the app icon, said wherever the
+    /// picker is.
+    static let iconNote = "Changes the accent color, the myTeams logo and the app icon together. iOS shows a message of its own when the app icon changes. If the icon can't change, the classic icon stays. The launch screen always shows the classic logo."
 
-    private let columns = [GridItem(.adaptive(minimum: 88, maximum: 120), spacing: Theme.Spacing.m)]
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let columns = [GridItem(.adaptive(minimum: 132, maximum: 200), spacing: Theme.Spacing.m)]
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: Theme.Spacing.m) {
-            ForEach(BrandIconStyle.allCases) { style in
-                candidate(style)
+            ForEach(BrandTheme.allCases) { theme in
+                tile(theme)
             }
         }
         .padding(.vertical, Theme.Spacing.xs)
     }
 
-    private func candidate(_ style: BrandIconStyle) -> some View {
-        let selected = style == selection
+    private func tile(_ theme: BrandTheme) -> some View {
+        let selected = theme == selection
         return Button {
-            selection = style
+            selection = theme
         } label: {
-            VStack(spacing: Theme.Spacing.xs) {
-                BrandLogoMark()
-                    .environment(\.brandIconStyle, style)
-                    .frame(width: 56)
-                    .frame(maxWidth: .infinity, minHeight: 52)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                BrandLogoMark(theme: theme)
+                    .frame(height: 44)
+                    .frame(maxWidth: .infinity)
                     .padding(Theme.Spacing.s)
                     .background(Color(uiColor: .tertiarySystemFill), in: Theme.Radius.innerShape)
-                    .overlay {
-                        Theme.Radius.innerShape
-                            .strokeBorder(selected ? accent.fill : AnyShapeStyle(Color.clear), lineWidth: 2)
+
+                HStack(spacing: Theme.Spacing.s) {
+                    Image(theme.iconPreviewImageName(for: colorScheme))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    Circle()
+                        .fill(theme.accentColor)
+                        .frame(width: 16, height: 16)
+                    Spacer(minLength: 0)
+                    if selected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.body.weight(.bold))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, theme.accentColor)
                     }
-                    .overlay(alignment: .topTrailing) {
-                        if selected {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.body.weight(.bold))
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, accent.primaryColor)
-                                .padding(Theme.Spacing.xs)
-                        }
-                    }
-                Text(style.title)
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                }
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(theme.title)
+                        .font(Theme.Typography.caption.weight(.semibold))
+                        .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    Text(theme.appIconName ?? "AppIcon")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            }
+            .padding(Theme.Spacing.s)
+            .overlay {
+                Theme.Radius.innerShape
+                    .strokeBorder(selected ? theme.accentColor : Color.clear, lineWidth: 2)
             }
             .contentShape(Rectangle())
         }
         // A plain style, so the whole row isn't one tappable cell.
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(style.title)
+        .accessibilityLabel(theme.title)
         .accessibilityAddTraits(.isButton)
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("settings.brandIconStyle.\(style.rawValue)")
+        .accessibilityIdentifier("\(identifierPrefix).\(theme.rawValue)")
     }
 }
 
 #Preview {
     NavigationStack {
-        BrandSettingsView()
+        ThemeSettingsView()
     }
 }
