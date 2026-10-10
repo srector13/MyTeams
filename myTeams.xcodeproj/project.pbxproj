@@ -134,7 +134,9 @@
 		A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */; };
 		BA7ACCE5E3D1F2A4C6E8D10A /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D109 /* ThemeSettingsView.swift */; };
 		BA7ACCE5E3D1F2A4C6E8D10C /* ThemeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D10B /* ThemeOnboardingView.swift */; };
+		BA7ACCE5E3D1F2A4C6E8D111 /* OnboardingWalkthroughView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D110 /* OnboardingWalkthroughView.swift */; };
 		BA7ACCE5E3D1F2A4C6E8D10E /* BrandThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D10D /* BrandThemeTests.swift */; };
+		BA7ACCE5E3D1F2A4C6E8D113 /* OnboardingWalkthroughTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D112 /* OnboardingWalkthroughTests.swift */; };
 		EF052AEDBC214A5175C8BD14 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */; };
 		7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */; };
 		E0EC1F16A329C33DE895872A /* WidgetScoreboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CA6FD1F7AD1F9B77140658 /* WidgetScoreboardSnapshot.swift */; };
@@ -335,7 +337,9 @@
 		A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettingsView.swift"; sourceTree = "<group>"; };
 		BA7ACCE5E3D1F2A4C6E8D109 /* ThemeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeSettingsView.swift"; sourceTree = "<group>"; };
 		BA7ACCE5E3D1F2A4C6E8D10B /* ThemeOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeOnboardingView.swift"; sourceTree = "<group>"; };
+		BA7ACCE5E3D1F2A4C6E8D110 /* OnboardingWalkthroughView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingWalkthroughView.swift"; sourceTree = "<group>"; };
 		BA7ACCE5E3D1F2A4C6E8D10D /* BrandThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandThemeTests.swift"; sourceTree = "<group>"; };
+		BA7ACCE5E3D1F2A4C6E8D112 /* OnboardingWalkthroughTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OnboardingWalkthroughTests.swift"; sourceTree = "<group>"; };
 		9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
 		77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiff.swift"; sourceTree = "<group>"; };
 		78CA6FD1F7AD1F9B77140658 /* WidgetScoreboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetScoreboardSnapshot.swift"; sourceTree = "<group>"; };
@@ -454,6 +458,7 @@
 				A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */,
 				BA7ACCE5E3D1F2A4C6E8D109 /* ThemeSettingsView.swift */,
 				BA7ACCE5E3D1F2A4C6E8D10B /* ThemeOnboardingView.swift */,
+				BA7ACCE5E3D1F2A4C6E8D110 /* OnboardingWalkthroughView.swift */,
 				9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */,
 				B7B6A399AAE14CFEB1693E93 /* ApiFootballSettingsSection.swift */,
 				346F15839B839382E7E93D52 /* Standings.swift */,
@@ -692,6 +697,7 @@
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				BA7ACCE5E3D1F2A4C6E8D10D /* BrandThemeTests.swift */,
+				BA7ACCE5E3D1F2A4C6E8D112 /* OnboardingWalkthroughTests.swift */,
 				5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */,
 				CA1E7A0B00000000000000D1 /* CalendarEventBuilderTests.swift */,
 				BD52FEA243D6F89CB697B876 /* TabBarTests.swift */,
@@ -922,6 +928,7 @@
 				A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D10A /* ThemeSettingsView.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D10C /* ThemeOnboardingView.swift in Sources */,
+				BA7ACCE5E3D1F2A4C6E8D111 /* OnboardingWalkthroughView.swift in Sources */,
 				EF052AEDBC214A5175C8BD14 /* SettingsView.swift in Sources */,
 				749E671F2916273F3E45E498 /* Standings.swift in Sources */,
 				65D076717FCEAD9E6C2663EB /* Record.swift in Sources */,
@@ -1055,6 +1062,7 @@
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D10E /* BrandThemeTests.swift in Sources */,
+				BA7ACCE5E3D1F2A4C6E8D113 /* OnboardingWalkthroughTests.swift in Sources */,
 				5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */,
 				CA1E7A0B00000000000000D2 /* CalendarEventBuilderTests.swift in Sources */,
 				A66D0A558CEC12590E02F9A2 /* TabBarTests.swift in Sources */,

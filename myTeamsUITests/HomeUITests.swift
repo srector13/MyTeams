@@ -192,13 +192,65 @@ final class HomeUITests: XCTestCase {
         XCTAssertTrue(element("settings.theme.classic", in: app).exists, "The theme screen has no Classic tile.")
     }
 
-    /// A launch that asks for the theme step (`ThemeOnboarding.launchKey`)
-    /// shows it over Home, with every palette, Continue pinned below the
-    /// grid; Skip closes it. (That it never comes back is
-    /// `BrandThemeTests`'.)
+    /// A launch that asks for onboarding (`ThemeOnboarding.launchKey`)
+    /// opens on the walkthrough's first page; swiping and Next step
+    /// through its pages, the last offering Get Started, which hands off
+    /// to the theme step; Continue there closes the sheet.
+    @MainActor
+    func testWalkthroughStepsToThemeStep() throws {
+        let app = launch(environment: ["MYTEAMS_ONBOARDING": "1"])
+        let skip = app.buttons["onboarding.walkthrough.skip"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "The walkthrough never showed.")
+        XCTAssertTrue(waitOnScreen(element("onboarding.walkthrough.page.1", in: app), in: app), "The walkthrough didn't open on its first page.")
+
+        // Swiped to the second page.
+        element("onboarding.walkthrough.page.1", in: app).swipeLeft()
+        XCTAssertTrue(waitOnScreen(element("onboarding.walkthrough.page.2", in: app), in: app), "A swipe didn't turn to the second page.")
+        XCTAssertFalse(app.buttons["onboarding.walkthrough.getStarted"].exists, "Get Started before the last page.")
+
+        // Next to the last.
+        let next = app.buttons["onboarding.walkthrough.next"]
+        XCTAssertTrue(next.exists, "No Next on the second page.")
+        next.tap()
+        XCTAssertTrue(waitOnScreen(element("onboarding.walkthrough.page.3", in: app), in: app), "Next didn't turn to the last page.")
+        XCTAssertTrue(skip.exists, "Skip went missing on the last page.")
+
+        let getStarted = app.buttons["onboarding.walkthrough.getStarted"]
+        XCTAssertTrue(getStarted.waitForExistence(timeout: 5), "No Get Started on the last page.")
+        XCTAssertFalse(next.exists, "Next on the last page.")
+        getStarted.tap()
+
+        let continueButton = app.buttons["onboarding.theme.continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 5), "Get Started didn't hand off to the theme step.")
+        XCTAssertTrue(skip.waitForNonExistence(timeout: 5), "The walkthrough stayed under the theme step.")
+        continueButton.tap()
+        XCTAssertTrue(continueButton.waitForNonExistence(timeout: 5), "Continue didn't close onboarding.")
+        XCTAssertTrue(app.buttons["home.settings"].waitForExistence(timeout: 5))
+    }
+
+    /// The walkthrough's Skip goes straight to the theme step, from its
+    /// first page.
+    @MainActor
+    func testWalkthroughSkipsToThemeStep() throws {
+        let app = launch(environment: ["MYTEAMS_ONBOARDING": "1"])
+        let skip = app.buttons["onboarding.walkthrough.skip"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "The walkthrough never showed.")
+        skip.tap()
+
+        XCTAssertTrue(app.buttons["onboarding.theme.continue"].waitForExistence(timeout: 5), "Skip didn't go to the theme step.")
+        XCTAssertFalse(element("onboarding.walkthrough.page.1", in: app).exists, "The walkthrough stayed up.")
+    }
+
+    /// Past the walkthrough, the theme step shows over Home, with every
+    /// palette, Continue pinned below the grid; Skip closes it. (That it
+    /// never comes back is `BrandThemeTests`'.)
     @MainActor
     func testThemeOnboardingSkips() throws {
         let app = launch(environment: ["MYTEAMS_ONBOARDING": "1"])
+        let walkthroughSkip = app.buttons["onboarding.walkthrough.skip"]
+        XCTAssertTrue(walkthroughSkip.waitForExistence(timeout: 10), "The walkthrough never showed.")
+        walkthroughSkip.tap()
+
         let skip = app.buttons["onboarding.theme.skip"]
         XCTAssertTrue(skip.waitForExistence(timeout: 10), "The theme step never showed.")
         XCTAssertTrue(element("onboarding.theme.classic", in: app).waitForExistence(timeout: 5))
@@ -248,6 +300,23 @@ final class HomeUITests: XCTestCase {
     @MainActor
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[identifier].firstMatch
+    }
+
+    /// Waits for `element` to be in view: centred in the window, not just
+    /// in the hierarchy, as a paged view's neighbouring pages are.
+    @MainActor
+    private func waitOnScreen(_ element: XCUIElement, in app: XCUIApplication, timeout: TimeInterval = 5) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists {
+                let frame = element.frame
+                if app.windows.firstMatch.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) {
+                    return true
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline
+        return false
     }
 
     /// The app, following `favorites` in place of whatever an earlier test
