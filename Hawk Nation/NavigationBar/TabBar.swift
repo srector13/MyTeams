@@ -944,10 +944,14 @@ private struct CrestOutline: ViewModifier {
 /// accent and the T's bars keep the ink, as long as every stop of the
 /// accent reads on the team colour (`BarCrest.minimumContrast`); otherwise
 /// the whole mark stays in ink.
+///
+/// A style other than `classic` (`BrandIconStyle`) draws that style, in the
+/// accent on the same terms, otherwise in ink.
 private struct BrandBarLogo: View {
     let backgroundHex: String
 
     @Environment(\.brandAccent) private var accent
+    @Environment(\.brandIconStyle) private var iconStyle
 
     var body: some View {
         mark
@@ -961,7 +965,14 @@ private struct BrandBarLogo: View {
 
     @ViewBuilder
     private var mark: some View {
-        if !accent.isDefault, accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast) {
+        if !iconStyle.isDefault {
+            // `.foreground` is the ink `teamInk(onHex:)` sets.
+            BrandIconGlyph(
+                style: iconStyle,
+                fill: accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast)
+                    ? accent.fill : AnyShapeStyle(.foreground)
+            )
+        } else if !accent.isDefault, accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast) {
             // The bars as a template, so they take the ink.
             Image("myTeamsLogoBars")
                 .renderingMode(.template)

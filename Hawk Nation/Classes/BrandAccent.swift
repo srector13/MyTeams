@@ -331,13 +331,27 @@ private struct WindowTint: UIViewRepresentable {
 ///
 /// The shipped blue draws the original full-colour art (`art`), unchanged.
 /// Resizable and aspect-fit, like the `Image` it stands in for: frame it.
+///
+/// A style other than `classic` (`BrandIconStyle`) draws that style in the
+/// accent instead (`BrandIconGlyph`), on the same canvas, so the frame
+/// holds; `art` is the classic logo's alone.
 struct BrandLogoMark: View {
     /// The full-colour art for the shipped blue.
     var art: String = "myTeamsLogo"
 
     @Environment(\.brandAccent) private var accent
+    @Environment(\.brandIconStyle) private var iconStyle
 
     var body: some View {
+        if iconStyle.isDefault {
+            classic
+        } else {
+            BrandIconGlyph(style: iconStyle, fill: accent.fill)
+        }
+    }
+
+    @ViewBuilder
+    private var classic: some View {
         if accent.isDefault {
             Image(art)
                 .resizable()

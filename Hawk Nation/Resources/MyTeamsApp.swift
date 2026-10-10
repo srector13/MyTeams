@@ -39,6 +39,8 @@ struct MyTeamsApp: App {
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
     /// The brand accent, from Settings (`BrandAccent`).
     @AppStorage(BrandAccent.storageKey) private var brandAccent: BrandAccent = .classic
+    /// The style of the logo, from Settings (`BrandIconStyle`).
+    @AppStorage(BrandIconStyle.storageKey) private var brandIconStyle: BrandIconStyle = .classic
 
     var body: some Scene {
         WindowGroup {
@@ -54,6 +56,8 @@ struct MyTeamsApp: App {
                 // The tint reaches every screen and sheet under the root,
                 // and changes the moment Settings does.
                 .brandAccent(brandAccent)
+                // Beside it, for the same reasons: the splash's logo too.
+                .brandIconStyle(brandIconStyle)
                 .onOpenURL { url in
                     open(url)
                 }

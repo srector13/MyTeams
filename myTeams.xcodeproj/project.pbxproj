@@ -37,6 +37,7 @@
 		FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B31 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */; };
 		BA7ACCE5E3D1F2A4C6E8D102 /* BrandAccent.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D101 /* BrandAccent.swift */; };
+		BA7ACCE5E3D1F2A4C6E8D106 /* BrandIconStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D105 /* BrandIconStyle.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B41 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B42 /* TeamLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79881DBBADFB9BC8FCD8431 /* TeamLogo.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B43 /* RemoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2FB2E1805F644DD405F129 /* RemoteImage.swift */; };
@@ -113,6 +114,7 @@
 		0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */; };
 		BA7ACCE5E3D1F2A4C6E8D104 /* BrandAccentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D103 /* BrandAccentTests.swift */; };
+		BA7ACCE5E3D1F2A4C6E8D108 /* BrandIconStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D107 /* BrandIconStyleTests.swift */; };
 		5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */; };
 		CA1E7A0B00000000000000D2 /* CalendarEventBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1E7A0B00000000000000D1 /* CalendarEventBuilderTests.swift */; };
 		A66D0A558CEC12590E02F9A2 /* TabBarTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD52FEA243D6F89CB697B876 /* TabBarTests.swift */; };
@@ -133,6 +135,7 @@
 		A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */; };
 		C60415BD6AD63FDCC0065D93 /* AlertsSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60FC9E09F90C7500085E831A /* AlertsSettings.swift */; };
 		A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */; };
+		BA7ACCE5E3D1F2A4C6E8D10A /* BrandSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA7ACCE5E3D1F2A4C6E8D109 /* BrandSettingsView.swift */; };
 		EF052AEDBC214A5175C8BD14 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */; };
 		7F8E92B0D1E332A00046DC73 /* ScoreDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */; };
 		E0EC1F16A329C33DE895872A /* WidgetScoreboardSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CA6FD1F7AD1F9B77140658 /* WidgetScoreboardSnapshot.swift */; };
@@ -241,6 +244,7 @@
 		24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RepeatingTask.swift"; sourceTree = "<group>"; };
 		7A1D0C3E5B9F2A4C6E8D1B30 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Theme.swift"; sourceTree = "<group>"; };
 		BA7ACCE5E3D1F2A4C6E8D101 /* BrandAccent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandAccent.swift"; sourceTree = "<group>"; };
+		BA7ACCE5E3D1F2A4C6E8D105 /* BrandIconStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandIconStyle.swift"; sourceTree = "<group>"; };
 		295F3B13CE1F1A66438291C3 /* HomeSections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeSections.swift"; sourceTree = "<group>"; };
 		8F2D6B13C95A7E4F01B3D826 /* TeamHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamHomeView.swift"; sourceTree = "<group>"; };
 		BF854E8FC1231BAD448D63BA /* TeamModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamModel.swift"; sourceTree = "<group>"; };
@@ -312,6 +316,7 @@
 		4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TeamLogoTests.swift"; sourceTree = "<group>"; };
 		7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeTests.swift"; sourceTree = "<group>"; };
 		BA7ACCE5E3D1F2A4C6E8D103 /* BrandAccentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandAccentTests.swift"; sourceTree = "<group>"; };
+		BA7ACCE5E3D1F2A4C6E8D107 /* BrandIconStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandIconStyleTests.swift"; sourceTree = "<group>"; };
 		5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GameCardContentTests.swift"; sourceTree = "<group>"; };
 		CA1E7A0B00000000000000D1 /* CalendarEventBuilderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalendarEventBuilderTests.swift"; sourceTree = "<group>"; };
 		BD52FEA243D6F89CB697B876 /* TabBarTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TabBarTests.swift"; sourceTree = "<group>"; };
@@ -332,6 +337,7 @@
 		0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreAlertsPermissions.swift"; sourceTree = "<group>"; };
 		60FC9E09F90C7500085E831A /* AlertsSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettings.swift"; sourceTree = "<group>"; };
 		A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AlertsSettingsView.swift"; sourceTree = "<group>"; };
+		BA7ACCE5E3D1F2A4C6E8D109 /* BrandSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BrandSettingsView.swift"; sourceTree = "<group>"; };
 		9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SettingsView.swift"; sourceTree = "<group>"; };
 		77BBB55DFA6210CB7B45F03F /* ScoreDiff.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScoreDiff.swift"; sourceTree = "<group>"; };
 		78CA6FD1F7AD1F9B77140658 /* WidgetScoreboardSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WidgetScoreboardSnapshot.swift"; sourceTree = "<group>"; };
@@ -425,6 +431,7 @@
 			isa = PBXGroup;
 			children = (
 				BA7ACCE5E3D1F2A4C6E8D101 /* BrandAccent.swift */,
+				BA7ACCE5E3D1F2A4C6E8D105 /* BrandIconStyle.swift */,
 				8F7DFED7B341798C35C5671F /* ConvertColor.swift */,
 				3336602F15AB9F42EE41A789 /* LoadingView.swift */,
 				24BB1F80C1C9188B8F947AEB /* RepeatingTask.swift */,
@@ -448,6 +455,7 @@
 				0F569FD476AA3CA168D4089A /* ScoreAlertsPermissions.swift */,
 				60FC9E09F90C7500085E831A /* AlertsSettings.swift */,
 				A2323471F90D8D4681F7AB62 /* AlertsSettingsView.swift */,
+				BA7ACCE5E3D1F2A4C6E8D109 /* BrandSettingsView.swift */,
 				9E9BCA9DA2DE99665D6030A2 /* SettingsView.swift */,
 				B7B6A399AAE14CFEB1693E93 /* ApiFootballSettingsSection.swift */,
 				346F15839B839382E7E93D52 /* Standings.swift */,
@@ -686,6 +694,7 @@
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				BA7ACCE5E3D1F2A4C6E8D103 /* BrandAccentTests.swift */,
+				BA7ACCE5E3D1F2A4C6E8D107 /* BrandIconStyleTests.swift */,
 				5C1A2E7D9B3F4A6C8E0D2B40 /* GameCardContentTests.swift */,
 				CA1E7A0B00000000000000D1 /* CalendarEventBuilderTests.swift */,
 				BD52FEA243D6F89CB697B876 /* TabBarTests.swift */,
@@ -914,6 +923,7 @@
 				A3264B92A99736DC68EBCC66 /* ScoreAlertsPermissions.swift in Sources */,
 				C60415BD6AD63FDCC0065D93 /* AlertsSettings.swift in Sources */,
 				A39E46D9903C7E297D90A0F1 /* AlertsSettingsView.swift in Sources */,
+				BA7ACCE5E3D1F2A4C6E8D10A /* BrandSettingsView.swift in Sources */,
 				EF052AEDBC214A5175C8BD14 /* SettingsView.swift in Sources */,
 				749E671F2916273F3E45E498 /* Standings.swift in Sources */,
 				65D076717FCEAD9E6C2663EB /* Record.swift in Sources */,
@@ -925,6 +935,7 @@
 				FA363D114509970AB9439478 /* RepeatingTask.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B31 /* Theme.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D102 /* BrandAccent.swift in Sources */,
+				BA7ACCE5E3D1F2A4C6E8D106 /* BrandIconStyle.swift in Sources */,
 				F40E52311E166FC0C805078D /* HomeSections.swift in Sources */,
 				3C71A9E2B04D5F18A6E29C40 /* TeamHomeView.swift in Sources */,
 				0FE667583883927DBEE1F6C1 /* TeamModel.swift in Sources */,
@@ -1047,6 +1058,7 @@
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D104 /* BrandAccentTests.swift in Sources */,
+				BA7ACCE5E3D1F2A4C6E8D108 /* BrandIconStyleTests.swift in Sources */,
 				5C1A2E7D9B3F4A6C8E0D2B41 /* GameCardContentTests.swift in Sources */,
 				CA1E7A0B00000000000000D2 /* CalendarEventBuilderTests.swift in Sources */,
 				A66D0A558CEC12590E02F9A2 /* TabBarTests.swift in Sources */,
