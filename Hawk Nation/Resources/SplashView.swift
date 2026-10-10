@@ -18,7 +18,9 @@ import SwiftUI
 /// launch screen before it can't: iOS draws `UILaunchScreen` from the
 /// bundle before any of the app's code runs, so it is always the shipped
 /// art, and with another accent the arches change colour as the splash
-/// takes over. `LaunchscreenColor` stays, so the background doesn't.
+/// takes over. `LaunchscreenColor` stays, so the background doesn't. The
+/// same goes for the reader's style of the logo (`BrandIconStyle`): drawn
+/// at the launch screen's size, so only the mark itself changes.
 struct SplashView: View {
     var body: some View {
         ZStack {

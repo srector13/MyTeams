@@ -157,6 +157,39 @@ final class HomeUITests: XCTestCase {
         XCTAssertTrue(alerts.exists, "Settings never opened from Home.")
     }
 
+    /// Settings' Brand row opens the brand screen, which holds the accent
+    /// and the logo's style; Settings' own list holds neither.
+    @MainActor
+    func testSettingsOpensBrand() throws {
+        let app = launchWithFixtures()
+        let gear = app.buttons["home.settings"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button in Home's bar.")
+
+        let brand = app.buttons["settings.brand"]
+        // On a cold launch the bar can redraw under the first tap.
+        for _ in 0..<3 where !brand.exists {
+            gear.tap()
+            _ = brand.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(brand.exists, "Settings never opened, or has no Brand row.")
+
+        let accent = element("settings.brandAccent.current", in: app)
+        XCTAssertFalse(accent.exists, "The accent is still in Settings' own list.")
+        for _ in 0..<3 where !accent.exists {
+            brand.tap()
+            _ = accent.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(accent.exists, "The Brand row never opened the brand screen.")
+
+        // Under the accent's grid: scrolled to only if it isn't in view.
+        let iconStyle = element("settings.brandIconStyle.current", in: app)
+        for _ in 0..<4 where !iconStyle.exists {
+            app.swipeUp()
+            _ = iconStyle.waitForExistence(timeout: 2)
+        }
+        XCTAssertTrue(iconStyle.exists, "The brand screen has no icon style.")
+    }
+
     /// With no favorites Home is the only tab, and its empty state's "Add
     /// your first team" opens the team browser.
     @MainActor
