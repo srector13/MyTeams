@@ -157,37 +157,64 @@ final class HomeUITests: XCTestCase {
         XCTAssertTrue(alerts.exists, "Settings never opened from Home.")
     }
 
-    /// Settings' Brand row opens the brand screen, which holds the accent
-    /// and the logo's style; Settings' own list holds neither.
+    /// Settings' Theme row opens the theme screen, which holds the one
+    /// palette picker; Settings' own list doesn't.
     @MainActor
-    func testSettingsOpensBrand() throws {
+    func testSettingsOpensTheme() throws {
         let app = launchWithFixtures()
         let gear = app.buttons["home.settings"]
         XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button in Home's bar.")
 
-        let brand = app.buttons["settings.brand"]
+        let themeRow = app.buttons["settings.theme"]
         // On a cold launch the bar can redraw under the first tap.
-        for _ in 0..<3 where !brand.exists {
+        for _ in 0..<3 where !themeRow.exists {
             gear.tap()
-            _ = brand.waitForExistence(timeout: 5)
+            _ = themeRow.waitForExistence(timeout: 5)
         }
-        XCTAssertTrue(brand.exists, "Settings never opened, or has no Brand row.")
+        XCTAssertTrue(themeRow.exists, "Settings never opened, or has no Theme row.")
 
-        let accent = element("settings.brandAccent.current", in: app)
-        XCTAssertFalse(accent.exists, "The accent is still in Settings' own list.")
-        for _ in 0..<3 where !accent.exists {
-            brand.tap()
-            _ = accent.waitForExistence(timeout: 5)
+        let current = element("settings.theme.current", in: app)
+        XCTAssertFalse(current.exists, "The theme is still in Settings' own list.")
+        for _ in 0..<3 where !current.exists {
+            themeRow.tap()
+            _ = current.waitForExistence(timeout: 5)
         }
-        XCTAssertTrue(accent.exists, "The Brand row never opened the brand screen.")
+        XCTAssertTrue(current.exists, "The Theme row never opened the theme screen.")
+        XCTAssertFalse(element("settings.brandAccent.current", in: app).exists, "The old accent grid is still there.")
 
-        // Under the accent's grid: scrolled to only if it isn't in view.
-        let iconStyle = element("settings.brandIconStyle.current", in: app)
-        for _ in 0..<4 where !iconStyle.exists {
+        // The grid's last tile: scrolled to only if it isn't in view.
+        let graphite = element("settings.theme.graphite", in: app)
+        for _ in 0..<4 where !graphite.exists || !graphite.isHittable {
             app.swipeUp()
-            _ = iconStyle.waitForExistence(timeout: 2)
+            _ = graphite.waitForExistence(timeout: 2)
         }
-        XCTAssertTrue(iconStyle.exists, "The brand screen has no icon style.")
+        XCTAssertTrue(graphite.exists, "The theme screen has no Graphite tile.")
+        XCTAssertTrue(element("settings.theme.classic", in: app).exists, "The theme screen has no Classic tile.")
+    }
+
+    /// A launch that asks for the theme step (`ThemeOnboarding.launchKey`)
+    /// shows it over Home, with every palette, Continue pinned below the
+    /// grid; Skip closes it. (That it never comes back is
+    /// `BrandThemeTests`'.)
+    @MainActor
+    func testThemeOnboardingSkips() throws {
+        let app = launch(environment: ["MYTEAMS_ONBOARDING": "1"])
+        let skip = app.buttons["onboarding.theme.skip"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 10), "The theme step never showed.")
+        XCTAssertTrue(element("onboarding.theme.classic", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["onboarding.theme.continue"].exists, "No Continue on the theme step.")
+
+        // The grid's last tile: scrolled to only if it isn't in view.
+        let graphite = element("onboarding.theme.graphite", in: app)
+        for _ in 0..<4 where !graphite.exists || !graphite.isHittable {
+            app.swipeUp()
+            _ = graphite.waitForExistence(timeout: 2)
+        }
+        XCTAssertTrue(graphite.exists, "The theme step has no Graphite tile.")
+
+        skip.tap()
+        XCTAssertTrue(skip.waitForNonExistence(timeout: 5), "Skip didn't close the theme step.")
+        XCTAssertTrue(app.buttons["home.settings"].waitForExistence(timeout: 5))
     }
 
     /// With no favorites Home is the only tab, and its empty state's "Add
