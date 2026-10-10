@@ -50,7 +50,7 @@ enum AboutInfo {
     }
 }
 
-/// The app's settings: appearance, game alerts, the reader's teams, photo
+/// The app's settings: appearance and brand accent, game alerts, the reader's teams, photo
 /// credits and the API-Football key, and what build this is.
 ///
 /// Opened from the gear in Home's or a team page's navigation bar, as a
@@ -62,6 +62,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
+    @AppStorage(BrandAccent.storageKey) private var brandAccent: BrandAccent = .classic
 
     @State private var showsBrowser = false
 
@@ -86,6 +87,20 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.appearance")
                 } header: {
                     Text("Appearance")
+                }
+
+                // Applies at once, app-wide: the root reads the same key
+                // (`MyTeamsApp`).
+                Section {
+                    LabeledContent("Accent", value: brandAccent.title)
+                        .accessibilityIdentifier("settings.brandAccent.current")
+                    BrandAccentPicker(selection: $brandAccent)
+                } header: {
+                    Text("Accent Color")
+                } footer: {
+                    // iOS limits (`BrandAccent`): the icon is the bundle's,
+                    // and the launch screen is drawn before the app runs.
+                    Text("Colors the myTeams logo, buttons and highlights. The App Store icon and the launch screen can't change with this setting.")
                 }
 
                 // No header: the row says what it is, and a header repeating
@@ -189,15 +204,71 @@ struct SettingsView: View {
         }
     }
 
-    /// The brand logo, in the art drawn for the scheme on screen.
+    /// The brand logo, in the art drawn for the scheme on screen, its
+    /// arches in the brand accent.
     private var logo: some View {
-        Image(colorScheme == .dark ? "myTeamsLogoOnDark" : "myTeamsLogoOnLight")
-            .resizable()
-            .scaledToFit()
+        BrandLogoMark(art: colorScheme == .dark ? "myTeamsLogoOnDark" : "myTeamsLogoOnLight")
             .frame(width: BrandLogo.inline)
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
             .accessibilityLabel("myTeams")
+    }
+}
+
+/// The brand accents as swatches, solids, gradients and specials in turn:
+/// a tap picks one. Each swatch draws its fill, and the chosen one is
+/// ringed and checked.
+private struct BrandAccentPicker: View {
+    @Binding var selection: BrandAccent
+
+    private let columns = [GridItem(.adaptive(minimum: 44, maximum: 56), spacing: Theme.Spacing.m)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            ForEach(BrandAccent.Style.allCases, id: \.self) { style in
+                Text(style.title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+                LazyVGrid(columns: columns, spacing: Theme.Spacing.m) {
+                    ForEach(BrandAccent.allCases.filter { $0.style == style }) { accent in
+                        swatch(accent)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, Theme.Spacing.xs)
+    }
+
+    private func swatch(_ accent: BrandAccent) -> some View {
+        let selected = accent == selection
+        return Button {
+            selection = accent
+        } label: {
+            Circle()
+                .fill(accent.fill)
+                .frame(width: 36, height: 36)
+                .overlay {
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .shadow(color: .black.opacity(0.4), radius: 1)
+                    }
+                }
+                .padding(3)
+                .overlay {
+                    Circle()
+                        .strokeBorder(selected ? AnyShapeStyle(accent.fill) : AnyShapeStyle(Color.clear), lineWidth: 2)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        // A plain style, so the whole row isn't one tappable cell.
+        .buttonStyle(.plain)
+        .accessibilityLabel(accent.title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier("settings.brandAccent.\(accent.rawValue)")
     }
 }
 

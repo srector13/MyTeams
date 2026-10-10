@@ -35,10 +35,9 @@ struct NewsDetailView: View {
                 Label {
                     Text("Can't Open This Article")
                 } icon: {
-                    // Asset-catalog appearances pick the light/dark art.
-                    Image("myTeamsLogo")
-                        .resizable()
-                        .scaledToFit()
+                    // Asset-catalog appearances pick the light/dark art;
+                    // the arches take the brand accent.
+                    BrandLogoMark()
                         .frame(width: BrandLogo.inline)
                         .accessibilityHidden(true)
                 }

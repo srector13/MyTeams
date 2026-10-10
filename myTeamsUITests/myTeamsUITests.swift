@@ -197,10 +197,16 @@ final class myTeamsUITests: XCTestCase {
         let done = app.buttons["teamBrowser.done"]
         let gear = app.buttons["home.settings"]
         let addTeams = app.buttons["settings.addTeams"]
+        let settingsClose = app.buttons["settings.done"]
         XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button on the team page.")
-        for _ in 0..<3 where !addTeams.exists {
+        for _ in 0..<3 where !settingsClose.exists && !addTeams.exists {
             gear.tap()
-            _ = addTeams.waitForExistence(timeout: 5)
+            _ = settingsClose.waitForExistence(timeout: 5)
+        }
+        // The accent grid put the row below the sheet's fold (t_e30988b7).
+        for _ in 0..<4 where settingsClose.exists && !addTeams.exists {
+            app.swipeUp()
+            _ = addTeams.waitForExistence(timeout: 2)
         }
         XCTAssertTrue(addTeams.exists, "Settings never opened.")
         for _ in 0..<3 {

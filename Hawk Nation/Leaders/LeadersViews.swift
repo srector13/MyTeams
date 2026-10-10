@@ -250,12 +250,14 @@ struct LeagueLeadersView: View {
     let league: LeagueID
     /// The ESPN id of the team whose players are highlighted, if any.
     var followedTeamID: String?
-    var teamColor: Color = .accentColor
+    /// The highlight; the brand accent without one.
+    var teamColor: Color?
     /// Given, a row is a button that hands its leader here and closes the
     /// sheet, so the presenter can open their team's page (t_8d15e070).
     var onPick: ((StatLeader) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.brandAccent) private var brandAccent
 
     @State private var leaders: StatLeaders?
     @State private var state: SectionLoadState = .loading
@@ -344,7 +346,7 @@ struct LeagueLeadersView: View {
                 content
             }
         }
-        .modifier(LeaderRowBackground(followed: followed, teamColor: teamColor))
+        .modifier(LeaderRowBackground(followed: followed, teamColor: teamColor ?? brandAccent.primaryColor))
     }
 
     /// Whether a leader names both themself and their team, which opening

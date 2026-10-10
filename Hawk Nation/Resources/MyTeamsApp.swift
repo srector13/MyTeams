@@ -37,6 +37,8 @@ struct MyTeamsApp: App {
     @State private var intentLinks = AppIntentLinks.shared
     /// Light, dark or the system's, from Settings (`SettingsView`).
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
+    /// The brand accent, from Settings (`BrandAccent`).
+    @AppStorage(BrandAccent.storageKey) private var brandAccent: BrandAccent = .classic
 
     var body: some Scene {
         WindowGroup {
@@ -48,6 +50,10 @@ struct MyTeamsApp: App {
                 // system's, as the launch screen before it does, and applies
                 // `appearance` once it has gone.
                 .splashOverlay(preferredColorScheme: appearance.colorScheme)
+                // Outside the splash, so it draws the logo in the accent too.
+                // The tint reaches every screen and sheet under the root,
+                // and changes the moment Settings does.
+                .brandAccent(brandAccent)
                 .onOpenURL { url in
                     open(url)
                 }

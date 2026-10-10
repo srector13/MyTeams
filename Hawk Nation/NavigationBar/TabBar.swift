@@ -939,20 +939,43 @@ private struct CrestOutline: ViewModifier {
 /// The myTeams mark in a team page's bar: the mono-white logo drawn as a
 /// template in the bar's ink (`teamInk(onHex:)`), white or black, so it
 /// reads on whatever the team colour is, like the title beside it.
+///
+/// With a brand accent other than the shipped blue, the arches take the
+/// accent and the T's bars keep the ink, as long as every stop of the
+/// accent reads on the team colour (`BarCrest.minimumContrast`); otherwise
+/// the whole mark stays in ink.
 private struct BrandBarLogo: View {
     let backgroundHex: String
 
+    @Environment(\.brandAccent) private var accent
+
     var body: some View {
-        Image("myTeamsLogoMonoWhite")
-            .renderingMode(.template)
-            .resizable()
-            .scaledToFit()
+        mark
             // Fixed: brand presence, not a control that grows with text.
             .frame(height: BrandLogo.bar)
             .teamInk(onHex: backgroundHex)
             .accessibilityLabel("myTeams")
             .accessibilityAddTraits(.isImage)
             .accessibilityIdentifier("home.brandLogo")
+    }
+
+    @ViewBuilder
+    private var mark: some View {
+        if !accent.isDefault, accent.reads(onHex: backgroundHex, minimum: BarCrest.minimumContrast) {
+            // The bars as a template, so they take the ink.
+            Image("myTeamsLogoBars")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .overlay {
+                    BrandArches(fill: accent.fill)
+                }
+        } else {
+            Image("myTeamsLogoMonoWhite")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+        }
     }
 }
 
