@@ -13,6 +13,12 @@ import SwiftUI
 /// SwiftUI so the hand-off from the launch screen to the app is seamless.
 /// `View.splashOverlay()` lays it over the root view until that view's
 /// first frame is up, then fades it away.
+///
+/// The logo's arches take the reader's brand accent (`BrandAccent`). The
+/// launch screen before it can't: iOS draws `UILaunchScreen` from the
+/// bundle before any of the app's code runs, so it is always the shipped
+/// art, and with another accent the arches change colour as the splash
+/// takes over. `LaunchscreenColor` stays, so the background doesn't.
 struct SplashView: View {
     var body: some View {
         ZStack {
@@ -21,9 +27,7 @@ struct SplashView: View {
             // white and black, as on the launch screen.
             // At the size the launch screen draws it, its natural point
             // width, so the hand-off doesn't shrink it (B-5).
-            Image("myTeamsLogo")
-                .resizable()
-                .scaledToFit()
+            BrandLogoMark()
                 .frame(width: BrandLogo.launch)
                 .accessibilityLabel("myTeams")
                 .accessibilityIdentifier("splash.logo")

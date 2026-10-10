@@ -496,9 +496,9 @@ struct TeamBrowserView: View {
             Image(systemName: sport.kind.browserSymbol)
                 .font(.title3)
                 .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.tint)
                 .frame(width: tileSize, height: tileSize)
-                .background(Color.accentColor.opacity(0.15), in: Theme.Radius.innerShape)
+                .background(.tint.opacity(0.15), in: Theme.Radius.innerShape)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -530,10 +530,10 @@ struct TeamBrowserView: View {
                 .font(.caption.weight(.heavy))
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.tint)
                 .padding(.horizontal, Theme.Spacing.xs)
                 .frame(minWidth: tileSize, minHeight: tileSize)
-                .background(Color.accentColor.opacity(0.15), in: Theme.Radius.innerShape)
+                .background(.tint.opacity(0.15), in: Theme.Radius.innerShape)
                 .accessibilityHidden(name == item.label)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -566,7 +566,7 @@ struct TeamBrowserView: View {
             Label("\(count)", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold).monospacedDigit())
                 .labelStyle(.titleAndIcon)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.tint)
                 .accessibilityLabel("\(count) followed")
         }
     }
@@ -710,7 +710,7 @@ struct TeamBrowserView: View {
                 Image(systemName: followed ? "checkmark.circle.fill" : "circle")
                     .symbolRenderingMode(.hierarchical)
                     .contentTransition(.symbolEffect(.replace))
-                    .foregroundStyle(followed ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(followed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .imageScale(.large)
                     // The store changes outside any animation; the replace
                     // effect needs one to play. None under Reduce Motion.

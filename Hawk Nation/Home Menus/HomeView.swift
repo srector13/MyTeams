@@ -74,10 +74,9 @@ private struct HomeEmptyState: View {
             Label {
                 Text("No Teams Yet")
             } icon: {
-                // Asset-catalog appearances pick the light/dark art.
-                Image("myTeamsLogo")
-                    .resizable()
-                    .scaledToFit()
+                // Asset-catalog appearances pick the light/dark art;
+                // the arches take the brand accent.
+                BrandLogoMark()
                     .frame(width: BrandLogo.hero)
                     .accessibilityHidden(true)
             }
