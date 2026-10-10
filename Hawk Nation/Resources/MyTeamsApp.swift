@@ -55,16 +55,16 @@ struct MyTeamsApp: App {
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
-                // Once, on a fresh install: the theme step. Inside the
-                // theme's root modifier, so its tiles and logo follow the
-                // choice as it is made.
+                // Once, on a fresh install: the walkthrough, then the
+                // theme step. Inside the theme's root modifier, so its
+                // tiles and logo follow the choice as it is made.
                 .sheet(isPresented: Binding(
                     get: { !themeOnboardingCompleted },
                     set: { presented in
                         if !presented { themeOnboardingCompleted = true }
                     }
                 )) {
-                    ThemeOnboardingView {
+                    OnboardingFlowView {
                         themeOnboardingCompleted = true
                     }
                 }
