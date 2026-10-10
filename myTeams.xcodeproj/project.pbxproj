@@ -1229,6 +1229,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Cobalt AppIcon-Sky AppIcon-Teal AppIcon-Green AppIcon-Gold AppIcon-Orange AppIcon-Red AppIcon-Pink AppIcon-Purple AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "myTeams-app.entitlements";
 				CODE_SIGN_STYLE = Automatic;
@@ -1254,6 +1255,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Cobalt AppIcon-Sky AppIcon-Teal AppIcon-Green AppIcon-Gold AppIcon-Orange AppIcon-Red AppIcon-Pink AppIcon-Purple AppIcon-Graphite";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "myTeams-app.entitlements";
 				CODE_SIGN_STYLE = Automatic;
