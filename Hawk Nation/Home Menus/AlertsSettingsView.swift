@@ -65,7 +65,11 @@ struct AlertsSettingsView: View {
             } header: {
                 Text("Game Alerts")
             } footer: {
-                Text("Starts, scores, period ends and finals for each team turned on. With the app closed, iOS decides when scores are checked, and may check rarely if you seldom open the app.")
+                if alertsBlocked {
+                    Text("Allow notifications above for these alerts to arrive. Each team keeps its choice until then.")
+                } else {
+                    Text("Starts, scores, period ends and finals for each team turned on. With the app closed, iOS decides when scores are checked, and may check rarely if you seldom open the app.")
+                }
             }
 
             Section {
@@ -144,9 +148,22 @@ struct AlertsSettingsView: View {
         .accessibilityIdentifier(identifier)
     }
 
+    /// Whether the system holds every alert back: notifications not allowed
+    /// yet, or turned off. Unknown until the permission is read.
+    private var alertsBlocked: Bool {
+        switch model.permission {
+        case .notDetermined?, .denied?: true
+        case .granted?, nil: false
+        }
+    }
+
     /// A team's row: its alerts at a glance, pushing to their settings.
+    /// A team that's on reads "Not Allowed" while notifications are off,
+    /// rather than an "On" no alert would follow.
     private func teamRow(_ team: TeamRef) -> some View {
-        let status = TeamAlertsView.status(store.alertKinds(for: team.id))
+        let kinds = store.alertKinds(for: team.id)
+        let isOff = kinds.map(\.isEmpty) ?? false
+        let status = alertsBlocked && !isOff ? "Not Allowed" : TeamAlertsView.status(kinds)
         return NavigationLink {
             TeamAlertsView(team: team)
         } label: {

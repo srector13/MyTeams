@@ -22,6 +22,9 @@ import UIKit
 ///
 /// The dark crest is used in Dark Mode when the feed lists one; callers that
 /// sit the crest on a team-coloured background choose with `forceVariant`.
+/// A crest with no dark variant whose main colour would sink into Dark
+/// Mode's cards (a navy or purple crest) gets a thin light outline, as the
+/// bar's crest does on a bar its colour (`BarCrest`).
 struct TeamLogo: View {
     let team: TeamRef
     let size: CGFloat
@@ -45,9 +48,17 @@ struct TeamLogo: View {
         return wanted == .dark && LogoStore.sourceURL(for: team, variant: .dark) == nil ? .default : wanted
     }
 
+    /// The dark grouped card most crests sit on in Dark Mode
+    /// (`secondarySystemGroupedBackground`).
+    private static let darkCardHex = "1C1C1E"
+
     var body: some View {
         let _ = storeRevision
         let chosen = variant
+        let outlined = forceVariant == nil
+            && colorScheme == .dark
+            && chosen == .default
+            && BarCrest.needsOutline(team: team, variant: .default, onHex: Self.darkCardHex)
         Group {
             if let stored = LogoStore.image(for: team, variant: chosen) {
                 Image(uiImage: stored)
@@ -61,6 +72,7 @@ struct TeamLogo: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
+        .modifier(CrestOutline(isOn: outlined))
         .frame(width: size, height: size)
         .task(id: "\(team.id)|\(chosen.rawValue)") {
             guard LogoStore.url(for: team, variant: chosen) == nil else { return }
@@ -82,6 +94,25 @@ struct TeamLogo: View {
                 .resizable()
         } else {
             MonogramTeam(team: team, size: size)
+        }
+    }
+}
+
+/// A one-point light outline traced around a crest's shape: four offset
+/// copies under it, as `BarCrest`'s outline is drawn.
+private struct CrestOutline: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            let ink = Color.white.opacity(0.85)
+            content
+                .shadow(color: ink, radius: 0, x: BarCrest.outlineWidth, y: 0)
+                .shadow(color: ink, radius: 0, x: -BarCrest.outlineWidth, y: 0)
+                .shadow(color: ink, radius: 0, x: 0, y: BarCrest.outlineWidth)
+                .shadow(color: ink, radius: 0, x: 0, y: -BarCrest.outlineWidth)
+        } else {
+            content
         }
     }
 }

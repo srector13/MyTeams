@@ -245,7 +245,7 @@ struct ConferenceSection: Identifiable, Hashable, Sendable {
 /// league, searchable throughout, with the reader's own teams pinned at the
 /// top for reordering and removal.
 ///
-/// Opened from Settings' "Add Teams" and "Manage Teams" rows (t_fa6748f4)
+/// Opened from Settings' "Add Teams" and "Edit My Teams" rows (t_fa6748f4)
 /// and from the empty home screen's "Add Teams", where a fresh install
 /// starts (t_afe5c297). Alerts live in Settings (B-9).
 ///
@@ -308,7 +308,9 @@ struct TeamBrowserView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            page(title, showsEditButton: true) {
+            // Edit only once there's an order to change or a team to remove
+            // in bulk: an empty list has nothing to edit.
+            page(title, showsEditButton: myTeams.count > 1) {
                 if !myTeams.isEmpty {
                     Section("My Teams") {
                         ForEach(myTeams) { team in
@@ -630,10 +632,10 @@ struct TeamBrowserView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(recent.team.displayName)
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.primary)
                     Text("“\(recent.query)”")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondary)
                 }
 
                 Spacer(minLength: 0)
@@ -680,15 +682,18 @@ struct TeamBrowserView: View {
                 TeamLogo(team: team, size: crestSize)
                     .frame(width: crestSize, height: crestSize)
 
+                // Concrete label colours: in a button, the hierarchical
+                // `.primary` and `.secondary` take the tint, and every team
+                // read as a link.
                 Text(team.displayName)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.primary)
 
                 // Always shown: "Kansas City" is four teams in four leagues.
                 Text(team.league.badge)
                     .font(.caption2.weight(.semibold))
                     .padding(.vertical, 2)
                     .padding(.horizontal, 6)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.secondary)
                     .background(Color.secondary.opacity(0.15))
                     .clipShape(.capsule)
 
@@ -699,7 +704,7 @@ struct TeamBrowserView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.vertical, 2)
                         .padding(.horizontal, 6)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
                         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
                 }
 
