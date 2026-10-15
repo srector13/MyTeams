@@ -1,0 +1,150 @@
+    t =   851.19s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   851.19s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   851.60s     Check for interrupting elements affecting "myTeams" Application
+    t =   851.98s         Wait for com.apple.springboard to idle
+    t =   852.04s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   852.05s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   852.06s     Synthesize event
+    t =   852.53s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   854.75s Added attachment named '04-live-dark__61-settings-alerts-scrolled'
+    t =   854.75s Checking existence of `Button (Element at index 0)`
+    t =   855.18s Find the Button (Element at index 0)
+    t =   855.67s Tap "BackButton" Button
+    t =   855.67s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   855.68s     Find the "BackButton" Button
+    t =   856.13s     Check for interrupting elements affecting "BackButton" Button
+    t =   856.48s         Wait for com.apple.springboard to idle
+    t =   856.52s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   856.52s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   856.53s     Synthesize event
+    t =   857.00s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   858.88s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   858.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   858.89s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   859.34s     Check for interrupting elements affecting "myTeams" Application
+    t =   859.79s         Wait for com.apple.springboard to idle
+    t =   859.83s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   859.83s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   859.83s     Synthesize event
+    t =   860.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   861.46s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   861.46s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   861.50s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   861.84s     Check for interrupting elements affecting "myTeams" Application
+    t =   862.20s         Wait for com.apple.springboard to idle
+    t =   862.24s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   862.25s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   862.25s     Synthesize event
+    t =   862.69s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   863.32s Checking existence of `"settings.teams" Button`
+    t =   864.02s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   864.02s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   864.03s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   864.40s     Check for interrupting elements affecting "myTeams" Application
+    t =   864.81s         Wait for com.apple.springboard to idle
+    t =   864.84s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   864.84s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   864.85s     Synthesize event
+    t =   865.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   867.83s Checking existence of `"settings.teams" Button`
+    t =   868.32s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   868.32s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   868.33s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   868.71s     Check for interrupting elements affecting "myTeams" Application
+    t =   869.17s         Wait for com.apple.springboard to idle
+    t =   869.23s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   869.23s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   869.24s     Synthesize event
+    t =   869.71s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   872.36s Checking existence of `"settings.teams" Button`
+    t =   872.95s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   872.95s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   872.95s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   873.31s     Check for interrupting elements affecting "myTeams" Application
+    t =   873.68s         Wait for com.apple.springboard to idle
+    t =   873.71s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   873.71s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   873.72s     Synthesize event
+    t =   874.16s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   876.83s Checking existence of `"settings.teams" Button`
+    t =   877.23s Checking existence of `"settings.apiFootball" Button`
+    t =   877.68s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   877.68s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   877.68s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   878.04s     Check for interrupting elements affecting "myTeams" Application
+    t =   878.51s         Wait for com.apple.springboard to idle
+    t =   878.54s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   878.54s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   878.54s     Synthesize event
+    t =   878.97s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   881.64s Checking existence of `"settings.apiFootball" Button`
+    t =   882.15s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   882.15s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   882.15s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   882.48s     Check for interrupting elements affecting "myTeams" Application
+    t =   882.78s         Wait for com.apple.springboard to idle
+    t =   882.84s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   882.84s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   882.84s     Synthesize event
+    t =   883.30s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   884.55s Checking existence of `"settings.apiFootball" Button`
+    t =   885.06s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   885.06s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   885.06s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   885.36s     Check for interrupting elements affecting "myTeams" Application
+    t =   885.72s         Wait for com.apple.springboard to idle
+    t =   885.75s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   885.75s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   885.75s     Synthesize event
+    t =   886.21s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   887.12s Checking existence of `"settings.apiFootball" Button`
+    t =   887.60s Checking existence of `"settings.addTeams" Button`
+    t =   888.03s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   888.03s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   888.04s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   888.35s     Check for interrupting elements affecting "myTeams" Application
+    t =   888.75s         Wait for com.apple.springboard to idle
+    t =   888.80s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   888.80s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   888.81s     Synthesize event
+    t =   889.26s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   890.17s Checking existence of `"settings.addTeams" Button`
+    t =   890.64s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   890.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   890.65s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   891.00s     Check for interrupting elements affecting "myTeams" Application
+    t =   891.36s         Wait for com.apple.springboard to idle
+    t =   891.40s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   891.41s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   891.41s     Synthesize event
+    t =   891.86s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   892.79s Checking existence of `"settings.addTeams" Button`
+    t =   893.29s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   893.29s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   893.29s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   893.69s     Check for interrupting elements affecting "myTeams" Application
+    t =   894.11s         Wait for com.apple.springboard to idle
+    t =   894.15s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   894.16s Ignoring failure to get hierarchy for remote element in process 22145 (Error getting main window kAXErrorServerNotFound)
+    t =   894.16s     Synthesize event
+    t =   894.60s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   895.51s Checking existence of `"settings.addTeams" Button`
+    t =   895.97s Terminate PolarReailty.Hawk-Nation:19427
+    t =   897.11s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark]' passed (900.514 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-15 18:23:31.593.
+	 Executed 1 test, with 0 failures (0 unexpected) in 900.514 (900.518) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-15 18:23:31.598.
+	 Executed 1 test, with 0 failures (0 unexpected) in 900.514 (900.523) seconds
+Test Suite 'Selected tests' passed at 2026-10-15 18:23:31.598.
+	 Executed 1 test, with 0 failures (0 unexpected) in 900.514 (900.526) seconds
+2026-10-15 18:23:34.373 xcodebuild[17612:51901] [MT] IDETestOperationsObserverDebug: 944.129 elapsed -- Testing started completed.
+2026-10-15 18:23:34.373 xcodebuild[17612:51901] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 18:23:34.373 xcodebuild[17612:51901] [MT] IDETestOperationsObserverDebug: 944.129 sec, +944.129 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

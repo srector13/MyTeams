@@ -1,0 +1,150 @@
+    t =   442.35s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   442.35s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   442.78s     Check for interrupting elements affecting "myTeams" Application
+    t =   443.11s     Synthesize event
+    t =   443.55s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   443.89s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   443.89s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   443.90s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   444.29s     Check for interrupting elements affecting "myTeams" Application
+    t =   444.55s     Synthesize event
+    t =   444.98s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   445.32s Checking existence of `"settings.alerts" Button`
+    t =   445.71s Find the "settings.alerts" Button
+    t =   446.10s Checking existence of `"settings.alerts" Button`
+    t =   446.41s Find the "settings.alerts" Button
+    t =   446.81s Checking existence of `"settings.alerts" Button`
+    t =   447.21s Find the "settings.alerts" Button
+    t =   447.68s Checking existence of `"settings.alerts" Button`
+    t =   448.18s Tap "settings.alerts" Button
+    t =   448.18s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   448.18s     Find the "settings.alerts" Button
+    t =   448.57s     Check for interrupting elements affecting "settings.alerts" Button
+    t =   448.99s     Synthesize event
+    t =   449.37s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   452.18s Added attachment named '04-live-dark__27-settings-alerts'
+    t =   452.19s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   452.19s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   452.19s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   452.58s     Check for interrupting elements affecting "myTeams" Application
+    t =   452.97s     Synthesize event
+    t =   453.41s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   455.32s Added attachment named '04-live-dark__28-settings-alerts-scrolled'
+    t =   455.32s Checking existence of `Button (Element at index 0)`
+    t =   455.76s Find the Button (Element at index 0)
+    t =   456.25s Tap "BackButton" Button
+    t =   456.25s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   456.25s     Find the "BackButton" Button
+    t =   456.60s     Check for interrupting elements affecting "BackButton" Button
+    t =   456.94s     Synthesize event
+    t =   457.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   459.37s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   459.37s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   459.37s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   459.70s     Check for interrupting elements affecting "myTeams" Application
+    t =   460.06s     Synthesize event
+    t =   460.50s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   460.84s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   460.84s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   460.85s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   461.21s     Check for interrupting elements affecting "myTeams" Application
+    t =   461.62s     Synthesize event
+    t =   462.07s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   462.40s Checking existence of `"settings.teams" Button`
+    t =   463.41s Find the "settings.teams" Button
+    t =   463.80s Checking existence of `"settings.teams" Button`
+    t =   464.29s Find the "settings.teams" Button
+    t =   464.62s Checking existence of `"settings.teams" Button`
+    t =   464.90s Find the "settings.teams" Button
+    t =   465.20s Checking existence of `"settings.teams" Button`
+    t =   465.52s Tap "settings.teams" Button
+    t =   465.52s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   465.52s     Find the "settings.teams" Button
+    t =   465.95s     Check for interrupting elements affecting "settings.teams" Button
+    t =   466.33s     Synthesize event
+    t =   466.72s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   469.80s Added attachment named '04-live-dark__29-settings-teams'
+    t =   469.81s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   469.81s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   469.82s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   470.36s     Check for interrupting elements affecting "myTeams" Application
+    t =   470.74s     Synthesize event
+    t =   471.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   473.03s Added attachment named '04-live-dark__30-settings-teams-scrolled'
+    t =   473.03s Checking existence of `Button (Element at index 0)`
+    t =   473.44s Find the Button (Element at index 0)
+    t =   475.12s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   475.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   475.12s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   475.52s     Check for interrupting elements affecting "myTeams" Application
+    t =   475.85s     Synthesize event
+    t =   476.30s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   476.91s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   476.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   476.92s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   477.44s     Check for interrupting elements affecting "myTeams" Application
+    t =   477.84s     Synthesize event
+    t =   478.31s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   478.96s Checking existence of `"settings.apiFootball" Button`
+    t =   479.46s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   479.46s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   479.46s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   479.77s     Check for interrupting elements affecting "myTeams" Application
+    t =   480.13s     Synthesize event
+    t =   480.66s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   483.19s Checking existence of `"settings.apiFootball" Button`
+    t =   484.13s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   484.13s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   484.29s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   484.74s     Check for interrupting elements affecting "myTeams" Application
+    t =   485.47s     Synthesize event
+    t =   486.04s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   487.53s Checking existence of `"settings.apiFootball" Button`
+    t =   488.13s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   488.13s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   488.15s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   488.68s     Check for interrupting elements affecting "myTeams" Application
+    t =   489.43s     Synthesize event
+    t =   489.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   491.71s Checking existence of `"settings.apiFootball" Button`
+    t =   492.23s Checking existence of `"settings.addTeams" Button`
+    t =   492.81s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   492.81s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   492.82s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   493.09s     Check for interrupting elements affecting "myTeams" Application
+    t =   493.45s     Synthesize event
+    t =   493.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   495.70s Checking existence of `"settings.addTeams" Button`
+    t =   496.04s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   496.04s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   496.04s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   496.28s     Check for interrupting elements affecting "myTeams" Application
+    t =   496.55s     Synthesize event
+    t =   496.99s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   498.35s Checking existence of `"settings.addTeams" Button`
+    t =   499.04s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   499.04s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   499.19s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   499.55s     Check for interrupting elements affecting "myTeams" Application
+    t =   499.98s     Synthesize event
+    t =   500.52s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   501.49s Checking existence of `"settings.addTeams" Button`
+    t =   501.76s Terminate PolarReailty.Hawk-Nation:21429
+    t =   502.81s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark]' passed (505.072 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-15 17:55:41.075.
+	 Executed 1 test, with 0 failures (0 unexpected) in 505.072 (505.076) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-15 17:55:41.078.
+	 Executed 1 test, with 0 failures (0 unexpected) in 505.072 (505.079) seconds
+Test Suite 'Selected tests' passed at 2026-10-15 17:55:41.078.
+	 Executed 1 test, with 0 failures (0 unexpected) in 505.072 (505.081) seconds
+2026-10-15 17:55:42.686 xcodebuild[18538:53650] [MT] IDETestOperationsObserverDebug: 555.279 elapsed -- Testing started completed.
+2026-10-15 17:55:42.686 xcodebuild[18538:53650] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 17:55:42.686 xcodebuild[18538:53650] [MT] IDETestOperationsObserverDebug: 555.279 sec, +555.279 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

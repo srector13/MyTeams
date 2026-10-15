@@ -1,0 +1,150 @@
+    t =   883.77s Checking existence of `"settings.addTeams" Button`
+    t =   884.16s Tap "settings.addTeams" Button
+    t =   884.16s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   884.16s     Find the "settings.addTeams" Button
+    t =   884.59s     Check for interrupting elements affecting "settings.addTeams" Button
+    t =   884.89s     Synthesize event
+    t =   884.93s         Scroll element to visible
+    t =   884.94s         Find the "settings.addTeams" Button
+    t =   885.34s         Computed hit point {-1, -1} after scrolling to visible
+    t =   885.34s         Failed: Not hittable: Button, {{30.7, 392.7}, {340.5, 47.9}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   886.35s     Retrying `Tap "settings.addTeams" Button` (attempt #2)
+    t =   886.35s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   886.36s         Find the "settings.addTeams" Button
+    t =   886.74s         Check for interrupting elements affecting "settings.addTeams" Button
+    t =   887.06s         Synthesize event
+    t =   887.11s             Scroll element to visible
+    t =   887.11s             Find the "settings.addTeams" Button
+    t =   887.58s             Computed hit point {-1, -1} after scrolling to visible
+    t =   887.58s             Failed: Not hittable: Button, {{30.7, 392.7}, {340.5, 47.9}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   888.59s     Retrying `Tap "settings.addTeams" Button` (attempt #3)
+    t =   888.59s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   888.59s         Find the "settings.addTeams" Button
+    t =   889.01s         Check for interrupting elements affecting "settings.addTeams" Button
+    t =   889.40s         Synthesize event
+    t =   889.46s             Scroll element to visible
+    t =   889.46s             Find the "settings.addTeams" Button
+    t =   889.88s             Computed hit point {-1, -1} after scrolling to visible
+    t =   889.88s             Failed: Not hittable: Button, {{30.7, 392.7}, {340.5, 47.9}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   889.88s Requesting snapshot of accessibility hierarchy for app with pid 21712
+/Users/runner/work/MyTeams/MyTeams/myTeamsUITests/GUIAuditScreenshotTests.swift:272: error: -[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark] : Failed to not hittable: Button, {{30.7, 392.7}, {340.5, 47.9}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   890.94s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark]' failed (892.276 seconds).
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test09_Accessibility]' started.
+    t =     0.00s Start Test at 2026-10-15 18:24:18.951
+    t =     0.11s Set Up
+    t =     0.11s Setting appearance mode to Light
+    t =     3.33s     Wait for PolarReailty.Hawk-Nation to idle
+    t =     3.33s Open PolarReailty.Hawk-Nation
+    t =     3.34s     Launch PolarReailty.Hawk-Nation
+    t =     3.34s         Terminate PolarReailty.Hawk-Nation:21712
+2026-10-15 18:24:26.833 xcodebuild[15233:46428] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-15 18:24:26.833 xcodebuild[15233:46428] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     9.42s         Setting up automation session
+    t =    14.93s         Wait for PolarReailty.Hawk-Nation to idle
+    t =    20.83s Waiting 20.0s for "home.settings" Button to exist
+    t =    21.87s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =    21.88s         Checking existence of `"home.settings" Button`
+    t =    26.71s Added attachment named '09-a11y-hc-light__01-home'
+    t =    26.73s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    26.90s Find the Button (Element at index 0)
+    t =    27.02s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    27.09s Find the Button (Element at index 0)
+    t =    27.22s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    27.33s Find the Button (Element at index 0)
+    t =    27.45s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    27.53s Checking existence of `Button (Element at index 0)`
+    t =    27.65s Waiting 5.0s for Button (Element at index 0) to exist
+    t =    28.68s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 0)`
+    t =    28.68s         Checking existence of `Button (Element at index 0)`
+    t =    28.79s Find the Button (Element at index 0)
+    t =    28.96s Tap "teamPicker.team.basketball/mens-college-basketball:2305" Button
+    t =    28.96s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    28.97s     Find the "teamPicker.team.basketball/mens-college-basketball:2305" Button
+    t =    29.09s     Check for interrupting elements affecting "teamPicker.team.basketball/mens-college-basketball:2305" Button
+    t =    29.22s     Synthesize event
+    t =    29.54s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    37.30s Added attachment named '09-a11y-hc-light__02-team-page'
+    t =    37.31s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =    37.31s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    37.32s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    38.05s     Check for interrupting elements affecting "myTeams" Application
+    t =    38.56s     Synthesize event
+    t =    39.01s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    42.82s Added attachment named '09-a11y-hc-light__03-team-page-scrolled'
+    t =    42.82s Terminate PolarReailty.Hawk-Nation:49841
+    t =    43.83s Setting appearance mode to Dark
+    t =    45.85s     Wait for com.apple.springboard to idle
+    t =    45.87s Open PolarReailty.Hawk-Nation
+    t =    45.87s     Launch PolarReailty.Hawk-Nation
+2026-10-15 18:25:04.916 xcodebuild[15233:46428] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-15 18:25:04.916 xcodebuild[15233:46428] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    47.08s         Setting up automation session
+    t =    49.41s         Wait for PolarReailty.Hawk-Nation to idle
+    t =    53.64s Waiting 20.0s for "home.settings" Button to exist
+    t =    54.68s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =    54.68s         Checking existence of `"home.settings" Button`
+    t =    59.22s Added attachment named '09-a11y-rt-dark__01-home'
+    t =    59.23s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    59.41s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    59.41s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    59.42s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    59.51s     Check for interrupting elements affecting "myTeams" Application
+    t =    59.66s     Synthesize event
+    t =    60.13s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    61.04s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    61.12s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    61.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    61.13s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    61.28s     Check for interrupting elements affecting "myTeams" Application
+    t =    61.38s     Synthesize event
+    t =    61.85s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    62.74s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    62.90s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    62.90s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    62.90s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    63.06s     Check for interrupting elements affecting "myTeams" Application
+    t =    63.17s     Synthesize event
+    t =    63.65s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    64.87s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    64.96s Checking existence of `Button (Element at index 1)`
+    t =    65.04s Waiting 5.0s for Button (Element at index 1) to exist
+    t =    66.08s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 1)`
+    t =    66.08s         Checking existence of `Button (Element at index 1)`
+    t =    66.18s Find the Button (Element at index 1)
+    t =    66.31s Tap "Kansas Jayhawks" Button
+    t =    66.31s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    66.31s     Find the "Kansas Jayhawks" Button
+    t =    66.40s     Check for interrupting elements affecting "Kansas Jayhawks" Button
+    t =    66.47s     Synthesize event
+    t =    66.79s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    73.90s Added attachment named '09-a11y-rt-dark__02-team-page'
+    t =    73.91s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =    73.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    73.91s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    74.39s     Check for interrupting elements affecting "myTeams" Application
+    t =    74.80s     Synthesize event
+    t =    75.25s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    79.68s Added attachment named '09-a11y-rt-dark__03-team-page-scrolled'
+    t =    79.69s Terminate PolarReailty.Hawk-Nation:51099
+    t =    80.75s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test09_Accessibility]' passed (80.944 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 18:25:39.895.
+	 Executed 4 tests, with 1 failure (0 unexpected) in 1121.028 (1121.039) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 18:25:39.896.
+	 Executed 4 tests, with 1 failure (0 unexpected) in 1121.028 (1121.041) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 18:25:39.897.
+	 Executed 4 tests, with 1 failure (0 unexpected) in 1121.028 (1121.042) seconds
+2026-10-15 18:26:20.631 xcodebuild[15233:46428] [MT] IDETestOperationsObserverDebug: 1215.096 elapsed -- Testing started completed.
+2026-10-15 18:26:20.632 xcodebuild[15233:46428] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 18:26:20.632 xcodebuild[15233:46428] [MT] IDETestOperationsObserverDebug: 1215.097 sec, +1215.097 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test04_LiveTourDark()
+
+** TEST EXECUTE FAILED **
+
+Testing started
