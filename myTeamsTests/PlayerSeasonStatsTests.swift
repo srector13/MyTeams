@@ -553,3 +553,121 @@ struct BaseballSlashLineTests {
         #expect(baseballSlashLine(.empty) == ".000/.000/.000")
     }
 }
+
+// MARK: - Player sheet
+
+@Suite("Player sheet: every sport's About card says Hometown", .tags(.golden))
+struct PlayerSheetHometownTests {
+    /// The About card's fact titles, in reading order.
+    private func titles(_ grid: PlayerSheetGrid) -> [String] {
+        grid.sections.flatMap(\.rows).flatMap { $0 }.map(\.title)
+    }
+
+    @Test("Basketball, football, baseball and hockey title the fact alike")
+    func hometown() throws {
+        // Was "HomeTown", and baseball's "Home Town".
+        let basketball = try #require(parseBasketballRoster(from: try Fixture.json("jayhawks_roster")).first)
+        let football = try #require(parseFootballRoster(from: try Fixture.json("chiefs_roster")).first)
+        let baseball = try #require(parseBaseballRoster(from: try Fixture.json("royals_roster")).first)
+        let hockey = try #require(parseHockeyRoster(from: try Fixture.json("nhl_roster")).first)
+        for about in [basketball.about, football.about, baseball.about, hockey.about] {
+            #expect(titles(about).contains("Hometown"))
+            #expect(!titles(about).contains("HomeTown") && !titles(about).contains("Home Town"))
+        }
+    }
+
+    @Test("A season line with no games yet reads as empty; one with figures doesn't")
+    func noFigures() throws {
+        // jayhawks_roster.json Jackson (4872739) before the sheet's fetch: the
+        // basketball placeholder, every figure 0.0 and every ring 0%.
+        let roster = parseBasketballRoster(from: try Fixture.json("jayhawks_roster"))
+        let jackson = try #require(roster.first { $0.playerID == "4872739" })
+        #expect(jackson.placeholderStatistics.hasNoFigures)
+
+        // nwsl_roster.json Maiara Niehues (402432): 19 appearances, 9 goals.
+        let niehues = try #require(parseSoccerRoster(from: try Fixture.json("nwsl_roster")).first { $0.playerID == "402432" })
+        #expect(!niehues.placeholderStatistics.hasNoFigures)
+    }
+}
+
+@Suite("Player sheet: empty seasons, missing facts and grid columns")
+struct PlayerSheetGridTests {
+    @Test("Zero however it's written, or missing, is no figure")
+    func emptyFigures() {
+        let zeros = PlayerSheetGrid(rows: [
+            [
+                .stat(title: "Average Points", info: "0.0"),
+                .stat(title: "Slash Line", info: ".000/.000/.000"),
+                .stat(title: "Time On Ice Per Game", info: "0:00"),
+            ],
+            [
+                .stat(title: "Goals", info: "N/A"),
+                .stat(title: "Assists", info: " -- "),
+                .percentage(title: "Save Percentage", progress: .nan),
+                .percentage(title: "Field Goal Percentage", progress: 0),
+            ],
+        ])
+        #expect(zeros.hasNoFigures)
+
+        // One real figure, even a negative one, is a season.
+        var plusMinus = zeros
+        plusMinus.sections[0].rows[0].append(.stat(title: "Plus/Minus", info: "-2"))
+        #expect(!plusMinus.hasNoFigures)
+        var ring = zeros
+        ring.sections[0].rows[0].append(.percentage(title: "Free Throw Percentage", progress: 0.5))
+        #expect(!ring.hasNoFigures)
+
+        // "0" games played is empty whatever else the line says.
+        let noGames = PlayerSheetGrid(rows: [[
+            .stat(title: "Games Played", info: "0"),
+            .stat(title: "Average Points", info: "12.0"),
+        ]])
+        #expect(noGames.hasNoFigures)
+
+        // A grid with no cells has its own message.
+        #expect(!PlayerSheetGrid(sections: []).hasNoFigures)
+    }
+
+    @Test("Missing facts and Position are left off the About card")
+    func aboutFacts() {
+        let about = PlayerSheetGrid(rows: [
+            [
+                .fact(title: "Position", info: "Guard"),
+                .fact(title: "Class", info: "N/A"),
+                .fact(title: "Status", info: "n/a "),
+            ],
+            [
+                .fact(title: "Height", info: " -- "),
+                .fact(title: "Weight", info: "-"),
+                .fact(title: "Hometown", info: " Lawrence, KS "),
+            ],
+            [
+                .fact(title: "Age", info: ""),
+            ],
+        ])
+        #expect(about.aboutFacts.map(\.title) == ["Hometown"])
+        #expect(about.aboutFacts.map(\.info) == ["Lawrence, KS"])
+
+        // A box-score player with nothing known: no facts, so no card.
+        let unknown = PlayerSheetGrid(rows: [[
+            .fact(title: "Position", info: "Forward"),
+            .fact(title: "Height", info: "N/A"),
+        ]])
+        #expect(unknown.aboutFacts.isEmpty)
+    }
+
+    @Test("A lone cell on the last row gives up a column when that fills every row")
+    func columnCount() {
+        // Basketball's ten remaining cells: 3+3+3+1 becomes 2+2+2+2+2.
+        #expect(PlayerSheetGrid.columnCount(fitting: 3, cells: 10) == 2)
+        #expect(PlayerSheetGrid.columnCount(fitting: 3, cells: 4) == 2)
+        #expect(PlayerSheetGrid.columnCount(fitting: 4, cells: 9) == 3)
+        // Already even, or no fewer columns would do better.
+        #expect(PlayerSheetGrid.columnCount(fitting: 3, cells: 9) == 3)
+        #expect(PlayerSheetGrid.columnCount(fitting: 3, cells: 7) == 3)
+        #expect(PlayerSheetGrid.columnCount(fitting: 3, cells: 1) == 3)
+        #expect(PlayerSheetGrid.columnCount(fitting: 2, cells: 5) == 2)
+        // Never fewer than one, as at the largest text sizes.
+        #expect(PlayerSheetGrid.columnCount(fitting: 0, cells: 3) == 1)
+    }
+}
