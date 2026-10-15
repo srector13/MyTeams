@@ -1,0 +1,150 @@
+    t =   245.76s     Check for interrupting elements affecting "myTeams" Application
+    t =   245.99s         Wait for com.apple.springboard to idle
+    t =   246.03s     Synthesize event
+    t =   246.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   246.81s Checking existence of `"settings.teams" Button`
+    t =   247.24s Find the "settings.teams" Button
+    t =   247.57s Checking existence of `"settings.teams" Button`
+    t =   247.88s Find the "settings.teams" Button
+    t =   248.18s Checking existence of `"settings.teams" Button`
+    t =   248.44s Find the "settings.teams" Button
+    t =   248.77s Checking existence of `"settings.teams" Button`
+    t =   249.05s Tap "settings.teams" Button
+    t =   249.05s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   249.06s     Find the "settings.teams" Button
+    t =   249.36s     Check for interrupting elements affecting "settings.teams" Button
+    t =   249.55s         Wait for com.apple.springboard to idle
+    t =   249.59s     Synthesize event
+    t =   249.92s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   253.92s Added attachment named '04-live-dark__13-settings-teams'
+    t =   253.93s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   253.93s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   253.93s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   254.50s     Check for interrupting elements affecting "myTeams" Application
+    t =   254.93s         Wait for com.apple.springboard to idle
+    t =   255.01s     Synthesize event
+    t =   255.53s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   257.86s Added attachment named '04-live-dark__14-settings-teams-scrolled'
+    t =   257.87s Checking existence of `Button (Element at index 0)`
+    t =   258.24s Find the Button (Element at index 0)
+    t =   259.73s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   259.73s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   259.73s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   260.02s     Check for interrupting elements affecting "myTeams" Application
+    t =   260.37s         Wait for com.apple.springboard to idle
+    t =   260.48s     Synthesize event
+    t =   260.94s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   261.65s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   261.65s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   261.66s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   262.22s     Check for interrupting elements affecting "myTeams" Application
+    t =   262.58s         Wait for com.apple.springboard to idle
+    t =   262.65s     Synthesize event
+    t =   263.10s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   263.45s Checking existence of `"settings.apiFootball" Button`
+    t =   264.15s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   264.15s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   264.16s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   264.58s     Check for interrupting elements affecting "myTeams" Application
+    t =   265.08s         Wait for com.apple.springboard to idle
+    t =   265.15s     Synthesize event
+    t =   265.61s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   266.70s Checking existence of `"settings.apiFootball" Button`
+    t =   267.33s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   267.33s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   267.53s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   268.00s     Check for interrupting elements affecting "myTeams" Application
+    t =   268.45s         Wait for com.apple.springboard to idle
+    t =   268.52s     Synthesize event
+    t =   268.99s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   269.88s Checking existence of `"settings.apiFootball" Button`
+    t =   270.38s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   270.38s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   270.39s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   270.64s     Check for interrupting elements affecting "myTeams" Application
+    t =   270.93s         Wait for com.apple.springboard to idle
+    t =   270.98s     Synthesize event
+    t =   271.43s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   272.54s Checking existence of `"settings.apiFootball" Button`
+    t =   272.93s Checking existence of `"settings.addTeams" Button`
+    t =   273.31s Find the "settings.addTeams" Button
+    t =   273.84s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   273.84s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   273.85s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   274.26s     Check for interrupting elements affecting "myTeams" Application
+    t =   274.59s         Wait for com.apple.springboard to idle
+    t =   274.66s     Synthesize event
+    t =   275.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   276.15s Checking existence of `"settings.addTeams" Button`
+    t =   276.79s Find the "settings.addTeams" Button
+    t =   277.42s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   277.42s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   277.44s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   277.86s     Check for interrupting elements affecting "myTeams" Application
+    t =   278.24s         Wait for com.apple.springboard to idle
+    t =   278.31s     Synthesize event
+    t =   278.77s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   279.72s Checking existence of `"settings.addTeams" Button`
+    t =   280.27s Find the "settings.addTeams" Button
+    t =   280.88s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   280.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   280.88s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   281.10s     Check for interrupting elements affecting "myTeams" Application
+    t =   281.32s         Wait for com.apple.springboard to idle
+    t =   281.35s     Synthesize event
+    t =   281.82s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   283.06s Checking existence of `"settings.addTeams" Button`
+    t =   283.51s Tap "settings.addTeams" Button
+    t =   283.51s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   283.65s     Find the "settings.addTeams" Button
+    t =   284.01s     Check for interrupting elements affecting "settings.addTeams" Button
+    t =   284.32s         Wait for com.apple.springboard to idle
+    t =   284.37s     Synthesize event
+    t =   284.46s         Scroll element to visible
+    t =   284.47s         Find the "settings.addTeams" Button
+    t =   284.96s         Computed hit point {-1, -1} after scrolling to visible
+    t =   284.96s         Failed: Not hittable: Button, {{264.6, 687.1}, {502.8, 48.4}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   285.97s     Retrying `Tap "settings.addTeams" Button` (attempt #2)
+    t =   285.97s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   285.99s         Find the "settings.addTeams" Button
+    t =   286.43s         Check for interrupting elements affecting "settings.addTeams" Button
+    t =   286.83s             Wait for com.apple.springboard to idle
+    t =   286.89s         Synthesize event
+    t =   287.00s             Scroll element to visible
+    t =   287.00s             Find the "settings.addTeams" Button
+    t =   287.39s             Computed hit point {-1, -1} after scrolling to visible
+    t =   287.39s             Failed: Not hittable: Button, {{264.6, 687.1}, {502.8, 48.4}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   288.40s     Retrying `Tap "settings.addTeams" Button` (attempt #3)
+    t =   288.40s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   288.41s         Find the "settings.addTeams" Button
+    t =   288.87s         Check for interrupting elements affecting "settings.addTeams" Button
+    t =   289.15s             Wait for com.apple.springboard to idle
+    t =   289.18s         Synthesize event
+    t =   289.54s             Scroll element to visible
+    t =   289.54s             Find the "settings.addTeams" Button
+    t =   290.03s             Computed hit point {-1, -1} after scrolling to visible
+    t =   290.03s             Failed: Not hittable: Button, {{264.6, 687.1}, {502.8, 48.4}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   290.03s Requesting snapshot of accessibility hierarchy for app with pid 29928
+/Users/runner/work/MyTeams/MyTeams/myTeamsUITests/GUIAuditScreenshotTests.swift:272: error: -[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark] : Failed to not hittable: Button, {{264.6, 687.1}, {502.8, 48.4}}, identifier: 'settings.addTeams', label: 'Add Teams'
+    t =   290.85s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test04_LiveTourDark]' failed (292.259 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 16:58:40.019.
+	 Executed 4 tests, with 2 failures (0 unexpected) in 688.980 (688.990) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 16:58:40.020.
+	 Executed 4 tests, with 2 failures (0 unexpected) in 688.980 (688.991) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 16:58:40.020.
+	 Executed 4 tests, with 2 failures (0 unexpected) in 688.980 (688.993) seconds
+2026-10-15 16:59:41.156 xcodebuild[16312:50316] [MT] IDETestOperationsObserverDebug: 818.456 elapsed -- Testing started completed.
+2026-10-15 16:59:41.157 xcodebuild[16312:50316] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 16:59:41.158 xcodebuild[16312:50316] [MT] IDETestOperationsObserverDebug: 818.456 sec, +818.456 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test03_LiveTourLight()
+	GUIAuditScreenshotTests.test04_LiveTourDark()
+
+** TEST EXECUTE FAILED **
+
+Testing started

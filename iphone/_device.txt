@@ -1,0 +1,3 @@
+iPhone 17 Pro Max
+Xcode 26.6
+Build version 17F113

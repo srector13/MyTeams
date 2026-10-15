@@ -1,0 +1,10 @@
+03-live-light: missed team tab 0
+03-live-light: missed team tab 1
+03-live-light: missed team tab 2
+03-live-light: missed team tab 3
+03-live-light: missed settings row settings.apiFootball
+04-live-dark: missed team tab 0
+04-live-dark: missed team tab 1
+04-live-dark: missed team tab 2
+04-live-dark: missed team tab 3
+04-live-dark: missed settings row settings.apiFootball
