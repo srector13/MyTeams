@@ -169,6 +169,31 @@ struct ThemeTests {
         #expect(TeamColors.ink(on: team) != .clear)
     }
 
+    /// `foreground` laid over `background` at `opacity`, as a hex colour.
+    private func blend(_ foreground: String, over background: String, opacity: Double) -> String {
+        func channels(_ hex: String) -> [Double] {
+            let value = UInt32(hex, radix: 16) ?? 0
+            return [Double((value >> 16) & 0xFF), Double((value >> 8) & 0xFF), Double(value & 0xFF)]
+        }
+        let mixed = zip(channels(foreground), channels(background)).map { opacity * $0 + (1 - opacity) * $1 }
+        return mixed.map { String(format: "%02X", Int($0.rounded())) }.joined()
+    }
+
+    @Test("A result's word reads on its own wash, light and dark, at either strength", arguments: [
+        // Ink, the system colour of the wash, and the content card beneath.
+        (Theme.Outcome.winLightHex, "34C759", "FFFFFF"),
+        (Theme.Outcome.lossLightHex, "FF3B30", "FFFFFF"),
+        (Theme.Outcome.winDarkHex, "30D158", "1C1C1E"),
+        (Theme.Outcome.lossDarkHex, "FF453A", "1C1C1E"),
+    ])
+    func outcomeInk(ink: String, wash: String, card: String) throws {
+        for contrast in [ColorSchemeContrast.standard, .increased] {
+            let background = blend(wash, over: card, opacity: Theme.selectionWashOpacity(contrast: contrast))
+            let ratio = try #require(TeamColors.contrastRatio(ink, background))
+            #expect(ratio >= TeamColors.minimumInkContrast, "\(ink) on \(background): \(ratio)")
+        }
+    }
+
     @Test("A colourless team's fill is a fallback colour, never clear (B-1)")
     func colourlessFill() {
         let fill = TeamColors.fillHex(for: makeTeam(color: ""))

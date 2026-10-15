@@ -75,19 +75,65 @@ extension HomeFeed {
         return result
     }
 
-    /// Every story across the favorites' feeds, newest first, each story
-    /// once (a story tagged with two favorites is in both feeds), as the
-    /// first favorite in `teams` to list it. No cap: Home's news feed is
-    /// the page's bottom layer and draws its rows lazily.
+    /// Every story across the favorites' feeds, each story once (a story
+    /// tagged with two favorites is in both feeds), as the first favorite
+    /// in `teams` to list it.
+    ///
+    /// Dealt round-robin across the favorites rather than merged newest
+    /// first: one busy feed (an NFL team's mid-season) otherwise filled the
+    /// first screen on its own. Each favorite's stories keep their own
+    /// newest-first order; each round — every favorite's newest story not
+    /// yet dealt — goes newest first, so the freshest story leads. No cap:
+    /// Home's news feed is the page's bottom layer and draws its rows
+    /// lazily.
     static func headlines(teams: [TeamRef], articles: [TeamRef.ID: [News]]) -> [HomeHeadline] {
         var seen: Set<String> = []
-        var merged: [HomeHeadline] = []
+        var feeds: [[HomeHeadline]] = []
         for team in teams {
-            for article in articles[team.id] ?? [] where seen.insert(article.id).inserted {
-                merged.append(HomeHeadline(team: team, article: article))
+            let own = (articles[team.id] ?? [])
+                .filter { seen.insert($0.id).inserted }
+                .map { HomeHeadline(team: team, article: $0) }
+                .sorted { $0.article.publishedAt > $1.article.publishedAt }
+            if !own.isEmpty {
+                feeds.append(own)
             }
         }
-        return merged.sorted { $0.article.publishedAt > $1.article.publishedAt }
+
+        var dealt: [HomeHeadline] = []
+        let rounds = feeds.map(\.count).max() ?? 0
+        for round in 0..<rounds {
+            // Each favorite's story this round, by its place in `feeds`,
+            // which breaks a tie in favorites order.
+            let hand: [(order: Int, headline: HomeHeadline)] = feeds.indices.compactMap { order in
+                feeds[order].indices.contains(round) ? (order: order, headline: feeds[order][round]) : nil
+            }
+            dealt += hand
+                .sorted { first, second in
+                    let a = first.headline.article.publishedAt
+                    let b = second.headline.article.publishedAt
+                    return a == b ? first.order < second.order : a > b
+                }
+                .map(\.headline)
+        }
+        return dealt
+    }
+
+    /// How many games Upcoming and Recent Results show until the reader
+    /// asks for the rest: with many favorites they ran to eight rows and
+    /// more and pushed the news off the first screen.
+    static let collapsedGameCount = 4
+
+    /// The first `games` of `days`' games, still under their days: a day
+    /// cut short keeps the games before the cut, and the days after it go.
+    static func prefix(_ days: [HomeDay], games: Int) -> [HomeDay] {
+        var remaining = max(games, 0)
+        var shown: [HomeDay] = []
+        for day in days where remaining > 0 {
+            let kept = Array(day.games.prefix(remaining))
+            shown.append(HomeDay(date: day.date, games: kept))
+            remaining -= kept.count
+        }
+        return shown
     }
 
     /// One state for a section fed by every favorite's feed (P1's

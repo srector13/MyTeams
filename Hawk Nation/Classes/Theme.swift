@@ -94,6 +94,49 @@ enum Theme {
         static var chrome: Glass { .regular }
     }
 
+    /// The widest a page's column of content runs (B-14): about a
+    /// readable line's width. An iPhone's screen is narrower, so it only
+    /// caps an iPad's, where rows and cards ran the width of the screen.
+    /// See `View.readableContentWidth(_:)`.
+    static let readableWidth: CGFloat = 720
+
+    /// A result's word ("Win", "Loss") in the outcome's colour on a
+    /// result row: a deeper green and red in light mode and a paler pair
+    /// in dark, so the word reads at 4.5:1 or better on a content card
+    /// under the outcome's own wash at either strength
+    /// (`selectionWashOpacity`), where the system green and red did not
+    /// (about 2.2:1 and 3.5:1). The word carries the outcome; the colour
+    /// only echoes it (G-4).
+    enum Outcome {
+        static let winLightHex = "116329"
+        static let winDarkHex = "6EE7A0"
+        static let lossLightHex = "9F1A12"
+        static let lossDarkHex = "FF9E96"
+
+        static let win = adaptive(light: winLightHex, dark: winDarkHex)
+        static let loss = adaptive(light: lossLightHex, dark: lossDarkHex)
+
+        /// `light` in light mode, `dark` in dark mode.
+        private static func adaptive(light: String, dark: String) -> Color {
+            let lightColor = uiColor(light)
+            let darkColor = uiColor(dark)
+            return Color(uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark ? darkColor : lightColor
+            })
+        }
+
+        /// A six-digit hex colour; the constants above all are.
+        private static func uiColor(_ hex: String) -> UIColor {
+            let value = UInt32(hex, radix: 16) ?? 0
+            return UIColor(
+                red: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255,
+                alpha: 1
+            )
+        }
+    }
+
     /// The opacity of the team-colour wash behind a followed row (a
     /// standings row, a leaderboard row): faint by default, twice as strong
     /// under Increase Contrast. The wash only backs up the row's star and
@@ -254,6 +297,16 @@ extension View {
     /// content cards scroll, and glass is for the chrome above them (B1).
     func contentCard() -> some View {
         background(Theme.Surface.contentCard, in: Theme.Radius.cardShape)
+    }
+
+    /// A page's column of content, no wider than `maxWidth` and centred in
+    /// whatever is wider (B-14): on an iPad the rows, cards and tables ran
+    /// the width of the screen. A no-op on an iPhone, which is narrower
+    /// than the cap. Backgrounds drawn outside it (a team colour, the
+    /// grouped page) stay full-bleed; only the column is capped.
+    func readableContentWidth(_ maxWidth: CGFloat = Theme.readableWidth) -> some View {
+        frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity)
     }
 
     /// Draws a hand-rolled scrim layer (a team-colour wash, a dimmed crest)

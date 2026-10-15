@@ -348,9 +348,12 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "calendar", title: "Schedule") {
-                Text(record)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                // No "0-0" over a schedule with no games in it yet.
+                if !model.games.isEmpty {
+                    Text(record)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 if !seasonDrafts.isEmpty {
                     GlassEffectContainer(spacing: Theme.Spacing.s) {
                         SectionHeaderMenu(
@@ -370,7 +373,11 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             }
             .padding([.leading, .top, .trailing])
 
-            if usesStackedLayout && !model.games.isEmpty {
+            if model.games.isEmpty && model.scheduleState != .loading {
+                // A line, not a carousel's height of empty card: a team
+                // between seasons has nothing scheduled for months.
+                scheduleStatus
+            } else if usesStackedLayout && !model.games.isEmpty {
                 // Opens on the last result, as the carousel does.
                 StackedCarousel(items: model.games, start: model.nextGame - 1) { game in
                     gameButton(game)
@@ -398,6 +405,25 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(calendarMessage ?? "")
+        }
+    }
+
+    /// What a schedule with no games says, compact: one line once the feed
+    /// has answered with none, or the error and a retry.
+    @ViewBuilder
+    private var scheduleStatus: some View {
+        if model.scheduleState == .failed {
+            SectionStatusView(message: "Couldn't load the schedule") {
+                Task { await model.reloadSchedule() }
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            Text("Nothing scheduled")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding([.horizontal, .bottom])
+                .accessibilityIdentifier("schedule.empty")
         }
     }
 
@@ -429,19 +455,10 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             // of requests a minute.
             LazyHStack(spacing: Theme.Spacing.m) {
                 if model.games.isEmpty {
-                    switch model.scheduleState {
-                    case .loading:
-                        ForEach(0..<5, id: \.self) { _ in
-                            LoadingGameView()
-                        }
-                    case .loaded:
-                        SectionStatusView(message: "Nothing scheduled")
-                            .containerRelativeFrame(.horizontal)
-                    case .failed:
-                        SectionStatusView(message: "Couldn't load the schedule") {
-                            Task { await model.reloadSchedule() }
-                        }
-                        .containerRelativeFrame(.horizontal)
+                    // Only while loading: a schedule that answered with
+                    // no games, or failed, is `scheduleStatus`'s line.
+                    ForEach(0..<5, id: \.self) { _ in
+                        LoadingGameView()
                     }
                 } else {
                     ForEach(model.games) { game in
@@ -580,9 +597,9 @@ struct StandingsSection<Player: RosterPlayer>: View {
             } else {
                 switch model.standingsState {
                 case .loading:
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding()
+                    // Skeleton rows, as the other sections load (X-6).
+                    StandingsSkeleton()
+                        .padding([.horizontal, .bottom])
                 case .loaded:
                     SectionStatusView(message: "No standings yet")
                         .frame(maxWidth: .infinity)
@@ -631,39 +648,46 @@ private struct StandingsTable: View {
     /// (B-3).
     @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 20
 
-    /// A numeric column: its heading, and each row's value.
+    /// The followed team's row, in the table's coordinate space
+    /// (`"standings.table"`), for the one band of team colour drawn
+    /// behind it (`followedBand`).
+    @State private var followedRowFrame: CGRect?
+
+    /// A numeric column: its heading, how VoiceOver reads a value in it
+    /// ("8 wins", "games behind 2.5"), and each row's value.
     private struct Column {
         let title: String
+        let spoken: (String) -> String
         let value: (StandingsEntry) -> String
     }
 
     private var columns: [Column] {
-        let wins = Column(title: "W") { "\($0.record.wins)" }
-        let losses = Column(title: "L") { "\($0.record.losses)" }
-        let points = Column(title: "Pts") { $0.record.points.map(String.init) ?? "" }
+        let wins = Column(title: "W", spoken: { "\($0) wins" }) { "\($0.record.wins)" }
+        let losses = Column(title: "L", spoken: { "\($0) losses" }) { "\($0.record.losses)" }
+        let points = Column(title: "Pts", spoken: { "\($0) points" }) { $0.record.points.map(String.init) ?? "" }
 
         switch kind {
         case .pointsTable:
             return [
                 wins,
-                Column(title: "D") { "\($0.record.ties)" },
+                Column(title: "D", spoken: { "\($0) draws" }) { "\($0.record.ties)" },
                 losses,
-                Column(title: "GD") { $0.goalDifference },
+                Column(title: "GD", spoken: { "goal difference \($0)" }) { $0.goalDifference },
                 points,
             ]
         case .records where group.entries.first?.record.format == .winLossOvertimeLoss:
-            let otl = Column(title: "OTL") { "\($0.record.overtimeLosses)" }
+            let otl = Column(title: "OTL", spoken: { "\($0) overtime losses" }) { "\($0.record.overtimeLosses)" }
             return [wins, losses, otl, points] + extraColumns
         case .records:
             var columns = [wins, losses]
             // Ties only where someone has one (an NFL or college season).
             if group.entries.contains(where: { $0.record.ties > 0 }) {
-                columns.append(Column(title: "T") { "\($0.record.ties)" })
+                columns.append(Column(title: "T", spoken: { "\($0) ties" }) { "\($0.record.ties)" })
             }
-            columns.append(Column(title: "GB") { $0.gamesBehind })
+            columns.append(Column(title: "GB", spoken: { "games behind \($0)" }) { $0.gamesBehind })
             return columns + extraColumns
         case .rankings:
-            return [Column(title: "Record") { $0.record.summary }]
+            return [Column(title: "Record", spoken: { "record \($0)" }) { $0.record.summary }]
         }
     }
 
@@ -674,9 +698,9 @@ private struct StandingsTable: View {
         group.extraColumns(kind: kind, isAccessibilitySize: dynamicTypeSize.isAccessibilitySize).map { extra -> Column in
             switch extra {
             case .conferenceRecord:
-                return Column(title: "Conf") { $0.conferenceRecord }
+                return Column(title: "Conf", spoken: { "conference record \($0)" }) { $0.conferenceRecord }
             case .streak:
-                return Column(title: "Strk") { $0.streak }
+                return Column(title: "Strk", spoken: { "streak \($0)" }) { $0.streak }
             }
         }
     }
@@ -734,13 +758,16 @@ private struct StandingsTable: View {
             }
             .font(Theme.Typography.statLabel)
             .foregroundStyle(.secondary)
+            // Each row says its own columns (`accessibilityLabel(for:)`).
+            .accessibilityHidden(true)
 
             ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
                 let followed = entry.teamID == followedID
+                let rank = entry.rank ?? position + 1
                 GridRow {
                     // The zone bar runs the row's full height: the cell is
                     // stretched to the row's tallest (the crest) first.
-                    Text("\(entry.rank ?? position + 1)")
+                    Text("\(rank)")
                         .foregroundStyle(.secondary)
                         .padding(.leading, zoned ? Theme.Spacing.s : 0)
                         .frame(maxHeight: .infinity)
@@ -749,6 +776,14 @@ private struct StandingsTable: View {
                                 ZoneBar(colorHex: zone.colorHex)
                             }
                         }
+                        // As tall as the row, so its frame is the row's
+                        // for the followed team's band.
+                        .onGeometryChange(for: CGRect.self) { proxy in
+                            proxy.frame(in: .named("standings.table"))
+                        } action: { frame in
+                            if followed { followedRowFrame = frame }
+                        }
+                        .accessibilityHidden(true)
                     HStack(spacing: Theme.Spacing.s) {
                         TeamLogo(team: crestTeam(for: entry), size: crestSize)
                         Text(rowName(entry))
@@ -764,21 +799,30 @@ private struct StandingsTable: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityElement(children: .combine)
+                    // The whole row to VoiceOver, as one element: its rank,
+                    // team and columns, "9th, Kansas, 0 wins, 0 losses",
+                    // and a tap's action. A grid row can't be one element
+                    // itself, so the team's cell speaks for it and the
+                    // others are hidden.
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(accessibilityLabel(for: entry, rank: rank, columns: columns))
                     .accessibilityAddTraits(followed ? .isSelected : [])
                     .accessibilityAddTraits(opensPage(entry) ? .isButton : [])
                     // The zone the bar shows by colour alone.
                     .accessibilityValue(entry.zone?.note ?? "")
+                    .accessibilityAction {
+                        open(entry)
+                    }
                     .accessibilityIdentifier("standings.team.\(entry.teamID)")
                     ForEach(columns.indices, id: \.self) { index in
                         Text(columns[index].value(entry))
                             .monospacedDigit()
+                            .accessibilityHidden(true)
                     }
                 }
                 .font(.footnote)
                 .fontWeight(followed ? .bold : .regular)
                 .padding(.vertical, 2)
-                .background(followed ? teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast)) : Color.clear)
                 // Another team's row opens its page (t_8d15e070).
                 .contentShape(.rect)
                 .onTapGesture {
@@ -786,6 +830,42 @@ private struct StandingsTable: View {
                 }
             }
         }
+        .coordinateSpace(.named("standings.table"))
+        // One band behind the followed team's whole row: a background on a
+        // grid row is each cell's, which broke it into a rectangle per
+        // cell with the column spacing between.
+        .background(alignment: .topLeading) {
+            followedBand
+        }
+    }
+
+    /// The followed team's row picked out in a faint wash of its colour,
+    /// the table's full width; nothing when the table on show doesn't
+    /// hold the team.
+    @ViewBuilder
+    private var followedBand: some View {
+        if let frame = followedRowFrame, group.entries.contains(where: { $0.teamID == followedID }) {
+            RoundedRectangle(cornerRadius: Theme.Spacing.xs, style: .continuous)
+                .fill(teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast)))
+                // The row's 2 pt of padding above and below its cells, and
+                // a little room either side of the text.
+                .frame(height: frame.height + 4)
+                .padding(.horizontal, -Theme.Spacing.xs)
+                .offset(y: frame.minY - 2)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// "9th, #7 Kansas, 10 wins, 6 losses, games behind 2": a row's rank,
+    /// team and columns, each value with its column's name, skipping the
+    /// cells the feed left blank ("" or "-").
+    private func accessibilityLabel(for entry: StandingsEntry, rank: Int, columns: [Column]) -> String {
+        let values = columns.compactMap { column -> String? in
+            let value = column.value(entry)
+            guard !value.isEmpty, value != "-", value != "–", value != "—" else { return nil }
+            return column.spoken(value)
+        }
+        return ([ordinalString(rank), rowName(entry)] + values).joined(separator: ", ")
     }
 
     /// The row's team name, `"#7 Kansas"` when the league's poll ranks it.
@@ -817,6 +897,40 @@ private struct StandingsTable: View {
             colorHex: "", alternateColorHex: "",
             logoURL: entry.logoURL, logoDarkURL: nil, logoAsset: nil
         )
+    }
+}
+
+/// The standings while they load: a table's worth of skeleton rows — rank,
+/// crest, name, figures — in the pulse the other sections' placeholders
+/// take (X-6), where a spinner sat alone. "Loading" to VoiceOver.
+private struct StandingsSkeleton: View {
+    /// As a row's crest (`StandingsTable.crestSize`).
+    @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .footnote) private var lineHeight: CGFloat = 12
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            LoadingView()
+                .frame(width: 120, height: lineHeight)
+
+            ForEach(0..<6, id: \.self) { _ in
+                HStack(spacing: Theme.Spacing.m) {
+                    LoadingView()
+                        .frame(width: 14, height: lineHeight)
+                    HStack(spacing: Theme.Spacing.s) {
+                        LoadingViewCircle()
+                            .frame(width: crestSize, height: crestSize)
+                        LoadingView()
+                            .frame(height: lineHeight)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    LoadingView()
+                        .frame(width: 64, height: lineHeight)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Loading"))
     }
 }
 
@@ -894,10 +1008,16 @@ extension StandingsGroup {
     }
 }
 
-/// The news feed at the foot of a team page.
+/// The news feed at the foot of a team page: the team's latest stories,
+/// up to `shownCount`. The feed runs back months; Home's merged feed is
+/// the place for more.
 struct NewsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let teamColor: Color
+
+    /// The most stories the section lists. Computed: a generic type can't
+    /// store a static.
+    static var shownCount: Int { 8 }
 
     @State private var selectedArticle: News?
 
@@ -927,7 +1047,7 @@ struct NewsSection<Player: RosterPlayer>: View {
                         }
                     }
                 } else {
-                    ForEach(model.articles) { article in
+                    ForEach(model.articles.prefix(Self.shownCount)) { article in
                         Button {
                             selectedArticle = article
                         } label: {
@@ -1187,6 +1307,9 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                // In line with the cards' column; the team colour behind
+                // it is `TeamPage`'s, full-bleed.
+                .readableContentWidth()
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { height in
@@ -1197,6 +1320,9 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
                 content
             }
             .padding(Theme.Spacing.m)
+            // A readable column on an iPad, centred on the grouped page,
+            // which stays full-bleed (B-14); the full width on an iPhone.
+            .readableContentWidth()
             // At least a screen tall, so a page still loading covers the hero
             // rather than leaving it showing beneath a short page.
             .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)

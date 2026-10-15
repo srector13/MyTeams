@@ -9,9 +9,10 @@
 import SwiftUI
 
 /// The Home tab, first in the bar and where the app opens (t_0b94af11):
-/// every favorite at once. The page is the favorites' news, merged newest
-/// first; above it, only when they have games, the games under way, the
-/// next seven days' games and the last seven days' results (t_191edd79).
+/// every favorite at once. The page is the favorites' news, dealt
+/// round-robin across them (`HomeFeed.headlines`); above it, only when
+/// they have games, the games under way, the next seven days' games and
+/// the last seven days' results (t_191edd79).
 ///
 /// Reads what the app already loads (`HomeViewModel`): the scoreboards the
 /// app polls for every favorite, the seasons it loaded to know which, and
@@ -108,8 +109,9 @@ private struct HomeGameSelection: Identifiable {
 
 /// Home's page (t_191edd79): the game sections that have games — Live Now,
 /// Upcoming, Recent Results, each an inset card, none drawn when it has
-/// nothing — over the news feed, every favorite's stories newest first, a
-/// card each. All of it scrolls under the bars (T-4, T-5).
+/// nothing — over the news feed, every favorite's stories dealt in turn
+/// (`HomeFeed.headlines`), a card each. All of it scrolls under the bars
+/// (T-4, T-5).
 private struct HomeSections: View {
     let model: HomeViewModel
 
@@ -119,6 +121,12 @@ private struct HomeSections: View {
 
     @State private var selectedGame: HomeGameSelection?
     @State private var selectedArticle: HomeHeadline?
+
+    /// Whether Upcoming and Recent Results show every game, past their
+    /// first `HomeFeed.collapsedGameCount`: with many favorites they ran to
+    /// eight rows and more and pushed the news off the first screen.
+    @State private var showsAllUpcoming = false
+    @State private var showsAllResults = false
 
     /// Where a sheet zooms from: its card (X-13).
     @Namespace private var cardZoom
@@ -150,6 +158,9 @@ private struct HomeSections: View {
                 newsFeed
             }
             .padding(Theme.Spacing.m)
+            // A readable column on an iPad, centred on the grouped page
+            // (B-14); the full width on an iPhone.
+            .readableContentWidth()
         }
         .scrollIndicators(.hidden)
         // Pull to refresh: the news, whatever its age, and any season that
@@ -159,6 +170,9 @@ private struct HomeSections: View {
         }
         // The page scrolls under the tab bar, softened there (T-5, B5).
         .scrollEdgeEffectStyle(.soft, for: .bottom)
+        // A hard edge under the bar's title and date: a soft one left the
+        // headlines scrolled beneath legible enough to collide with them.
+        .scrollEdgeEffectStyle(.hard, for: .top)
         .accessibilityIdentifier("home.page")
         .sheet(item: $selectedGame) { selection in
             GameDetailView(game: selection.entry.game, team: selection.entry.team)
@@ -216,11 +230,15 @@ private struct HomeSections: View {
 
     // MARK: Upcoming
 
-    /// The next seven days' games, under a header for each day.
+    /// The next seven days' games, under a header for each day: the first
+    /// `HomeFeed.collapsedGameCount` of them until the reader asks for the
+    /// rest.
     private func upcomingSection(_ days: [HomeDay]) -> some View {
-        section(systemImage: "calendar", title: "Upcoming", identifier: "home.section.upcoming") {
+        let total = days.reduce(0) { $0 + $1.games.count }
+        let shown = showsAllUpcoming ? days : HomeFeed.prefix(days, games: HomeFeed.collapsedGameCount)
+        return section(systemImage: "calendar", title: "Upcoming", identifier: "home.section.upcoming") {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                ForEach(days) { day in
+                ForEach(shown) { day in
                     VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                         Text(dayTitle(day.date))
                             .font(.subheadline.bold())
@@ -233,6 +251,8 @@ private struct HomeSections: View {
                         }
                     }
                 }
+
+                showAllButton(total: total, showsAll: $showsAllUpcoming, identifier: "home.upcoming.showAll")
             }
             .padding([.horizontal, .bottom])
         }
@@ -254,23 +274,44 @@ private struct HomeSections: View {
 
     // MARK: Recent Results
 
-    /// The last seven days' results, newest first.
+    /// The last seven days' results, newest first: the first
+    /// `HomeFeed.collapsedGameCount` until the reader asks for the rest.
     private func resultsSection(_ results: [HomeGame]) -> some View {
-        section(systemImage: "flag.checkered", title: "Recent Results", identifier: "home.section.results") {
+        let shown = showsAllResults ? results : Array(results.prefix(HomeFeed.collapsedGameCount))
+        return section(systemImage: "flag.checkered", title: "Recent Results", identifier: "home.section.results") {
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                ForEach(results) { entry in
+                ForEach(shown) { entry in
                     gameRow(entry, source: "result", identifier: "home.result.\(entry.id)", tintsOutcome: true)
                 }
+
+                showAllButton(total: results.count, showsAll: $showsAllResults, identifier: "home.results.showAll")
             }
             .padding([.horizontal, .bottom])
+        }
+    }
+
+    /// "Show All (6)" under a game section holding more than
+    /// `HomeFeed.collapsedGameCount` games, and "Show Fewer" once open, as
+    /// a stacked carousel's (`StackedCarousel`). Nothing for a section that
+    /// fits.
+    @ViewBuilder
+    private func showAllButton(total: Int, showsAll: Binding<Bool>, identifier: String) -> some View {
+        if total > HomeFeed.collapsedGameCount {
+            Button(showsAll.wrappedValue ? "Show Fewer" : "Show All (\(total))") {
+                showsAll.wrappedValue.toggle()
+            }
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity)
+            .accessibilityIdentifier(identifier)
         }
     }
 
     // MARK: News
 
     /// The page's bottom layer: its header, then a card for each of the
-    /// favorites' stories, newest first, uncapped. Children of the page's
-    /// lazy stack, so a long feed costs only the rows on screen.
+    /// favorites' stories, dealt in turn across them, uncapped. Children
+    /// of the page's lazy stack, so a long feed costs only the rows on
+    /// screen.
     @ViewBuilder
     private var newsFeed: some View {
         SectionHeader(systemImage: "newspaper", title: "News")
@@ -648,7 +689,7 @@ private struct HomeGameRow: View {
                     Text(outcome)
                         .font(.caption.weight(.heavy))
                         .textCase(.uppercase)
-                        .foregroundStyle(tintsOutcome ? outcomeTint(content) : Color.secondary)
+                        .foregroundStyle(tintsOutcome ? outcomeInk(content) : Color.secondary)
                 } else {
                     Text(content.status)
                         .font(Theme.Typography.caption)
@@ -690,6 +731,17 @@ private struct HomeGameRow: View {
         case .win: return .green
         case .loss: return .red
         case .draw, nil: return .clear
+        }
+    }
+
+    /// The outcome's word on that wash: a green or red picked to read on
+    /// it in either appearance (`Theme.Outcome`), where the wash's own
+    /// system green and red did not. A draw's in secondary ink.
+    private func outcomeInk(_ content: GameCardContent) -> Color {
+        switch content.outcome {
+        case .win: return Theme.Outcome.win
+        case .loss: return Theme.Outcome.loss
+        case .draw, nil: return .secondary
         }
     }
 }
