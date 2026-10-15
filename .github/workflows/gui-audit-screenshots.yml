@@ -1,0 +1,159 @@
+# GUI audit screenshots (audit branch only)
+#
+# Runs GUIAuditScreenshotTests on iOS Simulators (a standard iPhone, the
+# smallest iPhone the runtime offers, and an iPad) and commits the PNGs to
+# the `claude/gui-audit-shots` branch so they can be reviewed without
+# downloading artifacts.
+
+name: GUI Audit Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'claude/gui-audit'
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: macos-26
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slot: iphone
+            prefer: 'iPhone 17 Pro|iPhone 17|iPhone 16 Pro'
+            only: ''
+          - slot: iphone-small
+            prefer: 'iPhone 17e|iPhone 16e|iPhone SE|iPhone 13 mini|iPhone 16'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test02_EmptyState -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test05_DynamicTypeAX3'
+          - slot: ipad
+            prefer: 'iPad Pro 13-inch|iPad Pro 11-inch|iPad Air 13-inch|iPad Air 11-inch|iPad'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test01_Onboarding -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test02_EmptyState -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test04_LiveTourDark'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick and boot simulator
+        shell: bash
+        env:
+          PREFER: ${{ matrix.prefer }}
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun simctl list devices available
+          UDID_NAME=$(xcrun simctl list devices available -j | PREFER="$PREFER" python3 -c '
+          import json, os, re, sys
+          devs = []
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              m = re.search(r"iOS-(\d+)-(\d+)(?:-(\d+))?$", runtime)
+              if not m:
+                  continue
+              v = tuple(int(p or 0) for p in m.groups())
+              for d in devices:
+                  devs.append((v, d["name"], d["udid"]))
+          for want in os.environ["PREFER"].split("|"):
+              hits = [d for d in devs if d[1].startswith(want)]
+              if hits:
+                  hits.sort(reverse=True)
+                  print(hits[0][2] + "|" + hits[0][1])
+                  break
+          ')
+          UDID="${UDID_NAME%%|*}"
+          NAME="${UDID_NAME#*|}"
+          echo "Using $NAME ($UDID)"
+          [ -n "$UDID" ]
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          # Clean status bar for screenshots.
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          echo "SIM_NAME=$NAME" >> "$GITHUB_ENV"
+
+      - name: Build for testing
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,id=$SIM_UDID" -skipPackagePluginValidation -skipMacroValidation -derivedDataPath dd build-for-testing CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -40
+
+      - name: Screenshot tour
+        shell: bash
+        continue-on-error: true
+        env:
+          TEST_RUNNER_AUDIT_SHOTS: '1'
+          ONLY: ${{ matrix.only }}
+        run: |
+          set -o pipefail
+          export TEST_RUNNER_AUDIT_SHOTS_DIR="$GITHUB_WORKSPACE/shots/${{ matrix.slot }}"
+          mkdir -p "$TEST_RUNNER_AUDIT_SHOTS_DIR"
+          ONLY_ARGS="$ONLY"
+          [ -z "$ONLY_ARGS" ] && ONLY_ARGS="-only-testing:myTeamsUITests/GUIAuditScreenshotTests"
+          # shellcheck disable=SC2086
+          xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,id=$SIM_UDID" -skipPackagePluginValidation -skipMacroValidation -derivedDataPath dd test-without-building CODE_SIGNING_ALLOWED=NO $ONLY_ARGS -resultBundlePath audit.xcresult 2>&1 | tee test.log | grep -E "Test Case|error|failed|passed|Executed" | tail -80
+
+      - name: Collect
+        if: always()
+        shell: bash
+        run: |
+          OUT="shots/${{ matrix.slot }}"
+          mkdir -p "$OUT"
+          echo "$SIM_NAME" > "$OUT/_device.txt"
+          xcodebuild -version >> "$OUT/_device.txt" 2>/dev/null || true
+          COUNT=$(find "$OUT" -name '*.png' | wc -l | tr -d ' ')
+          echo "PNG files written by runner: $COUNT"
+          if [ "$COUNT" = "0" ] && [ -d audit.xcresult ]; then
+            mkdir -p xc
+            xcrun xcresulttool export attachments --path audit.xcresult --output-path xc || true
+            python3 - "$OUT" <<'EOF'
+          import json, os, shutil, sys
+          out = sys.argv[1]
+          manifest = os.path.join("xc", "manifest.json")
+          if os.path.exists(manifest):
+              for test in json.load(open(manifest)):
+                  for a in test.get("attachments", []):
+                      name = a.get("suggestedHumanReadableName") or a["exportedFileName"]
+                      name = name.split("_0_")[0]
+                      if not name.endswith(".png"):
+                          name += ".png"
+                      shutil.copy(os.path.join("xc", a["exportedFileName"]), os.path.join(out, name))
+          EOF
+          fi
+          tail -150 test.log > "$OUT/_test-tail.log" 2>/dev/null || true
+          grep -E "error:" build.log | head -50 > "$OUT/_build-errors.log" 2>/dev/null || true
+          find "$OUT" -type f | wc -l
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.slot }}
+          path: shots/${{ matrix.slot }}
+          retention-days: 7
+
+  publish:
+    needs: shots
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: shots
+          pattern: shots-*
+      - name: Commit to claude/gui-audit-shots
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init -q repo
+          cd repo
+          for d in ../shots/shots-*; do
+            mkdir -p "$(basename "$d" | sed 's/^shots-//')"
+            cp -R "$d"/. "$(basename "$d" | sed 's/^shots-//')/"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -b claude/gui-audit-shots
+          git add -A
+          git commit -qm "GUI audit screenshots for ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git push -f origin claude/gui-audit-shots

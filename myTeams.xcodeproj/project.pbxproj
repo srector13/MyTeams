@@ -100,6 +100,7 @@
 		CCD996A8700D1012D5207A84 /* ScheduleParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */; };
 		CDA8493C950E9AE560961E76 /* myTeamsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */; };
 		7A1D0C3E5B9F2A4C6E8D1B35 /* GlassUIScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D0C3E5B9F2A4C6E8D1B34 /* GlassUIScreenshotTests.swift */; };
+		AA0D17A0D17A0D17A0D17A02 /* GUIAuditScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0D17A0D17A0D17A0D17A01 /* GUIAuditScreenshotTests.swift */; };
 		5457AB9FB521F7F7EF0268A3 /* myTeamWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		228A9DA3DCBC7960F1F35DF0 /* LogoStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5883C4F774D9544E81195578 /* LogoStore.swift */; };
 		5E1A7C33D9B04F2A8C6E1F02 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E1A7C33D9B04F2A8C6E1F01 /* SharedStore.swift */; };
@@ -306,6 +307,7 @@
 		CD86BF7A0097CF9FDA696FF4 /* ScheduleParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScheduleParsingTests.swift"; sourceTree = "<group>"; };
 		E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "myTeamsUITests.swift"; sourceTree = "<group>"; };
 		7A1D0C3E5B9F2A4C6E8D1B34 /* GlassUIScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassUIScreenshotTests.swift"; sourceTree = "<group>"; };
+		AA0D17A0D17A0D17A0D17A01 /* GUIAuditScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GUIAuditScreenshotTests.swift"; sourceTree = "<group>"; };
 		B6CDB6E5D160E013280D3C68 /* myTeams.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = myTeams.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C47665D1BA4105DF9684DC4 /* myTeamWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = myTeamWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E02A90D9643568EA39115CFB /* myTeamsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = myTeamsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -735,6 +737,7 @@
 			children = (
 				E2173D3CEFFD95945C667099 /* myTeamsUITests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B34 /* GlassUIScreenshotTests.swift */,
+				AA0D17A0D17A0D17A0D17A01 /* GUIAuditScreenshotTests.swift */,
 				A8F3D58A2369AEB7973BCAE1 /* HomeUITests.swift */,
 			);
 			path = "myTeamsUITests";
@@ -1100,6 +1103,7 @@
 				38C1E734968CF889E3E20FBC /* HomeUITests.swift in Sources */,
 				CDA8493C950E9AE560961E76 /* myTeamsUITests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B35 /* GlassUIScreenshotTests.swift in Sources */,
+				AA0D17A0D17A0D17A0D17A02 /* GUIAuditScreenshotTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
