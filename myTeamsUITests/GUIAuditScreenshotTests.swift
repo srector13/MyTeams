@@ -233,6 +233,10 @@ final class GUIAuditScreenshotTests: XCTestCase {
 
         // Each bundled team's page, scrolled to its end.
         for index in 0..<4 {
+            app.terminate()
+            app.launch()
+            _ = waitForHome(app)
+            pause(2)
             guard openTeam(app, index: index) else { continue }
             pause(5)
             shot("team\(index + 1)-top")
@@ -309,7 +313,10 @@ final class GUIAuditScreenshotTests: XCTestCase {
             shot("home")
             app.swipeUp(); pause(1.2); shot("home-scroll1")
             app.swipeUp(); pause(1.2); shot("home-scroll2")
-            for _ in 0..<4 { app.swipeDown() }
+            app.terminate()
+            app.launch()
+            _ = waitForHome(app)
+            pause(2)
             if openTeam(app, index: 1) {
                 pause(5)
                 shot("team-top")
@@ -442,7 +449,7 @@ final class GUIAuditScreenshotTests: XCTestCase {
             // By label, for a bar that lost its identifiers.
             let names = ["Hawkeyes", "Chiefs", "Royals", "Sporting"]
             if index < names.count {
-                tab = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", names[index])).firstMatch
+                tab = app.tabBars.buttons.matching(NSPredicate(format: "label CONTAINS %@", names[index])).firstMatch
             }
         }
         guard tab.waitForExistence(timeout: 5), tab.isHittable else {
