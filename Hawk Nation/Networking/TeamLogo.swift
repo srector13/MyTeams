@@ -23,8 +23,8 @@ import UIKit
 /// The dark crest is used in Dark Mode when the feed lists one; callers that
 /// sit the crest on a team-coloured background choose with `forceVariant`.
 /// A crest with no dark variant whose main colour would sink into Dark
-/// Mode's cards (a navy or purple crest) gets a thin light outline, as the
-/// bar's crest does on a bar its colour (`BarCrest`).
+/// Mode's cards (a navy or purple crest) gets a thin light outline, where
+/// the app supplies the rule (`crestOutlineRule`); the widget draws none.
 struct TeamLogo: View {
     let team: TeamRef
     let size: CGFloat
@@ -33,6 +33,7 @@ struct TeamLogo: View {
     var forceVariant: LogoVariant?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.crestOutlineRule) private var outlineRule
 
     /// Bumped when a crest lands in `LogoStore`, so the body reads it again.
     @State private var storeRevision = 0
@@ -48,17 +49,13 @@ struct TeamLogo: View {
         return wanted == .dark && LogoStore.sourceURL(for: team, variant: .dark) == nil ? .default : wanted
     }
 
-    /// The dark grouped card most crests sit on in Dark Mode
-    /// (`secondarySystemGroupedBackground`).
-    private static let darkCardHex = "1C1C1E"
-
     var body: some View {
         let _ = storeRevision
         let chosen = variant
         let outlined = forceVariant == nil
             && colorScheme == .dark
             && chosen == .default
-            && BarCrest.needsOutline(team: team, variant: .default, onHex: Self.darkCardHex)
+            && (outlineRule?(team) ?? false)
         Group {
             if let stored = LogoStore.image(for: team, variant: chosen) {
                 Image(uiImage: stored)
@@ -98,8 +95,15 @@ struct TeamLogo: View {
     }
 }
 
+extension EnvironmentValues {
+    /// Whether a crest with no dark variant needs `TeamLogo`'s light outline
+    /// in Dark Mode. The app measures the stored crest (`BarCrest`); `nil`,
+    /// as in the widget, draws none.
+    @Entry var crestOutlineRule: (@MainActor @Sendable (TeamRef) -> Bool)? = nil
+}
+
 /// A one-point light outline traced around a crest's shape: four offset
-/// copies under it, as `BarCrest`'s outline is drawn.
+/// copies under it, as the bar's outlined crest is drawn.
 private struct CrestOutline: ViewModifier {
     let isOn: Bool
 
@@ -107,10 +111,10 @@ private struct CrestOutline: ViewModifier {
         if isOn {
             let ink = Color.white.opacity(0.85)
             content
-                .shadow(color: ink, radius: 0, x: BarCrest.outlineWidth, y: 0)
-                .shadow(color: ink, radius: 0, x: -BarCrest.outlineWidth, y: 0)
-                .shadow(color: ink, radius: 0, x: 0, y: BarCrest.outlineWidth)
-                .shadow(color: ink, radius: 0, x: 0, y: -BarCrest.outlineWidth)
+                .shadow(color: ink, radius: 0, x: 1, y: 0)
+                .shadow(color: ink, radius: 0, x: -1, y: 0)
+                .shadow(color: ink, radius: 0, x: 0, y: 1)
+                .shadow(color: ink, radius: 0, x: 0, y: -1)
         } else {
             content
         }
