@@ -417,6 +417,9 @@ final class GUIAuditScreenshotTests: XCTestCase {
         app.launchEnvironment["MYTEAMS_FAVORITES"] = favorites
         app.launchEnvironment.merge(environment) { _, new in new }
         app.launchArguments += ["-UIPreferredContentSizeCategoryName", typeSize.rawValue]
+        // The app's own Appearance setting (`AppAppearance.storageKey`), as
+        // the device appearance alone doesn't reach a relaunched app here.
+        app.launchArguments += ["-settings.appearance", dark ? "dark" : "light"]
         app.launch()
         return app
     }
