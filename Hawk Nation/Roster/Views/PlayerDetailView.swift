@@ -708,6 +708,8 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
         // Full height: the header alone fills most of a medium detent.
         .presentationDetents([.large])
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .presentationDragIndicator(.visible)
         .task(id: season) {
             await loadStatistics()
