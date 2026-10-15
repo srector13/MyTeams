@@ -344,7 +344,7 @@ final class GUIAuditScreenshotTests: XCTestCase {
         let picker = element("playerDetail.section", in: app)
         if picker.exists {
             let segments = picker.buttons
-            for i in 1..<min(segments.count, 4) {
+            for i in stride(from: 1, to: min(segments.count, 4), by: 1) {
                 segments.element(boundBy: i).tapIfExists(); pause(2)
                 shot("team\(team)-player-section\(i)")
             }
@@ -432,10 +432,21 @@ final class GUIAuditScreenshotTests: XCTestCase {
 
     @MainActor
     private func openTeam(_ app: XCUIApplication, index: Int) -> Bool {
-        for _ in 0..<3 where !app.tabBars.buttons.element(boundBy: 1).isHittable { app.swipeDown() }
-        let byID = app.tabBars.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
-        let tab = byID.count > index ? byID.element(boundBy: index) : app.tabBars.buttons.element(boundBy: index + 1)
-        guard tab.waitForExistence(timeout: 5) else { miss("team tab \(index)"); return false }
+        let byID = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "teamPicker.team."))
+        for _ in 0..<3 where !(byID.count > index && byID.element(boundBy: index).isHittable) { app.swipeDown(); pause(0.4) }
+        var tab = byID.count > index ? byID.element(boundBy: index) : app.tabBars.buttons.element(boundBy: index + 1)
+        if !tab.exists {
+            // By label, for a bar that lost its identifiers.
+            let names = ["Hawkeyes", "Chiefs", "Royals", "Sporting"]
+            if index < names.count {
+                tab = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", names[index])).firstMatch
+            }
+        }
+        guard tab.waitForExistence(timeout: 5), tab.isHittable else {
+            shot("team-tab-\(index)-not-found")
+            miss("team tab \(index)")
+            return false
+        }
         tab.tap()
         return true
     }
