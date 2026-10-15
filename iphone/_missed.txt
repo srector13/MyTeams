@@ -1,0 +1,6 @@
+03-live-light: missed team1 schedule
+04-live-dark: missed team1 schedule
+04-live-dark: missed settings row settings.alerts
+04-live-dark: missed settings row settings.teams
+04-live-dark: missed settings row settings.advanced
+05-ax3-light: missed team2 schedule

@@ -1,0 +1,150 @@
+    t =   719.07s Find the "settings.alerts" Button
+    t =   719.31s Checking existence of `"settings.alerts" Button`
+    t =   719.52s Find the "settings.alerts" Button
+    t =   719.75s Checking existence of `"settings.alerts" Button`
+    t =   720.01s Find the "settings.alerts" Button
+    t =   720.25s Checking existence of `"settings.alerts" Button`
+    t =   720.48s Tap "settings.alerts" Button
+    t =   720.48s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   720.48s     Find the "settings.alerts" Button
+    t =   720.77s     Check for interrupting elements affecting "settings.alerts" Button
+    t =   720.98s     Synthesize event
+    t =   721.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   723.61s Added attachment named '03-live-light__60-settings-alerts'
+    t =   723.61s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   723.61s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   723.62s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   723.95s     Check for interrupting elements affecting "myTeams" Application
+    t =   724.19s     Synthesize event
+    t =   724.66s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   727.07s Added attachment named '03-live-light__61-settings-alerts-scrolled'
+    t =   727.07s Checking existence of `Button (Element at index 0)`
+    t =   727.37s Find the Button (Element at index 0)
+    t =   727.67s Tap "BackButton" Button
+    t =   727.67s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   727.67s     Find the "BackButton" Button
+    t =   727.92s     Check for interrupting elements affecting "BackButton" Button
+    t =   728.13s     Synthesize event
+    t =   728.46s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   730.39s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   730.39s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   730.39s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   730.56s     Check for interrupting elements affecting "myTeams" Application
+    t =   730.73s     Synthesize event
+    t =   731.17s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   731.51s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   731.51s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   731.53s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   731.80s     Check for interrupting elements affecting "myTeams" Application
+    t =   732.01s     Synthesize event
+    t =   732.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   732.80s Checking existence of `"settings.teams" Button`
+    t =   733.10s Find the "settings.teams" Button
+    t =   733.38s Checking existence of `"settings.teams" Button`
+    t =   733.62s Find the "settings.teams" Button
+    t =   733.91s Checking existence of `"settings.teams" Button`
+    t =   734.17s Find the "settings.teams" Button
+    t =   734.42s Checking existence of `"settings.teams" Button`
+    t =   734.65s Tap "settings.teams" Button
+    t =   734.65s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   734.65s     Find the "settings.teams" Button
+    t =   734.88s     Check for interrupting elements affecting "settings.teams" Button
+    t =   735.08s     Synthesize event
+    t =   735.39s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   738.99s Added attachment named '03-live-light__62-settings-teams'
+    t =   739.00s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   739.00s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   739.00s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   739.32s     Check for interrupting elements affecting "myTeams" Application
+    t =   739.56s     Synthesize event
+    t =   740.02s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   741.94s Added attachment named '03-live-light__63-settings-teams-scrolled'
+    t =   741.94s Checking existence of `Button (Element at index 0)`
+    t =   742.22s Find the Button (Element at index 0)
+    t =   743.64s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   743.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   743.64s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   743.94s     Check for interrupting elements affecting "myTeams" Application
+    t =   744.20s     Synthesize event
+    t =   744.63s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   745.22s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   745.22s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   745.24s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   745.72s     Check for interrupting elements affecting "myTeams" Application
+    t =   745.98s     Synthesize event
+    t =   746.41s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   746.76s Checking existence of `"settings.advanced" Button`
+    t =   747.18s Find the "settings.advanced" Button
+    t =   747.55s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   747.55s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   747.71s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   747.97s     Check for interrupting elements affecting "myTeams" Application
+    t =   748.26s     Synthesize event
+    t =   748.69s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   749.66s Checking existence of `"settings.advanced" Button`
+    t =   750.02s Find the "settings.advanced" Button
+    t =   750.47s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   750.47s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   750.62s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   750.83s     Check for interrupting elements affecting "myTeams" Application
+    t =   751.15s     Synthesize event
+    t =   751.60s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   752.51s Checking existence of `"settings.advanced" Button`
+    t =   752.85s Find the "settings.advanced" Button
+    t =   753.23s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   753.23s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   753.40s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   753.65s     Check for interrupting elements affecting "myTeams" Application
+    t =   753.98s     Synthesize event
+    t =   754.43s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   755.53s Checking existence of `"settings.advanced" Button`
+    t =   755.90s Tap "settings.advanced" Button
+    t =   755.90s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   755.90s     Find the "settings.advanced" Button
+    t =   756.22s     Check for interrupting elements affecting "settings.advanced" Button
+    t =   756.43s     Synthesize event
+    t =   756.48s         Scroll element to visible
+    t =   756.61s         Find the "settings.advanced" Button
+    t =   756.90s         Computed hit point {-1, -1} after scrolling to visible
+    t =   756.90s         Failed: Not hittable: Button, {{30.7, 584.3}, {328.6, 47.7}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   757.90s     Retrying `Tap "settings.advanced" Button` (attempt #2)
+    t =   757.90s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   757.91s         Find the "settings.advanced" Button
+    t =   758.14s         Check for interrupting elements affecting "settings.advanced" Button
+    t =   758.35s         Synthesize event
+    t =   758.39s             Scroll element to visible
+    t =   758.39s             Find the "settings.advanced" Button
+    t =   758.70s             Computed hit point {-1, -1} after scrolling to visible
+    t =   758.70s             Failed: Not hittable: Button, {{30.7, 584.3}, {328.6, 47.7}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   759.71s     Retrying `Tap "settings.advanced" Button` (attempt #3)
+    t =   759.71s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   759.72s         Find the "settings.advanced" Button
+    t =   759.99s         Check for interrupting elements affecting "settings.advanced" Button
+    t =   760.22s         Synthesize event
+    t =   760.28s             Scroll element to visible
+    t =   760.28s             Find the "settings.advanced" Button
+    t =   760.67s             Computed hit point {-1, -1} after scrolling to visible
+    t =   760.67s             Failed: Not hittable: Button, {{30.7, 584.3}, {328.6, 47.7}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   760.67s Requesting snapshot of accessibility hierarchy for app with pid 41843
+/Users/runner/work/MyTeams/MyTeams/myTeamsUITests/GUIAuditScreenshotTests.swift:265: error: -[myTeamsUITests.GUIAuditScreenshotTests test03_LiveTourLight] : Failed to not hittable: Button, {{30.7, 584.3}, {328.6, 47.7}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   761.92s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test03_LiveTourLight]' failed (763.747 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 20:58:42.557.
+	 Executed 1 test, with 1 failure (0 unexpected) in 763.747 (763.748) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 20:58:42.558.
+	 Executed 1 test, with 1 failure (0 unexpected) in 763.747 (763.749) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 20:58:42.558.
+	 Executed 1 test, with 1 failure (0 unexpected) in 763.747 (763.751) seconds
+2026-10-15 20:59:18.412 xcodebuild[16452:49275] [MT] IDETestOperationsObserverDebug: 851.697 elapsed -- Testing started completed.
+2026-10-15 20:59:18.413 xcodebuild[16452:49275] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 20:59:18.413 xcodebuild[16452:49275] [MT] IDETestOperationsObserverDebug: 851.697 sec, +851.697 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test03_LiveTourLight()
+
+** TEST EXECUTE FAILED **
+
+Testing started

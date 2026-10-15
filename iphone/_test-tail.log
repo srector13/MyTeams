@@ -1,0 +1,150 @@
+    t =    94.87s Waiting 8.0s for "playerDetail.close" Button to exist
+    t =    95.94s     Checking `Expect predicate `existsNoRetry == 1` for object "playerDetail.close" Button`
+    t =    95.94s         Checking existence of `"playerDetail.close" Button`
+    t =    99.39s Added attachment named '05-ax3-light__10-team2-player'
+    t =    99.39s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =    99.39s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    99.39s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    99.51s     Check for interrupting elements affecting "myTeams" Application
+    t =    99.61s     Synthesize event
+    t =   100.03s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   103.30s Added attachment named '05-ax3-light__11-team2-player-scrolled'
+    t =   103.30s Checking existence of `"playerDetail.section" Any`
+    t =   103.38s Get number of matches for: Descendants matching type Button
+    t =   103.46s Checking existence of `"playerDetail.close" Button`
+    t =   103.58s Find the "playerDetail.close" Button
+    t =   103.71s Tap "playerDetail.close" Button
+    t =   103.71s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   103.72s     Find the "playerDetail.close" Button
+    t =   103.84s     Check for interrupting elements affecting "playerDetail.close" Button
+    t =   103.95s     Synthesize event
+    t =   104.25s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   106.23s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   106.23s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   106.23s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   106.31s     Check for interrupting elements affecting "myTeams" Application
+    t =   106.39s     Synthesize event
+    t =   106.83s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   107.54s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   107.54s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   107.55s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   107.73s     Check for interrupting elements affecting "myTeams" Application
+    t =   107.85s     Synthesize event
+    t =   108.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   109.28s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   109.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   109.29s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   109.39s     Check for interrupting elements affecting "myTeams" Application
+    t =   109.48s     Synthesize event
+    t =   109.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   110.49s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   110.49s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   110.49s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   110.65s     Check for interrupting elements affecting "myTeams" Application
+    t =   110.75s     Synthesize event
+    t =   111.19s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   111.78s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   111.78s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   111.79s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   112.01s     Check for interrupting elements affecting "myTeams" Application
+    t =   112.15s     Synthesize event
+    t =   112.59s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   113.55s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   113.55s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   113.56s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   113.67s     Check for interrupting elements affecting "myTeams" Application
+    t =   113.75s     Synthesize event
+    t =   114.19s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   115.04s Waiting 8.0s for Any (First Match) to exist
+    t =   116.06s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   116.06s         Checking existence of `Any (First Match)`
+    t =   116.35s         Capturing element debug description
+    t =   117.06s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   117.06s         Checking existence of `Any (First Match)`
+    t =   117.53s         Capturing element debug description
+    t =   118.04s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   118.04s         Checking existence of `Any (First Match)`
+    t =   118.32s         Capturing element debug description
+    t =   119.05s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   119.05s         Checking existence of `Any (First Match)`
+    t =   119.27s         Capturing element debug description
+    t =   120.12s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   120.12s         Checking existence of `Any (First Match)`
+    t =   120.35s         Capturing element debug description
+    t =   121.06s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   121.06s         Checking existence of `Any (First Match)`
+    t =   121.29s         Capturing element debug description
+    t =   122.11s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   122.11s         Checking existence of `Any (First Match)`
+    t =   122.50s         Capturing element debug description
+    t =   123.04s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   123.04s         Checking existence of `Any (First Match)`
+    t =   123.35s         Capturing element debug description
+    t =   123.35s     Checking existence of `Any (First Match)`
+    t =   123.61s Collecting debug information to assist test failure triage
+    t =   123.61s     Requesting snapshot of accessibility hierarchy for app with pid 79038
+    t =   123.80s Waiting 5.0s for "home.settings" Button to exist
+    t =   124.86s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =   124.87s         Checking existence of `"home.settings" Button`
+    t =   125.08s Checking existence of `"settings.done" Button`
+    t =   125.20s Tap "home.settings" Button
+    t =   125.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   125.20s     Find the "home.settings" Button
+    t =   125.28s     Check for interrupting elements affecting "home.settings" Button
+    t =   125.38s     Synthesize event
+    t =   125.72s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   127.36s Waiting 4.0s for "settings.done" Button to exist
+    t =   128.39s     Checking `Expect predicate `existsNoRetry == 1` for object "settings.done" Button`
+    t =   128.39s         Checking existence of `"settings.done" Button`
+    t =   128.60s Checking existence of `"settings.done" Button`
+    t =   128.75s Checking existence of `"settings.done" Button`
+    t =   128.90s Checking existence of `"settings.done" Button`
+    t =   130.76s Added attachment named '05-ax3-light__12-settings'
+    t =   130.76s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   130.76s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   130.77s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   130.90s     Check for interrupting elements affecting "myTeams" Application
+    t =   131.04s     Synthesize event
+    t =   131.47s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   133.80s Added attachment named '05-ax3-light__13-settings-scrolled'
+    t =   133.80s Checking existence of `"settings.theme" Button`
+    t =   133.97s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   133.97s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   133.98s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   134.09s     Check for interrupting elements affecting "myTeams" Application
+    t =   134.21s     Synthesize event
+    t =   134.63s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   136.06s Checking existence of `"settings.theme" Button`
+    t =   136.21s Find the "settings.theme" Button
+    t =   136.37s Checking existence of `"settings.theme" Button`
+    t =   136.52s Find the "settings.theme" Button
+    t =   136.69s Checking existence of `"settings.theme" Button`
+    t =   136.85s Tap "settings.theme" Button
+    t =   136.85s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   136.89s     Find the "settings.theme" Button
+    t =   137.05s     Check for interrupting elements affecting "settings.theme" Button
+    t =   137.17s     Synthesize event
+    t =   137.49s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   140.35s Added attachment named '05-ax3-light__14-settings-theme'
+    t =   140.35s Terminate PolarReailty.Hawk-Nation:79038
+    t =   141.40s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test05_DynamicTypeAX3]' passed (141.937 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 21:10:14.716.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 1631.933 (1631.943) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 21:10:14.721.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 1631.933 (1631.949) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 21:10:14.721.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 1631.933 (1631.950) seconds
+2026-10-15 21:10:40.906 xcodebuild[11955:37248] [MT] IDETestOperationsObserverDebug: 1695.093 elapsed -- Testing started completed.
+2026-10-15 21:10:40.906 xcodebuild[11955:37248] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 21:10:40.906 xcodebuild[11955:37248] [MT] IDETestOperationsObserverDebug: 1695.093 sec, +1695.093 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test03_LiveTourLight()
+
+** TEST EXECUTE FAILED **
+
+Testing started

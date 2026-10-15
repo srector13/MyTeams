@@ -1,0 +1,150 @@
+    t =   707.38s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   707.72s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   707.72s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   707.72s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   708.07s     Check for interrupting elements affecting "myTeams" Application
+    t =   708.33s         Wait for com.apple.springboard to idle
+    t =   708.36s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   708.36s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   708.37s     Synthesize event
+    t =   708.81s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   709.16s Checking existence of `"settings.teams" Button`
+    t =   709.56s Find the "settings.teams" Button
+    t =   710.02s Checking existence of `"settings.teams" Button`
+    t =   710.38s Find the "settings.teams" Button
+    t =   710.81s Checking existence of `"settings.teams" Button`
+    t =   711.18s Find the "settings.teams" Button
+    t =   711.56s Checking existence of `"settings.teams" Button`
+    t =   711.88s Tap "settings.teams" Button
+    t =   711.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   711.89s     Find the "settings.teams" Button
+    t =   712.16s     Check for interrupting elements affecting "settings.teams" Button
+    t =   712.39s         Wait for com.apple.springboard to idle
+    t =   712.43s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   712.43s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   712.44s     Synthesize event
+    t =   712.76s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   715.91s Added attachment named '03-live-light__63-settings-teams'
+    t =   715.92s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   715.92s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   715.92s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   716.28s     Check for interrupting elements affecting "myTeams" Application
+    t =   716.57s         Wait for com.apple.springboard to idle
+    t =   716.60s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   716.60s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   716.61s     Synthesize event
+    t =   717.10s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   719.16s Added attachment named '03-live-light__64-settings-teams-scrolled'
+    t =   719.17s Checking existence of `Button (Element at index 0)`
+    t =   719.46s Find the Button (Element at index 0)
+    t =   720.89s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   720.89s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   720.89s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   721.23s     Check for interrupting elements affecting "myTeams" Application
+    t =   721.53s         Wait for com.apple.springboard to idle
+    t =   721.57s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   721.57s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   721.57s     Synthesize event
+    t =   722.02s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   722.64s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   722.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   722.65s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   723.18s     Check for interrupting elements affecting "myTeams" Application
+    t =   723.53s         Wait for com.apple.springboard to idle
+    t =   723.57s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   723.58s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   723.58s     Synthesize event
+    t =   724.02s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   724.36s Checking existence of `"settings.advanced" Button`
+    t =   724.83s Find the "settings.advanced" Button
+    t =   725.24s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   725.24s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   725.24s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   725.50s     Check for interrupting elements affecting "myTeams" Application
+    t =   725.80s         Wait for com.apple.springboard to idle
+    t =   725.83s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   725.83s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   725.83s     Synthesize event
+    t =   726.26s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   727.77s Checking existence of `"settings.advanced" Button`
+    t =   728.10s Find the "settings.advanced" Button
+    t =   728.64s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   728.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   728.65s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   729.03s     Check for interrupting elements affecting "myTeams" Application
+    t =   729.38s         Wait for com.apple.springboard to idle
+    t =   729.43s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   729.43s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   729.44s     Synthesize event
+    t =   729.89s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   730.79s Checking existence of `"settings.advanced" Button`
+    t =   731.19s Find the "settings.advanced" Button
+    t =   731.64s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   731.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   731.80s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   732.06s     Check for interrupting elements affecting "myTeams" Application
+    t =   732.37s         Wait for com.apple.springboard to idle
+    t =   732.41s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   732.41s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   732.42s     Synthesize event
+    t =   732.85s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   733.75s Checking existence of `"settings.advanced" Button`
+    t =   734.28s Tap "settings.advanced" Button
+    t =   734.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   734.28s     Find the "settings.advanced" Button
+    t =   734.84s     Check for interrupting elements affecting "settings.advanced" Button
+    t =   735.13s         Wait for com.apple.springboard to idle
+    t =   735.17s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   735.18s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   735.19s     Synthesize event
+    t =   735.29s         Scroll element to visible
+    t =   735.30s         Find the "settings.advanced" Button
+    t =   736.04s         Computed hit point {-1, -1} after scrolling to visible
+    t =   736.04s         Failed: Not hittable: Button, {{264.6, 803.0}, {502.8, 48.4}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   737.05s     Retrying `Tap "settings.advanced" Button` (attempt #2)
+    t =   737.05s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   737.08s         Find the "settings.advanced" Button
+    t =   737.65s         Check for interrupting elements affecting "settings.advanced" Button
+    t =   738.15s             Wait for com.apple.springboard to idle
+    t =   738.20s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   738.21s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   738.22s         Synthesize event
+    t =   738.36s             Scroll element to visible
+    t =   738.36s             Find the "settings.advanced" Button
+    t =   738.99s             Computed hit point {-1, -1} after scrolling to visible
+    t =   738.99s             Failed: Not hittable: Button, {{264.6, 803.0}, {502.8, 48.4}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   740.00s     Retrying `Tap "settings.advanced" Button` (attempt #3)
+    t =   740.00s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   740.01s         Find the "settings.advanced" Button
+    t =   740.55s         Check for interrupting elements affecting "settings.advanced" Button
+    t =   740.92s             Wait for com.apple.springboard to idle
+    t =   740.98s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   740.99s Ignoring failure to get hierarchy for remote element in process 20819 (Error getting main window kAXErrorServerNotFound)
+    t =   741.00s         Synthesize event
+    t =   741.08s             Scroll element to visible
+    t =   741.08s             Find the "settings.advanced" Button
+    t =   741.53s             Computed hit point {-1, -1} after scrolling to visible
+    t =   741.53s             Failed: Not hittable: Button, {{264.6, 803.0}, {502.8, 48.4}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   741.53s Requesting snapshot of accessibility hierarchy for app with pid 35542
+/Users/runner/work/MyTeams/MyTeams/myTeamsUITests/GUIAuditScreenshotTests.swift:265: error: -[myTeamsUITests.GUIAuditScreenshotTests test03_LiveTourLight] : Failed to not hittable: Button, {{264.6, 803.0}, {502.8, 48.4}}, identifier: 'settings.advanced', label: 'Advanced'
+    t =   742.81s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test03_LiveTourLight]' failed (744.677 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 21:00:34.984.
+	 Executed 1 test, with 1 failure (0 unexpected) in 744.677 (744.679) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 21:00:34.985.
+	 Executed 1 test, with 1 failure (0 unexpected) in 744.677 (744.680) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 21:00:34.985.
+	 Executed 1 test, with 1 failure (0 unexpected) in 744.677 (744.684) seconds
+2026-10-15 21:01:38.581 xcodebuild[16701:51660] [MT] IDETestOperationsObserverDebug: 852.395 elapsed -- Testing started completed.
+2026-10-15 21:01:38.581 xcodebuild[16701:51660] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 21:01:38.581 xcodebuild[16701:51660] [MT] IDETestOperationsObserverDebug: 852.395 sec, +852.395 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test03_LiveTourLight()
+
+** TEST EXECUTE FAILED **
+
+Testing started
