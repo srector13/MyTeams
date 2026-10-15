@@ -1,0 +1,8 @@
+03-live-light: missed team tab 0
+03-live-light: missed team2 roster
+03-live-light: missed team2 schedule
+03-live-light: missed team2 leaders button
+03-live-light: missed team2 news
+03-live-light: missed team tab 2
+03-live-light: missed team tab 3
+05-ax3-light: missed team2 schedule

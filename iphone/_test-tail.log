@@ -1,0 +1,150 @@
+    t =    41.59s Tap "settings.theme.graphite" Button
+    t =    41.59s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    41.59s     Find the "settings.theme.graphite" Button
+    t =    42.82s     Check for interrupting elements affecting "settings.theme.graphite" Button
+    t =    43.11s     Synthesize event
+    t =    43.48s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    45.60s Added attachment named '10-theme__02-theme-settings-graphite'
+    t =    45.61s Checking existence of `"settings.done" Button`
+    t =    45.74s Checking existence of `"settings.done" Button`
+    t =    48.62s Added attachment named '10-theme__03-home-graphite'
+    t =    48.63s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    48.76s Find the Button (Element at index 1)
+    t =    48.98s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    48.98s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    48.98s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    49.16s     Check for interrupting elements affecting "myTeams" Application
+    t =    49.27s     Synthesize event
+    t =    49.73s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    50.78s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    50.85s Find the Button (Element at index 1)
+    t =    50.99s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    50.99s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    50.99s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    51.08s     Check for interrupting elements affecting "myTeams" Application
+    t =    51.18s     Synthesize event
+    t =    51.63s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    52.38s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    52.46s Find the Button (Element at index 1)
+    t =    52.61s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    52.61s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    52.69s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    52.78s     Check for interrupting elements affecting "myTeams" Application
+    t =    52.88s     Synthesize event
+    t =    53.34s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    54.05s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    54.14s Checking existence of `Button (Element at index 1)`
+    t =    54.23s Waiting 5.0s for Button (Element at index 1) to exist
+    t =    55.31s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 1)`
+    t =    55.31s         Checking existence of `Button (Element at index 1)`
+    t =    55.42s Find the Button (Element at index 1)
+    t =    55.77s Added attachment named '10-theme__04-team-tab-1-not-found'
+    t =    55.77s Terminate PolarReailty.Hawk-Nation:52259
+    t =    56.81s Setting appearance mode to Dark
+    t =    58.83s     Wait for com.apple.springboard to idle
+    t =    58.83s Open PolarReailty.Hawk-Nation
+    t =    58.83s     Launch PolarReailty.Hawk-Nation
+2026-10-15 20:22:43.777 xcodebuild[14416:44897] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-15 20:22:43.777 xcodebuild[14416:44897] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    59.71s         Setting up automation session
+    t =    61.44s         Wait for PolarReailty.Hawk-Nation to idle
+    t =    64.76s Waiting 20.0s for "home.settings" Button to exist
+    t =    65.78s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =    65.79s         Checking existence of `"home.settings" Button`
+    t =    69.36s Added attachment named '10-theme__05-home-graphite-dark'
+    t =    69.36s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    69.45s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    69.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    69.46s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    69.52s     Check for interrupting elements affecting "myTeams" Application
+    t =    69.58s     Synthesize event
+    t =    70.02s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    71.18s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    71.27s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    71.27s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    71.28s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    71.33s     Check for interrupting elements affecting "myTeams" Application
+    t =    71.42s     Synthesize event
+    t =    71.87s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    72.76s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    72.86s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    72.86s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    72.87s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    72.95s     Check for interrupting elements affecting "myTeams" Application
+    t =    73.03s     Synthesize event
+    t =    73.48s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    74.83s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    74.87s Checking existence of `Button (Element at index 2)`
+    t =    74.95s Waiting 5.0s for Button (Element at index 2) to exist
+    t =    75.96s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 2)`
+    t =    75.96s         Checking existence of `Button (Element at index 2)`
+    t =    76.02s Find the Button (Element at index 2)
+    t =    76.13s Tap "Kansas City Chiefs" Button
+    t =    76.13s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    76.13s     Find the "Kansas City Chiefs" Button
+    t =    76.19s     Check for interrupting elements affecting "Kansas City Chiefs" Button
+    t =    76.25s     Synthesize event
+    t =    76.57s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    86.23s Added attachment named '10-theme__06-team-page-graphite-dark'
+    t =    86.23s Waiting 5.0s for "home.settings" Button to exist
+    t =    87.26s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =    87.26s         Checking existence of `"home.settings" Button`
+    t =    87.40s Checking existence of `"settings.done" Button`
+    t =    87.77s Tap "home.settings" Button
+    t =    87.77s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    87.79s     Find the "home.settings" Button
+    t =    87.88s     Check for interrupting elements affecting "home.settings" Button
+    t =    88.01s     Synthesize event
+    t =    88.33s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    89.74s Waiting 4.0s for "settings.done" Button to exist
+    t =    90.79s     Checking `Expect predicate `existsNoRetry == 1` for object "settings.done" Button`
+    t =    90.79s         Checking existence of `"settings.done" Button`
+    t =    91.03s Checking existence of `"settings.done" Button`
+    t =    91.24s Checking existence of `"settings.done" Button`
+    t =    91.46s Checking existence of `"settings.done" Button`
+    t =    91.66s Checking existence of `"settings.theme" Button`
+    t =    91.90s Find the "settings.theme" Button
+    t =    92.12s Tap "settings.theme" Button
+    t =    92.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    92.12s     Find the "settings.theme" Button
+    t =    92.36s     Check for interrupting elements affecting "settings.theme" Button
+    t =    92.59s     Synthesize event
+    t =    92.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    95.49s Checking existence of `"settings.theme.classic" Any`
+    t =    96.30s Find the "settings.theme.classic" Any
+    t =    97.10s Checking existence of `"settings.theme.classic" Button`
+    t =    97.77s Find the "settings.theme.classic" Button
+    t =    98.41s Checking existence of `"settings.theme.classic" Button`
+    t =    99.12s Find the "settings.theme.classic" Button
+    t =    99.81s Checking existence of `"settings.theme.classic" Button`
+    t =   100.33s Find the "settings.theme.classic" Button
+    t =   100.89s Checking existence of `"settings.theme.classic" Button`
+    t =   101.60s Find the "settings.theme.classic" Button
+    t =   102.20s Tap "settings.theme.classic" Button
+    t =   102.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   102.20s     Find the "settings.theme.classic" Button
+    t =   102.75s     Check for interrupting elements affecting "settings.theme.classic" Button
+    t =   102.98s     Synthesize event
+    t =   103.29s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   103.82s Terminate PolarReailty.Hawk-Nation:54236
+    t =   104.83s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test10_ThemePalette]' passed (105.049 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-15 20:23:29.978.
+	 Executed 10 tests, with 1 failure (0 unexpected) in 1249.023 (1249.041) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-15 20:23:29.981.
+	 Executed 10 tests, with 1 failure (0 unexpected) in 1249.023 (1249.045) seconds
+Test Suite 'Selected tests' failed at 2026-10-15 20:23:29.983.
+	 Executed 10 tests, with 1 failure (0 unexpected) in 1249.023 (1249.048) seconds
+2026-10-15 20:24:12.544 xcodebuild[14416:44897] [MT] IDETestOperationsObserverDebug: 1330.851 elapsed -- Testing started completed.
+2026-10-15 20:24:12.545 xcodebuild[14416:44897] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-15 20:24:12.545 xcodebuild[14416:44897] [MT] IDETestOperationsObserverDebug: 1330.856 sec, +1330.856 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test04_LiveTourDark()
+
+** TEST EXECUTE FAILED **
+
+Testing started
