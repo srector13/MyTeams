@@ -254,7 +254,7 @@ final class GUIAuditScreenshotTests: XCTestCase {
             shot("settings")
             app.swipeUp(); pause(1); shot("settings-scrolled")
             app.swipeDown(); app.swipeDown()
-            for (id, name) in [("settings.theme", "theme"), ("settings.alerts", "alerts"), ("settings.teams", "teams"), ("settings.apiFootball", "api-football")] {
+            for (id, name) in [("settings.theme", "theme"), ("settings.alerts", "alerts"), ("settings.teams", "teams"), ("settings.advanced", "advanced")] {
                 let button = app.buttons[id]
                 for _ in 0..<3 where !(button.exists && button.isHittable) { app.swipeUp(); pause(0.4) }
                 guard button.exists else { miss("settings row \(id)"); continue }
