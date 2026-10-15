@@ -120,7 +120,7 @@ struct ThemeOnboardingView: View {
                 .padding(Theme.Spacing.l)
             }
             // Always reachable, however far the grid scrolls.
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaBar(edge: .bottom) {
                 Button {
                     let chosen = theme
                     Task {

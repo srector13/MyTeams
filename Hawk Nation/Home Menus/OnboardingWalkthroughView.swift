@@ -154,7 +154,7 @@ struct OnboardingWalkthroughView: View {
             // The dots on a backing, so they show on light and dark alike.
             .indexViewStyle(.page(backgroundDisplayMode: .always))
             .background(Theme.Surface.content)
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaBar(edge: .bottom) {
                 Button(action: onNext) {
                     Text(page.buttonTitle)
                         .frame(maxWidth: .infinity)
