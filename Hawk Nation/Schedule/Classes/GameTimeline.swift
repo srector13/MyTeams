@@ -137,6 +137,11 @@ struct GameStory: Hashable, Sendable {
     var homeAbbreviation: String {
         sides.values.first { $0.homeAway == "home" }?.abbreviation ?? ""
     }
+
+    /// The away team's abbreviation, or empty.
+    var awayAbbreviation: String {
+        sides.values.first { $0.homeAway == "away" }?.abbreviation ?? ""
+    }
 }
 
 extension GameStory {

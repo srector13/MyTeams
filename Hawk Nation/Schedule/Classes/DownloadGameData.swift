@@ -489,7 +489,8 @@ func parseSoccerGameTeamStats(from json: JSON) -> [SoccerGameTeamStats] {
 // MARK: - The detail sheet's box score
 
 /// A game's box score as the detail sheet draws it, whatever the sport: the
-/// scoreline, then one row per statistic, home side on the left.
+/// scoreline, then one row per statistic, each with both sides' figures
+/// (the sheet draws the away side on the left).
 struct BoxScore: Hashable, Sendable {
     struct Row: Hashable, Sendable, Identifiable {
         var title: String

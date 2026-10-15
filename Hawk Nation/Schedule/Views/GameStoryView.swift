@@ -10,14 +10,17 @@ import Charts
 import SwiftUI
 
 /// A game sheet's "story" (R-2), between the scoreboard and the box score:
-/// the scoring timeline, the home side's win probability, and each team's
-/// injury report. A part the summary doesn't carry draws nothing.
+/// the scoring timeline, the followed team's win probability, and each
+/// team's injury report. A part the summary doesn't carry draws nothing.
 ///
 /// A timeline row naming a player the sheet's own tables list opens their
 /// sheet through `onPlayer` (C-6); `player` resolves the athlete id.
 struct GameStoryView: View {
     let story: GameStory
     let league: LeagueDescriptor
+    /// Whether the followed team is the home side: the win probability is
+    /// drawn for the followed team, whichever side it is.
+    var followedIsHome = true
     var player: (String) -> GameSheetPlayer? = { _ in nil }
     var onPlayer: ((GameSheetPlayer) -> Void)? = nil
 
@@ -32,7 +35,11 @@ struct GameStoryView: View {
                 timeline
             }
             if story.winProbability.count > 1 {
-                WinProbabilityStrip(points: story.winProbability, homeAbbreviation: story.homeAbbreviation)
+                WinProbabilityStrip(
+                    points: story.winProbability,
+                    followedIsHome: followedIsHome,
+                    abbreviation: followedIsHome ? story.homeAbbreviation : story.awayAbbreviation
+                )
             }
             let reports = story.injuries.filter { !$0.injuries.isEmpty }
             if !reports.isEmpty {
@@ -60,7 +67,8 @@ struct GameStoryView: View {
                 Button(title) {
                     withAnimation { showsAllEvents.toggle() }
                 }
-                .font(Theme.Typography.caption)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .accessibilityIdentifier("gameDetail.timeline.toggle")
             }
 
@@ -150,8 +158,8 @@ private struct TimelineRow: View {
 
             if let home = event.homeScore, let away = event.awayScore {
                 VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
-                    // Home first, as the rest of the sheet puts home first.
-                    Text("\(home) - \(away)")
+                    // Away first, as the scoreboard and linescore put it.
+                    Text("\(away) - \(home)")
                         .font(.subheadline.bold().monospacedDigit())
                     if let points = event.points, points > 0 {
                         Text("+\(points)")
@@ -212,20 +220,31 @@ private struct InjuryRow: View {
 
 // MARK: - Win probability
 
-/// The home side's chance of winning over the game's plays, 0–100%, with
-/// an even-odds rule at 50%.
+/// The followed team's chance of winning over the game's plays, 0–100%,
+/// with an even-odds rule at 50%. The feed gives the home side's chance:
+/// an away team's is its complement.
 private struct WinProbabilityStrip: View {
     let points: [WinProbabilityPoint]
-    let homeAbbreviation: String
+    let followedIsHome: Bool
+    /// The followed team's abbreviation, or empty.
+    let abbreviation: String
 
     @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 90
 
     private var title: String {
-        homeAbbreviation.isEmpty ? "Home win probability" : "\(homeAbbreviation) win probability"
+        if abbreviation.isEmpty {
+            return followedIsHome ? "Home win probability" : "Away win probability"
+        }
+        return "\(abbreviation) win probability"
+    }
+
+    /// The followed team's chance after `point`, from 0 to 1.
+    private func chance(_ point: WinProbabilityPoint) -> Double {
+        followedIsHome ? point.homeWinPercentage : 1 - point.homeWinPercentage
     }
 
     private var latest: Int {
-        Int(((points.last?.homeWinPercentage ?? 0) * 100).rounded())
+        Int(((points.last.map(chance) ?? 0) * 100).rounded())
     }
 
     var body: some View {
@@ -246,7 +265,7 @@ private struct WinProbabilityStrip: View {
                 ForEach(points) { point in
                     LineMark(
                         x: .value("Play", point.index),
-                        y: .value("Win %", point.homeWinPercentage * 100)
+                        y: .value("Win %", chance(point) * 100)
                     )
                     .interpolationMethod(.monotone)
                 }
