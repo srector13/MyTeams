@@ -330,6 +330,8 @@ struct LeagueLeadersView: View {
         }
         // Full height: ten-deep boards are a long list (X-9).
         .presentationDetents([.large])
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .task(id: league) { await load() }
     }
 

@@ -189,6 +189,8 @@ struct GameDetailView: View {
             shareImage = renderShareImage()
         }
         .presentationDetents(detents)
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .presentationDragIndicator(.visible)
         // The roster's player sheet, over this one. Its colours and the
         // league its statistics load from are the followed team's: both
