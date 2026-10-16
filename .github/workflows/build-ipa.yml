@@ -23,8 +23,12 @@
 #
 # unsigned_feather input (default false): when ticked, the signed build-ipa job
 # is skipped and build-ipa-unsigned runs instead. It builds Release with code
-# signing disabled and zips Payload/myTeams.app into an unsigned .ipa for
-# on-device re-signing with Feather. It uses no secrets, keychain or profiles,
+# signing disabled, then signs the app and the widget AD HOC (no identity, no
+# profile) only to embed each target's entitlements (App Group, iCloud KVS),
+# and zips Payload/myTeams.app into an .ipa for on-device re-signing with
+# Feather. Re-signers that read entitlements from the binary (Feather's Merge
+# Entitlements, AltStore/SideStore/Sideloadly) need them there; an ad-hoc
+# signature installs nowhere as is. It uses no secrets, keychain or profiles,
 # and export_method is ignored.
 #
 # GitHub Release: build-ipa-unsigned runs on EVERY run (unsigned_feather only
@@ -559,6 +563,130 @@ jobs:
             -skipPackagePluginValidation -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             2>&1 | tee build.log
+
+      - name: Embed entitlements (ad-hoc signature)
+        shell: bash
+        env:
+          # CODE_SIGN_ENTITLEMENTS of each target (pbxproj, Release).
+          APP_ENTITLEMENTS: myTeams-app.entitlements
+          WIDGET_ENTITLEMENTS: myTeamWidget/myTeamWidget.entitlements
+        run: |
+          set -euo pipefail
+          # Why: with CODE_SIGNING_ALLOWED=NO neither binary carries a code
+          # signature, so neither carries entitlements. A re-signer that
+          # reads them from the binary then has nothing to read:
+          #   - Feather's "Merge Entitlements" option returns early when the
+          #     app binary has no entitlements, so it never fills the
+          #     profile's TEAMID.* wildcards in (application-identifier,
+          #     keychain-access-groups) for the app and the widget.
+          #   - AltStore/SideStore/Sideloadly register and rewrite the App
+          #     Groups each bundle's binary asks for; with none asked for,
+          #     the app and the widget get no shared group at all.
+          # Feather's default path (zsign) signs both executables with the
+          # chosen profile's entitlements whatever the binary holds; the app
+          # and the widget find their shared store from their own signatures
+          # at runtime (SharedStoreIdentity), so this step changes nothing
+          # there.
+          #
+          # So sign each bundle ad hoc (no identity, no profile) with its
+          # target's entitlements, inner code first: nested frameworks and
+          # dylibs, then the widget, then the app. Ad-hoc signatures are
+          # replaced by any re-signer; nothing here is valid for installing
+          # as is, as before.
+          PRODUCTS="dd/Build/Products/Release-iphoneos"
+          APP="${PRODUCTS}/${APP_TARGET}.app"
+          APPEX="${APP}/PlugIns/${WIDGET_TARGET}.appex"
+          for bundle in "$APP" "$APPEX"; do
+            if [ ! -d "$bundle" ]; then
+              echo "::error::${bundle} is missing; nothing to sign."
+              exit 1
+            fi
+          done
+          for file in "$APP_ENTITLEMENTS" "$WIDGET_ENTITLEMENTS"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Entitlements file ${file} is missing (CODE_SIGN_ENTITLEMENTS moved?)."
+              exit 1
+            fi
+          done
+          APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${APP}/Info.plist")"
+          WIDGET_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${APPEX}/Info.plist")"
+          if [ "$APP_ID" != "$APP_BUNDLE_ID" ] || [ "$WIDGET_ID" != "$WIDGET_BUNDLE_ID" ]; then
+            echo "::error::Unexpected bundle ids: app ${APP_ID} (want ${APP_BUNDLE_ID}), widget ${WIDGET_ID} (want ${WIDGET_BUNDLE_ID})."
+            exit 1
+          fi
+
+          # Xcode expands the build-setting references in an entitlements
+          # file when it signs; codesign does not, so expand them here.
+          ENT_DIR="${RUNNER_TEMP}/entitlements"
+          rm -rf "$ENT_DIR" && mkdir -p "$ENT_DIR"
+          expand_entitlements() { # <source> <destination> <bundle id>
+            sed \
+              -e 's/\$(TeamIdentifierPrefix)/'"${EXPECTED_TEAM_ID}"'./g' \
+              -e 's/\$(AppIdentifierPrefix)/'"${EXPECTED_TEAM_ID}"'./g' \
+              -e 's/\$(CFBundleIdentifier)/'"$3"'/g' \
+              -e 's/\$(PRODUCT_BUNDLE_IDENTIFIER)/'"$3"'/g' \
+              "$1" > "$2"
+            if grep -n '\$(' "$2"; then
+              echo "::error::$1 still references build settings after expansion (above)."
+              exit 1
+            fi
+            plutil -lint "$2"
+          }
+          expand_entitlements "$APP_ENTITLEMENTS" "${ENT_DIR}/app.plist" "$APP_ID"
+          expand_entitlements "$WIDGET_ENTITLEMENTS" "${ENT_DIR}/widget.plist" "$WIDGET_ID"
+
+          sign() { # <path> [entitlements]
+            local args=(--force --sign - --timestamp=none)
+            if [ -n "${2:-}" ]; then
+              args+=(--entitlements "$2" --generate-entitlement-der)
+            fi
+            codesign "${args[@]}" "$1"
+          }
+          # Extended attributes (Finder info, quarantine) make codesign
+          # refuse a bundle; the build's own files carry none that matter.
+          xattr -cr "$APP"
+          # Nested code first, deepest first (none today; a future SPM
+          # framework would otherwise fail the bundle's signature).
+          NESTED="$(find "$APP" \( -name '*.framework' -o -name '*.dylib' \) -print | awk '{ print length($0) "\t" $0 }' | sort -rn | cut -f2-)"
+          while IFS= read -r code; do
+            [ -n "$code" ] || continue
+            echo "Signing nested ${code}"
+            sign "$code"
+          done <<< "$NESTED"
+          sign "$APPEX" "${ENT_DIR}/widget.plist"
+          sign "$APP" "${ENT_DIR}/app.plist"
+
+          # Read the entitlements back out of each signature and fail
+          # loudly unless both carry the project's App Group.
+          entitlements_of() { # <bundle> <destination>
+            if ! codesign -d --entitlements - --xml "$1" > "$2" 2>/dev/null || [ ! -s "$2" ]; then
+              codesign -d --entitlements :- "$1" > "$2" 2>/dev/null
+            fi
+          }
+          for pair in "app:${APP}" "widget:${APPEX}"; do
+            name="${pair%%:*}"
+            bundle="${pair#*:}"
+            out="${ENT_DIR}/${name}.signed.plist"
+            entitlements_of "$bundle" "$out"
+            echo "--- ${name} entitlements as signed (${bundle})"
+            cat "$out"
+            echo
+            GROUP="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$out" 2>/dev/null || true)"
+            if [ "$GROUP" != "$APP_GROUP" ]; then
+              echo "::error::The ${name}'s signature does not carry the App Group ${APP_GROUP} (found '${GROUP}')."
+              exit 1
+            fi
+            echo "PASS: ${name} signature carries ${APP_GROUP}"
+          done
+          KVS="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.ubiquity-kvstore-identifier' "${ENT_DIR}/app.signed.plist" 2>/dev/null || true)"
+          if [ "$KVS" != "${EXPECTED_TEAM_ID}.${APP_ID}" ]; then
+            echo "::error::The app's signature has iCloud KVS identifier '${KVS}', expected ${EXPECTED_TEAM_ID}.${APP_ID}."
+            exit 1
+          fi
+          # A structural check only: an ad-hoc signature never verifies as
+          # installable, and every re-signer replaces it.
+          codesign --verify --strict --verbose=2 "$APP" \
+            || echo "::warning::codesign --verify reported a problem with the ad-hoc signature (above); re-signers replace it."
 
       - name: Package unsigned IPA
         shell: bash

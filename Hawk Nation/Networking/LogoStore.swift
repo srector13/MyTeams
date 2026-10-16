@@ -232,7 +232,11 @@ enum SharedDataStatus: Hashable, Sendable {
     }
 
     static let unavailableTitle = "Shared data unavailable"
-    static let repairHint = "Choose a team in Edit Widget, or re-sign with an App Group."
+    /// What to do about it, on the widget's face: opening the app lets it
+    /// write what it shares (the favorites, through the keychain when the
+    /// signature has no App Group); a team chosen in Edit Widget shows with
+    /// nothing shared at all.
+    static let repairHint = "Open myTeams to finish setup, or choose a team in Edit Widget."
     /// The one caption-sized line a widget or its settings show.
     static let unavailableCaption = "Shared data unavailable — signature has no App Group or keychain group"
 

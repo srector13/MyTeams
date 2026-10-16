@@ -435,7 +435,7 @@ enum WidgetMissingTeam: Hashable, Sendable {
         case .sharedUnavailable:
             return SharedDataStatus.repairHint
         case .notShared(let store):
-            return "\(store.label) reachable but empty. Open myTeams, or choose a team in Edit Widget."
+            return "\(store.label) has nothing from myTeams yet. Open myTeams to finish setup, or choose a team in Edit Widget."
         }
     }
 

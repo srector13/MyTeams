@@ -32,7 +32,12 @@ CI does not need any signing secrets.
    **`unsigned_feather`** (`export_method` is ignored) → **Run workflow**.
    The signed job is skipped. `build-ipa-unsigned` runs on every run of the
    workflow, ticked or not; ticking only skips the signed job. It builds Release
-   with `CODE_SIGNING_ALLOWED=NO` and zips `Payload/myTeams.app` by hand. It
+   with `CODE_SIGNING_ALLOWED=NO`, then signs the widget and the app **ad hoc**
+   (`codesign -s -`, no identity or profile) with each target's own
+   entitlements, so the binaries carry the App Group
+   `group.PolarReailty.Hawk-Nation` (and the app its iCloud KVS id). It reads
+   them back out of both signatures and fails if either lacks the App Group.
+   Then it zips `Payload/myTeams.app` by hand. It
    fails if `myTeamWidgetExtension.appex` is not in
    `Payload/myTeams.app/PlugIns`. It then publishes a GitHub Release tagged
    `v1.0.N` (next after the highest existing `v1.0.*` tag) on the built commit.
@@ -45,11 +50,35 @@ CI does not need any signing secrets.
 4. Sign it in Feather with your own certificate + provisioning profile, then install.
 
 Notes:
-- Feather signs every bundle with a **single** profile. The app and the widget
-  normally have separate App IDs, both with the App Group
-  `group.PolarReailty.Hawk-Nation`, so the widget or the shared App Group data
-  may not work until you adjust the entitlements in Feather's entitlement
-  editing.
+- Feather (zsign) signs the app **and** the widget with the **one** profile
+  you pick, and gives both that profile's entitlements, whatever the binary
+  carries. The app and the widget then find their shared store from their
+  own signatures at runtime (`SharedStoreIdentity` in
+  `Hawk Nation/Networking/SharedStore.swift`), the same way in both:
+  - The profile has App Groups: the project's group if listed, else one named
+    `…Hawk-Nation…`, else `group.<the app's bundle id as installed>`, else the
+    first listed whose container the OS resolves.
+  - A wildcard profile (`TEAMID.*`, no App Groups): the favorites go through
+    the keychain group the profile signs both with.
+- Recommended Feather settings:
+  - Leave the widget in (don't remove `PlugIns`).
+  - Changing the bundle id (custom identifier, or PPQ protection) is fine:
+    Feather renames the widget's prefix with it.
+  - **Merge Entitlements: on**, with no custom entitlements file. Feather
+    then fills the profile's `TEAMID.*` wildcards in with the app's bundle
+    id (a concrete `application-identifier` and keychain group for both
+    bundles). It only does this when the app binary carries entitlements,
+    which builds from before the ad-hoc step above did not.
+  - If you made your own App ID for this app, give it an App Group, put
+    that group in the profile, and sign with that profile. Any group name
+    works; `group.<your bundle id>` is picked first after the project's.
+- After installing, open myTeams once (it writes the favorites where the
+  widget reads them), then add or edit the widget. Settings → Advanced →
+  Widget Sharing lists what the app was signed with, the App Group it
+  resolved and whether its container is reachable; the widget shows the same
+  lines on its face when it has no data, to compare side by side.
+- A Team Schedule widget set to a team in **Edit Widget** loads that team's
+  games itself, with nothing shared with the app.
 - The device's UDID only has to be in whichever profile Feather signs with.
   None of the profiles or secrets above are involved.
 

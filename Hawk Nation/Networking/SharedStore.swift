@@ -230,14 +230,27 @@ struct SharedStoreIdentity: Equatable, Sendable {
     var keychainGroup: String?
 
     /// The identity a signature gives: with none readable, the project's
-    /// group and no keychain group, as before re-signed installs were told
-    /// apart.
-    static func resolve(_ signed: SigningEntitlements?) -> SharedStoreIdentity {
+    /// group (or the one named for the app as installed) and no keychain
+    /// group, as before re-signed installs were told apart.
+    ///
+    /// The App Group is the first of `appGroupCandidates` whose container
+    /// `isReachable` in this process, else the first candidate (which the
+    /// shared container then finds unreachable). Both processes hold the
+    /// same groups under a re-signer and derive the same `appBundleID`, so
+    /// they still agree; what this adds is that a preferred group the OS
+    /// won't resolve no longer hides another one it would.
+    static func resolve(
+        _ signed: SigningEntitlements?,
+        appBundleID: String? = nil,
+        isReachable: (String) -> Bool = { _ in true }
+    ) -> SharedStoreIdentity {
+        let candidates = appGroupCandidates(in: signed?.appGroups, appBundleID: appBundleID)
+        let group = candidates.first(where: isReachable) ?? candidates.first
         guard let signed else {
-            return SharedStoreIdentity(appGroup: canonicalGroup, keychainGroup: nil)
+            return SharedStoreIdentity(appGroup: group, keychainGroup: nil)
         }
         return SharedStoreIdentity(
-            appGroup: appGroup(in: signed.appGroups),
+            appGroup: group,
             keychainGroup: keychainGroup(in: signed.keychainAccessGroups, applicationIdentifier: signed.applicationIdentifier)
         )
     }
@@ -246,10 +259,56 @@ struct SharedStoreIdentity: Equatable, Sendable {
     /// team id), else the profile's first: the same in both processes, as
     /// zsign signs both with the same list.
     static func appGroup(in groups: [String]) -> String? {
-        if groups.contains(canonicalGroup) {
-            return canonicalGroup
+        appGroupCandidates(in: groups).first
+    }
+
+    /// The App Groups worth trying, most preferred first.
+    ///
+    /// From a signature (`groups`): the project's group; any named for the
+    /// app (AltStore's `group.PolarReailty.Hawk-Nation.TEAMID`); the one
+    /// named for the app as installed, `group.<appBundleID>` (what a
+    /// re-signer that renames the app tends to be given, and what a
+    /// reader registering their own App ID would call it); any containing
+    /// that id; then the rest, in the signature's order. Only groups the
+    /// signature holds: no other can resolve.
+    ///
+    /// With no signature to read (`nil`), the project's group, then
+    /// `group.<appBundleID>` when the app was renamed.
+    static func appGroupCandidates(in groups: [String]?, appBundleID: String? = nil) -> [String] {
+        let named = appBundleID.flatMap { $0.isEmpty ? nil : "group.\($0)" }
+        guard let groups else {
+            guard let named, named.caseInsensitiveCompare(canonicalGroup) != .orderedSame else {
+                return [canonicalGroup]
+            }
+            return [canonicalGroup, named]
         }
-        return groups.first { $0.localizedCaseInsensitiveContains("Hawk-Nation") } ?? groups.first
+        var preferred: [String] = groups.filter { $0 == canonicalGroup }
+        preferred += groups.filter { $0.localizedCaseInsensitiveContains("Hawk-Nation") }
+        if let named {
+            preferred += groups.filter { $0.caseInsensitiveCompare(named) == .orderedSame }
+        }
+        if let appBundleID, !appBundleID.isEmpty {
+            preferred += groups.filter { $0.localizedCaseInsensitiveContains(appBundleID) }
+        }
+        preferred += groups
+        var ordered: [String] = []
+        for group in preferred where !group.isEmpty && !ordered.contains(group) {
+            ordered.append(group)
+        }
+        return ordered
+    }
+
+    /// The app's bundle identifier as this process derives it: its own,
+    /// or, in the widget, its own less the last component
+    /// (`<app>.myTeamWidget`). A re-signer that renames the app (Feather's
+    /// custom identifier or PPQ suffix) renames the widget's prefix with
+    /// it, so both processes arrive at the same id. `nil` when there is
+    /// none to derive.
+    static func appBundleID(bundleID: String?, isExtension: Bool) -> String? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        guard isExtension else { return bundleID }
+        guard let dot = bundleID.lastIndex(of: "."), dot != bundleID.startIndex else { return nil }
+        return String(bundleID[..<dot])
     }
 
     /// The first keychain group, as signed (a wildcard profile's `TEAMID.*`
@@ -259,8 +318,25 @@ struct SharedStoreIdentity: Equatable, Sendable {
         groups.first ?? applicationIdentifier.flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    /// The app's bundle identifier, as this process derives it
+    /// (`appBundleID(bundleID:isExtension:)`).
+    static let currentAppBundleID: String? = appBundleID(
+        bundleID: Bundle.main.bundleIdentifier,
+        isExtension: Bundle.main.bundleURL.pathExtension == "appex"
+    )
+
+    /// Whether this process can reach `group`'s container: only a group in
+    /// its signature can.
+    static func isReachable(_ group: String) -> Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) != nil
+    }
+
     /// This process's.
-    static let current = resolve(SigningEntitlements.current)
+    static let current = resolve(
+        SigningEntitlements.current,
+        appBundleID: currentAppBundleID,
+        isReachable: { isReachable($0) }
+    )
 
     /// What the signature offers, for a widget saying why it has no data:
     /// "App Group group.… · Keychain TEAMID.…".
@@ -454,6 +530,9 @@ struct SharedStoreDiagnostics: Equatable, Sendable {
     var keychainRead: OSStatus?
     /// The app's last keychain write; `nil` before any, and in the widget.
     var keychainWrite: OSStatus? = nil
+    /// The App Group this process resolved and whether its container is
+    /// reachable here (`groupLine(_:reachable:)`); `nil` when not read.
+    var appGroupLine: String? = nil
 
     /// One line each, for the widget's no-team face and the app's
     /// Settings.
@@ -462,6 +541,11 @@ struct SharedStoreDiagnostics: Equatable, Sendable {
             "\(process) \(bundleID)",
             "groups: \(Self.list(signed?.appGroups))",
             "keychain: \(Self.list(signed?.keychainAccessGroups))",
+        ]
+        if let appGroupLine {
+            lines.append(appGroupLine)
+        }
+        lines += [
             "store: \(store)",
             "favorites: \(favoritesCount)",
         ]
@@ -493,6 +577,16 @@ struct SharedStoreDiagnostics: Equatable, Sendable {
         return values.isEmpty ? "none" : values.joined(separator: ", ")
     }
 
+    /// "app group: group.x · container reachable": the group a process
+    /// resolved (`SharedStoreIdentity.appGroup`) and whether the OS hands
+    /// it that group's container. Compared between the app's Settings and
+    /// the widget's face, it tells a group neither holds from one only one
+    /// of them reaches.
+    static func groupLine(_ group: String?, reachable: Bool) -> String {
+        guard let group else { return "app group: none" }
+        return "app group: \(group) · container \(reachable ? "reachable" : "unreachable")"
+    }
+
     /// `diagnostics`, unless the project's App Group carries the app's
     /// data: an Xcode-signed install's widgets keep their faces clean.
     static func shown(_ diagnostics: SharedStoreDiagnostics) -> SharedStoreDiagnostics? {
@@ -503,6 +597,7 @@ struct SharedStoreDiagnostics: Equatable, Sendable {
     /// This process's, read now.
     static func current(in container: SharedContainer = .live) -> SharedStoreDiagnostics {
         let isExtension = Bundle.main.bundleURL.pathExtension == "appex"
+        let group = SharedStoreIdentity.current.appGroup
         return SharedStoreDiagnostics(
             process: isExtension ? "widget" : "app",
             bundleID: Bundle.main.bundleIdentifier ?? "?",
@@ -511,7 +606,8 @@ struct SharedStoreDiagnostics: Equatable, Sendable {
             status: container.status,
             favoritesCount: container.favoriteTeamIDs().count,
             keychainRead: container.keychain?.read(SharedFavoritesMirror.keychainAccount).status,
-            keychainWrite: isExtension ? nil : SharedKeychain.lastWriteStatus.withLock { $0 }
+            keychainWrite: isExtension ? nil : SharedKeychain.lastWriteStatus.withLock { $0 },
+            appGroupLine: groupLine(group, reachable: group.map(SharedStoreIdentity.isReachable) ?? false)
         )
     }
 }

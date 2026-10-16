@@ -625,6 +625,101 @@ struct WidgetFeatherSharingTests {
         #expect(SharedStoreIdentity.keychainGroup(in: [], applicationIdentifier: "") == nil)
     }
 
+    // MARK: App Group candidates and the app's id
+
+    @Test func theWidgetDerivesTheAppsBundleID() {
+        #expect(SharedStoreIdentity.appBundleID(bundleID: "PolarReailty.Hawk-Nation.myTeamWidget", isExtension: true)
+            == "PolarReailty.Hawk-Nation")
+        #expect(SharedStoreIdentity.appBundleID(bundleID: "PolarReailty.Hawk-Nation", isExtension: false)
+            == "PolarReailty.Hawk-Nation")
+        // Feather's custom identifier, and its PPQ suffix, rename the
+        // widget's prefix with the app.
+        #expect(SharedStoreIdentity.appBundleID(bundleID: "com.me.teams.x7k2q.myTeamWidget", isExtension: true)
+            == "com.me.teams.x7k2q")
+        #expect(SharedStoreIdentity.appBundleID(bundleID: "widget", isExtension: true) == nil)
+        #expect(SharedStoreIdentity.appBundleID(bundleID: ".widget", isExtension: true) == nil)
+        #expect(SharedStoreIdentity.appBundleID(bundleID: "", isExtension: false) == nil)
+        #expect(SharedStoreIdentity.appBundleID(bundleID: nil, isExtension: true) == nil)
+    }
+
+    @Test func groupCandidatesPreferTheProjectsThenTheAppsOwn() {
+        // No signature: the project's group, which is the app's own name.
+        #expect(SharedStoreIdentity.appGroupCandidates(in: nil, appBundleID: "PolarReailty.Hawk-Nation") == [Self.canonical])
+        #expect(SharedStoreIdentity.appGroupCandidates(in: nil) == [Self.canonical])
+        // Renamed: the group named for the app as installed, after it.
+        #expect(SharedStoreIdentity.appGroupCandidates(in: nil, appBundleID: "com.me.teams")
+            == [Self.canonical, "group.com.me.teams"])
+        // From a signature: only its groups, the app's own ahead of the rest.
+        #expect(SharedStoreIdentity.appGroupCandidates(
+            in: ["group.com.me.other", "group.com.me.teams.shared", "group.com.me.teams"],
+            appBundleID: "com.me.teams"
+        ) == ["group.com.me.teams", "group.com.me.teams.shared", "group.com.me.other"])
+        #expect(SharedStoreIdentity.appGroupCandidates(
+            in: ["group.z", "group.PolarReailty.Hawk-Nation.ABCDE12345", Self.canonical],
+            appBundleID: "com.me.teams"
+        ) == [Self.canonical, "group.PolarReailty.Hawk-Nation.ABCDE12345", "group.z"])
+        #expect(SharedStoreIdentity.appGroupCandidates(in: [], appBundleID: "com.me.teams").isEmpty)
+    }
+
+    @Test func anUnreachablePreferredGroupGivesWayToOneThatResolves() {
+        let signed = SigningEntitlements(appGroups: [Self.canonical, "group.com.me.teams"], keychainAccessGroups: ["\(Self.team).*"])
+        let reachable: Set<String> = ["group.com.me.teams"]
+        let identity = SharedStoreIdentity.resolve(signed, appBundleID: "com.me.teams") { reachable.contains($0) }
+        #expect(identity == SharedStoreIdentity(appGroup: "group.com.me.teams", keychainGroup: "\(Self.team).*"))
+        // None resolves: the preferred one, which the container then finds
+        // unreachable, as before.
+        #expect(SharedStoreIdentity.resolve(signed, appBundleID: "com.me.teams") { _ in false }.appGroup == Self.canonical)
+        // Nothing readable, renamed app: its own group when that resolves.
+        #expect(SharedStoreIdentity.resolve(nil, appBundleID: "com.me.teams") { $0 == "group.com.me.teams" }
+            == SharedStoreIdentity(appGroup: "group.com.me.teams", keychainGroup: nil))
+    }
+
+    @Test func appAndWidgetResolveTheSameGroupUnderARenamedReSign() {
+        // zsign signs both with one entitlements blob; each derives the
+        // app's id from its own bundle id.
+        let signed = SigningEntitlements(
+            appGroups: ["group.com.me.other", "group.com.me.teams"],
+            keychainAccessGroups: ["\(Self.team).*"],
+            applicationIdentifier: "\(Self.team).*"
+        )
+        let appID = SharedStoreIdentity.appBundleID(bundleID: "com.me.teams", isExtension: false)
+        let widgetID = SharedStoreIdentity.appBundleID(bundleID: "com.me.teams.myTeamWidget", isExtension: true)
+        #expect(appID == widgetID)
+        let app = SharedStoreIdentity.resolve(signed, appBundleID: appID)
+        let widget = SharedStoreIdentity.resolve(signed, appBundleID: widgetID)
+        #expect(app == widget)
+        #expect(app.appGroup == "group.com.me.teams")
+    }
+
+    @Test func diagnosticsSayWhichGroupResolvedAndWhetherItsContainerIsReachable() {
+        #expect(SharedStoreDiagnostics.groupLine("group.x", reachable: true) == "app group: group.x · container reachable")
+        #expect(SharedStoreDiagnostics.groupLine("group.x", reachable: false) == "app group: group.x · container unreachable")
+        #expect(SharedStoreDiagnostics.groupLine(nil, reachable: false) == "app group: none")
+        let diagnostics = SharedStoreDiagnostics(
+            process: "app",
+            bundleID: "com.me.teams",
+            signed: SigningEntitlements(appGroups: ["group.x"]),
+            identity: SharedStoreIdentity(appGroup: "group.x", keychainGroup: nil),
+            status: .fallback(.appGroup("group.x"), lastShared: nil),
+            favoritesCount: 2,
+            keychainRead: nil,
+            appGroupLine: SharedStoreDiagnostics.groupLine("group.x", reachable: true)
+        )
+        #expect(diagnostics.lines == [
+            "app com.me.teams",
+            "groups: group.x",
+            "keychain: none",
+            "app group: group.x · container reachable",
+            "store: App Group group.x",
+            "favorites: 2",
+        ])
+    }
+
+    @Test func theSetupHintSendsTheReaderToTheApp() {
+        #expect(WidgetMissingTeam.sharedUnavailable.detail.hasPrefix("Open myTeams to finish setup"))
+        #expect(WidgetMissingTeam.notShared(.keychain("T.x")).detail.contains("Open myTeams to finish setup"))
+    }
+
     @Test func bothProcessesSelectTheSameStoreWhenSignedAlike() {
         // zsign signs the app and the widget with one entitlements blob.
         let signed = SigningEntitlements(keychainAccessGroups: ["\(Self.team).*"], applicationIdentifier: "\(Self.team).*")
