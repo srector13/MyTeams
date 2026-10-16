@@ -81,6 +81,7 @@ struct HomeHero: View {
     let openGame: @MainActor (HomeFeaturedGame) -> Void
 
     @ScaledMetric(relativeTo: .title3) private var crestSize: CGFloat = 56
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .caption2) private var liveDotSize: CGFloat = 6
 
     /// How far Home's clock is from the device's: nothing, unless a UI test
@@ -184,11 +185,25 @@ struct HomeHero: View {
     /// reads; between them the countdown, or the score and its stage.
     private func matchup(_ featured: HomeFeaturedGame) -> some View {
         let favoriteIsHome = featured.favoriteIsHome
-        return HStack(alignment: .center, spacing: Theme.Spacing.s) {
-            side(featured, isFavorite: !favoriteIsHome)
-            centre(featured)
-                .layoutPriority(1)
-            side(featured, isFavorite: favoriteIsHome)
+        // At accessibility sizes the countdown or score takes the full
+        // width above the two sides, so none of the three is squeezed into
+        // a third of it.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: Theme.Spacing.m))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.s))
+        return layout {
+            if dynamicTypeSize.isAccessibilitySize {
+                centre(featured)
+                HStack(alignment: .top, spacing: Theme.Spacing.s) {
+                    side(featured, isFavorite: !favoriteIsHome)
+                    side(featured, isFavorite: favoriteIsHome)
+                }
+            } else {
+                side(featured, isFavorite: !favoriteIsHome)
+                centre(featured)
+                    .layoutPriority(1)
+                side(featured, isFavorite: favoriteIsHome)
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenMatchup(featured))

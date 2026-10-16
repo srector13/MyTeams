@@ -80,8 +80,10 @@ struct HomeTeamCard: View {
     private var figures: some View {
         let header = summary.header
         let content = VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text(header.record ?? (isLoading ? "0-0" : "–"))
-                .font(Theme.Typography.statFigure)
+            // No record yet (a season not started): the season's state
+            // in the figure's place, not a dash.
+            Text(header.record ?? (isLoading ? "0-0" : summary.status.text))
+                .font(header.record == nil && !isLoading ? Theme.Typography.cardTitle : Theme.Typography.statFigure)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 

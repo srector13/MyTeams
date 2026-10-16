@@ -157,6 +157,12 @@ private struct HomeDashboard: View {
     @State private var selectedDay: Date?
     /// The news feed's team, or `nil` for every favorite's stories.
     @State private var newsFilter: TeamRef.ID?
+    /// Whether the news runs on past its first `collapsedNewsCount`
+    /// stories, so the sections and Customize Home below stay in reach.
+    @State private var showsAllNews = false
+
+    /// The stories Home shows before "More News".
+    private static let collapsedNewsCount = 10
     /// The hero's height, which the colour behind it must cover.
     @State private var heroHeight: CGFloat = 0
 
@@ -645,12 +651,26 @@ private struct HomeDashboard: View {
                     HomeNewsLeadCard(headline: lead)
                 }
 
+                let rest = Array(shown.dropFirst())
+                let visible = showsAllNews ? rest : Array(rest.prefix(Self.collapsedNewsCount - 1))
                 LazyVStack(spacing: Theme.Spacing.s) {
-                    ForEach(shown.dropFirst()) { headline in
+                    ForEach(visible) { headline in
                         newsButton(headline) {
                             HomeNewsRow(headline: headline)
                         }
                     }
+                }
+
+                if rest.count > Self.collapsedNewsCount - 1 {
+                    Button(showsAllNews ? "Show Fewer Stories" : "More News (\(rest.count - visible.count))") {
+                        withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
+                            showsAllNews.toggle()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("home.news.more")
                 }
             } else if let filterTeam {
                 compactLine("No stories about the \(filterTeam.shortName) right now.", identifier: "home.news.filterEmpty")
