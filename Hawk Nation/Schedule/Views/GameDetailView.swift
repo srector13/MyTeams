@@ -8,6 +8,11 @@
 
 import SwiftUI
 
+/// The band at the top of a game sheet left to the system grabber and the
+/// share and close buttons floating over the venue: a button's 44 pt and
+/// its inset.
+private let sheetButtonClearance: CGFloat = 44 + Theme.Spacing.m
+
 /// The sheet a schedule card opens: the venue, the scoreline and the box
 /// score, refreshed while the game is live.
 ///
@@ -24,10 +29,10 @@ struct GameDetailView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    /// The venue header's height at the default text size; it grows with
-    /// the text over it. Short enough that the medium detent shows the
-    /// scoreboard and linescore beneath it.
-    @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 140
+    /// The venue header's height at the default text size, the buttons'
+    /// band included; it grows with the text over it. Short enough that the
+    /// medium detent shows the scoreboard and linescore beneath it.
+    @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 196
 
     /// The scoreboard's crests, which scale with the team names under them
     /// (B-3).
@@ -51,6 +56,9 @@ struct GameDetailView: View {
     /// The scoreboard as an image, for Share (R-3); `nil` until the game
     /// has a score.
     @State private var shareImage: Image?
+    /// Whether the venue header has scrolled up under the buttons, which
+    /// then take a bar of their own so the figures pass behind it.
+    @State private var scrolledPastHeader = false
 
     /// Paces refreshes that produced no sheet: 30 seconds, doubling while
     /// ESPN throttles. See `PollBackoff`.
@@ -161,14 +169,17 @@ struct GameDetailView: View {
             Spacer()
         }
         .scrollIndicators(.hidden)
-        // What scrolls up passes behind a firm edge under the buttons, not
-        // under the bare glass of the buttons themselves.
-        .scrollEdgeEffectStyle(.hard, for: .top)
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            geometry.contentOffset.y + geometry.contentInsets.top > headerHeight - sheetButtonClearance
+        } action: { _, past in
+            scrolledPastHeader = past
+        }
         // No background of its own: the system sheet draws the surface
-        // (glass at the medium detent). Share and close sit in a bar of
-        // their own beside the grabber, and the venue header starts below
-        // it, so no content rests under them.
-        .safeAreaBar(edge: .top) {
+        // (glass at the medium detent), and the venue runs under the
+        // grabber and the buttons to the sheet's top edge. Once the venue
+        // has scrolled away, the buttons take a bar, so the figures pass
+        // behind it rather than under bare glass.
+        .overlay(alignment: .top) {
             HStack(alignment: .top) {
                 if !loading {
                     shareButton
@@ -183,6 +194,15 @@ struct GameDetailView: View {
             .padding(.horizontal, Theme.Spacing.m)
             .padding(.top, Theme.Spacing.m)
             .padding(.bottom, Theme.Spacing.xs)
+            .background {
+                if scrolledPastHeader {
+                    Rectangle()
+                        .fill(.bar)
+                        .ignoresSafeArea(edges: .top)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: scrolledPastHeader)
         }
         // Drawn again as the score or status changes.
         .onChange(of: shareLine, initial: true) {
@@ -271,14 +291,17 @@ struct GameDetailView: View {
     ///
     /// At least `headerHeight` tall, and taller when the text needs it: the
     /// venue and its wash sit behind the text rather than fixing its height.
-    /// It starts below the bar holding the share and close buttons.
+    /// The venue runs to the sheet's top edge, under the grabber and the
+    /// buttons; the text starts below them.
     private var header: some View {
         VStack(spacing: 0) {
             Text(game.competitionName)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .padding(.top, Theme.Spacing.m)
+                // Below the grabber and the buttons; the venue runs on
+                // under them.
+                .padding(.top, sheetButtonClearance)
 
             Spacer(minLength: Theme.Spacing.s)
 
