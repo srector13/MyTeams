@@ -211,6 +211,57 @@ final class GUIAuditScreenshotTests: XCTestCase {
         darkApp.terminate()
     }
 
+    /// The redesigned Home: the hero, each section, the week strip's days,
+    /// Customize Home, and a team card opening its tab; live data in both
+    /// appearances, then the fixture-pinned mid-season week.
+    @MainActor
+    func test11_HomeRedesign() {
+        for dark in [false, true] {
+            run = "11-home-\(dark ? "dark" : "light")"
+            counter = 0
+            let app = launch(dark: dark)
+            guard waitForHome(app) else { app.terminate(); continue }
+            pause(6)
+            shot("top")
+            for i in 1...6 { app.swipeUp(); pause(1.2); shot("scroll\(i)") }
+            // Customize Home, at the foot.
+            let customize = app.buttons["home.customize"]
+            for _ in 0..<3 where !(customize.exists && customize.isHittable) { app.swipeUp(); pause(0.6) }
+            if customize.exists && customize.isHittable {
+                customize.tap(); pause(1.5); shot("customize")
+                app.buttons["home.customize.done"].tapIfExists(); pause(1)
+            } else { miss("customize") }
+            for _ in 0..<8 { app.swipeDown() }
+            pause(1)
+            // Another day in the strip.
+            let days = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "home.week.day."))
+            if days.count > 4 {
+                let day = days.element(boundBy: 4)
+                if day.isHittable { day.tap(); pause(1.5); shot("week-day") }
+            }
+            // A team card opens its tab.
+            let card = app.descendants(matching: .any)["home.myTeams.football/nfl:12"].firstMatch
+            if card.waitForExistence(timeout: 5), card.isHittable {
+                card.tap(); pause(4); shot("team-from-card")
+            } else { miss("my teams card") }
+            app.terminate()
+        }
+
+        run = "11-home-fixtures"
+        counter = 0
+        let app = launch(dark: false, favorites: "football/nfl:12", environment: [
+            "MYTEAMS_FIXTURES_DIR": fixturesPath,
+            "MYTEAMS_HOME_NOW": "1790424000",
+        ])
+        if waitForHome(app) {
+            pause(4)
+            shot("midseason-top")
+            app.swipeUp(); pause(1.2); shot("midseason-scroll1")
+            app.swipeUp(); pause(1.2); shot("midseason-scroll2")
+        }
+        app.terminate()
+    }
+
     // MARK: Tours
 
     @MainActor
