@@ -162,7 +162,7 @@ jobs:
         with:
           path: shots
           pattern: shots-*
-      - name: Commit to claude/soccer-photos-shots-out2
+      - name: Commit to claude/soccer-photos-shots-out3
         shell: bash
         run: |
           set -euo pipefail
@@ -174,8 +174,8 @@ jobs:
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -b claude/soccer-photos-shots-out2
+          git checkout -q -b claude/soccer-photos-shots-out3
           git add -A
           git commit -qm "GUI audit screenshots for ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push -f origin claude/soccer-photos-shots-out2
+          git push -f origin claude/soccer-photos-shots-out3

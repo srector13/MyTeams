@@ -274,7 +274,9 @@ final class GUIAuditScreenshotTests: XCTestCase {
             XCUIDevice.shared.appearance = .light
             let app = XCUIApplication()
             app.launchEnvironment["MYTEAMS_FAVORITES"] = "soccer/usa.1:186"
-            app.launchArguments += ["-settings.appearance", "light", "-settings.fotmob.enabled", fotmob ? "YES" : "NO"]
+            // Booleans in the argument domain as plist values: a bare "YES" is a
+            // string, which a Bool @AppStorage ignores.
+            app.launchArguments += ["-settings.appearance", "light", "-settings.fotmob.enabled", fotmob ? "<true/>" : "<false/>"]
             app.launch()
             guard waitForHome(app) else { app.terminate(); continue }
             pause(2)
