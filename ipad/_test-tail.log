@@ -1,0 +1,150 @@
+    t =    71.29s     Synthesize event
+    t =    71.76s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    84.59s Added attachment named '13-soccer-fotmob__02-roster1'
+    t =    84.60s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =    85.06s Find the Any (Element at index 0)
+    t =    85.50s Find the Any (Element at index 1)
+    t =    85.89s Find the Any (Element at index 2)
+    t =    86.47s Find the Any (Element at index 3)
+    t =    87.01s Find the Any (Element at index 4)
+    t =    87.56s Find the Any (Element at index 5)
+    t =    88.08s Find the Any (Element at index 6)
+    t =    88.68s Find the Any (Element at index 7)
+    t =    89.21s Find the Any (Element at index 8)
+    t =    89.71s Find the Any (Element at index 9)
+    t =    90.01s Find the Any (Element at index 10)
+    t =    90.43s Find the Any (Element at index 11)
+    t =    90.80s Find the Any (Element at index 12)
+    t =    91.18s Find the Any (Element at index 13)
+    t =    91.55s Find the Any (Element at index 14)
+    t =    91.95s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =    92.28s Find the Any (Element at index 0)
+    t =    92.64s Find the Any (Element at index 1)
+    t =    93.16s Find the Any (Element at index 2)
+    t =    94.11s Find the Any (Element at index 3)
+    t =    94.83s Find the Any (Element at index 4)
+    t =    95.46s Find the Any (Element at index 5)
+    t =    96.13s Find the Any (Element at index 6)
+    t =    97.32s Find the Any (Element at index 7)
+    t =    98.71s Find the Any (Element at index 8)
+    t =   100.18s Find the Any (Element at index 9)
+    t =   101.98s Find the Any (Element at index 10)
+    t =   103.77s Find the Any (Element at index 11)
+    t =   105.04s Find the Any (Element at index 12)
+    t =   105.42s Find the Any (Element at index 13)
+    t =   105.83s Find the Any (Element at index 14)
+    t =   106.21s Terminate PolarReailty.Hawk-Nation:22149
+    t =   107.30s Setting appearance mode to Light
+    t =   108.12s     Wait for com.apple.DocumentManager.DockFolderViewService to idle
+    t =   108.13s     Wait for com.apple.springboard to idle
+    t =   108.21s Open PolarReailty.Hawk-Nation
+    t =   108.21s     Launch PolarReailty.Hawk-Nation
+2026-10-16 12:49:19.878 xcodebuild[20005:58881] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-16 12:49:19.879 xcodebuild[20005:58881] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   115.31s         Setting up automation session
+    t =   116.85s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   121.84s Waiting 20.0s for "home.settings" Button to exist
+    t =   122.86s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =   122.86s         Checking existence of `"home.settings" Button`
+    t =   125.21s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   125.33s Find the Button (Element at index 0)
+    t =   125.55s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   125.74s Find the Button (Element at index 0)
+    t =   125.89s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   126.10s Find the Button (Element at index 0)
+    t =   126.52s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   127.13s Checking existence of `Button (Element at index 0)`
+    t =   127.47s Waiting 5.0s for Button (Element at index 0) to exist
+    t =   128.50s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 0)`
+    t =   128.50s         Checking existence of `Button (Element at index 0)`
+    t =   128.65s Find the Button (Element at index 0)
+    t =   128.85s Tap "teamPicker.team.soccer/usa.1:186" Button
+    t =   128.85s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   128.85s     Find the "teamPicker.team.soccer/usa.1:186" Button
+    t =   128.97s     Check for interrupting elements affecting "teamPicker.team.soccer/usa.1:186" Button
+    t =   129.10s         Wait for com.apple.springboard to idle
+    t =   129.18s Ignoring failure to get hierarchy for remote element in process 22505 (Error getting main window kAXErrorServerNotFound)
+    t =   129.18s Ignoring failure to get hierarchy for remote element in process 22505 (Error getting main window kAXErrorServerNotFound)
+    t =   129.20s     Synthesize event
+    t =   129.54s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   141.19s Added attachment named '13-soccer-default__01-team-top'
+    t =   141.20s Waiting 10.0s for Any (First Match) to exist
+    t =   142.21s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   142.22s         Checking existence of `Any (First Match)`
+    t =   142.99s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   143.56s Find the Any (Element at index 0)
+    t =   143.91s Find the Any (Element at index 1)
+    t =   144.24s Find the Any (Element at index 2)
+    t =   144.67s Find the Any (Element at index 3)
+    t =   145.07s Find the Any (Element at index 4)
+    t =   145.40s Find the Any (Element at index 5)
+    t =   145.70s Find the Any (Element at index 6)
+    t =   146.08s Find the Any (Element at index 7)
+    t =   146.66s Find the Any (Element at index 8)
+    t =   147.35s Find the Any (Element at index 9)
+    t =   148.17s Find the Any (Element at index 10)
+    t =   148.96s Find the Any (Element at index 11)
+    t =   149.97s Find the Any (Element at index 12)
+    t =   150.80s Find the Any (Element at index 13)
+    t =   151.46s Find the Any (Element at index 14)
+    t =   152.27s Swipe left "roster.player.316648" Button
+    t =   152.27s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   152.28s     Find the "roster.player.316648" Button
+    t =   152.63s     Check for interrupting elements affecting "roster.player.316648" Button
+    t =   152.97s         Wait for com.apple.springboard to idle
+    t =   153.04s Ignoring failure to get hierarchy for remote element in process 22505 (Error getting main window kAXErrorServerNotFound)
+    t =   153.05s Ignoring failure to get hierarchy for remote element in process 22505 (Error getting main window kAXErrorServerNotFound)
+    t =   153.06s     Synthesize event
+    t =   153.66s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   159.94s Added attachment named '13-soccer-default__02-roster1'
+    t =   159.96s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   160.56s Find the Any (Element at index 0)
+    t =   161.14s Find the Any (Element at index 1)
+    t =   161.71s Find the Any (Element at index 2)
+    t =   162.31s Find the Any (Element at index 3)
+    t =   163.03s Find the Any (Element at index 4)
+    t =   163.70s Find the Any (Element at index 5)
+    t =   164.28s Find the Any (Element at index 6)
+    t =   164.92s Find the Any (Element at index 7)
+    t =   165.67s Find the Any (Element at index 8)
+    t =   166.40s Find the Any (Element at index 9)
+    t =   166.87s Find the Any (Element at index 10)
+    t =   167.33s Find the Any (Element at index 11)
+    t =   167.82s Find the Any (Element at index 12)
+    t =   168.35s Find the Any (Element at index 13)
+    t =   168.77s Find the Any (Element at index 14)
+    t =   169.25s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   169.64s Find the Any (Element at index 0)
+    t =   170.06s Find the Any (Element at index 1)
+    t =   170.58s Find the Any (Element at index 2)
+    t =   171.22s Find the Any (Element at index 3)
+    t =   171.79s Find the Any (Element at index 4)
+    t =   172.47s Find the Any (Element at index 5)
+    t =   173.04s Find the Any (Element at index 6)
+    t =   173.54s Find the Any (Element at index 7)
+    t =   174.07s Find the Any (Element at index 8)
+    t =   174.81s Find the Any (Element at index 9)
+    t =   175.23s Find the Any (Element at index 10)
+    t =   175.58s Find the Any (Element at index 11)
+    t =   175.99s Find the Any (Element at index 12)
+    t =   176.31s Find the Any (Element at index 13)
+    t =   176.68s Find the Any (Element at index 14)
+    t =   177.12s Terminate PolarReailty.Hawk-Nation:25262
+    t =   178.23s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test13_SoccerPhotos]' passed (179.114 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-16 12:50:25.431.
+	 Executed 1 test, with 0 failures (0 unexpected) in 179.114 (179.118) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-16 12:50:25.432.
+	 Executed 1 test, with 0 failures (0 unexpected) in 179.114 (179.119) seconds
+Test Suite 'Selected tests' passed at 2026-10-16 12:50:25.432.
+	 Executed 1 test, with 0 failures (0 unexpected) in 179.114 (179.121) seconds
+2026-10-16 12:50:26.862 xcodebuild[20005:58881] [MT] IDETestOperationsObserverDebug: 221.240 elapsed -- Testing started completed.
+2026-10-16 12:50:26.862 xcodebuild[20005:58881] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-16 12:50:26.862 xcodebuild[20005:58881] [MT] IDETestOperationsObserverDebug: 221.240 sec, +221.240 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
