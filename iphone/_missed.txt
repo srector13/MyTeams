@@ -1,0 +1,6 @@
+03-live-light: missed team1 schedule
+05-ax3-light: missed team2 schedule
+11-home-light: missed customize
+11-home-light: missed my teams card
+11-home-dark: missed customize
+11-home-dark: missed my teams card
