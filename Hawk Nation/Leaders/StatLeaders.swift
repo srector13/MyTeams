@@ -177,6 +177,55 @@ func leaderBoards(from leaders: StatLeaders, kind: SportKind, depth: Int) -> [Le
 /// the one in progress by its `SeasonNaming`. Early in a new season that
 /// can have no leaders yet, so an empty answer is retried for the season
 /// before. Only the first request's failure is reported.
+/// Each team's leader boards, one leader deep, fetched once and kept for an
+/// hour, for Home's top performers; a team page keeps loading its own
+/// (`TeamModel`). Concurrent callers share one load; a failed one is
+/// retried on the next ask.
+actor TeamLeadersStore {
+    static let shared = TeamLeadersStore()
+
+    /// How long a team's leaders are served without asking again.
+    static let timeToLive: TimeInterval = 60 * 60
+
+    private let load: @Sendable (TeamRef) async -> [LeaderBoard]?
+    private let now: @Sendable () -> Date
+
+    private var cached: [TeamRef.ID: (fetchedAt: Date, boards: [LeaderBoard])] = [:]
+    private var loads: [TeamRef.ID: Task<[LeaderBoard]?, Never>] = [:]
+
+    init(
+        load: @escaping @Sendable (TeamRef) async -> [LeaderBoard]? = { team in
+            guard case .success(let leaders) = await downloadStatLeaders(league: team.league, teamID: team.espnID, depth: 1)
+            else { return nil }
+            return leaderBoards(from: leaders, kind: team.league.descriptor.kind, depth: 1)
+        },
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.load = load
+        self.now = now
+    }
+
+    /// The team's leader boards, from the last hour's fetch or a new one;
+    /// empty when the feed couldn't be read or lists nobody.
+    func leaders(for team: TeamRef) async -> [LeaderBoard] {
+        if let entry = cached[team.id], now().timeIntervalSince(entry.fetchedAt) < Self.timeToLive {
+            return entry.boards
+        }
+        if let existing = loads[team.id] {
+            return await existing.value ?? []
+        }
+        let load = load
+        let task = Task<[LeaderBoard]?, Never> { await load(team) }
+        loads[team.id] = task
+        let boards = await task.value
+        loads[team.id] = nil
+        if let boards {
+            cached[team.id] = (now(), boards)
+        }
+        return boards ?? []
+    }
+}
+
 func downloadStatLeaders(
     league: LeagueID,
     teamID: String? = nil,

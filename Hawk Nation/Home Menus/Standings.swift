@@ -454,6 +454,55 @@ actor PollRankStore {
     }
 }
 
+/// Each league's standings, fetched once and kept for an hour, shared by
+/// every view that shows a team's place without its whole page loaded:
+/// Home's team cards and standings snapshot. Concurrent callers share one
+/// load; a failed one is retried on the next ask rather than kept.
+actor StandingsStore {
+    static let shared = StandingsStore()
+
+    /// How long a league's standings are served without asking again.
+    static let timeToLive: TimeInterval = 60 * 60
+
+    private let load: @Sendable (LeagueID) async -> Standings?
+    private let now: @Sendable () -> Date
+
+    private var cached: [LeagueID: (fetchedAt: Date, standings: Standings)] = [:]
+    /// Loads in flight, so concurrent callers share one request.
+    private var loads: [LeagueID: Task<Standings?, Never>] = [:]
+
+    init(
+        load: @escaping @Sendable (LeagueID) async -> Standings? = { league in
+            if case .success(let standings) = await downloadStandings(league: league) { return standings }
+            return nil
+        },
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.load = load
+        self.now = now
+    }
+
+    /// The league's standings, from the last hour's fetch or a new one;
+    /// `nil` when the feed couldn't be read.
+    func standings(for league: LeagueID) async -> Standings? {
+        if let entry = cached[league], now().timeIntervalSince(entry.fetchedAt) < Self.timeToLive {
+            return entry.standings
+        }
+        if let existing = loads[league] {
+            return await existing.value
+        }
+        let load = load
+        let task = Task<Standings?, Never> { await load(league) }
+        loads[league] = task
+        let standings = await task.value
+        loads[league] = nil
+        if let standings {
+            cached[league] = (now(), standings)
+        }
+        return standings
+    }
+}
+
 // MARK: - Loading
 
 extension LeagueDescriptor {

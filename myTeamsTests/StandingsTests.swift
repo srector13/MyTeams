@@ -520,6 +520,52 @@ struct PollRanksTests {
         #expect(await store.ranks(for: .womensCollegeBasketball).isEmpty)
         #expect(transport.requestCount == 4)
     }
+
+    @Test("The standings store asks once an hour per league, and retries a failure")
+    func standingsStore() async throws {
+        let table = try standings("epl_standings", .premierLeague)
+        let loads = LoadCounter()
+        let clock = PollClock()
+        let store = StandingsStore(load: { league in
+            loads.increment()
+            return league == .premierLeague ? table : nil
+        }, now: { clock.now })
+
+        #expect(await store.standings(for: .premierLeague) == table)
+        #expect(await store.standings(for: .premierLeague) == table)
+        #expect(loads.count == 1)
+
+        // An hour on, the table is asked for again.
+        clock.advance(by: StandingsStore.timeToLive + 1)
+        _ = await store.standings(for: .premierLeague)
+        #expect(loads.count == 2)
+
+        // A failure is nil, and not kept.
+        #expect(await store.standings(for: .nba) == nil)
+        #expect(await store.standings(for: .nba) == nil)
+        #expect(loads.count == 4)
+    }
+
+    @Test("A team with no schedule takes its record from its standings row")
+    func standingsRecordFallback() throws {
+        let table = try standings("epl_standings", .premierLeague)
+        let entry = try #require(table.groups.flatMap(\.entries).first { $0.record.gamesPlayed > 0 })
+        #expect(TeamHeaderSummary.standingsRecord(of: entry.teamID, in: table) == entry.record.summary)
+        #expect(TeamHeaderSummary.standingsRecord(of: "no-such-team", in: table) == nil)
+        #expect(TeamHeaderSummary.standingsRecord(of: entry.teamID, in: .empty) == nil)
+    }
+}
+
+/// Counts a store's loads, from whatever task runs them.
+private final class LoadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = 0
+
+    var count: Int { lock.withLock { current } }
+
+    func increment() {
+        lock.withLock { current += 1 }
+    }
 }
 
 /// A settable clock for the poll store's time-to-live.

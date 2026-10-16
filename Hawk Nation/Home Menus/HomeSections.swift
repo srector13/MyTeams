@@ -1113,7 +1113,9 @@ struct TeamHeaderSummary: Equatable, Sendable {
     /// if it's still to be played, and the form from the same games the
     /// record is counted from.
     init(team: TeamRef, games: [Game], nextGame: Int, record: Record, standings: Standings?) {
-        self.record = games.isEmpty ? nil : record.summary
+        self.record = games.isEmpty
+            ? standings.flatMap { Self.standingsRecord(of: team.espnID, in: $0) }
+            : record.summary
         self.standing = standings.flatMap {
             Self.standing(of: team.espnID, in: $0, leagueName: team.league.descriptor.displayName)
         }
@@ -1150,6 +1152,17 @@ struct TeamHeaderSummary: Equatable, Sendable {
         case .pointsTable, .records:
             return "\(ordinalString(rank)) in \(title)"
         }
+    }
+
+    /// The team's record as its standings row gives it, for a team whose
+    /// schedule is empty (a season over: the Royals' 69-93 in October), or
+    /// `nil` where the row has no games yet or the table is a poll.
+    static func standingsRecord(of teamID: String, in standings: Standings) -> String? {
+        guard standings.kind != .rankings,
+              let record = standings.entry(for: teamID)?.record,
+              record.gamesPlayed > 0
+        else { return nil }
+        return record.summary
     }
 
     /// `"vs Raiders · Sun, Oct 12"` (`"at"` away from home) for the game at
