@@ -1,0 +1,121 @@
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,id=E839A11B-51B4-4AD3-ACF4-A53B95B7C957" -skipPackagePluginValidation -skipMacroValidation -derivedDataPath dd test-without-building CODE_SIGNING_ALLOWED=NO "-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test13_SoccerPhotos" -resultBundlePath audit.xcresult
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Writing result bundle at path:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, arch:arm64, id:E839A11B-51B4-4AD3-ACF4-A53B95B7C957, OS:26.5, name:iPhone 17 Pro }
+{ platform:iOS Simulator, arch:x86_64, id:E839A11B-51B4-4AD3-ACF4-A53B95B7C957, OS:26.5, name:iPhone 17 Pro }
+2026-10-16 12:08:21.119199+0000 myTeamsUITests-Runner[17629:52164] [Default] Running tests...
+2026-10-16 12:08:21.296694+0000 myTeamsUITests-Runner[17629:52709] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-16 12:08:21.367367+0000 myTeamsUITests-Runner[17629:52711] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+objc[17629]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10750c310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x106f54398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-10-16 12:08:29.019.
+Test Suite 'myTeamsUITests.xctest' started at 2026-10-16 12:08:29.020.
+Test Suite 'GUIAuditScreenshotTests' started at 2026-10-16 12:08:29.020.
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test13_SoccerPhotos]' started.
+    t =     0.00s Start Test at 2026-10-16 12:08:29.021
+    t =     1.09s Set Up
+    t =     1.09s Setting appearance mode to Light
+    t =     1.19s     Wait for com.apple.springboard to idle
+    t =     1.45s Open PolarReailty.Hawk-Nation
+    t =     1.45s     Launch PolarReailty.Hawk-Nation
+2026-10-16 12:08:36.103 xcodebuild[15774:47492] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-16 12:08:36.103 xcodebuild[15774:47492] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =    19.30s         Setting up automation session
+    t =    22.46s         Wait for PolarReailty.Hawk-Nation to idle
+    t =    30.49s Waiting 20.0s for "home.settings" Button to exist
+    t =    31.55s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =    31.55s         Checking existence of `"home.settings" Button`
+    t =    35.80s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    36.31s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    36.31s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    36.32s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    36.79s     Check for interrupting elements affecting "myTeams" Application
+    t =    37.74s     Synthesize event
+    t =    38.35s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    39.40s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    40.15s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    40.15s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    40.16s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    40.37s     Check for interrupting elements affecting "myTeams" Application
+    t =    41.14s     Synthesize event
+    t =    41.63s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    42.54s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    42.78s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =    42.78s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    42.80s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =    43.01s     Check for interrupting elements affecting "myTeams" Application
+    t =    43.32s     Synthesize event
+    t =    43.80s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    44.71s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =    44.91s Checking existence of `Button (Element at index 1)`
+    t =    45.22s Waiting 5.0s for Button (Element at index 1) to exist
+    t =    46.24s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 1)`
+    t =    46.24s         Checking existence of `Button (Element at index 1)`
+    t =    46.57s Find the Button (Element at index 1)
+    t =    53.59s Tap "Sporting Kansas City" Button
+    t =    53.59s     Wait for PolarReailty.Hawk-Nation to idle
+    t =    53.60s     Find the "Sporting Kansas City" Button
+    t =    54.03s     Check for interrupting elements affecting "Sporting Kansas City" Button
+    t =    72.06s     Synthesize event
+    t =    72.42s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   132.13s Added attachment named '13-soccer-fotmob__01-team-top'
+    t =   132.15s Waiting 10.0s for Any (First Match) to exist
+    t =   133.23s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   133.23s         Checking existence of `Any (First Match)`
+    t =   137.44s Swipe left Any (First Match)
+    t =   137.44s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   137.60s     Find the Any (First Match)
+    t =   140.18s     Check for interrupting elements affecting "roster.player.324574" Button
+    t =   140.93s     Synthesize event
+    t =   142.09s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   145.62s Added attachment named '13-soccer-fotmob__02-roster1'
+    t =   145.63s Swipe left "roster.player.324574" Button
+    t =   145.63s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   145.64s     Find the "roster.player.324574" Button
+    t =   146.64s     Check for interrupting elements affecting "roster.player.324574" Button
+    t =   147.06s     Synthesize event
+    t =   147.32s         Failed: Unable to perform Swipe left on "roster.player.324574" Button: visible frame is empty, which may happen if the element is offscreen.
+    t =   147.32s         Requesting snapshot of accessibility hierarchy for app with pid 18303
+    t =   148.75s     Retrying `Swipe left "roster.player.324574" Button` (attempt #2)
+    t =   148.75s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   148.75s         Find the "roster.player.324574" Button
+    t =   149.96s         Check for interrupting elements affecting "roster.player.324574" Button
+    t =   150.48s         Synthesize event
+    t =   150.89s             Failed: Unable to perform Swipe left on "roster.player.324574" Button: visible frame is empty, which may happen if the element is offscreen.
+    t =   150.90s             Requesting snapshot of accessibility hierarchy for app with pid 18303
+    t =   152.88s     Retrying `Swipe left "roster.player.324574" Button` (attempt #3)
+    t =   152.88s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   152.89s         Find the "roster.player.324574" Button
+    t =   156.85s         Check for interrupting elements affecting "roster.player.324574" Button
+    t =   157.46s         Synthesize event
+    t =   157.77s             Failed: Unable to perform Swipe left on "roster.player.324574" Button: visible frame is empty, which may happen if the element is offscreen.
+    t =   157.77s             Requesting snapshot of accessibility hierarchy for app with pid 18303
+/Users/runner/work/MyTeams/MyTeams/myTeamsUITests/GUIAuditScreenshotTests.swift:290: error: -[myTeamsUITests.GUIAuditScreenshotTests test13_SoccerPhotos] : Failed to unable to perform Swipe left on "roster.player.324574" Button: visible frame is empty, which may happen if the element is offscreen.
+    t =   159.03s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test13_SoccerPhotos]' failed (159.705 seconds).
+Test Suite 'GUIAuditScreenshotTests' failed at 2026-10-16 12:11:08.728.
+	 Executed 1 test, with 1 failure (0 unexpected) in 159.705 (159.707) seconds
+Test Suite 'myTeamsUITests.xctest' failed at 2026-10-16 12:11:08.731.
+	 Executed 1 test, with 1 failure (0 unexpected) in 159.705 (159.711) seconds
+Test Suite 'Selected tests' failed at 2026-10-16 12:11:08.732.
+	 Executed 1 test, with 1 failure (0 unexpected) in 159.705 (159.713) seconds
+2026-10-16 12:12:35.341 xcodebuild[15774:47492] [MT] IDETestOperationsObserverDebug: 291.261 elapsed -- Testing started completed.
+2026-10-16 12:12:35.342 xcodebuild[15774:47492] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-16 12:12:35.342 xcodebuild[15774:47492] [MT] IDETestOperationsObserverDebug: 291.261 sec, +291.261 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+Failing tests:
+	GUIAuditScreenshotTests.test13_SoccerPhotos()
+
+** TEST EXECUTE FAILED **
+
+Testing started
