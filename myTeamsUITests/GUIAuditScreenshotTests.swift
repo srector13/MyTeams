@@ -264,6 +264,44 @@ final class GUIAuditScreenshotTests: XCTestCase {
 
     /// Player sheets across sports (soccer first), each scrolled through,
     /// and a game sheet's header, for the player-sheet audit.
+    /// Sporting KC's roster and player sheets with each soccer photo source:
+    /// FotMob on (experimental), then the default (TheSportsDB only).
+    @MainActor
+    func test13_SoccerPhotos() {
+        for (name, fotmob) in [("fotmob", true), ("default", false)] {
+            run = "13-soccer-\(name)"
+            counter = 0
+            XCUIDevice.shared.appearance = .light
+            let app = XCUIApplication()
+            app.launchEnvironment["MYTEAMS_FAVORITES"] = "soccer/usa.1:186"
+            app.launchArguments += ["-settings.appearance", "light", "-settings.fotmob.enabled", fotmob ? "YES" : "NO"]
+            app.launch()
+            guard waitForHome(app) else { app.terminate(); continue }
+            pause(2)
+            guard openTeam(app, index: 0) else { app.terminate(); continue }
+            pause(8)
+            shot("team-top")
+            let players = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "roster.player"))
+            if players.firstMatch.waitForExistence(timeout: 10) {
+                // The roster carousel scrolled across, photos loading in.
+                let carousel = players.firstMatch
+                for i in 1...3 {
+                    carousel.swipeLeft(); pause(3); shot("roster\(i)")
+                }
+                let hittable = players.allElementsBoundByIndex.filter { $0.isHittable }
+                if let first = hittable.first {
+                    first.tap()
+                    if app.buttons["playerDetail.close"].waitForExistence(timeout: 8) {
+                        pause(5); shot("player")
+                        app.buttons["playerDetail.close"].tapIfExists(); pause(1)
+                    }
+                }
+            } else { miss("soccer roster") }
+            app.terminate()
+        }
+    }
+
     @MainActor
     func test12_PlayerSheets() {
         for dark in [false, true] {
