@@ -12,7 +12,15 @@
 	     asks v3.football.api-sports.io for soccer league player lists (the
 	     key goes to that host only) and loads photos from media.api-sports.io
 	     (no key). The key stays in the device Keychain; no user data is
-	     collected or sent, and neither host is a tracking domain. -->
+	     collected or sent, and neither host is a tracking domain.
+	     For soccer players ESPN has no photo of, the app also searches
+	     www.thesportsdb.com by player name (TheSportsDBHeadshotStore, on by
+	     default) and, only with the reader's "FotMob (Experimental)" setting
+	     on, asks www.fotmob.com for a club's squad by club name
+	     (FotMobHeadshotStore); photos load from r2.thesportsdb.com and
+	     images.fotmob.com. Only player and club names are sent; no user
+	     data is collected or sent, and none of these hosts is a tracking
+	     domain. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>

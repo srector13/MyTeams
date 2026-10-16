@@ -20,8 +20,9 @@ struct PlayerCard<Player: RosterPlayer>: View {
     /// The roster's league, for the Wikimedia Commons fallback when ESPN
     /// has no headshot (`AthleteHeadshot`). `nil` keeps the jersey avatar.
     var league: LeagueID? = nil
-    /// The roster's team, for the jersey avatar's colours and crest. `nil`
-    /// draws it in the system's grey.
+    /// The roster's team, for the jersey avatar's colours and crest, and
+    /// for the soccer photo sources that look players up by club
+    /// (`AthleteHeadshot`). `nil` draws it in the system's grey.
     var team: TeamRef? = nil
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -42,7 +43,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
             : AnyLayout(VStackLayout(spacing: 5))
 
         layout {
-            AthleteHeadshot(player, league: league, drawsSilhouette: false) {
+            AthleteHeadshot(player, league: league, team: team, drawsSilhouette: false) {
                 PlayerJerseyAvatar(player, team: team, size: headshotSize)
             }
             .aspectRatio(contentMode: .fill)

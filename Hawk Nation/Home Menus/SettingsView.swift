@@ -202,17 +202,38 @@ struct SettingsView: View {
     }
 }
 
-/// Settings few people need: the reader's own API-Football key, for soccer
-/// photos neither ESPN nor Commons has (tier 3), and what the app was
-/// signed with and where it shares the favorites, to compare with the
-/// widget's face on a re-signed install (`SharedStoreDiagnostics`).
+/// Settings few people need: where soccer photos ESPN lacks may come from
+/// (TheSportsDB, on by default; FotMob, an experiment, off), the reader's
+/// own API-Football key for more of them, and what the app was signed with
+/// and where it shares the favorites, to compare with the widget's face on
+/// a re-signed install (`SharedStoreDiagnostics`).
 struct AdvancedSettingsView: View {
     /// The app's sharing diagnostics, read as the screen opens, after
     /// Settings published the favorites.
     @State private var sharing: SharedStoreDiagnostics?
 
+    /// Soccer Photos: stored where `AthleteHeadshot` reads them, so a change
+    /// applies to the next headshot drawn (`SoccerPhotoSettings`).
+    @AppStorage(SoccerPhotoSettings.theSportsDBKey) private var theSportsDBEnabled = SoccerPhotoSettings.theSportsDBDefault
+    @AppStorage(SoccerPhotoSettings.fotMobKey) private var fotMobEnabled = SoccerPhotoSettings.fotMobDefault
+
     var body: some View {
         Form {
+            Section {
+                Toggle("TheSportsDB", isOn: $theSportsDBEnabled)
+                    .accessibilityHint("Looks up soccer player photos ESPN doesn't have in TheSportsDB.")
+                    .accessibilityIdentifier("settings.thesportsdb.enabled")
+
+                Toggle("FotMob (Experimental)", isOn: $fotMobEnabled)
+                    .accessibilityHint("Looks up soccer player photos ESPN doesn't have through FotMob's unofficial endpoints.")
+                    .accessibilityIdentifier("settings.fotmob.enabled")
+            } header: {
+                Text("Soccer Photos")
+                    .accessibilityIdentifier("settings.soccerPhotos")
+            } footer: {
+                Text("Where ESPN has no photo of a soccer player, the app can look for one elsewhere. TheSportsDB is a free, community-run sports database, asked a few players at a time. FotMob (Experimental) uses FotMob's unofficial public endpoints, which may stop working at any time. Photos belong to their owners.")
+            }
+
             ApiFootballSettingsSection()
 
             Section {
