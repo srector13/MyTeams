@@ -297,8 +297,12 @@ private struct HomeDashboard: View {
         return VStack(spacing: Theme.Spacing.m) {
             if isRegular && !leading.isEmpty && !trailing.isEmpty {
                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                    // Each column at its own height: offered the taller
+                    // one's, a horizontal carousel stretched to fill it.
                     column(leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     column(trailing)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
                 column(visible)
