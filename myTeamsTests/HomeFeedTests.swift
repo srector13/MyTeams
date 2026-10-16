@@ -163,34 +163,150 @@ struct HomeFeedTests {
         #expect(HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles).map(\.article.title) == ["Chiefs one", "Kansas one"])
     }
 
-    // MARK: Collapsing
+    // MARK: This Week
 
-    @Test("Collapsed Upcoming keeps its first games under their days, and drops the days after")
-    func upcomingPrefix() {
-        let day1 = Self.calendar.startOfDay(for: Self.now)
-        let day2 = day1.addingTimeInterval(86_400)
-        let day3 = day2.addingTimeInterval(86_400)
-        let days = [
-            HomeDay(date: day1, games: [
-                HomeGame(team: chiefs, game: game(id: "1", start: Self.now)),
-                HomeGame(team: jayhawks, game: game(id: "2", start: Self.now)),
-            ]),
-            HomeDay(date: day2, games: [
-                HomeGame(team: chiefs, game: game(id: "3", start: Self.now)),
-                HomeGame(team: jayhawks, game: game(id: "4", start: Self.now)),
-                HomeGame(team: jayhawks, game: game(id: "5", start: Self.now)),
-            ]),
-            HomeDay(date: day3, games: [HomeGame(team: chiefs, game: game(id: "6", start: Self.now))]),
-        ]
+    @Test("This Week runs three days back to seven on, each day's games in start order")
+    func weekStrip() {
+        let late = HomeGame(team: chiefs, game: game(id: "1", start: Self.now.addingTimeInterval(4 * 3600)))
+        let early = HomeGame(team: jayhawks, game: game(id: "2", start: Self.now.addingTimeInterval(-3 * 3600), completed: true))
+        let threeBack = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(-3 * 86_400), completed: true))
+        let fourBack = HomeGame(team: chiefs, game: game(id: "4", start: Self.now.addingTimeInterval(-4 * 86_400), completed: true))
+        let sevenOn = HomeGame(team: chiefs, game: game(id: "5", start: Self.now.addingTimeInterval(7 * 86_400)))
+        let eightOn = HomeGame(team: chiefs, game: game(id: "6", start: Self.now.addingTimeInterval(8 * 86_400)))
 
-        let collapsed = HomeFeed.prefix(days, games: HomeFeed.collapsedGameCount)
-        #expect(HomeFeed.collapsedGameCount == 4)
-        #expect(collapsed.map(\.date) == [day1, day2])
-        #expect(collapsed.map { $0.games.map(\.id) } == [["1", "2"], ["3", "4"]])
+        let week = HomeFeed.week([late, eightOn, early, fourBack, sevenOn, threeBack], now: Self.now, calendar: Self.calendar)
+        let today = Self.calendar.startOfDay(for: Self.now)
+        #expect(week.count == 11)
+        #expect(week.first?.date == today.addingTimeInterval(-3 * 86_400))
+        #expect(week.last?.date == today.addingTimeInterval(7 * 86_400))
+        #expect(week.first?.games.map(\.id) == ["3"])
+        #expect(week.last?.games.map(\.id) == ["5"])
+        // Played and to come alike, in start order.
+        #expect(week.first(where: { $0.date == today })?.games.map(\.id) == ["2", "1"])
+        #expect(!week.flatMap(\.games).contains(where: { $0.id == "4" || $0.id == "6" }))
+    }
 
-        // Room for them all: unchanged.
-        #expect(HomeFeed.prefix(days, games: 10) == days)
-        #expect(HomeFeed.prefix(days, games: 0).isEmpty)
+    @Test("This Week opens on today, else the next day with games, else the last one")
+    func weekDefaultDay() {
+        let today = Self.calendar.startOfDay(for: Self.now)
+        let tomorrowGame = HomeGame(team: chiefs, game: game(id: "1", start: Self.now.addingTimeInterval(86_400)))
+        let todayGame = HomeGame(team: chiefs, game: game(id: "2", start: Self.now.addingTimeInterval(3600)))
+        let yesterdayGame = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(-86_400), completed: true))
+
+        func opening(_ games: [HomeGame]) -> Date {
+            HomeFeed.defaultDay(in: HomeFeed.week(games, now: Self.now, calendar: Self.calendar), now: Self.now, calendar: Self.calendar)
+        }
+        #expect(opening([tomorrowGame, todayGame, yesterdayGame]) == today)
+        #expect(opening([tomorrowGame, yesterdayGame]) == today.addingTimeInterval(86_400))
+        #expect(opening([yesterdayGame]) == today.addingTimeInterval(-86_400))
+        #expect(opening([]) == today)
+    }
+
+    @Test("A day's key is its date in the calendar, zero-padded")
+    func weekDayKey() {
+        #expect(HomeFeed.dayKey(Self.now, calendar: Self.calendar) == "2026-10-06")
+    }
+
+    // MARK: Hero
+
+    @Test("The hero features the soonest game to come, else a result from the last day")
+    func featuredGame() {
+        let soon = HomeGame(team: jayhawks, game: game(id: "1", start: Self.now.addingTimeInterval(3 * 3600)))
+        let later = HomeGame(team: chiefs, game: game(id: "2", start: Self.now.addingTimeInterval(2 * 86_400)))
+        let lastNight = HomeGame(team: chiefs, game: game(id: "3", start: Self.now.addingTimeInterval(-10 * 3600), completed: true, win: true))
+        let lastWeek = HomeGame(team: chiefs, game: game(id: "4", start: Self.now.addingTimeInterval(-3 * 86_400), completed: true))
+
+        let next = HomeFeed.featured(live: [], games: [later, lastNight, soon], now: Self.now)
+        #expect(next?.id == "1")
+        #expect(next?.phase == .upcoming)
+
+        let result = HomeFeed.featured(live: [], games: [lastWeek, lastNight], now: Self.now)
+        #expect(result?.id == "3")
+        #expect(result?.phase == .final)
+
+        #expect(HomeFeed.featured(live: [], games: [lastWeek], now: Self.now) == nil)
+    }
+
+    // MARK: My Teams
+
+    @Test("A team's card says its next game, else its last result, else the season's state")
+    func teamSummaryStatus() {
+        let won = game(id: "1", start: Self.now.addingTimeInterval(-2 * 86_400), completed: true, win: true)
+        let next = game(id: "2", start: Self.now.addingTimeInterval(26 * 3600), opponent: "Chargers")
+
+        let midSeason = HomeFeed.teamSummary(team: chiefs, games: [won, next], live: nil, standings: nil, pollRanks: .empty, now: Self.now)
+        guard case .next(let line) = midSeason.status else {
+            Issue.record("Expected the next game, got \(midSeason.status)")
+            return
+        }
+        #expect(line.hasPrefix("Next vs Chargers · "))
+        #expect(midSeason.header.record == "1-0")
+        #expect(midSeason.header.form == [.win])
+
+        let over = HomeFeed.teamSummary(team: chiefs, games: [won], live: nil, standings: nil, pollRanks: .empty, now: Self.now)
+        #expect(over.status == .last("Last W 24–17 vs Raiders"))
+
+        let longOver = HomeFeed.teamSummary(
+            team: chiefs, games: [won], live: nil, standings: nil, pollRanks: .empty,
+            now: Self.now.addingTimeInterval(30 * 86_400)
+        )
+        #expect(longOver.status == .seasonOver)
+
+        #expect(HomeFeed.teamSummary(team: chiefs, games: [], live: nil, standings: nil, pollRanks: .empty, now: Self.now).status == .preseason)
+        #expect(HomeFeed.teamSummary(team: chiefs, games: nil, live: nil, standings: nil, pollRanks: .empty, now: Self.now).status == .loading)
+    }
+
+    // MARK: Standings
+
+    private func entry(_ id: String, rank: Int) -> StandingsEntry {
+        StandingsEntry(
+            teamID: id, name: "Team \(id)", shortName: "T\(id)", abbreviation: "T\(id)", logoURL: nil,
+            record: Record(wins: 10 - rank, losses: rank, format: .winLoss),
+            rank: rank, gamesBehind: "", conferenceRecord: "", goalDifference: "", streak: "W1",
+            note: "", noteColorHex: "", clincher: ""
+        )
+    }
+
+    @Test("A team's standings slice is its row and the rows either side, clamped at the ends")
+    func standingsSlice() {
+        let rows = ["1", "2", "3", "12", "5"].enumerated().map { entry($1, rank: $0 + 1) }
+        let standings = Standings(
+            kind: .records,
+            seasonDisplayName: "2026",
+            groups: [StandingsGroup(id: "afc-west", name: "AFC West", abbreviation: "AFCW", entries: rows)]
+        )
+
+        let middle = HomeFeed.standingsSlice(team: chiefs, standings: standings)
+        #expect(middle?.rows.map(\.entry.teamID) == ["3", "12", "5"])
+        #expect(middle?.rows.map(\.isFollowed) == [false, true, false])
+        #expect(middle?.title == "AFC West")
+
+        let leader = Standings(
+            kind: .records,
+            seasonDisplayName: "2026",
+            groups: [StandingsGroup(id: "afc-west", name: "AFC West", abbreviation: "AFCW", entries: [entry("12", rank: 1)] + rows.prefix(3))]
+        )
+        #expect(HomeFeed.standingsSlice(team: chiefs, standings: leader)?.rows.map(\.entry.teamID) == ["12", "1", "2"])
+
+        #expect(HomeFeed.standingsSlice(team: jayhawks, standings: standings) == nil)
+    }
+
+    // MARK: Layout
+
+    @Test("Home's layout reads leniently: unknown values dropped, missing sections added shown")
+    func sectionLayout() {
+        #expect(HomeSectionLayout(storage: "") == .standard)
+        #expect(HomeSectionLayout(storage: HomeSectionLayout.standard.storage) == .standard)
+
+        let custom = HomeSectionLayout(storage: "news,-standings,bogus,week")
+        #expect(custom.order == [.news, .standings, .week, .myTeams, .performers])
+        #expect(custom.hidden == [.standings])
+        #expect(custom.visible == [.news, .week, .myTeams, .performers])
+        #expect(HomeSectionLayout(storage: custom.storage) == custom)
+
+        let moved = HomeSectionLayout.standard.moving(fromOffsets: IndexSet(integer: 4), toOffset: 0)
+        #expect(moved.order.first == .news)
+        #expect(HomeSectionLayout.standard.setting(.news, shown: false).visible.contains(.news) == false)
     }
 
     @Test("With no game live, upcoming or recent, Home is the news feed alone")

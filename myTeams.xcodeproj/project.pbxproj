@@ -156,6 +156,9 @@
 		8473A281ED2BC0EEADCA463D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 48894AFDF913DDA8138E5B0C /* PrivacyInfo.xcprivacy */; };
 		D2B55DBA017E0C6714ADB3BF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B58AC2186F276DF2B919173C /* PrivacyInfo.xcprivacy */; };
 		C33A1DF7AC4D3629429B1094 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 381D9063F8712266EC82966C /* HomeView.swift */; };
+		4E0A7C1B2D3F5A6B7C8D9E11 /* HomeHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0A7C1B2D3F5A6B7C8D9E01 /* HomeHero.swift */; };
+		4E0A7C1B2D3F5A6B7C8D9E12 /* HomeDashboardCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0A7C1B2D3F5A6B7C8D9E02 /* HomeDashboardCards.swift */; };
+		4E0A7C1B2D3F5A6B7C8D9E13 /* HomeCustomization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E0A7C1B2D3F5A6B7C8D9E03 /* HomeCustomization.swift */; };
 		2E825ADE480647DDFA960E08 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */; };
 		8E448D8B9624B4E9D70E14E1 /* HomeFeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE1F007B80803106A72D80C /* HomeFeedTests.swift */; };
 		38C1E734968CF889E3E20FBC /* HomeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8F3D58A2369AEB7973BCAE1 /* HomeUITests.swift */; };
@@ -356,6 +359,9 @@
 		48894AFDF913DDA8138E5B0C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
 		B58AC2186F276DF2B919173C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "PrivacyInfo.xcprivacy"; sourceTree = "<group>"; };
 		381D9063F8712266EC82966C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeView.swift"; sourceTree = "<group>"; };
+		4E0A7C1B2D3F5A6B7C8D9E01 /* HomeHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeHero.swift"; sourceTree = "<group>"; };
+		4E0A7C1B2D3F5A6B7C8D9E02 /* HomeDashboardCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeDashboardCards.swift"; sourceTree = "<group>"; };
+		4E0A7C1B2D3F5A6B7C8D9E03 /* HomeCustomization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeCustomization.swift"; sourceTree = "<group>"; };
 		D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeViewModel.swift"; sourceTree = "<group>"; };
 		EDE1F007B80803106A72D80C /* HomeFeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeFeedTests.swift"; sourceTree = "<group>"; };
 		A8F3D58A2369AEB7973BCAE1 /* HomeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HomeUITests.swift"; sourceTree = "<group>"; };
@@ -470,6 +476,9 @@
 				D061498A1D04423DADE5F8E4 /* HomeViewModel.swift */,
 				9E5A1C0B7D2F4A6E8B3C9001 /* HomeFeedWindow.swift */,
 				381D9063F8712266EC82966C /* HomeView.swift */,
+				4E0A7C1B2D3F5A6B7C8D9E01 /* HomeHero.swift */,
+				4E0A7C1B2D3F5A6B7C8D9E02 /* HomeDashboardCards.swift */,
+				4E0A7C1B2D3F5A6B7C8D9E03 /* HomeCustomization.swift */,
 				BF854E8FC1231BAD448D63BA /* TeamModel.swift */,
 			);
 			path = "Home Menus";
@@ -911,6 +920,9 @@
 			files = (
 				2E825ADE480647DDFA960E08 /* HomeViewModel.swift in Sources */,
 				C33A1DF7AC4D3629429B1094 /* HomeView.swift in Sources */,
+				4E0A7C1B2D3F5A6B7C8D9E11 /* HomeHero.swift in Sources */,
+				4E0A7C1B2D3F5A6B7C8D9E12 /* HomeDashboardCards.swift in Sources */,
+				4E0A7C1B2D3F5A6B7C8D9E13 /* HomeCustomization.swift in Sources */,
 				8E4848E75EFA1A90824D11E1 /* StatLeaders.swift in Sources */,
 				1E3BCB241DA1C6CB2812914D /* LeadersViews.swift in Sources */,
 				A6230D4AA20CC9D1ACFE7EFF /* LeagueScoreboardCenter.swift in Sources */,

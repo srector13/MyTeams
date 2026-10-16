@@ -182,7 +182,7 @@ private struct TeamLeader: Identifiable {
 ///
 /// A fixed-width card in the carousel, scaled with the text; a full-width
 /// row in the accessibility-size list.
-private struct TeamLeaderCard: View {
+struct TeamLeaderCard: View {
     let board: LeaderBoard
     let row: LeaderBoardRow
     let teamColor: Color
@@ -231,7 +231,7 @@ private struct TeamLeaderCard: View {
 
 /// A `TeamLeaderCard`'s placeholder while the leaders load: its headshot,
 /// figure, label and name as skeleton blocks, at its size (X-6).
-private struct LoadingLeaderCard: View {
+struct LoadingLeaderCard: View {
     @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 110
     @ScaledMetric(relativeTo: .body) private var headshotSize: CGFloat = 56
 

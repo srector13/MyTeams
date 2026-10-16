@@ -1272,7 +1272,7 @@ struct TeamPageHeader: View {
 }
 
 /// One result in a form guide: its letter in a small capsule.
-private struct FormCapsule: View {
+struct FormCapsule: View {
     let outcome: Record.Outcome
 
     var body: some View {

@@ -35,6 +35,119 @@ struct HomeHeadline: Identifiable, Hashable, Sendable {
     var id: String { article.id }
 }
 
+/// The game Home's hero leads with (`HomeHero`): a favorite's game under
+/// way, else the soonest still to come, else one just played.
+struct HomeFeaturedGame: Identifiable, Hashable, Sendable {
+    enum Phase: Hashable, Sendable {
+        case live
+        case upcoming
+        case final
+    }
+
+    let entry: HomeGame
+    let phase: Phase
+    /// The board's reading of a live game: its scores and stage.
+    let live: HomeLiveGame?
+
+    var id: String { entry.id }
+    var team: TeamRef { entry.team }
+    var game: Game { entry.game }
+
+    /// Whether the favorite is the home side, as the board says while it's
+    /// live and the schedule says otherwise. A neutral-site game keeps the
+    /// schedule's listing, so the matchup still reads away first.
+    var favoriteIsHome: Bool { live?.favoriteIsHome ?? entry.game.gameHome }
+}
+
+/// One day of This Week's strip (`HomeFeed.week`): its games, in start
+/// order, none on a quiet day.
+struct HomeWeekDay: Identifiable, Equatable, Sendable {
+    /// The day's start.
+    let date: Date
+    let games: [HomeGame]
+
+    var id: Date { date }
+}
+
+/// What a favorite's card in My Teams says (`HomeFeed.teamSummary`): the
+/// team page header's record, standing and form, and where its season is.
+struct HomeTeamSummary: Identifiable, Equatable, Sendable {
+    /// Where the favorite's season stands, as the card's foot words it.
+    enum Status: Equatable, Sendable {
+        /// The season is still loading.
+        case loading
+        /// "Live vs Dolphins · 21–17", the favorite's score first.
+        case live(String)
+        /// "Next vs Chargers · Sun 3:25 PM".
+        case next(String)
+        /// "Last L 0–4 at Nashville", the favorite's score first.
+        case last(String)
+        case seasonOver
+        case preseason
+
+        /// The foot's line.
+        var text: String {
+            switch self {
+            case .loading: "Loading"
+            case .live(let text), .next(let text), .last(let text): text
+            case .seasonOver: "Season over"
+            case .preseason: "Preseason"
+            }
+        }
+
+        /// The SF Symbol beside the line.
+        var systemImage: String {
+            switch self {
+            case .loading, .next, .preseason: "calendar"
+            case .live: "dot.radiowaves.left.and.right"
+            case .last: "flag.checkered"
+            case .seasonOver: "moon.zzz"
+            }
+        }
+    }
+
+    let team: TeamRef
+    /// The record, standing and form, as the team page's header has them.
+    let header: TeamHeaderSummary
+    /// The team's place in its league's poll, for a college team.
+    let pollRank: Int?
+    let status: Status
+
+    var id: TeamRef.ID { team.id }
+}
+
+/// A favorite's slice of its standings table for Home (`HomeFeed
+/// .standingsSlice`): its own row and the rows either side of it.
+struct HomeStandingsSlice: Identifiable, Equatable, Sendable {
+    struct Row: Identifiable, Equatable, Sendable {
+        /// The table's rank, or the row's place where the feed ranks none.
+        let rank: Int
+        let entry: StandingsEntry
+        let isFollowed: Bool
+
+        var id: String { entry.teamID }
+    }
+
+    let team: TeamRef
+    let kind: StandingsKind
+    /// The table's name, `"AFC West"`, `"Bundesliga"`.
+    let title: String
+    /// Three rows where the table has them, first place first.
+    let rows: [Row]
+
+    var id: TeamRef.ID { team.id }
+}
+
+/// A favorite's top performer for Home: the leader of the first of its
+/// sport's boards (`TeamLeadersStore`).
+struct HomePerformer: Identifiable, Equatable, Sendable {
+    let team: TeamRef
+    let board: LeaderBoard
+    let row: LeaderBoardRow
+
+    var id: TeamRef.ID { team.id }
+}
+
 // `HomeGame`, `HomeDay` and Home's ±7-day window (`upcomingWindow`,
 // `games`, `upcomingDays`, `results`) live in HomeFeedWindow.swift, which
 // the widget compiles too (R-9).
@@ -118,22 +231,15 @@ extension HomeFeed {
         return dealt
     }
 
-    /// How many games Upcoming and Recent Results show until the reader
-    /// asks for the rest: with many favorites they ran to eight rows and
-    /// more and pushed the news off the first screen.
-    static let collapsedGameCount = 4
-
-    /// The first `games` of `days`' games, still under their days: a day
-    /// cut short keeps the games before the cut, and the days after it go.
-    static func prefix(_ days: [HomeDay], games: Int) -> [HomeDay] {
-        var remaining = max(games, 0)
-        var shown: [HomeDay] = []
-        for day in days where remaining > 0 {
-            let kept = Array(day.games.prefix(remaining))
-            shown.append(HomeDay(date: day.date, games: kept))
-            remaining -= kept.count
+    /// The feed's stories about `team`, for the news filter's chip: those
+    /// dealt as its own, and those another favorite listed first that are
+    /// tagged with it too, so a story two favorites share is under both.
+    static func headlines(_ headlines: [HomeHeadline], about team: TeamRef) -> [HomeHeadline] {
+        headlines.filter { headline in
+            headline.team.id == team.id
+                || (headline.team.league == team.league
+                    && headline.article.teams.contains { $0.espnID == team.espnID })
         }
-        return shown
     }
 
     /// One state for a section fed by every favorite's feed (P1's
@@ -144,26 +250,278 @@ extension HomeFeed {
         if states.allSatisfy({ $0 == .failed }) { return .failed }
         return .loading
     }
+
+    // MARK: This Week
+
+    /// How many days back This Week's strip reaches: last weekend's results
+    /// from midweek, without a fortnight of strip to scroll.
+    static let weekDaysBack = 3
+
+    /// How many days ahead the strip reaches, as Upcoming did.
+    static let weekDaysAhead = 7
+
+    /// The strip's days, `weekDaysBack` before `now`'s day to
+    /// `weekDaysAhead` after it, each with the favorites' games that day in
+    /// start order: played, under way and still to come alike. A day
+    /// without games is in the strip too, empty. Games without a date are
+    /// left out.
+    static func week(_ games: [HomeGame], now: Date, calendar: Calendar = .autoupdatingCurrent) -> [HomeWeekDay] {
+        let today = calendar.startOfDay(for: now)
+        var byDay: [Date: [HomeGame]] = [:]
+        for entry in games where !entry.game.date.isEmpty {
+            byDay[calendar.startOfDay(for: entry.game.dateAsDate), default: []].append(entry)
+        }
+        return (-weekDaysBack...weekDaysAhead).compactMap { offset -> HomeWeekDay? in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else { return nil }
+            let day = calendar.startOfDay(for: date)
+            let games = (byDay[day] ?? []).sorted { $0.game.dateAsDate < $1.game.dateAsDate }
+            return HomeWeekDay(date: day, games: games)
+        }
+    }
+
+    /// The day the strip opens on: today if it has games, else the next
+    /// day that does, else the latest past day that does, else today.
+    static func defaultDay(in week: [HomeWeekDay], now: Date, calendar: Calendar = .autoupdatingCurrent) -> Date {
+        let today = calendar.startOfDay(for: now)
+        if week.contains(where: { $0.date == today && !$0.games.isEmpty }) {
+            return today
+        }
+        if let next = week.first(where: { $0.date > today && !$0.games.isEmpty }) {
+            return next.date
+        }
+        if let last = week.last(where: { $0.date < today && !$0.games.isEmpty }) {
+            return last.date
+        }
+        return today
+    }
+
+    /// `"2026-09-27"`: a day's key in `calendar`, for its button's
+    /// accessibility identifier (`home.week.day.<key>`).
+    static func dayKey(_ date: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        func padded(_ value: Int?, _ width: Int) -> String {
+            let digits = String(value ?? 0)
+            return String(repeating: "0", count: max(0, width - digits.count)) + digits
+        }
+        return "\(padded(parts.year, 4))-\(padded(parts.month, 2))-\(padded(parts.day, 2))"
+    }
+
+    // MARK: Hero
+
+    /// How long after it was played a result can still lead Home's hero.
+    static let featuredResultWindow: TimeInterval = 24 * 60 * 60
+
+    /// The game Home's hero features: the first favorite's game under way
+    /// that its schedule lists, else the soonest game still to come across
+    /// the favorites, else the latest result in the last
+    /// `featuredResultWindow`; `nil` with none of those.
+    static func featured(live: [HomeLiveGame], games: [HomeGame], now: Date) -> HomeFeaturedGame? {
+        for game in live {
+            if let scheduled = game.game {
+                return HomeFeaturedGame(entry: HomeGame(team: game.team, game: scheduled), phase: .live, live: game)
+            }
+        }
+
+        let next = games
+            .filter { entry in
+                let game = entry.game
+                return !game.completed && !game.cancelled && !game.postponed
+                    && !game.date.isEmpty && game.dateAsDate >= now
+            }
+            .min { $0.game.dateAsDate < $1.game.dateAsDate }
+        if let next {
+            return HomeFeaturedGame(entry: next, phase: .upcoming, live: nil)
+        }
+
+        let earliest = now.addingTimeInterval(-featuredResultWindow)
+        let last = games
+            .filter { entry in
+                let game = entry.game
+                return game.completed && !game.cancelled && !game.postponed
+                    && !game.date.isEmpty
+                    && game.dateAsDate >= earliest && game.dateAsDate <= now
+            }
+            .max { $0.game.dateAsDate < $1.game.dateAsDate }
+        return last.map { HomeFeaturedGame(entry: $0, phase: .final, live: nil) }
+    }
+
+    // MARK: My Teams
+
+    /// How long after its last game a team's card still shows that result
+    /// rather than "Season over".
+    static let lastResultWindow: TimeInterval = 14 * 24 * 60 * 60
+
+    /// A favorite's card in My Teams: the team page header's record (from
+    /// the standings row once the schedule is empty), standing and form,
+    /// its poll rank, and its season's state — the game under way, the next
+    /// game, the last result, or the season over or yet to start.
+    ///
+    /// - Parameter games: the favorite's season; `nil` while it loads.
+    static func teamSummary(
+        team: TeamRef,
+        games: [Game]?,
+        live: HomeLiveGame?,
+        standings: Standings?,
+        pollRanks: PollRanks,
+        now: Date
+    ) -> HomeTeamSummary {
+        let season = games ?? []
+        let rule = team.league.descriptor.recordRule
+        let header = TeamHeaderSummary(
+            team: team,
+            games: season,
+            nextGame: getNextGame(schedule: season, pastDatesCountAsPlayed: rule.usesDateForNextGame, now: now),
+            record: scheduleRecord(games: season, league: team.league, now: now),
+            standings: standings
+        )
+        return HomeTeamSummary(
+            team: team,
+            header: header,
+            pollRank: pollRanks.rank(of: team.espnID),
+            status: status(of: team, games: games, live: live, header: header, now: now)
+        )
+    }
+
+    private static func status(
+        of team: TeamRef,
+        games: [Game]?,
+        live: HomeLiveGame?,
+        header: TeamHeaderSummary,
+        now: Date
+    ) -> HomeTeamSummary.Status {
+        if let live {
+            let own = live.favoriteIsHome ? live.state.homeScore : live.state.awayScore
+            let other = live.favoriteIsHome ? live.state.awayScore : live.state.homeScore
+            let opponent = live.favoriteIsHome ? live.info.awayName : live.info.homeName
+            return .live("Live \(live.favoriteIsHome ? "vs" : "at") \(opponent) · \(own)–\(other)")
+        }
+        guard let games else { return .loading }
+
+        let next = games
+            .filter { game in
+                !game.completed && !game.cancelled && !game.postponed
+                    && !game.date.isEmpty && game.dateAsDate >= now
+            }
+            .min { $0.dateAsDate < $1.dateAsDate }
+        if let next {
+            let start = GameCardContent.startLabel(for: next.dateAsDate, now: now)
+            return .next("Next \(side(of: next)) \(opponentName(next)) · \(start)")
+        }
+
+        let last = games
+            .filter { game in
+                game.completed && !game.cancelled && !game.postponed
+                    && !game.date.isEmpty && game.dateAsDate <= now
+            }
+            .max { $0.dateAsDate < $1.dateAsDate }
+        if let last, now.timeIntervalSince(last.dateAsDate) <= lastResultWindow {
+            var parts = ["Last"]
+            switch GameCardContent.outcome(of: last) {
+            case .win: parts.append("W")
+            case .loss: parts.append("L")
+            case .draw: parts.append("D")
+            case nil: break
+            }
+            if !last.score.isEmpty, !last.opponentScore.isEmpty {
+                parts.append("\(last.score)–\(last.opponentScore)")
+            }
+            parts.append("\(side(of: last)) \(opponentName(last))")
+            return .last(parts.joined(separator: " "))
+        }
+        if last != nil || header.record != nil {
+            return .seasonOver
+        }
+        return .preseason
+    }
+
+    /// "vs" at home or at a neutral site, "at" away.
+    private static func side(of game: Game) -> String {
+        game.gameHome || game.neutralSite ? "vs" : "at"
+    }
+
+    private static func opponentName(_ game: Game) -> String {
+        game.opponent.isEmpty ? "TBD" : game.opponent
+    }
+
+    // MARK: Standings
+
+    /// How many rows a favorite's slice of its table holds.
+    static let standingsSliceCount = 3
+
+    /// The favorite's row in the table that holds it with the row above and
+    /// the row below — the top three for the leader, the foot three for the
+    /// last — or `nil` where no table holds it (a poll it isn't ranked in).
+    static func standingsSlice(team: TeamRef, standings: Standings) -> HomeStandingsSlice? {
+        guard let group = standings.group(containing: team.espnID),
+              let index = group.entries.firstIndex(where: { $0.teamID == team.espnID })
+        else { return nil }
+        let count = group.entries.count
+        let lower = max(0, min(index - 1, count - standingsSliceCount))
+        let upper = min(count, lower + standingsSliceCount)
+        let rows = (lower..<upper).map { position -> HomeStandingsSlice.Row in
+            let entry = group.entries[position]
+            return HomeStandingsSlice.Row(
+                rank: entry.rank ?? position + 1,
+                entry: entry,
+                isFollowed: entry.teamID == team.espnID
+            )
+        }
+        return HomeStandingsSlice(
+            team: team,
+            kind: standings.kind,
+            title: group.title(kind: standings.kind, leagueName: team.league.descriptor.displayName),
+            rows: rows
+        )
+    }
+
+    // MARK: Top performers
+
+    /// Each favorite's leader on the first of its boards that lists one, in
+    /// favorites order; none for a favorite with no leaders yet.
+    static func performers(teams: [TeamRef], leaders: [TeamRef.ID: [LeaderBoard]]) -> [HomePerformer] {
+        teams.compactMap { team -> HomePerformer? in
+            for board in leaders[team.id] ?? [] {
+                if let row = board.rows.first {
+                    return HomePerformer(team: team, board: board, row: row)
+                }
+            }
+            return nil
+        }
+    }
 }
 
-/// Everything Home shows, gathered from what the app already loads: no
-/// request of its own but the favorites' news feeds, which the team pages
-/// read too.
+/// One answer from the tables Home loads per favorite (`HomeViewModel
+/// .loadTables()`).
+private enum HomeTableAnswer: Sendable {
+    case standings(LeagueID, Standings?)
+    case leaders(TeamRef.ID, [LeaderBoard])
+    case pollRanks(LeagueID, PollRanks)
+}
+
+/// Everything Home shows, gathered from what the app already loads and a
+/// few shared stores: no feed of its own but the favorites' news feeds,
+/// which the team pages read too.
 ///
-/// - Live Now reads the league scoreboards `LeagueScoreboardCenter`
-///   polls for every favorite while the app is in the foreground — the
-///   same app-owned feed score alerts and Live Activities read.
-/// - Upcoming and Recent Results read the favorites' seasons the center
-///   loaded to know which boards to poll (`followedSeason(of:)`).
+/// - The hero's live game reads the league scoreboards
+///   `LeagueScoreboardCenter` polls for every favorite while the app is in
+///   the foreground — the same app-owned feed score alerts and Live
+///   Activities read.
+/// - The hero, My Teams' records and form, and This Week read the
+///   favorites' seasons the center loaded to know which boards to poll
+///   (`followedSeason(of:)`).
+/// - Standings, poll ranks and top performers come from the hour-long
+///   shared stores (`StandingsStore`, `PollRankStore`, `TeamLeadersStore`),
+///   asked once when the favorites change and again on pull to refresh: no
+///   poll of their own.
 /// - The news feed merges each favorite's ESPN news feed
 ///   (`downloadNewsData`, up to the 25 stories `TeamRef.newsURL` asks
 ///   for), fetched again once `TeamFeed.news.timeToLive` has run out, as a
 ///   team page's is.
 ///
 /// One cadence (`refreshInterval`, the center's): the clock moves on for
-/// Upcoming and Recent Results, and any news feed past its time-to-live is
-/// fetched.
-/// The scoreboards redraw Home whenever the center's polls change them.
+/// the hero and This Week, and any news feed past its time-to-live is
+/// fetched. The scoreboards redraw Home whenever the center's polls change
+/// them.
 @MainActor
 @Observable
 final class HomeViewModel {
@@ -174,8 +532,8 @@ final class HomeViewModel {
     /// The favorites, in favorites order.
     private(set) var teams: [TeamRef] = []
 
-    /// The moment Upcoming and Recent Results are worked out against, moved
-    /// on each `refreshInterval`.
+    /// The moment the hero and This Week are worked out against, moved on
+    /// each `refreshInterval`.
     private(set) var now: Date
 
     private var articles: [TeamRef.ID: [News]] = [:]
@@ -185,25 +543,46 @@ final class HomeViewModel {
     /// from the `FeedCache` (R-4).
     private var newsCachedAt: [TeamRef.ID: Date] = [:]
 
+    /// Each favorite league's standings, from `StandingsStore`.
+    private var standingsByLeague: [LeagueID: Standings] = [:]
+    /// Each favorite's leader boards, one leader deep, from
+    /// `TeamLeadersStore`.
+    private var leadersByTeam: [TeamRef.ID: [LeaderBoard]] = [:]
+    /// Each favorite college league's poll, from `PollRankStore`.
+    private var pollRanksByLeague: [LeagueID: PollRanks] = [:]
+
+    /// Whether the standings, polls and leaders have answered since the
+    /// favorites last changed: their sections' placeholders until then.
+    private(set) var tablesState: SectionLoadState = .loading
+
     private let scoreboards: LeagueScoreboardCenter
     private let loadNews: @Sendable (String) async -> Result<[News], NetworkError>
+    private let loadStandings: @Sendable (LeagueID) async -> Standings?
+    private let loadLeaders: @Sendable (TeamRef) async -> [LeaderBoard]
+    private let loadPollRanks: @Sendable (LeagueID) async -> PollRanks
     private let clock: @MainActor () -> Date
 
     init(
         scoreboards: LeagueScoreboardCenter = .shared,
         loadNews: @escaping @Sendable (String) async -> Result<[News], NetworkError> = { await downloadNewsData(queryURL: $0) },
+        loadStandings: @escaping @Sendable (LeagueID) async -> Standings? = { await StandingsStore.shared.standings(for: $0) },
+        loadLeaders: @escaping @Sendable (TeamRef) async -> [LeaderBoard] = { await TeamLeadersStore.shared.leaders(for: $0) },
+        loadPollRanks: @escaping @Sendable (LeagueID) async -> PollRanks = { await PollRankStore.shared.ranks(for: $0) },
         now: @escaping @MainActor () -> Date = { HomeViewModel.launchNow() }
     ) {
         self.scoreboards = scoreboards
         self.loadNews = loadNews
+        self.loadStandings = loadStandings
+        self.loadLeaders = loadLeaders
+        self.loadPollRanks = loadPollRanks
         self.clock = now
         self.now = now()
     }
 
     /// The launch-environment key a UI test pins Home's clock with, in
-    /// seconds since 1970, so the ±7-day windows read the same against the
-    /// fixtures (`MYTEAMS_FIXTURES_DIR`) whenever the tests run. Read by
-    /// Debug builds only.
+    /// seconds since 1970, so This Week reads the same against the fixtures
+    /// (`MYTEAMS_FIXTURES_DIR`) whenever the tests run. Read by Debug
+    /// builds only.
     static let launchNowKey = "MYTEAMS_HOME_NOW"
 
     /// The time, or in a Debug build the moment `launchNowKey` pins.
@@ -229,20 +608,71 @@ final class HomeViewModel {
         return seasons
     }
 
-    // The game sections show only when they have games (t_191edd79):
-    // nothing to say while the seasons load or when one failed, which pull
-    // to refresh asks for again.
+    /// Whether any favorite's season is still on its first load: the hero
+    /// and This Week hold placeholders rather than saying there are no
+    /// games.
+    var seasonsLoading: Bool {
+        teams.contains { scoreboards.followedSeason(of: $0.id) == .loading }
+    }
+
+    /// Every favorite's games, each once.
+    private var allGames: [HomeGame] {
+        HomeFeed.games(teams: teams, seasons: seasons)
+    }
 
     var liveGames: [HomeLiveGame] {
         HomeFeed.liveGames(teams: teams, boards: scoreboards.games, seasons: seasons)
     }
 
-    var upcoming: [HomeDay] {
-        HomeFeed.upcomingDays(HomeFeed.games(teams: teams, seasons: seasons), now: now)
+    /// The hero's game (`HomeFeed.featured`).
+    var featured: HomeFeaturedGame? {
+        let seasons = seasons
+        return HomeFeed.featured(
+            live: HomeFeed.liveGames(teams: teams, boards: scoreboards.games, seasons: seasons),
+            games: HomeFeed.games(teams: teams, seasons: seasons),
+            now: now
+        )
     }
 
-    var results: [HomeGame] {
-        HomeFeed.results(HomeFeed.games(teams: teams, seasons: seasons), now: now)
+    /// This Week's days (`HomeFeed.week`).
+    var week: [HomeWeekDay] {
+        HomeFeed.week(allGames, now: now)
+    }
+
+    /// My Teams' cards, one per favorite, in favorites order.
+    var teamSummaries: [HomeTeamSummary] {
+        let seasons = seasons
+        let live = HomeFeed.liveGames(teams: teams, boards: scoreboards.games, seasons: seasons)
+        return teams.map { team -> HomeTeamSummary in
+            // A season that failed to load reads as an empty one: the
+            // card falls back to the standings' record.
+            let games: [Game]?
+            switch scoreboards.followedSeason(of: team.id) {
+            case .loaded(let loaded): games = loaded
+            case .failed: games = []
+            case .loading: games = nil
+            }
+            return HomeFeed.teamSummary(
+                team: team,
+                games: games,
+                live: live.first { $0.team.id == team.id },
+                standings: standingsByLeague[team.league],
+                pollRanks: pollRanksByLeague[team.league] ?? .empty,
+                now: now
+            )
+        }
+    }
+
+    /// The standings snapshot's slices, one per favorite a table holds.
+    var standingsSlices: [HomeStandingsSlice] {
+        teams.compactMap { team -> HomeStandingsSlice? in
+            standingsByLeague[team.league].flatMap { HomeFeed.standingsSlice(team: team, standings: $0) }
+        }
+    }
+
+    /// Top Performers' cards (`HomeFeed.performers`).
+    var performers: [HomePerformer] {
+        HomeFeed.performers(teams: teams, leaders: leadersByTeam)
     }
 
     var headlines: [HomeHeadline] {
@@ -260,8 +690,8 @@ final class HomeViewModel {
         teams.compactMap { newsCachedAt[$0.id] }.min()
     }
 
-    /// `game`'s live score for `team` on the scoreboard, for a game in
-    /// Upcoming that has got under way since the last `refreshInterval`.
+    /// `game`'s live score for `team` on the scoreboard, for a game that
+    /// has got under way since the last `refreshInterval`.
     func liveScore(for game: Game, team: TeamRef) -> LiveGameScore? {
         shouldPollLiveScore(game: game, now: now) ? scoreboards.liveScore(for: game, team: team) : nil
     }
@@ -269,15 +699,33 @@ final class HomeViewModel {
     // MARK: Loading
 
     /// Shows `teams`, then keeps Home current for as long as it is on
-    /// screen: SwiftUI cancels the task when it goes.
+    /// screen: SwiftUI cancels the task when it goes. The tables are asked
+    /// for once, alongside the first news load.
     func run(teams: [TeamRef]) async {
         self.teams = teams
         let ids = Set(teams.map(\.id))
+        let leagues = Set(teams.map(\.league))
         articles = articles.filter { ids.contains($0.key) }
         newsStates = newsStates.filter { ids.contains($0.key) }
         newsLoadedAt = newsLoadedAt.filter { ids.contains($0.key) }
         newsCachedAt = newsCachedAt.filter { ids.contains($0.key) }
+        standingsByLeague = standingsByLeague.filter { leagues.contains($0.key) }
+        pollRanksByLeague = pollRanksByLeague.filter { leagues.contains($0.key) }
+        leadersByTeam = leadersByTeam.filter { ids.contains($0.key) }
+        // A favorite just followed shows its sections' placeholders until
+        // its tables answer.
+        if teams.contains(where: { leadersByTeam[$0.id] == nil }) {
+            tablesState = .loading
+        }
 
+        async let tables: Void = loadTables()
+        await keepCurrent()
+        await tables
+    }
+
+    /// Moves the clock on and fetches the news feeds that are due, each
+    /// `refreshInterval`, until cancelled.
+    private func keepCurrent() async {
         while !Task.isCancelled {
             now = clock()
             await refreshNews(force: false)
@@ -289,19 +737,87 @@ final class HomeViewModel {
         }
     }
 
-    /// Pull to refresh: every favorite's news again, whatever its age, and
-    /// any season that failed. What is on screen stays until each answer
+    /// Pull to refresh: every favorite's news again, whatever its age, any
+    /// season that failed, and the tables (which the stores serve from the
+    /// last hour's fetch). What is on screen stays until each answer
     /// arrives. The scoreboards keep their own minute.
     func refreshAll() async {
         now = clock()
         async let news: Void = refreshNews(force: true)
         async let schedules: Void = scoreboards.retryFailedSchedules()
-        _ = await (news, schedules)
+        async let tables: Void = loadTables()
+        _ = await (news, schedules, tables)
     }
 
     /// Retries the news feeds that failed.
     func reloadNews() async {
         await refreshNews(force: false)
+    }
+
+    /// Asks the shared stores for each favorite league's standings and
+    /// poll, and each favorite's leaders, all at once. An answer that came
+    /// back empty keeps what is already on screen.
+    private func loadTables() async {
+        let teams = teams
+        guard !teams.isEmpty else {
+            tablesState = .loaded
+            return
+        }
+        var leagues: [LeagueID] = []
+        for team in teams where !leagues.contains(team.league) {
+            leagues.append(team.league)
+        }
+
+        let loadStandings = loadStandings
+        let loadLeaders = loadLeaders
+        let loadPollRanks = loadPollRanks
+        let answers = await withTaskGroup(
+            of: HomeTableAnswer.self,
+            returning: [HomeTableAnswer].self
+        ) { group in
+            for league in leagues {
+                group.addTask {
+                    let standings = await loadStandings(league)
+                    return HomeTableAnswer.standings(league, standings)
+                }
+                if league.isCollege {
+                    group.addTask {
+                        let ranks = await loadPollRanks(league)
+                        return HomeTableAnswer.pollRanks(league, ranks)
+                    }
+                }
+            }
+            for team in teams {
+                let id = team.id
+                group.addTask {
+                    let boards = await loadLeaders(team)
+                    return HomeTableAnswer.leaders(id, boards)
+                }
+            }
+            var answers: [HomeTableAnswer] = []
+            for await answer in group {
+                answers.append(answer)
+            }
+            return answers
+        }
+
+        for answer in answers {
+            switch answer {
+            case .standings(let league, let standings):
+                if let standings {
+                    standingsByLeague[league] = standings
+                }
+            case .leaders(let id, let boards):
+                if !boards.isEmpty || leadersByTeam[id] == nil {
+                    leadersByTeam[id] = boards
+                }
+            case .pollRanks(let league, let ranks):
+                if !ranks.isEmpty || pollRanksByLeague[league] == nil {
+                    pollRanksByLeague[league] = ranks
+                }
+            }
+        }
+        tablesState = .loaded
     }
 
     /// Fetches the favorites' news feeds that are due (`feedNeedsRefresh`):
