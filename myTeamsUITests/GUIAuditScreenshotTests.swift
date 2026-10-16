@@ -262,6 +262,49 @@ final class GUIAuditScreenshotTests: XCTestCase {
         app.terminate()
     }
 
+    /// Player sheets across sports (soccer first), each scrolled through,
+    /// and a game sheet's header, for the player-sheet audit.
+    @MainActor
+    func test12_PlayerSheets() {
+        for dark in [false, true] {
+            run = "12-players-\(dark ? "dark" : "light")"
+            counter = 0
+            let app = launch(dark: dark)
+            guard waitForHome(app) else { app.terminate(); continue }
+            pause(3)
+            for index in [3, 1, 2] {
+                app.terminate(); app.launch()
+                _ = waitForHome(app)
+                pause(2)
+                guard openTeam(app, index: index) else { continue }
+                pause(5)
+                let players = app.descendants(matching: .any)
+                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "roster.player"))
+                guard players.firstMatch.waitForExistence(timeout: 10) else { miss("team\(index) roster"); continue }
+                // The first two players with a sheet each.
+                for n in 0..<2 {
+                    let hittable = players.allElementsBoundByIndex.filter { $0.isHittable }
+                    guard hittable.count > n else { break }
+                    hittable[n].tap()
+                    let close = app.buttons["playerDetail.close"]
+                    guard close.waitForExistence(timeout: 8) else { miss("team\(index) player \(n)"); continue }
+                    pause(4)
+                    shot("team\(index)-player\(n)-top")
+                    for i in 1...3 { app.swipeUp(); pause(1.2); shot("team\(index)-player\(n)-scroll\(i)") }
+                    close.tapIfExists(); pause(1.5)
+                }
+                if !dark, let game = firstHittable("schedule.game", in: app, swipes: 4) {
+                    game.tap()
+                    if app.buttons["gameDetail.close"].waitForExistence(timeout: 8) {
+                        pause(3); shot("team\(index)-game-sheet")
+                        app.buttons["gameDetail.close"].tapIfExists(); pause(1)
+                    }
+                }
+            }
+            app.terminate()
+        }
+    }
+
     // MARK: Tours
 
     @MainActor
