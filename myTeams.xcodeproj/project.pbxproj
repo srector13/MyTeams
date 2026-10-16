@@ -43,6 +43,10 @@
 		2D20D4F0D14F95669B9634EF /* WikidataHeadshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */; };
 		455C8A8EFBB7AA647AF74B09 /* ApiFootballKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3638309E717E79C3075A33D /* ApiFootballKey.swift */; };
 		336C5C116BDABF7A3C163B92 /* ApiFootballHeadshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9E650E9C660E11C9C04D81 /* ApiFootballHeadshotStore.swift */; };
+		0F4FE19438461901A13C5942 /* HeadshotNameMatching.swift in Sources */ = {isa = PBXBuildFile; fileRef = C779A629580C3C1CFBC7D785 /* HeadshotNameMatching.swift */; };
+		B50657EBDDFCD3982BEE8F89 /* TheSportsDBHeadshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED59B117ED7A54BCDDDCFB4 /* TheSportsDBHeadshotStore.swift */; };
+		51E6C6086CCE5126AD7F2E7B /* FotMobHeadshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26354CE38A30885BEA98C39 /* FotMobHeadshotStore.swift */; };
+		749AFABA931D194607282DDD /* SoccerHeadshotSourcesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C88F18C2E0EE621C6EDA3BE /* SoccerHeadshotSourcesTests.swift */; };
 		4FAEA2801DAAA50D3D63D3CF /* ApiFootballSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7B6A399AAE14CFEB1693E93 /* ApiFootballSettingsSection.swift */; };
 		1222CA7240E62E8BCB2BEA62 /* ApiFootballKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB9C64E7F23AFE201C7DC0FA /* ApiFootballKeyTests.swift */; };
 		A4C32ECB7C1B924DD130BA7A /* ApiFootballHeadshotStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEF2427905F40F19C5342004 /* ApiFootballHeadshotStoreTests.swift */; };
@@ -263,6 +267,10 @@
 		F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WikidataHeadshotStore.swift"; sourceTree = "<group>"; };
 		D3638309E717E79C3075A33D /* ApiFootballKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApiFootballKey.swift"; sourceTree = "<group>"; };
 		4E9E650E9C660E11C9C04D81 /* ApiFootballHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApiFootballHeadshotStore.swift"; sourceTree = "<group>"; };
+		C779A629580C3C1CFBC7D785 /* HeadshotNameMatching.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HeadshotNameMatching.swift"; sourceTree = "<group>"; };
+		1ED59B117ED7A54BCDDDCFB4 /* TheSportsDBHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TheSportsDBHeadshotStore.swift"; sourceTree = "<group>"; };
+		B26354CE38A30885BEA98C39 /* FotMobHeadshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FotMobHeadshotStore.swift"; sourceTree = "<group>"; };
+		8C88F18C2E0EE621C6EDA3BE /* SoccerHeadshotSourcesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SoccerHeadshotSourcesTests.swift"; sourceTree = "<group>"; };
 		B7B6A399AAE14CFEB1693E93 /* ApiFootballSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApiFootballSettingsSection.swift"; sourceTree = "<group>"; };
 		CB9C64E7F23AFE201C7DC0FA /* ApiFootballKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApiFootballKeyTests.swift"; sourceTree = "<group>"; };
 		CEF2427905F40F19C5342004 /* ApiFootballHeadshotStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ApiFootballHeadshotStoreTests.swift"; sourceTree = "<group>"; };
@@ -508,6 +516,9 @@
 				F57DF80A0735C0D8F2D7EDAD /* WikidataHeadshotStore.swift */,
 				D3638309E717E79C3075A33D /* ApiFootballKey.swift */,
 				4E9E650E9C660E11C9C04D81 /* ApiFootballHeadshotStore.swift */,
+				C779A629580C3C1CFBC7D785 /* HeadshotNameMatching.swift */,
+				1ED59B117ED7A54BCDDDCFB4 /* TheSportsDBHeadshotStore.swift */,
+				B26354CE38A30885BEA98C39 /* FotMobHeadshotStore.swift */,
 				A1CBF316BA698A3A7672774F /* Sport.swift */,
 				95678F04274EC3A4BFC7B89B /* TeamRef.swift */,
 				5883C4F774D9544E81195578 /* LogoStore.swift */,
@@ -711,6 +722,7 @@
 				0EEDD564F37117499F40D17A /* WikidataHeadshotStoreTests.swift */,
 				CB9C64E7F23AFE201C7DC0FA /* ApiFootballKeyTests.swift */,
 				CEF2427905F40F19C5342004 /* ApiFootballHeadshotStoreTests.swift */,
+				8C88F18C2E0EE621C6EDA3BE /* SoccerHeadshotSourcesTests.swift */,
 				4ECCD455A0790D88722B60C1 /* TeamLogoTests.swift */,
 				7A1D0C3E5B9F2A4C6E8D1B32 /* ThemeTests.swift */,
 				BA7ACCE5E3D1F2A4C6E8D10D /* BrandThemeTests.swift */,
@@ -972,6 +984,9 @@
 				2D20D4F0D14F95669B9634EF /* WikidataHeadshotStore.swift in Sources */,
 				455C8A8EFBB7AA647AF74B09 /* ApiFootballKey.swift in Sources */,
 				336C5C116BDABF7A3C163B92 /* ApiFootballHeadshotStore.swift in Sources */,
+				0F4FE19438461901A13C5942 /* HeadshotNameMatching.swift in Sources */,
+				B50657EBDDFCD3982BEE8F89 /* TheSportsDBHeadshotStore.swift in Sources */,
+				51E6C6086CCE5126AD7F2E7B /* FotMobHeadshotStore.swift in Sources */,
 				4FAEA2801DAAA50D3D63D3CF /* ApiFootballSettingsSection.swift in Sources */,
 				76207EC0BBD446E30AD3ABCE /* Sport.swift in Sources */,
 				7B4DB145D40FB923834AE02E /* TeamRef.swift in Sources */,
@@ -1082,6 +1097,7 @@
 				2C89EA3412BC162DB815225F /* WikidataHeadshotStoreTests.swift in Sources */,
 				1222CA7240E62E8BCB2BEA62 /* ApiFootballKeyTests.swift in Sources */,
 				A4C32ECB7C1B924DD130BA7A /* ApiFootballHeadshotStoreTests.swift in Sources */,
+				749AFABA931D194607282DDD /* SoccerHeadshotSourcesTests.swift in Sources */,
 				0B133D64B5F170D8E647BECD /* TeamLogoTests.swift in Sources */,
 				7A1D0C3E5B9F2A4C6E8D1B33 /* ThemeTests.swift in Sources */,
 				BA7ACCE5E3D1F2A4C6E8D10E /* BrandThemeTests.swift in Sources */,

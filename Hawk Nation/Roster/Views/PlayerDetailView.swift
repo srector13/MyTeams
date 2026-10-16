@@ -923,14 +923,15 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
     }
 
-    /// The headshot in a circle. Where neither ESPN, Wikimedia Commons nor
-    /// API-Football has one, and while it loads, the jersey avatar stands
-    /// in rather than ESPN's grey silhouette: the number in the team's ink
-    /// on its colour, the crest faint behind (`PlayerJerseyAvatar`).
-    /// Long-press a Commons photo for its credit.
+    /// The headshot in a circle. Where no source has one (ESPN, then for
+    /// soccer FotMob, API-Football, TheSportsDB and Wikimedia Commons —
+    /// `AthleteHeadshot`), and while it loads, the jersey avatar stands in
+    /// rather than ESPN's grey silhouette: the number in the team's ink on
+    /// its colour, the crest faint behind (`PlayerJerseyAvatar`).
+    /// Long-press a fallback photo for its credit.
     private var headshot: some View {
         let size = min(headshotSize, 180)
-        return AthleteHeadshot(player, league: team.league, showsProgress: false, drawsSilhouette: false) {
+        return AthleteHeadshot(player, league: team.league, team: team, showsProgress: false, drawsSilhouette: false) {
             PlayerJerseyAvatar(player, team: team, size: size)
         }
         .aspectRatio(contentMode: .fill)
