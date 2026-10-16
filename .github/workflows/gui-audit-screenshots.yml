@@ -93,6 +93,28 @@ jobs:
           # shellcheck disable=SC2086
           xcodebuild -project myTeams.xcodeproj -scheme myTeams -destination "platform=iOS Simulator,id=$SIM_UDID" -skipPackagePluginValidation -skipMacroValidation -derivedDataPath dd test-without-building CODE_SIGNING_ALLOWED=NO $ONLY_ARGS -resultBundlePath audit.xcresult 2>&1 | tee test.log | grep -E "Test Case|error|failed|passed|Executed" | tail -80
 
+      - name: Photo source diagnostics
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          OUT="shots/${{ matrix.slot }}"
+          mkdir -p "$OUT"
+          UA='Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1'
+          {
+            for u in "https://www.fotmob.com/api/data/search/suggest?term=Sporting%20Kansas%20City&lang=en" \
+                     "https://www.fotmob.com/api/data/teams?id=6604&ccode3=USA" \
+                     "https://images.fotmob.com/image_resources/playerimages/1284944.png" \
+                     "https://www.thesportsdb.com/api/v1/json/3/searchplayers.php?p=Zorhan%20Bassong"; do
+              curl -sS --max-time 25 -A "$UA" -o /tmp/probe.out -w "%{http_code} %{content_type} %{size_download} $u\n" "$u" || echo "curl failed $u"
+              head -c 200 /tmp/probe.out; echo
+            done
+          } > "$OUT/_photo-probe.txt" 2>&1
+          xcrun simctl spawn "$SIM_UDID" log show --last 30m --style compact \
+            --predicate 'subsystem == "com.myTeams" AND category == "headshots"' > "$OUT/_headshot-log.txt" 2>&1 || true
+          tail -c 20000 "$OUT/_headshot-log.txt" > "$OUT/_headshot-log-tail.txt" || true
+          rm -f "$OUT/_headshot-log.txt"
+
       - name: Collect
         if: always()
         shell: bash
@@ -140,7 +162,7 @@ jobs:
         with:
           path: shots
           pattern: shots-*
-      - name: Commit to claude/soccer-photos-shots-out
+      - name: Commit to claude/soccer-photos-shots-out2
         shell: bash
         run: |
           set -euo pipefail
@@ -152,8 +174,8 @@ jobs:
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -b claude/soccer-photos-shots-out
+          git checkout -q -b claude/soccer-photos-shots-out2
           git add -A
           git commit -qm "GUI audit screenshots for ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push -f origin claude/soccer-photos-shots-out
+          git push -f origin claude/soccer-photos-shots-out2

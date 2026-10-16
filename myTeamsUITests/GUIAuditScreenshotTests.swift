@@ -285,9 +285,10 @@ final class GUIAuditScreenshotTests: XCTestCase {
                 .matching(NSPredicate(format: "identifier BEGINSWITH %@", "roster.player"))
             if players.firstMatch.waitForExistence(timeout: 10) {
                 // The roster carousel scrolled across, photos loading in.
-                let carousel = players.firstMatch
                 for i in 1...3 {
-                    carousel.swipeLeft(); pause(3); shot("roster\(i)")
+                    let visible = players.allElementsBoundByIndex.filter { $0.isHittable }
+                    guard let card = visible.last else { break }
+                    card.swipeLeft(); pause(3); shot("roster\(i)")
                 }
                 let hittable = players.allElementsBoundByIndex.filter { $0.isHittable }
                 if let first = hittable.first {
