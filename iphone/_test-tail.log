@@ -1,0 +1,150 @@
+    t =   623.65s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   623.65s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   623.76s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   624.00s     Check for interrupting elements affecting "myTeams" Application
+    t =   624.33s     Synthesize event
+    t =   624.86s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   625.76s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   626.05s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   626.05s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   626.06s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   626.39s     Check for interrupting elements affecting "myTeams" Application
+    t =   626.95s     Synthesize event
+    t =   627.51s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   628.42s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   629.75s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   629.75s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   629.77s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   630.04s     Check for interrupting elements affecting "myTeams" Application
+    t =   630.68s     Synthesize event
+    t =   631.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   632.11s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "teamPicker.team."'
+    t =   632.44s Checking existence of `Button (Element at index 3)`
+    t =   633.00s Waiting 5.0s for Button (Element at index 3) to exist
+    t =   634.06s     Checking `Expect predicate `existsNoRetry == 1` for object Button (Element at index 3)`
+    t =   634.07s         Checking existence of `Button (Element at index 3)`
+    t =   634.53s Find the Button (Element at index 3)
+    t =   635.13s Tap "Kansas City Royals" Button
+    t =   635.13s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   635.14s     Find the "Kansas City Royals" Button
+    t =   635.85s     Check for interrupting elements affecting "Kansas City Royals" Button
+    t =   636.18s     Synthesize event
+    t =   636.60s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   644.96s Waiting 10.0s for Any (First Match) to exist
+    t =   646.02s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   646.02s         Checking existence of `Any (First Match)`
+    t =   646.59s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   646.92s Find the Any (Element at index 0)
+    t =   647.13s Find the Any (Element at index 1)
+    t =   647.31s Find the Any (Element at index 2)
+    t =   647.47s Find the Any (Element at index 3)
+    t =   647.66s Find the Any (Element at index 4)
+    t =   648.05s Find the Any (Element at index 5)
+    t =   648.39s Find the Any (Element at index 6)
+    t =   648.70s Find the Any (Element at index 7)
+    t =   649.05s Tap "roster.player.5196249" Button
+    t =   649.05s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   649.06s     Find the "roster.player.5196249" Button
+    t =   649.19s     Check for interrupting elements affecting "roster.player.5196249" Button
+    t =   649.32s     Synthesize event
+    t =   649.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   651.05s Waiting 8.0s for "playerDetail.close" Button to exist
+    t =   652.13s     Checking `Expect predicate `existsNoRetry == 1` for object "playerDetail.close" Button`
+    t =   652.13s         Checking existence of `"playerDetail.close" Button`
+    t =   656.60s Added attachment named '12-players-dark__17-team2-player0-top'
+    t =   656.60s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   656.60s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   656.60s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   656.76s     Check for interrupting elements affecting "myTeams" Application
+    t =   656.89s     Synthesize event
+    t =   657.39s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   659.31s Added attachment named '12-players-dark__18-team2-player0-scroll1'
+    t =   659.31s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   659.31s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   659.31s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   659.47s     Check for interrupting elements affecting "myTeams" Application
+    t =   659.64s     Synthesize event
+    t =   660.08s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   662.01s Added attachment named '12-players-dark__19-team2-player0-scroll2'
+    t =   662.01s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   662.01s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   662.01s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   662.14s     Check for interrupting elements affecting "myTeams" Application
+    t =   662.31s     Synthesize event
+    t =   662.77s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   664.71s Added attachment named '12-players-dark__20-team2-player0-scroll3'
+    t =   664.71s Checking existence of `"playerDetail.close" Button`
+    t =   664.92s Find the "playerDetail.close" Button
+    t =   665.13s Tap "playerDetail.close" Button
+    t =   665.14s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   665.14s     Find the "playerDetail.close" Button
+    t =   665.31s     Check for interrupting elements affecting "playerDetail.close" Button
+    t =   665.47s     Synthesize event
+    t =   665.77s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   668.65s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   668.78s Find the Any (Element at index 0)
+    t =   668.97s Find the Any (Element at index 1)
+    t =   669.18s Find the Any (Element at index 2)
+    t =   669.37s Find the Any (Element at index 3)
+    t =   669.54s Find the Any (Element at index 4)
+    t =   669.85s Find the Any (Element at index 5)
+    t =   670.15s Find the Any (Element at index 6)
+    t =   670.52s Find the Any (Element at index 7)
+    t =   670.88s Tap "roster.player.5136077" Button
+    t =   670.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   670.88s     Find the "roster.player.5136077" Button
+    t =   671.02s     Check for interrupting elements affecting "roster.player.5136077" Button
+    t =   671.15s     Synthesize event
+    t =   671.49s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   672.73s Waiting 8.0s for "playerDetail.close" Button to exist
+    t =   673.79s     Checking `Expect predicate `existsNoRetry == 1` for object "playerDetail.close" Button`
+    t =   673.79s         Checking existence of `"playerDetail.close" Button`
+    t =   678.29s Added attachment named '12-players-dark__21-team2-player1-top'
+    t =   678.29s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   678.29s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   678.30s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   678.47s     Check for interrupting elements affecting "myTeams" Application
+    t =   678.65s     Synthesize event
+    t =   679.09s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   682.70s Added attachment named '12-players-dark__22-team2-player1-scroll1'
+    t =   682.70s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   682.70s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   682.70s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   682.89s     Check for interrupting elements affecting "myTeams" Application
+    t =   683.12s     Synthesize event
+    t =   683.57s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   686.29s Added attachment named '12-players-dark__23-team2-player1-scroll2'
+    t =   686.29s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   686.29s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   686.30s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   686.48s     Check for interrupting elements affecting "myTeams" Application
+    t =   686.66s     Synthesize event
+    t =   687.09s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   689.06s Added attachment named '12-players-dark__24-team2-player1-scroll3'
+    t =   689.06s Checking existence of `"playerDetail.close" Button`
+    t =   689.30s Find the "playerDetail.close" Button
+    t =   689.58s Tap "playerDetail.close" Button
+    t =   689.58s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   689.59s     Find the "playerDetail.close" Button
+    t =   689.86s     Check for interrupting elements affecting "playerDetail.close" Button
+    t =   690.05s     Synthesize event
+    t =   690.36s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   693.22s Terminate PolarReailty.Hawk-Nation:40338
+    t =   694.32s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test12_PlayerSheets]' passed (695.513 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-16 04:10:00.936.
+	 Executed 1 test, with 0 failures (0 unexpected) in 695.513 (695.517) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-16 04:10:00.937.
+	 Executed 1 test, with 0 failures (0 unexpected) in 695.513 (695.519) seconds
+Test Suite 'Selected tests' passed at 2026-10-16 04:10:00.937.
+	 Executed 1 test, with 0 failures (0 unexpected) in 695.513 (695.521) seconds
+2026-10-16 04:10:02.716 xcodebuild[19205:56116] [MT] IDETestOperationsObserverDebug: 742.395 elapsed -- Testing started completed.
+2026-10-16 04:10:02.716 xcodebuild[19205:56116] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-16 04:10:02.716 xcodebuild[19205:56116] [MT] IDETestOperationsObserverDebug: 742.395 sec, +742.395 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
