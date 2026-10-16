@@ -9,7 +9,8 @@
 import SwiftUI
 
 /// A player's card in a roster carousel: a round headshot with one line of
-/// detail beneath it.
+/// detail beneath it. A player no source has a photo of shows their jersey
+/// number on a disc (`PlayerJerseyAvatar`) rather than a grey silhouette.
 ///
 /// Which detail is shown follows the carousel's current sort, so ordering the
 /// roster by number labels every card with its number.
@@ -17,8 +18,11 @@ struct PlayerCard<Player: RosterPlayer>: View {
     var player: Player
     var state: PlayerSort
     /// The roster's league, for the Wikimedia Commons fallback when ESPN
-    /// has no headshot (`AthleteHeadshot`). `nil` keeps the blank.
+    /// has no headshot (`AthleteHeadshot`). `nil` keeps the jersey avatar.
     var league: LeagueID? = nil
+    /// The roster's team, for the jersey avatar's colours and crest. `nil`
+    /// draws it in the system's grey.
+    var team: TeamRef? = nil
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -38,9 +42,8 @@ struct PlayerCard<Player: RosterPlayer>: View {
             : AnyLayout(VStackLayout(spacing: 5))
 
         layout {
-            AthleteHeadshot(player, league: league) {
-                Image("blank")
-                    .resizable()
+            AthleteHeadshot(player, league: league, drawsSilhouette: false) {
+                PlayerJerseyAvatar(player, team: team, size: headshotSize)
             }
             .aspectRatio(contentMode: .fill)
             .frame(width: headshotSize, height: headshotSize)

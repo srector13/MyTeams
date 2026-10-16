@@ -125,7 +125,7 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
                 .contentCard()
             } else {
                 RosterSection(model: model) { player in
-                    PlayerCard(player: player, state: model.sort, league: team.league)
+                    PlayerCard(player: player, state: model.sort, league: team.league, team: team)
                 } detail: { player in
                     PlayerDetailView(player: player, team: team)
                 } filterMenu: {

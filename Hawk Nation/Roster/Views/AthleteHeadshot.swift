@@ -29,6 +29,11 @@ struct AthleteHeadshot<Placeholder: View>: View {
     private let espnID: String
     private let league: LeagueID?
     private let showsProgress: Bool
+    /// Whether ESPN's generic silhouette is drawn while it is all there is.
+    /// `false` shows `placeholder` in its place: the sheet's and the
+    /// card's jersey avatar (`PlayerJerseyAvatar`) say more than a grey
+    /// outline. The other tiers are asked either way.
+    private let drawsSilhouette: Bool
     private let placeholder: Placeholder
 
     /// Whether ESPN's image failed to load, or there was no URL.
@@ -45,11 +50,14 @@ struct AthleteHeadshot<Placeholder: View>: View {
     ///   - photo: the roster feed's headshot URL.
     ///   - espnID: the athlete's ESPN id (`RosterPlayer.playerID`).
     ///   - league: the roster's league; `nil` never looks on Commons.
+    ///   - drawsSilhouette: whether ESPN's silhouette is drawn; `false`
+    ///     shows `placeholder` instead.
     init(
         photo: String,
         espnID: String,
         league: LeagueID?,
         showsProgress: Bool = true,
+        drawsSilhouette: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.espnURL = URL(string: photo)
@@ -57,6 +65,7 @@ struct AthleteHeadshot<Placeholder: View>: View {
         self.espnID = espnID
         self.league = league
         self.showsProgress = showsProgress
+        self.drawsSilhouette = drawsSilhouette
         self.placeholder = placeholder()
     }
 
@@ -95,7 +104,7 @@ struct AthleteHeadshot<Placeholder: View>: View {
                     .contextMenu {
                         Text(ApiFootballPhoto.creditLine)
                     }
-            } else if espnFailed {
+            } else if espnFailed || (espnIsSilhouette && !drawsSilhouette) {
                 placeholder
             } else {
                 RemoteImage(url: espnURL, showsProgress: showsProgress, onLoad: { loaded in
@@ -221,6 +230,7 @@ extension AthleteHeadshot {
         _ player: Player,
         league: LeagueID?,
         showsProgress: Bool = true,
+        drawsSilhouette: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.init(
@@ -228,6 +238,7 @@ extension AthleteHeadshot {
             espnID: player.playerID,
             league: league,
             showsProgress: showsProgress,
+            drawsSilhouette: drawsSilhouette,
             placeholder: placeholder
         )
     }

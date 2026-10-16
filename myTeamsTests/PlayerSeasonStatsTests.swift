@@ -671,3 +671,267 @@ struct PlayerSheetGridTests {
         #expect(PlayerSheetGrid.columnCount(fitting: 0, cells: 3) == 1)
     }
 }
+
+// MARK: - Player sheet redesign
+
+/// The titles of a grid's cells, in reading order.
+private func cellTitles(_ sections: [PlayerSheetGrid.Section]) -> [String] {
+    sections.flatMap(\.rows).flatMap { $0 }.map(\.title)
+}
+
+@Suite("Player sheet: key statistics by sport and position", .tags(.golden))
+struct PlayerSheetKeyStatTests {
+    @Test("A soccer outfield player leads with goals, assists, appearances and starts")
+    func soccerOutfield() throws {
+        // nwsl_roster.json Maiara Niehues (402432): 19 appearances, 4 off
+        // the bench, 9 goals, 0 assists, 46 shots, 2 offsides, 0 own goals.
+        let niehues = try #require(parseSoccerRoster(from: try Fixture.json("nwsl_roster")).first { $0.playerID == "402432" })
+        let grid = niehues.placeholderStatistics
+        let featured = grid.featuredCells(for: niehues.featuredStatistics)
+        #expect(featured.map(\.cell.title) == ["Total Goals", "Goal Assists", "Games Played", "Games Started"])
+        #expect(featured.map(\.feature.abbreviation) == ["Goals", "Assists", "Apps", "Starts"])
+        // VoiceOver: "Goals, 9".
+        #expect(featured.map(\.spokenTitle) == ["Goals", "Assists", "Appearances", "Starts"])
+        #expect(featured.map(\.cell.displayValue) == ["9", "0", "19", "15"])
+
+        let rest = grid.remainingSections(excluding: featured)
+        #expect(rest.map(\.title) == ["Appearances", "Attacking", "Discipline"])
+        let titles = cellTitles(rest)
+        #expect(!titles.contains("Total Goals") && !titles.contains("Games Played"))
+        // Offsides has two; no own goals, so no row for them.
+        #expect(titles.contains("Offsides"))
+        #expect(!titles.contains("Own Goals"))
+        #expect(titles.contains("Shot Accuracy") && titles.contains("Conversion Rate"))
+
+        let cells = rest.flatMap(\.rows).flatMap { $0 }
+        #expect(cells.first { $0.title == "Goals per Game" }?.displayValue == "0.47")
+        #expect(cells.first { $0.title == "Shots per Game" }?.displayValue == "2.42")
+        let accuracy = try #require(cells.first { $0.title == "Shot Accuracy" }?.barFraction)
+        #expect(abs(accuracy - 16.0 / 46.0) < 0.0001)
+        #expect(cells.first { $0.title == "Yellow Cards" }?.glyph == .yellowCard)
+        #expect(cells.first { $0.title == "Red Cards" }?.glyph == .redCard)
+        #expect(cells.first { $0.title == "Fouls Committed" }?.glyph == nil)
+    }
+
+    @Test("A goalkeeper leads with saves, goals conceded, appearances and starts")
+    func soccerKeeper() throws {
+        // sporting_roster.json Stefan Cleveland (249729, Goalkeeper): 17
+        // appearances, none off the bench, 59 saves, 38 conceded. The roster
+        // has no clean sheets, so that tile is skipped.
+        let cleveland = try #require(parseSoccerRoster(from: try Fixture.json("sporting_roster")).first { $0.playerID == "249729" })
+        #expect(isSoccerGoalkeeper(cleveland.position))
+        let grid = cleveland.placeholderStatistics
+        let featured = grid.featuredCells(for: cleveland.featuredStatistics)
+        #expect(featured.map(\.cell.title) == ["Goals Saved", "Goals Conceded", "Games Played", "Starts"])
+        #expect(featured.map(\.spokenTitle) == ["Saves", "Goals conceded", "Appearances", "Starts"])
+        #expect(featured.map(\.cell.displayValue) == ["59", "38", "17", "17"])
+
+        let rest = grid.remainingSections(excluding: featured)
+        #expect(rest.map(\.title) == ["Goalkeeping", "Discipline"])
+        let cells = rest.flatMap(\.rows).flatMap { $0 }
+        let saves = try #require(cells.first { $0.title == "Save Percentage" }?.barFraction)
+        #expect(abs(saves - 59.0 / 97.0) < 0.0001)
+    }
+
+    @Test("A football player's key stats come from his position's group")
+    func football() {
+        // "Yards" and "Touchdowns" are in every group: each feature looks
+        // only in its own.
+        let grid = PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Passing", rows: [[
+                .stat(title: "Yards", info: "3,512"),
+                .stat(title: "Touchdowns", info: "28"),
+                .stat(title: "Interceptions", info: "9"),
+                .stat(title: "Rating", info: "101.2"),
+                .stat(title: "Completions", info: "301"),
+            ]]),
+            PlayerSheetGrid.Section(title: "Rushing", rows: [[
+                .stat(title: "Yards", info: "311"),
+                .stat(title: "Touchdowns", info: "4"),
+                .stat(title: "Avg / Carry", info: "5.2"),
+            ]]),
+            PlayerSheetGrid.Section(title: "Receiving", rows: [[
+                .stat(title: "Receptions", info: "1"),
+                .stat(title: "Yards", info: "6"),
+            ]]),
+        ])
+
+        let passer = grid.featuredCells(for: footballKeyStats(position: "Quarterback"))
+        #expect(passer.map(\.cell.displayValue) == ["3,512", "28", "9", "101.2"])
+        #expect(passer.allSatisfy { $0.section == 0 })
+        #expect(passer.map(\.spokenTitle) == ["Passing yards", "Passing touchdowns", "Interceptions thrown", "Passer rating"])
+        let rest = grid.remainingSections(excluding: passer)
+        // The rushing and receiving yards stay in their groups.
+        #expect(rest.map(\.title) == ["Passing", "Rushing", "Receiving"])
+        #expect(cellTitles(rest) == ["Completions", "Yards", "Touchdowns", "Avg / Carry", "Receptions", "Yards"])
+
+        let runner = grid.featuredCells(for: footballKeyStats(position: "Running Back"))
+        #expect(runner.map(\.cell.displayValue) == ["311", "4", "5.2", "1"])
+        #expect(runner.map(\.feature.abbreviation) == ["Rush Yds", "Rush TD", "YPC", "Rec"])
+
+        let receiver = grid.featuredCells(for: footballKeyStats(position: "Wide Receiver"))
+        #expect(Array(receiver.map(\.feature.abbreviation).prefix(2)) == ["Rec", "Rec Yds"])
+        #expect(Array(receiver.map(\.cell.displayValue).prefix(2)) == ["1", "6"])
+    }
+
+    @Test("Baseball: a pitcher's ERA, W-L, strikeouts and WHIP; a batter's AVG, HR, RBI and OPS")
+    func baseball() throws {
+        let roster = parseBaseballRoster(from: try Fixture.json("royals_roster"))
+        let pitcher = try #require(roster.first { $0.position.contains("Pitcher") })
+        let pitching = pitcher.placeholderStatistics.featuredCells(for: pitcher.featuredStatistics)
+        #expect(pitching.map(\.cell.title) == ["Earned Run Avg.", "Win-Loss Record", "Strikeouts", "WHIP"])
+        // A line of zeros is still no season (`hasNoFigures`).
+        #expect(pitcher.placeholderStatistics.hasNoFigures)
+
+        let batter = try #require(roster.first { !$0.position.contains("Pitcher") })
+        let batting = batter.placeholderStatistics.featuredCells(for: batter.featuredStatistics)
+        #expect(batting.map(\.feature.abbreviation) == ["AVG", "HR", "RBI", "OPS"])
+        #expect(batting.map(\.cell.displayValue) == [".000", "0", "0", ".000"])
+    }
+
+    @Test("Basketball's per-game line and hockey's skater line")
+    func basketballAndHockey() throws {
+        let jackson = try #require(parseBasketballRoster(from: try Fixture.json("jayhawks_roster")).first { $0.playerID == "4872739" })
+        let tiles = jackson.placeholderStatistics.featuredCells(for: jackson.featuredStatistics)
+        #expect(tiles.map(\.feature.abbreviation) == ["PPG", "RPG", "APG", "MPG"])
+
+        // nhl_splits_5080145.json (Cutter Gauthier): 41 G, 28 A, 69 PTS, -2.
+        let line = parseSplitsSeasonLine(from: try Fixture.json("nhl_splits_5080145"))
+        let skater = PlayerSheetGrid(rows: [hockeySheetStats(from: line).map { PlayerSheetCell.stat(title: $0.label, info: $0.display) }])
+        let hockey = try #require(parseHockeyRoster(from: try Fixture.json("nhl_roster")).first)
+        let featured = skater.featuredCells(for: hockey.featuredStatistics)
+        #expect(featured.map(\.feature.abbreviation) == ["G", "A", "PTS", "+/-"])
+        #expect(featured.map(\.cell.displayValue) == ["41", "28", "69", "-2"])
+    }
+
+    @Test("A quiet stat shows once it isn't zero")
+    func quietCells() {
+        let grid = PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Discipline", rows: [[
+                .stat(title: "Own Goals", info: "0"),
+                .stat(title: "Offsides", info: "3"),
+                .stat(title: "Red Cards", info: "0"),
+            ]]),
+            PlayerSheetGrid.Section(title: "Quiet", rows: [[
+                .stat(title: "Own Goals", info: "0"),
+            ]]),
+        ])
+        let rest = grid.remainingSections(excluding: [])
+        // Red cards say something at zero; a section left empty goes.
+        #expect(rest.map(\.title) == ["Discipline"])
+        #expect(cellTitles(rest) == ["Offsides", "Red Cards"])
+    }
+}
+
+@Suite("Player sheet: rates, totals from the game log, avatars and flags")
+struct PlayerSheetHelperTests {
+    @Test("Rates a game, and the baseball rates")
+    func rates() {
+        #expect(perGameRate(9, games: 19) == "0.47")
+        #expect(perGameRate(0, games: 8) == "0.00")
+        #expect(perGameRate(3, games: 0) == "N/A")
+
+        #expect(baseballRate(0.281) == ".281")
+        #expect(baseballRate(1) == "1.000")
+        // 76.1 innings is 76 and a third.
+        #expect(abs(baseballInnings(76.1) - (76 + 1.0 / 3)) < 0.0001)
+        #expect(abs(baseballInnings(5.2) - (5 + 2.0 / 3)) < 0.0001)
+        #expect(baseballInnings(0) == 0)
+        // royals_splits_5136077-shaped line: 35 walks, 61 hits, 76.1 IP.
+        #expect(baseballWHIP(walks: 35, hits: 61, innings: 76.1) == "1.26")
+        #expect(baseballWHIP(walks: 0, hits: 0, innings: 0) == "N/A")
+    }
+
+    @Test("A season summed from the game log: counts only, headline first", .tags(.golden))
+    func logTotals() throws {
+        // epl_gamelog_280555.json (Bukayo Saka): five matches, 3 goals on
+        // 15 shots, 9 on target, 2 fouls, 15 fouled, 4 offsides.
+        let log = parseGameLog(from: try Fixture.json("epl_gamelog_280555"))
+        let totals = log.summedTotals
+        #expect(totals.map(\.id) == [
+            "totalGoals", "goalAssists", "totalShots", "shotsOnTarget",
+            "foulsCommitted", "foulsSuffered", "offsides", "yellowCards", "redCards",
+        ])
+        #expect(totals.map(\.display) == ["3", "0", "15", "9", "2", "15", "4", "0", "0"])
+        #expect(totals.prefix(4).map(\.abbreviation) == ["G", "A", "SH", "SOT"])
+        #expect(totals.first?.label == "Total Goals")
+
+        // The crest each game's opponent is drawn with.
+        #expect(log.rows.first?.opponentLogo == "https://a.espncdn.com/i/teamlogos/soccer/500/331.png")
+    }
+
+    @Test("Summing skips rates, dashes and an empty log; half a sack keeps its place")
+    func logTotalsShapes() {
+        func game(_ id: String, _ stats: [String: String]) -> GameLogRow {
+            GameLogRow(
+                id: id, date: nil, opponentID: "", opponentName: "", opponentAbbreviation: "",
+                isHome: true, result: "", score: "", note: "", seasonType: "", stats: stats
+            )
+        }
+        let log = AthleteGameLog(
+            columns: [
+                GameLogColumn(id: "totalTackles", label: "TOT", displayName: "Total Tackles"),
+                GameLogColumn(id: "sacks", label: "SACK", displayName: "Sacks"),
+                GameLogColumn(id: "yardsPerReception", label: "AVG", displayName: "Yards Per Reception"),
+                GameLogColumn(id: "fumblesForced", label: "FF", displayName: "Forced Fumbles"),
+            ],
+            rows: [
+                game("1", ["totalTackles": "4", "sacks": "0.5", "yardsPerReception": "12.0", "fumblesForced": "-"]),
+                game("2", ["totalTackles": "6", "sacks": "1", "yardsPerReception": "8.0", "fumblesForced": "-"]),
+            ],
+            seasons: .empty,
+            loaded: true
+        )
+        let totals = log.summedTotals
+        #expect(totals.map(\.id) == ["totalTackles", "sacks"])
+        #expect(totals.map(\.display) == ["10", "1.5"])
+
+        #expect(AthleteGameLog.empty.summedTotals.isEmpty)
+        #expect(gameLogTotalsCaption(games: 4) == "From the last 4 games")
+        #expect(gameLogTotalsCaption(games: 1) == "From the last game")
+    }
+
+    @Test("A goal, touchdown or home run is picked out once there is one")
+    func emphasis() {
+        #expect(gameLogEmphasizes(columnID: "totalGoals", value: "2"))
+        #expect(gameLogEmphasizes(columnID: "receivingTouchdowns", value: "1"))
+        #expect(!gameLogEmphasizes(columnID: "totalGoals", value: "0"))
+        #expect(!gameLogEmphasizes(columnID: "totalShots", value: "5"))
+        #expect(!gameLogEmphasizes(columnID: "homeRuns", value: "–"))
+    }
+
+    @Test("The jersey avatar shows the number, else the position, else the name")
+    func avatarLabel() {
+        #expect(jerseyAvatarLabel(number: "11", position: "Forward", name: "André Luiz") == "11")
+        #expect(jerseyAvatarLabel(number: " ", position: "Wide Receiver", name: "Cyrus Allen") == "WR")
+        #expect(jerseyAvatarLabel(number: "", position: "", name: "André Luiz") == "AL")
+        #expect(jerseyAvatarLabel(number: "", position: "", name: "") == "")
+        #expect(positionInitials("Starting Pitcher") == "SP")
+        #expect(positionInitials("Forward") == "F")
+        #expect(nameInitials("Felix Anudike-Uzomah") == "FA")
+        #expect(isSoccerGoalkeeper("Goalkeeper"))
+        #expect(!isSoccerGoalkeeper("Forward"))
+    }
+
+    @Test("A nationality's flag, where the name maps to one")
+    func flags() {
+        #expect(countryFlag("Brazil") == "\u{1F1E7}\u{1F1F7}")
+        #expect(countryFlag("USA") == "\u{1F1FA}\u{1F1F8}")
+        #expect(countryFlag(" Colombia ") == "\u{1F1E8}\u{1F1F4}")
+        #expect(countryFlag("England") == "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}")
+        #expect(countryFlag("Northern Ireland") == nil)
+        #expect(countryFlag("N/A") == nil)
+        #expect(countryFlag("") == nil)
+        #expect(countryFlag("Atlantis") == nil)
+        #expect(regionalIndicatorFlag("br") == "\u{1F1E7}\u{1F1F7}")
+        #expect(regionalIndicatorFlag("B1") == nil)
+        #expect(regionalIndicatorFlag("USA") == nil)
+    }
+
+    @Test("Every About fact has a symbol")
+    func factSymbols() {
+        #expect(playerFactSymbol("Height") == "ruler")
+        #expect(playerFactSymbol("Citizenship") == "flag")
+        #expect(playerFactSymbol("Something New") == "info.circle")
+    }
+}

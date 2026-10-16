@@ -13,19 +13,21 @@ import Foundation
 
 /// One cell in a player sheet's grid.
 enum PlayerSheetCell: Sendable {
-    /// A biography fact, drawn as a `FactRow` on the About card.
+    /// A biography fact, drawn as a `FactTile` on the About card.
     case fact(title: String, info: String)
-    /// A season statistic, drawn as a `StatCell` or a headline tile.
+    /// A season statistic, drawn as a `StatRow` or a key-stat tile.
     case stat(title: String, info: String)
-    /// A rate drawn as a ring by `StatPercentageView`: `progress` runs 0–1,
-    /// and a non-finite one (a rate over zero attempts) reads "N/A".
+    /// A rate drawn as a `StatRow` with a slim bar in the team colour:
+    /// `progress` runs 0–1, and a non-finite one (a rate over zero
+    /// attempts) reads "N/A".
     case percentage(title: String, progress: Double)
 }
 
 /// One card of a player sheet: its cells, optionally under section titles.
 ///
-/// Cells come grouped in rows of up to three, the order they read in; the
-/// sheet lays them out in as many columns as the text size allows (P-4).
+/// Cells come grouped in rows, the order they read in. The Season Stats
+/// card lifts its key statistics into tiles (`featuredCells(for:)`) and
+/// lists the rest as labelled rows under each section's title.
 struct PlayerSheetGrid: Sendable {
     struct Section: Sendable {
         var title: String?
@@ -68,9 +70,10 @@ protocol PlayerSheetDescribing: RosterPlayer {
     /// The grid's `seasons` are those the feed offers.
     func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid
 
-    /// The statistics lifted out of the grid into the sheet's headline
-    /// tiles, by their cell titles, in the order they're shown. A title the
-    /// grid lacks is skipped, so one list can serve two stat lines.
+    /// The statistics lifted out of the grid into the sheet's key-stat
+    /// tiles, by their cell titles, in the order they're shown, chosen for
+    /// the sport and the player's position. A title the grid lacks is
+    /// skipped, so one list can serve two stat lines.
     var featuredStatistics: [PlayerSheetFeature] { get }
 }
 
@@ -84,14 +87,28 @@ struct PlayerSheetFeature: Sendable {
     var title: String
     var abbreviation: String
     /// Whether the tile takes a row of its own above the others, for a
-    /// figure too wide to share one (a baseball slash line). It doesn't
-    /// count toward the four tiles.
+    /// figure too wide to share one. It doesn't count toward the four
+    /// tiles.
     var spansRow: Bool
+    /// The title of the section the cell is looked for in, for a title
+    /// several sections share (football's "Yards"); `nil` looks in all.
+    var section: String?
+    /// What VoiceOver calls the tile ("Goals" for "Total Goals"); `nil`
+    /// reads the cell's title.
+    var spokenTitle: String?
 
-    init(_ title: String, _ abbreviation: String, spansRow: Bool = false) {
+    init(
+        _ title: String,
+        _ abbreviation: String,
+        spansRow: Bool = false,
+        in section: String? = nil,
+        spoken spokenTitle: String? = nil
+    ) {
         self.title = title
         self.abbreviation = abbreviation
         self.spansRow = spansRow
+        self.section = section
+        self.spokenTitle = spokenTitle
     }
 }
 
@@ -194,43 +211,51 @@ extension BasketballPlayer: PlayerSheetDescribing {
         return sheet
     }
 
+    /// Points, rebounds and assists a game, then minutes.
     var featuredStatistics: [PlayerSheetFeature] {
         [
-            PlayerSheetFeature("Average Points", "PPG"),
-            PlayerSheetFeature("Average Rebounds", "RPG"),
-            PlayerSheetFeature("Average Assists", "APG"),
-            PlayerSheetFeature("Average Minutes", "MPG"),
+            PlayerSheetFeature("Average Points", "PPG", spoken: "Points per game"),
+            PlayerSheetFeature("Average Rebounds", "RPG", spoken: "Rebounds per game"),
+            PlayerSheetFeature("Average Assists", "APG", spoken: "Assists per game"),
+            PlayerSheetFeature("Average Minutes", "MPG", spoken: "Minutes per game"),
         ]
     }
 
+    /// Scoring with its shooting rates, rebounding, then the rest.
     private static func grid(_ stats: BasketballPlayerStats) -> PlayerSheetGrid {
         func average(_ value: Float) -> String { String(format: "%.1f", value) }
 
-        return PlayerSheetGrid(rows: [
-            [
-                .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
-                .stat(title: "Average Minutes", info: average(stats.avgMinutes)),
-                .stat(title: "Average Points", info: average(stats.avgPoints)),
-            ],
-            [
-                .percentage(title: "Field Goal Percentage", progress: Double(stats.fieldGoalPct) / 100),
-                .percentage(title: "3-Point Percentage", progress: Double(stats.threePointFieldGoalPct) / 100),
-                .percentage(title: "Free Throw Percentage", progress: Double(stats.freeThrowPct) / 100),
-            ],
-            [
-                .stat(title: "Average Rebounds", info: average(stats.avgRebounds)),
-                .stat(title: "Avg. Defensive Rebounds", info: average(stats.avgDefensiveRebounds)),
-                .stat(title: "Avg. Offensive Rebounds", info: average(stats.avgOffensiveRebounds)),
-            ],
-            [
-                .stat(title: "Average Assists", info: average(stats.avgAssists)),
-                .stat(title: "Average Blocks", info: average(stats.avgBlocks)),
-                .stat(title: "Average Steals", info: average(stats.avgSteals)),
-            ],
-            [
-                .stat(title: "Average Fouls", info: average(stats.avgFouls)),
-                .stat(title: "Average Turnovers", info: average(stats.avgTurnovers)),
-            ],
+        return PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Scoring", rows: [
+                [
+                    .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
+                    .stat(title: "Average Minutes", info: average(stats.avgMinutes)),
+                    .stat(title: "Average Points", info: average(stats.avgPoints)),
+                ],
+                [
+                    .percentage(title: "Field Goal Percentage", progress: Double(stats.fieldGoalPct) / 100),
+                    .percentage(title: "3-Point Percentage", progress: Double(stats.threePointFieldGoalPct) / 100),
+                    .percentage(title: "Free Throw Percentage", progress: Double(stats.freeThrowPct) / 100),
+                ],
+            ]),
+            PlayerSheetGrid.Section(title: "Rebounding", rows: [
+                [
+                    .stat(title: "Average Rebounds", info: average(stats.avgRebounds)),
+                    .stat(title: "Avg. Defensive Rebounds", info: average(stats.avgDefensiveRebounds)),
+                    .stat(title: "Avg. Offensive Rebounds", info: average(stats.avgOffensiveRebounds)),
+                ],
+            ]),
+            PlayerSheetGrid.Section(title: "Playmaking & Defense", rows: [
+                [
+                    .stat(title: "Average Assists", info: average(stats.avgAssists)),
+                    .stat(title: "Average Blocks", info: average(stats.avgBlocks)),
+                    .stat(title: "Average Steals", info: average(stats.avgSteals)),
+                ],
+                [
+                    .stat(title: "Average Fouls", info: average(stats.avgFouls)),
+                    .stat(title: "Average Turnovers", info: average(stats.avgTurnovers)),
+                ],
+            ]),
         ])
     }
 }
@@ -261,6 +286,12 @@ extension FootBallPlayer: PlayerSheetDescribing {
         var sheet = Self.grid(stats)
         sheet.seasons = stats.seasons
         return sheet
+    }
+
+    /// By position group: a passer's, a runner's, a receiver's, a
+    /// kicker's, a punter's or a defender's line (`footballKeyStats`).
+    var featuredStatistics: [PlayerSheetFeature] {
+        footballKeyStats(position: position)
     }
 
     /// One titled section per position-appropriate stat group.
@@ -316,90 +347,100 @@ extension BaseballPlayer: PlayerSheetDescribing {
         return sheet
     }
 
-    /// The pitching line's headline, or the batting line's: the AVG/OBP/SLG
-    /// slash line on a row of its own, then hits, home runs, RBIs and OPS.
+    /// A pitcher's ERA, win-loss record, strikeouts and WHIP; a batter's
+    /// average, home runs, RBIs and OPS.
     var featuredStatistics: [PlayerSheetFeature] {
         if position.contains("Pitcher") {
             return [
-                PlayerSheetFeature("Earned Run Avg.", "ERA"),
-                PlayerSheetFeature("Wins", "W"),
-                PlayerSheetFeature("Losses", "L"),
-                PlayerSheetFeature("Strikeouts", "K"),
+                PlayerSheetFeature("Earned Run Avg.", "ERA", spoken: "Earned run average"),
+                PlayerSheetFeature("Win-Loss Record", "W-L", spoken: "Win-loss record"),
+                PlayerSheetFeature("Strikeouts", "SO", spoken: "Strikeouts"),
+                PlayerSheetFeature("WHIP", "WHIP", spoken: "Walks and hits per inning pitched"),
             ]
         }
         return [
-            PlayerSheetFeature(Self.slashLineTitle, "AVG / OBP / SLG", spansRow: true),
-            PlayerSheetFeature("Hits", "H"),
-            PlayerSheetFeature("Home Runs", "HR"),
-            PlayerSheetFeature("RBIs", "RBI"),
-            PlayerSheetFeature("OPS", "OPS"),
+            PlayerSheetFeature("Batting Average", "AVG", spoken: "Batting average"),
+            PlayerSheetFeature("Home Runs", "HR", spoken: "Home runs"),
+            PlayerSheetFeature("RBIs", "RBI", spoken: "Runs batted in"),
+            PlayerSheetFeature("OPS", "OPS", spoken: "On-base plus slugging"),
         ]
     }
 
     /// Pitchers get the pitching line; everyone else the batting line.
     private func grid(_ stats: BaseballPlayerStats) -> PlayerSheetGrid {
         if position.contains("Pitcher") {
-            return PlayerSheetGrid(rows: [
-                [
-                    .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
-                    .stat(title: "Games Started", info: "\(stats.gamesStarted)"),
-                    .stat(title: "Complete Games", info: "\(stats.completeGames)"),
-                ],
-                [
-                    .stat(title: "Innings Pitched", info: "\(stats.innings)"),
-                    .stat(title: "Wins", info: "\(stats.wins)"),
-                    .stat(title: "Losses", info: "\(stats.losses)"),
-                ],
-                [
-                    .stat(title: "Saves", info: "\(stats.saves)"),
-                    .stat(title: "Save Opportunities", info: "\(stats.saveOpportunities)"),
-                    .stat(title: "Opp. Batting Avg.", info: "\(stats.opponentAvg)"),
-                ],
-                [
-                    .stat(title: "Runs", info: "\(stats.runs)"),
-                    .stat(title: "Earned Run Avg.", info: String(format: "%.2f", stats.EarnedRunAverage)),
-                    .stat(title: "Earned Runs", info: "\(stats.earnedRuns)"),
-                ],
-                [
-                    .stat(title: "Hits", info: "\(stats.hits)"),
-                    .stat(title: "Home Runs", info: "\(stats.homeRuns)"),
-                    .stat(title: "Strikeouts", info: "\(stats.strikeouts)"),
-                ],
-                [
-                    .stat(title: "Walks", info: "\(stats.walks)"),
-                ],
+            return PlayerSheetGrid(sections: [
+                PlayerSheetGrid.Section(title: "Pitching", rows: [
+                    [
+                        .stat(title: "Earned Run Avg.", info: String(format: "%.2f", stats.EarnedRunAverage)),
+                        .stat(title: "Win-Loss Record", info: "\(stats.wins)-\(stats.losses)"),
+                        .stat(title: "WHIP", info: baseballWHIP(walks: stats.walks, hits: stats.hits, innings: stats.innings)),
+                    ],
+                    [
+                        .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
+                        .stat(title: "Games Started", info: "\(stats.gamesStarted)"),
+                        .stat(title: "Complete Games", info: "\(stats.completeGames)"),
+                        .stat(title: "Innings Pitched", info: "\(stats.innings)"),
+                    ],
+                    [
+                        .stat(title: "Wins", info: "\(stats.wins)"),
+                        .stat(title: "Losses", info: "\(stats.losses)"),
+                        .stat(title: "Saves", info: "\(stats.saves)"),
+                        .stat(title: "Save Opportunities", info: "\(stats.saveOpportunities)"),
+                    ],
+                ]),
+                PlayerSheetGrid.Section(title: "Against", rows: [
+                    [
+                        .stat(title: "Strikeouts", info: "\(stats.strikeouts)"),
+                        .stat(title: "Walks", info: "\(stats.walks)"),
+                        .stat(title: "Hits", info: "\(stats.hits)"),
+                        .stat(title: "Home Runs", info: "\(stats.homeRuns)"),
+                    ],
+                    [
+                        .stat(title: "Runs", info: "\(stats.runs)"),
+                        .stat(title: "Earned Runs", info: "\(stats.earnedRuns)"),
+                        .stat(title: "Opp. Batting Avg.", info: baseballRate(stats.opponentAvg)),
+                    ],
+                ]),
             ])
         }
 
-        return PlayerSheetGrid(rows: [
-            [
-                .stat(title: "At Bats", info: "\(stats.AtBats)"),
-                .stat(title: "Runs", info: "\(stats.Runs)"),
-                .stat(title: "Hits", info: "\(stats.Hits)"),
-            ],
-            [
-                .stat(title: "Doubles", info: "\(stats.Doubles)"),
-                .stat(title: "Triples", info: "\(stats.Triples)"),
-                .stat(title: "Home Runs", info: "\(stats.HomeRuns)"),
-            ],
-            [
-                .stat(title: "RBIs", info: "\(stats.RBIs)"),
-                .stat(title: "Walks", info: "\(stats.Walks)"),
-                .stat(title: "Hit By Pitches", info: "\(stats.HitByPitch)"),
-            ],
-            [
-                .stat(title: "Strikeouts", info: "\(stats.Strikeouts)"),
-                .stat(title: "Stolen Bases", info: "\(stats.StolenBases)"),
-                .stat(title: "Caught Stealing", info: "\(stats.CaughtStealing)"),
-            ],
-            [
-                .stat(title: "OPS", info: "\(stats.OPS)"),
-                .stat(title: Self.slashLineTitle, info: baseballSlashLine(stats)),
-            ],
+        return PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Hitting", rows: [
+                [
+                    .stat(title: "Batting Average", info: baseballRate(stats.Avg)),
+                    .stat(title: "Home Runs", info: "\(stats.HomeRuns)"),
+                    .stat(title: "RBIs", info: String(format: "%.0f", stats.RBIs)),
+                    .stat(title: "OPS", info: baseballRate(stats.OPS)),
+                ],
+                [
+                    .stat(title: "At Bats", info: "\(stats.AtBats)"),
+                    .stat(title: "Runs", info: "\(stats.Runs)"),
+                    .stat(title: "Hits", info: "\(stats.Hits)"),
+                    .stat(title: "Doubles", info: "\(stats.Doubles)"),
+                    .stat(title: "Triples", info: "\(stats.Triples)"),
+                ],
+                [
+                    .stat(title: Self.slashLineTitle, info: baseballSlashLine(stats)),
+                ],
+            ]),
+            PlayerSheetGrid.Section(title: "Plate Discipline", rows: [
+                [
+                    .stat(title: "Walks", info: "\(stats.Walks)"),
+                    .stat(title: "Strikeouts", info: "\(stats.Strikeouts)"),
+                    .stat(title: "Hit By Pitches", info: "\(stats.HitByPitch)"),
+                ],
+            ]),
+            PlayerSheetGrid.Section(title: "Base Running", rows: [
+                [
+                    .stat(title: "Stolen Bases", info: "\(stats.StolenBases)"),
+                    .stat(title: "Caught Stealing", info: "\(stats.CaughtStealing)"),
+                ],
+            ]),
         ])
     }
 
-    /// The slash line's cell title, which VoiceOver reads for its tile.
+    /// The slash line's cell title, which VoiceOver reads for its row.
     private static let slashLineTitle = "Batting Average / On-Base / Slugging"
 }
 
@@ -408,10 +449,7 @@ extension BaseballPlayer: PlayerSheetDescribing {
 /// (`"1.000"`) keeps it.
 func baseballSlashLine(_ stats: BaseballPlayerStats) -> String {
     [stats.Avg, stats.OnBasePct, stats.SlugAvg]
-        .map { rate in
-            let text = String(format: "%.3f", rate)
-            return text.hasPrefix("0.") ? String(text.dropFirst()) : text
-        }
+        .map(baseballRate)
         .joined(separator: "/")
 }
 
@@ -443,26 +481,31 @@ extension SoccerPlayer: PlayerSheetDescribing {
     func statistics(league: LeagueID, season: String?) async -> PlayerSheetGrid {
         guard !hasSeasonStats else { return seasonTotals }
         let stats = await downloadSoccerPlayerStats(playerID: playerID, playerPosition: position, league: league)
-        return Self.headline(stats, keeper: position.contains("Goalkeeper"))
+        return Self.headline(stats, keeper: isSoccerGoalkeeper(position))
     }
 
-    /// Covers both the roster's season totals and the athlete document's
-    /// headline figures, which title some stats differently.
+    /// A keeper's saves, clean sheets, goals conceded and appearances; an
+    /// outfield player's goals, assists, appearances and starts. Covers
+    /// both the roster's season totals and the athlete document's headline
+    /// figures, which title some stats differently, and skips what a line
+    /// lacks (the roster has no clean sheets; no soccer feed has minutes).
     var featuredStatistics: [PlayerSheetFeature] {
-        if position.contains("Goalkeeper") {
+        if isSoccerGoalkeeper(position) {
             return [
-                PlayerSheetFeature("Goals Saved", "SV"),
-                PlayerSheetFeature("Saves", "SV"),
-                PlayerSheetFeature("Save Percentage", "SV%"),
-                PlayerSheetFeature("Clean Sheets", "CS"),
-                PlayerSheetFeature("Goals Conceded", "GA"),
+                PlayerSheetFeature("Goals Saved", "Saves", spoken: "Saves"),
+                PlayerSheetFeature("Saves", "Saves", spoken: "Saves"),
+                PlayerSheetFeature("Clean Sheets", "Clean Sheets", spoken: "Clean sheets"),
+                PlayerSheetFeature("Goals Conceded", "Conceded", spoken: "Goals conceded"),
+                PlayerSheetFeature("Games Played", "Apps", spoken: "Appearances"),
+                PlayerSheetFeature("Starts", "Starts", spoken: "Starts"),
             ]
         }
         return [
-            PlayerSheetFeature("Total Goals", "G"),
-            PlayerSheetFeature("Goal Assists", "A"),
-            PlayerSheetFeature("Games Played", "GP"),
-            PlayerSheetFeature("Games Started", "GS"),
+            PlayerSheetFeature("Total Goals", "Goals", spoken: "Goals"),
+            PlayerSheetFeature("Goal Assists", "Assists", spoken: "Assists"),
+            PlayerSheetFeature("Games Played", "Apps", spoken: "Appearances"),
+            PlayerSheetFeature("Games Started", "Starts", spoken: "Starts"),
+            PlayerSheetFeature("Sub Appearances", "Off Bench", spoken: "Substitute appearances"),
         ]
     }
 
@@ -472,81 +515,106 @@ extension SoccerPlayer: PlayerSheetDescribing {
     /// substitute appearance twice.)
     private var starts: Int { max(appearances - subAppearances, 0) }
 
-    /// Keepers get the goalkeeping line; everyone else the outfield line.
+    /// Keepers get the goalkeeping line; everyone else the outfield line:
+    /// appearances, then attacking (with shot accuracy and conversion as
+    /// bars, and rates a game: no soccer feed carries minutes, so per 90
+    /// can't be worked out), then discipline. Own goals and offsides show
+    /// only once there are some (`PlayerSheetCell.quietTitles`).
     private var seasonTotals: PlayerSheetGrid {
-        if position.contains("Goalkeeper") {
-            return PlayerSheetGrid(rows: [
-                [
-                    .stat(title: "Starts", info: "\(starts)"),
-                    .stat(title: "Shots Faced", info: "\(shotsFaced)"),
-                    .stat(title: "Goals Saved", info: "\(saves)"),
-                ],
-                [
-                    .stat(title: "Goals Conceded", info: "\(goalsConceded)"),
-                    .percentage(title: "Save Percentage", progress: Double(saves) / Double(shotsFaced)),
-                    .percentage(title: "Conceded Percentage", progress: Double(goalsConceded) / Double(shotsFaced)),
-                ],
-                [
-                    .stat(title: "Fouls Committed", info: "\(fouls)"),
-                    .stat(title: "Yellow Cards", info: "\(yellowCards)"),
-                    .stat(title: "Red Cards", info: "\(redCards)"),
-                ],
-            ])
-        }
-
-        return PlayerSheetGrid(rows: [
+        let discipline = PlayerSheetGrid.Section(title: "Discipline", rows: [
             [
-                .stat(title: "Games Started", info: "\(starts)"),
-                .stat(title: "Games Played", info: "\(appearances)"),
-                .stat(title: "Goal Assists", info: "\(goalAssists)"),
-            ],
-            [
-                .stat(title: "Total Shots", info: "\(totalShots)"),
-                .stat(title: "Shots On Target", info: "\(shotsOnTarget)"),
-                .stat(title: "Total Goals", info: "\(totalGoals)"),
-            ],
-            [
-                .percentage(title: "Goal Percentage", progress: Double(totalGoals) / Double(totalShots)),
-                .percentage(title: "On Target Percentage", progress: Double(shotsOnTarget) / Double(totalShots)),
-                .stat(title: "Own Goals", info: "\(ownGoals)"),
-            ],
-            [
-                .stat(title: "Offsides", info: "\(offsides)"),
-                .stat(title: "Fouls Suffered", info: "\(foulsSuffered)"),
                 .stat(title: "Fouls Committed", info: "\(fouls)"),
+                .stat(title: "Fouls Suffered", info: "\(foulsSuffered)"),
             ],
             [
                 .stat(title: "Yellow Cards", info: "\(yellowCards)"),
                 .stat(title: "Red Cards", info: "\(redCards)"),
+                .stat(title: "Own Goals", info: "\(ownGoals)"),
             ],
+        ])
+
+        if isSoccerGoalkeeper(position) {
+            return PlayerSheetGrid(sections: [
+                PlayerSheetGrid.Section(title: "Appearances", rows: [
+                    [
+                        .stat(title: "Games Played", info: "\(appearances)"),
+                        .stat(title: "Starts", info: "\(starts)"),
+                    ],
+                ]),
+                PlayerSheetGrid.Section(title: "Goalkeeping", rows: [
+                    [
+                        .stat(title: "Goals Saved", info: "\(saves)"),
+                        .stat(title: "Goals Conceded", info: "\(goalsConceded)"),
+                        .stat(title: "Shots Faced", info: "\(shotsFaced)"),
+                    ],
+                    [
+                        .percentage(title: "Save Percentage", progress: Double(saves) / Double(shotsFaced)),
+                        .stat(title: "Saves per Game", info: perGameRate(saves, games: appearances)),
+                        .stat(title: "Conceded per Game", info: perGameRate(goalsConceded, games: appearances)),
+                    ],
+                ]),
+                discipline,
+            ])
+        }
+
+        return PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Appearances", rows: [
+                [
+                    .stat(title: "Games Played", info: "\(appearances)"),
+                    .stat(title: "Games Started", info: "\(starts)"),
+                    .stat(title: "Sub Appearances", info: "\(subAppearances)"),
+                ],
+            ]),
+            PlayerSheetGrid.Section(title: "Attacking", rows: [
+                [
+                    .stat(title: "Total Goals", info: "\(totalGoals)"),
+                    .stat(title: "Goal Assists", info: "\(goalAssists)"),
+                ],
+                [
+                    .stat(title: "Total Shots", info: "\(totalShots)"),
+                    .stat(title: "Shots On Target", info: "\(shotsOnTarget)"),
+                    .percentage(title: "Shot Accuracy", progress: Double(shotsOnTarget) / Double(totalShots)),
+                    .percentage(title: "Conversion Rate", progress: Double(totalGoals) / Double(totalShots)),
+                ],
+                [
+                    .stat(title: "Goals per Game", info: perGameRate(totalGoals, games: appearances)),
+                    .stat(title: "Shots per Game", info: perGameRate(totalShots, games: appearances)),
+                    .stat(title: "Offsides", info: "\(offsides)"),
+                ],
+            ]),
+            discipline,
         ])
     }
 
     /// The athlete document's headline figures. See `SoccerPlayerStats`.
     private static func headline(_ stats: SoccerPlayerStats, keeper: Bool) -> PlayerSheetGrid {
-        let rows: [[PlayerSheetCell]] = keeper
-            ? [[
-                .stat(title: "Starts", info: stats.starts),
-                .stat(title: "Saves", info: stats.saves),
-                .stat(title: "Clean Sheets", info: stats.cleanSheets),
-            ], [
-                .stat(title: "Goals Conceded", info: stats.goalsConceded),
-            ]]
-            : [[
-                .stat(title: "Games Started", info: stats.starts),
-                .stat(title: "Sub Appearances", info: stats.substituteAppearances),
-                .stat(title: "Total Goals", info: stats.goals),
-            ], [
-                .stat(title: "Goal Assists", info: stats.assists),
-                .stat(title: "Total Shots", info: stats.shots),
-            ]]
         guard stats.hasFigures else {
             return PlayerSheetGrid(
                 sections: [],
                 message: "No season statistics are available for this player yet."
             )
         }
-        return PlayerSheetGrid(rows: rows)
+        if keeper {
+            return PlayerSheetGrid(sections: [
+                PlayerSheetGrid.Section(title: "Goalkeeping", rows: [[
+                    .stat(title: "Starts", info: stats.starts),
+                    .stat(title: "Saves", info: stats.saves),
+                    .stat(title: "Clean Sheets", info: stats.cleanSheets),
+                    .stat(title: "Goals Conceded", info: stats.goalsConceded),
+                ]]),
+            ])
+        }
+        return PlayerSheetGrid(sections: [
+            PlayerSheetGrid.Section(title: "Appearances", rows: [[
+                .stat(title: "Games Started", info: stats.starts),
+                .stat(title: "Sub Appearances", info: stats.substituteAppearances),
+            ]]),
+            PlayerSheetGrid.Section(title: "Attacking", rows: [[
+                .stat(title: "Total Goals", info: stats.goals),
+                .stat(title: "Goal Assists", info: stats.assists),
+                .stat(title: "Total Shots", info: stats.shots),
+            ]]),
+        ])
     }
 }
 
@@ -576,33 +644,35 @@ extension HockeyPlayer: PlayerSheetDescribing {
     }
 
     /// The feed's own labels (`displayNames`): a goalie's line first, as a
-    /// skater's has none of its stats, then a skater's. A goalie's line
-    /// also has "Time On Ice Per Game", but the sheet shows four at most.
+    /// skater's has none of its stats, then a skater's goals, assists,
+    /// points and plus/minus. A goalie's line also has "Time On Ice Per
+    /// Game", but the sheet shows four at most.
     var featuredStatistics: [PlayerSheetFeature] {
         [
-            PlayerSheetFeature("Goals Against Average", "GAA"),
-            PlayerSheetFeature("Save Percentage", "SV%"),
-            PlayerSheetFeature("Wins", "W"),
-            PlayerSheetFeature("Shutouts", "SO"),
-            PlayerSheetFeature("Goals", "G"),
-            PlayerSheetFeature("Assists", "A"),
-            PlayerSheetFeature("Penalty Minutes", "PIM"),
-            PlayerSheetFeature("Time On Ice Per Game", "TOI"),
+            PlayerSheetFeature("Goals Against Average", "GAA", spoken: "Goals against average"),
+            PlayerSheetFeature("Save Percentage", "SV%", spoken: "Save percentage"),
+            PlayerSheetFeature("Wins", "W", spoken: "Wins"),
+            PlayerSheetFeature("Shutouts", "SO", spoken: "Shutouts"),
+            PlayerSheetFeature("Goals", "G", spoken: "Goals"),
+            PlayerSheetFeature("Assists", "A", spoken: "Assists"),
+            PlayerSheetFeature("Points", "PTS", spoken: "Points"),
+            PlayerSheetFeature("Plus/Minus Rating", "+/-", spoken: "Plus-minus"),
         ]
     }
 
-    /// The season line under its title, three stats a row, each labelled
-    /// with the feed's own name for it. A skater and a goalie get different
-    /// stats; see `hockeySheetStats(from:)`.
+    /// The season line under "Skating" or "Goaltending", three stats a
+    /// row, each labelled with the feed's own name for it. A skater and a
+    /// goalie get different stats; see `hockeySheetStats(from:)`.
     private static func grid(_ line: SplitsSeasonLine) -> PlayerSheetGrid {
         let stats = hockeySheetStats(from: line)
+        let title = line.stat("savePct") != nil ? "Goaltending" : "Skating"
         let rows = stride(from: 0, to: stats.count, by: 3).map { start in
             stats[start ..< min(start + 3, stats.count)].map {
                 PlayerSheetCell.stat(title: $0.label, info: $0.display)
             }
         }
         return PlayerSheetGrid(
-            sections: stats.isEmpty ? [] : [PlayerSheetGrid.Section(title: line.title.isEmpty ? nil : line.title, rows: rows)],
+            sections: stats.isEmpty ? [] : [PlayerSheetGrid.Section(title: title, rows: rows)],
             message: line.loaded && stats.isEmpty
                 ? "No season statistics are available for this player yet."
                 : nil
@@ -610,20 +680,23 @@ extension HockeyPlayer: PlayerSheetDescribing {
     }
 }
 
+
 // MARK: - Sheet
 
 /// The sheet a roster card opens: the player over the team's colour, then
-/// their season statistics and biography on cards over the grouped page,
-/// which scrolls up over the colour as the team page's does (T-4).
+/// their season statistics, recent games and biography on cards over the
+/// grouped page, which scrolls up over the colour as the team page's does
+/// (T-4). On an iPad the cards keep to a readable column (B-14).
 ///
 /// The header fades as it scrolls under the sheet's top edge, and a compact
 /// bar with the player's name fades in there in its place.
 struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
-    /// A grid cell's narrowest width: three columns at the default text
-    /// size, fewer as the text grows, one at the largest sizes (P-4).
-    @ScaledMetric(relativeTo: .body) private var cellMinimumWidth: CGFloat = 96
-    /// A headline tile's narrowest width: four across at the default size.
-    @ScaledMetric(relativeTo: .title) private var featureMinimumWidth: CGFloat = 64
+    /// A key-stat tile's narrowest width: four across at the default text
+    /// size, fewer as the text grows (P-4).
+    @ScaledMetric(relativeTo: .title) private var featureMinimumWidth: CGFloat = 68
+    /// An About tile's narrowest width: two across at the default text
+    /// size, one at the largest.
+    @ScaledMetric(relativeTo: .body) private var factMinimumWidth: CGFloat = 140
     /// The headshot, growing with the name beside it, to a point.
     @ScaledMetric(relativeTo: .largeTitle) private var headshotSize: CGFloat = 120
 
@@ -646,13 +719,16 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     /// The season the first fetch was for: the feed's current one.
     @State private var currentSeason = ""
     @State private var gameLog = AthleteGameLog.empty
+    /// The `gameLogRequest` `gameLog` answers, once it has.
+    @State private var gameLogAnswers: String?
     /// Whether the game-log card has scrolled into view. Its request waits
     /// for that, so a sheet opened and closed costs no extra fetch.
     @State private var gameLogVisible = false
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
-    /// The stat grids' width, for their column count; zero until measured.
-    @State private var gridWidth: CGFloat = 0
+    /// The key-stat tiles' width, for their column count; zero until
+    /// measured.
+    @State private var tileWidth: CGFloat = 0
 
     init(player: Player, team: TeamRef) {
         self.player = player
@@ -660,7 +736,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         _statistics = State(initialValue: player.placeholderStatistics)
     }
 
-    /// The team colour as a fill: the hero, the compact bar, the rate rings,
+    /// The team colour as a fill: the hero, the compact bar, the rate bars,
     /// the cards' accent bars. `fillHex` stands in a fallback for a team the
     /// feed gave no colour, which would otherwise draw clear (B-1).
     private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
@@ -847,13 +923,15 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
     }
 
-    /// The headshot in a circle; the player's initials stand in while it
-    /// loads or where neither ESPN nor Wikimedia Commons has one, or their
-    /// number without a name. Long-press a Commons photo for its credit.
+    /// The headshot in a circle. Where neither ESPN, Wikimedia Commons nor
+    /// API-Football has one, and while it loads, the jersey avatar stands
+    /// in rather than ESPN's grey silhouette: the number in the team's ink
+    /// on its colour, the crest faint behind (`PlayerJerseyAvatar`).
+    /// Long-press a Commons photo for its credit.
     private var headshot: some View {
         let size = min(headshotSize, 180)
-        return AthleteHeadshot(player, league: team.league, showsProgress: false) {
-            monogram(size: size)
+        return AthleteHeadshot(player, league: team.league, showsProgress: false, drawsSilhouette: false) {
+            PlayerJerseyAvatar(player, team: team, size: size)
         }
         .aspectRatio(contentMode: .fill)
         .frame(width: size, height: size)
@@ -864,36 +942,6 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 .strokeBorder(inkColor.opacity(0.35), lineWidth: 2)
         }
         .accessibilityHidden(true)
-    }
-
-    private func monogram(size: CGFloat) -> some View {
-        let initials = Self.initials(of: player.name)
-        let text = initials.isEmpty ? number : initials
-        return ZStack {
-            if text.isEmpty {
-                Image(systemName: "person.fill")
-                    .font(.system(size: size * 0.4))
-            } else {
-                // Proportional to the headshot, not to Dynamic Type: the
-                // headshot already scales.
-                Text(text)
-                    .font(.system(size: size * 0.36, weight: .bold, design: .rounded))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(size * 0.12)
-            }
-        }
-        .frame(width: size, height: size)
-        .teamInk(on: team)
-    }
-
-    /// The first and last names' first letters ("FA" for "Felix
-    /// Anudike-Uzomah"), one for a single name, none for no name.
-    private static func initials(of name: String) -> String {
-        let words = name.split(whereSeparator: \.isWhitespace)
-        guard let first = words.first?.first else { return "" }
-        guard words.count > 1, let last = words.last?.first else { return String(first).uppercased() }
-        return "\(first)\(last)".uppercased()
     }
 
     /// The player's name, pinned under the sheet's top edge once the header
@@ -942,6 +990,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 aboutCard
             }
         }
+        // A readable column on an iPad's page sheet, where a row of stats
+        // ran 1,300 pt wide (B-14). A no-op on an iPhone.
+        .readableContentWidth()
         .padding(Theme.Spacing.m)
         .padding(.bottom, Theme.Spacing.xl)
         // Tall enough to cover the hero's overscroll on a short page.
@@ -1007,12 +1058,20 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     // MARK: Game log
 
-    /// The season the game log is fetched for once its card is in view and
-    /// the statistics have said which season they show: empty for the
-    /// feed's current season, `nil` until then.
+    /// The season the game log is fetched for once the statistics have
+    /// said which season they show: empty for the feed's current season,
+    /// `nil` until then. It waits for its card to scroll into view, unless
+    /// the season has no statistics, when the log may stand in for them
+    /// (`logTotals`).
     private var gameLogRequest: String? {
-        guard gameLogVisible, loaded else { return nil }
+        guard loaded, gameLogVisible || allCells.isEmpty else { return nil }
         return statisticsSeason == currentSeason ? "" : statisticsSeason
+    }
+
+    /// Whether `gameLog` is the answer to the current `gameLogRequest`,
+    /// not still another season's.
+    private var gameLogIsCurrent: Bool {
+        gameLog.loaded && gameLogAnswers != nil && gameLogAnswers == gameLogRequest
     }
 
     /// The player's five most recent games in the season shown, fetched
@@ -1021,7 +1080,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         card {
             cardTitle("Last 5 Games")
 
-            PlayerGameLogView(log: gameLog, limit: 5)
+            PlayerGameLogView(log: gameLog, limit: 5, accent: teamColor, league: team.league)
                 .motionAnimation(Theme.Motion.stateChange, value: gameLog.loaded)
         }
         .onScrollVisibilityChange(threshold: 0.1) { visible in
@@ -1045,6 +1104,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         // A newer season has taken over.
         guard !Task.isCancelled else { return }
         gameLog = log
+        gameLogAnswers = request
     }
 
     /// Every cell in the grid, in reading order.
@@ -1052,44 +1112,27 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         statistics.sections.flatMap(\.rows).flatMap { $0 }
     }
 
-    /// The player's headline statistics that the grid has: four tiles at
-    /// most, plus any that span a row.
-    private var featuredCells: [(abbreviation: String, cell: PlayerSheetCell, spansRow: Bool)] {
-        let cells = allCells
-        var used: Set<String> = []
-        var tiles = 0
-        var featured: [(abbreviation: String, cell: PlayerSheetCell, spansRow: Bool)] = []
-        for feature in player.featuredStatistics where feature.spansRow || tiles < 4 {
-            guard !used.contains(feature.title),
-                  let cell = cells.first(where: { $0.title == feature.title })
-            else { continue }
-            used.insert(feature.title)
-            featured.append((abbreviation: feature.abbreviation, cell: cell, spansRow: feature.spansRow))
-            if !feature.spansRow {
-                tiles += 1
-            }
-        }
-        return featured
-    }
-
-    /// The grid's sections less the headline cells, and less any section
-    /// those leave empty.
-    private func remainingSections(excluding titles: Set<String>) -> [PlayerSheetGrid.Section] {
-        statistics.sections.compactMap { section -> PlayerSheetGrid.Section? in
-            let rows = section.rows
-                .map { row in row.filter { !titles.contains($0.title) } }
-                .filter { !$0.isEmpty }
-            return rows.isEmpty ? nil : PlayerSheetGrid.Section(title: section.title, rows: rows)
-        }
+    /// The season summed from the game log, for a season the feed has no
+    /// statistics for but has logged games in (`summedTotals`): an NFL
+    /// receiver with no catches yet has no splits, only his games.
+    private var logTotals: [PlayerSeasonStat] {
+        gameLogIsCurrent ? gameLog.summedTotals : []
     }
 
     @ViewBuilder
     private var statisticsContent: some View {
         if allCells.isEmpty {
-            if loaded {
-                emptyMessage(statistics.message ?? "No season statistics are available for this player yet.")
-            } else {
+            if !loaded {
                 statisticsSkeleton
+            } else if !logTotals.isEmpty {
+                logTotalsBody
+            } else if gameLogIsCurrent && !gameLog.rows.isEmpty {
+                emptyMessage("Season totals aren't published yet. Recent games are below.")
+            } else if !gameLogIsCurrent && !player.playerID.isEmpty {
+                // The game log is on its way, and may hold the season.
+                statisticsSkeleton
+            } else {
+                emptyMessage(statistics.message ?? "No season statistics are available for this player yet.")
             }
         } else if loaded {
             if statistics.hasNoFigures {
@@ -1105,54 +1148,29 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
     }
 
+    /// The key statistics for the player's sport and position as tiles
+    /// (`featuredStatistics`), then the rest of the line in titled groups
+    /// of labelled rows, a rate with a bar in the team colour.
     private var statisticsBody: some View {
-        let featured = featuredCells
-        let wide = featured.filter { $0.spansRow }
-        let tiles = featured.filter { !$0.spansRow }
-        let sections = remainingSections(excluding: Set(featured.map { $0.cell.title }))
+        let featured = statistics.featuredCells(for: player.featuredStatistics)
+        let wide = featured.filter { $0.feature.spansRow }.map { KeyStat($0) }
+        let tiles = featured.filter { !$0.feature.spansRow }.map { KeyStat($0) }
+        let sections = statistics.remainingSections(excluding: featured)
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-            if !featured.isEmpty {
+            if !wide.isEmpty || !tiles.isEmpty {
                 VStack(spacing: Theme.Spacing.s) {
-                    ForEach(Array(wide.enumerated()), id: \.offset) { _, feature in
-                        FeaturedStatTile(abbreviation: feature.abbreviation, cell: feature.cell)
+                    ForEach(Array(wide.enumerated()), id: \.offset) { _, stat in
+                        KeyStatTile(stat: stat, accent: teamColor)
                     }
 
                     if !tiles.isEmpty {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: featureMinimumWidth), spacing: Theme.Spacing.s)],
-                            spacing: Theme.Spacing.s
-                        ) {
-                            ForEach(Array(tiles.enumerated()), id: \.offset) { _, feature in
-                                FeaturedStatTile(abbreviation: feature.abbreviation, cell: feature.cell)
-                            }
-                        }
+                        keyStatGrid(tiles)
                     }
                 }
             }
 
             ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    if let title = section.title {
-                        Text(title)
-                            .font(Theme.Typography.cardTitle)
-                            .foregroundStyle(.secondary)
-                            .accessibilityAddTraits(.isHeader)
-                    }
-
-                    LazyVGrid(
-                        columns: statColumns(count: section.rows.joined().count),
-                        spacing: Theme.Spacing.m
-                    ) {
-                        ForEach(Array(section.rows.joined().enumerated()), id: \.offset) { _, cell in
-                            cellView(cell)
-                        }
-                    }
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.width
-                    } action: { width in
-                        gridWidth = width
-                    }
-                }
+                statSection(section)
             }
 
             if let message = statistics.message {
@@ -1161,65 +1179,152 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
     }
 
-    /// A stat grid's columns: as many as fit at `cellMinimumWidth`, so
-    /// fewer as the text grows (P-4), less one where that leaves a lone
-    /// cell on the last row (`PlayerSheetGrid.columnCount`). Adaptive until
-    /// the grid has been measured.
-    private func statColumns(count: Int) -> [GridItem] {
-        let spacing = Theme.Spacing.s
-        guard gridWidth > 0 else {
-            return [GridItem(.adaptive(minimum: cellMinimumWidth), spacing: spacing, alignment: .top)]
+    /// The logged games summed (`logTotals`), under a line saying how many:
+    /// the log's headline figures as tiles, any other count that isn't zero
+    /// as a row.
+    private var logTotalsBody: some View {
+        let totals = logTotals
+        let headline = Set(gameLog.headlineColumns.map(\.id))
+        let tiles = Array(totals.filter { headline.contains($0.id) }.prefix(4))
+        let tileIDs = Set(tiles.map(\.id))
+        let rows = totals
+            .filter { !tileIDs.contains($0.id) }
+            .map { PlayerSheetCell.stat(title: $0.label, info: $0.display) }
+            .filter { !$0.isEmptyFigure }
+        return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+            Label(gameLogTotalsCaption(games: gameLog.rows.count), systemImage: "sum")
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(.secondary)
+
+            if !tiles.isEmpty {
+                keyStatGrid(tiles.map { stat in
+                    KeyStat(
+                        label: stat.abbreviation,
+                        spokenTitle: stat.label,
+                        cell: .stat(title: stat.label, info: stat.display)
+                    )
+                })
+            }
+
+            if !rows.isEmpty {
+                statSection(PlayerSheetGrid.Section(title: nil, rows: [rows]))
+            }
         }
-        let fitting = Int((gridWidth + spacing) / (cellMinimumWidth + spacing))
-        let columns = PlayerSheetGrid.columnCount(fitting: fitting, cells: count)
-        return Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: columns)
     }
 
-    /// A season the player has no figures in yet (`hasNoFigures`), as a
-    /// college line reads before tip-off: one short line in place of a grid
-    /// of zeros. The season picker above stays, for a past season's line.
+    /// Key-stat tiles in as many columns as fit at `featureMinimumWidth`,
+    /// no more than there are tiles, and without a lone tile on a row of
+    /// its own (`PlayerSheetGrid.columnCount`). Adaptive until measured.
+    private func keyStatGrid(_ stats: [KeyStat]) -> some View {
+        LazyVGrid(columns: tileColumns(count: stats.count), spacing: Theme.Spacing.s) {
+            ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
+                KeyStatTile(stat: stat, accent: teamColor)
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            tileWidth = width
+        }
+    }
+
+    private func tileColumns(count: Int) -> [GridItem] {
+        let spacing = Theme.Spacing.s
+        guard tileWidth > 0, count > 0 else {
+            return [GridItem(.adaptive(minimum: featureMinimumWidth), spacing: spacing, alignment: .top)]
+        }
+        let fitting = Int((tileWidth + spacing) / (featureMinimumWidth + spacing))
+        let columns = min(count, PlayerSheetGrid.columnCount(fitting: fitting, cells: count))
+        return Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: max(columns, 1))
+    }
+
+    /// A group of the line under its title: each statistic a row on the
+    /// inset surface, its figure trailing.
+    private func statSection(_ section: PlayerSheetGrid.Section) -> some View {
+        let cells = Array(section.rows.joined())
+        return VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            if let title = section.title {
+                Text(title)
+                    .font(Theme.Typography.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                    .accessibilityAddTraits(.isHeader)
+            }
+
+            VStack(spacing: 0) {
+                ForEach(Array(cells.enumerated()), id: \.offset) { index, cell in
+                    if index > 0 {
+                        Divider()
+                    }
+                    StatRow(cell: cell, accent: teamColor)
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.m)
+            .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+        }
+    }
+
+    /// The season before the one shown, if the picker offers one: seasons
+    /// run newest first.
+    private var earlierSeason: AthleteSeason? {
+        guard let index = seasons.firstIndex(where: { $0.value == statisticsSeason }),
+              index + 1 < seasons.count
+        else { return nil }
+        return seasons[index + 1]
+    }
+
+    /// A season the player has no figures in (`hasNoFigures`), as a
+    /// college line reads before tip-off or an injured pitcher's all year:
+    /// one short line in place of a grid of zeros, and for the current
+    /// season a way to the one before. The season picker above stays.
     private var noFiguresState: some View {
         let current = statisticsSeason == currentSeason
         let title: String = current ? "No stats yet this season" : "No stats for this season"
-        var detail: String = current
-            ? "Numbers show up here once games are played."
+        let detail: String = current
+            ? "Nothing has been recorded for this player so far this season."
             : "Nothing was recorded for this player that season."
-        if current && seasons.count > 1 {
-            detail += " Pick an earlier season above to look back."
-        }
-        return VStack(spacing: Theme.Spacing.xs) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-                .padding(.bottom, Theme.Spacing.xs)
+        let earlier = current ? earlierSeason : nil
+        return VStack(spacing: Theme.Spacing.m) {
+            VStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                    .padding(.bottom, Theme.Spacing.xs)
 
-            Text(title)
-                .font(Theme.Typography.cardTitle)
+                Text(title)
+                    .font(Theme.Typography.cardTitle)
 
-            Text(detail)
-                .font(Theme.Typography.footnote)
-                .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("playerDetail.noStats")
+
+            if let earlier {
+                Button {
+                    season = earlier.value
+                } label: {
+                    Text("Show \(earlier.label) Season")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("playerDetail.earlierSeason")
+            }
         }
-        .multilineTextAlignment(.center)
         .padding(.horizontal, Theme.Spacing.l)
         .padding(.vertical, Theme.Spacing.s)
         .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("playerDetail.noStats")
     }
 
-    /// Stand-in headline tiles while a line with nothing to lay out yet
+    /// Stand-in key-stat tiles while a line with nothing to lay out yet
     /// (football's, soccer's without roster totals) loads.
     private var statisticsSkeleton: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: featureMinimumWidth), spacing: Theme.Spacing.s)],
-            spacing: Theme.Spacing.s
-        ) {
-            ForEach(0..<4, id: \.self) { _ in
-                FeaturedStatTile(abbreviation: "STAT", cell: .stat(title: "Statistic", info: "00.0"))
-            }
-        }
+        keyStatGrid(Array(
+            repeating: KeyStat(label: "STAT", spokenTitle: "Statistic", cell: .stat(title: "Statistic", info: "00.0")),
+            count: 4
+        ))
         .loadingPlaceholder()
     }
 
@@ -1233,17 +1338,6 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    @ViewBuilder
-    private func cellView(_ cell: PlayerSheetCell) -> some View {
-        switch cell {
-        case .fact(let title, let info), .stat(let title, let info):
-            StatCell(title: title, info: info)
-        case .percentage(let title, let progress):
-            StatPercentageView(progress: progress, color: teamColor, title: title)
-                .animation(.spring(response: 0.6, dampingFraction: 1.0, blendDuration: 1.0), value: progress)
-        }
-    }
-
     // MARK: About
 
     /// The biography facts with something in them, less "N/A"s and
@@ -1252,16 +1346,19 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         player.about.aboutFacts
     }
 
+    /// The facts as tiles, each with its symbol: two across at the default
+    /// text size, one at the largest.
     private var aboutCard: some View {
         card {
             cardTitle("About")
 
-            VStack(spacing: 0) {
-                ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
-                    if index > 0 {
-                        Divider()
-                    }
-                    FactRow(title: fact.title, value: fact.info)
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: factMinimumWidth), spacing: Theme.Spacing.s, alignment: .top)],
+                alignment: .leading,
+                spacing: Theme.Spacing.s
+            ) {
+                ForEach(Array(facts.enumerated()), id: \.offset) { _, fact in
+                    FactTile(title: fact.title, value: fact.info)
                 }
             }
         }
@@ -1270,100 +1367,160 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
 // MARK: - Cells
 
-/// A headline statistic: a large figure over its short label, on the inset
-/// surface. VoiceOver reads the full title and the value as one element.
-private struct FeaturedStatTile: View {
-    let abbreviation: String
-    let cell: PlayerSheetCell
+/// What a key-stat tile shows: its short label ("Goals", "PPG"), what
+/// VoiceOver calls it, and the cell its figure comes from.
+private struct KeyStat {
+    var label: String
+    var spokenTitle: String
+    var cell: PlayerSheetCell
+}
 
-    private var value: String {
-        switch cell {
-        case .fact(_, let info), .stat(_, let info):
-            return info.isEmpty ? "N/A" : info
-        case .percentage(_, let progress):
-            return progress.isFinite
-                ? progress.formatted(.percent.precision(.fractionLength(0)))
-                : "N/A"
-        }
+extension KeyStat {
+    init(_ featured: PlayerSheetFeaturedCell) {
+        self.init(label: featured.feature.abbreviation, spokenTitle: featured.spokenTitle, cell: featured.cell)
     }
+}
+
+/// A key statistic: a large figure over its short label on the inset
+/// surface, under a dash of the team colour. VoiceOver reads it as one
+/// element, "Goals, 7".
+private struct KeyStatTile: View {
+    let stat: KeyStat
+    let accent: Color
 
     var body: some View {
-        VStack(spacing: Theme.Spacing.xs) {
+        let value = stat.cell.displayValue
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Capsule()
+                .fill(accent)
+                .frame(width: Theme.Spacing.l, height: 3)
+                .padding(.bottom, 2)
+
             Text(value)
-                .font(.title.weight(.black).monospacedDigit())
+                .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
                 .lineLimit(1)
                 // No further: half size read as a different figure from its
                 // neighbours. A hockey "17:15" still fits four across on a
                 // 375 pt phone at 0.7.
                 .minimumScaleFactor(0.7)
 
-            Text(abbreviation)
+            Text(stat.label)
                 .font(Theme.Typography.statLabel)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, Theme.Spacing.m)
-        .padding(.horizontal, Theme.Spacing.s)
+        .padding(.horizontal, Theme.Spacing.s + Theme.Spacing.xs / 2)
         .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(stat.spokenTitle))
+        .accessibilityValue(Text(value))
+    }
+}
+
+/// A season statistic as a row: its label leading, the figure trailing in
+/// tabular digits, a rate's bar in the team colour beneath, a card beside
+/// a booking. Stacked at accessibility sizes so neither truncates;
+/// VoiceOver reads label and figure as one element.
+private struct StatRow: View {
+    let cell: PlayerSheetCell
+    let accent: Color
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let value = cell.displayValue
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Theme.Spacing.m))
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            layout {
+                HStack(spacing: Theme.Spacing.s) {
+                    if let glyph = cell.glyph {
+                        BookingCardGlyph(glyph: glyph)
+                    }
+                    Text(cell.title)
+                }
+                if !stacked {
+                    Spacer(minLength: Theme.Spacing.m)
+                }
+                Text(value)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .multilineTextAlignment(stacked ? .leading : .trailing)
+            }
+
+            if let fraction = cell.barFraction {
+                ProgressView(value: fraction)
+                    .tint(accent)
+            }
+        }
+        .font(Theme.Typography.body)
+        .padding(.vertical, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(cell.title))
         .accessibilityValue(Text(value))
     }
 }
 
-/// A season statistic in the grid: the figure over its label. The grid
-/// sets the width (P-4); VoiceOver reads label and value as one element.
-private struct StatCell: View {
-    let title: String
-    let info: String
+/// A referee's card beside a booking row: yellow or red. Decorative: the
+/// row's label says which.
+private struct BookingCardGlyph: View {
+    let glyph: PlayerStatGlyph
 
-    private var value: String { info.isEmpty ? "N/A" : info }
+    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 14
 
     var body: some View {
-        VStack(alignment: .center, spacing: Theme.Spacing.xs) {
-            Text(value)
-                .font(.title3.weight(.bold).monospacedDigit())
-                .multilineTextAlignment(.center)
-
-            Text(title)
-                .font(Theme.Typography.statLabel)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.xs)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(title))
-        .accessibilityValue(Text(value))
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(glyph == .yellowCard ? Color.yellow : Color.red)
+            .frame(width: height * 0.72, height: height)
+            .rotationEffect(.degrees(8))
+            .accessibilityHidden(true)
     }
 }
 
-/// A biography fact as a Settings-style row: the label leading, the value
-/// trailing, stacked at accessibility sizes so neither truncates.
-private struct FactRow: View {
+/// A biography fact as a tile: its symbol, the label over the value, and a
+/// nationality's flag where the country maps to one (`countryFlag`).
+/// VoiceOver reads label and value, without the flag, as one element.
+private struct FactTile: View {
     let title: String
     let value: String
 
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 24
+
+    /// The value as shown: a nationality led by its flag.
+    private var shownValue: String {
+        guard title == "Citizenship" || title == "Birth Country",
+              let flag = countryFlag(value)
+        else { return value }
+        return "\(flag) \(value)"
+    }
 
     var body: some View {
-        let stacked = dynamicTypeSize.isAccessibilitySize
-        let layout = stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: Theme.Spacing.m))
-        layout {
-            Text(title)
+        HStack(alignment: .top, spacing: Theme.Spacing.s) {
+            Image(systemName: playerFactSymbol(title))
+                .font(Theme.Typography.body)
                 .foregroundStyle(.secondary)
-            if !stacked {
-                Spacer(minLength: Theme.Spacing.m)
+                .frame(width: iconWidth)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(.secondary)
+                Text(shownValue)
+                    .font(Theme.Typography.body.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text(value)
-                .multilineTextAlignment(stacked ? .leading : .trailing)
         }
-        .font(Theme.Typography.body)
-        .padding(.vertical, Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .padding(Theme.Spacing.m)
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(Text(value))
     }
 }

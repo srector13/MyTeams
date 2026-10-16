@@ -680,7 +680,7 @@ func parseSoccerPlayerStats(from json: JSON, playerPosition: String) -> SoccerPl
 
     let starts = value("starts-subIns")
 
-    guard !playerPosition.contains("Goalkeeper") else {
+    guard !isSoccerGoalkeeper(playerPosition) else {
         return SoccerPlayerStats(
             starts: starts,
             saves: value("saves"),
@@ -788,6 +788,8 @@ struct GameLogRow: Identifiable, Hashable, Sendable {
     var opponentName: String
     /// `"LV"`.
     var opponentAbbreviation: String
+    /// The opponent's crest on ESPN's CDN, or empty when the feed gave none.
+    var opponentLogo: String = ""
     /// The feed's `atVs`: `"vs"` at home, `"@"` away.
     var isHome: Bool
     /// The feed's `gameResult` for the athlete's team: `"W"`, `"L"`, a
@@ -943,6 +945,7 @@ func parseGameLog(from json: JSON) -> AthleteGameLog {
                     opponentID: opponent["id"].stringValue,
                     opponentName: opponent["displayName"].stringValue,
                     opponentAbbreviation: opponent["abbreviation"].stringValue,
+                    opponentLogo: opponent["logo"].stringValue,
                     // A game without `atVs` is placed by the home team's id.
                     isHome: atVs.isEmpty
                         ? event["homeTeamId"].stringValue == event["team"]["id"].stringValue

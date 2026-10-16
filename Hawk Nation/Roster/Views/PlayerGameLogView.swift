@@ -9,19 +9,23 @@
 import SwiftUI
 
 /// The rows of a player sheet's game-log card: the most recent games, each
-/// with its opponent, date, result and the log's headline columns
-/// (`AthleteGameLog.headlineColumns`).
+/// with its result in a coloured chip, the opponent's crest and name, the
+/// date and score, and the player's line as compact chips ("2 G", "5 SH")
+/// from the log's headline columns (`AthleteGameLog.headlineColumns`). A
+/// goal, touchdown or home run is picked out in the team colour.
 ///
-/// The figures sit in columns under their headers; at accessibility sizes
-/// each game stacks instead, its figures labelled inline, so nothing
+/// The chips sit in one line beside the game and wrap under it when they
+/// don't fit; at accessibility sizes each game stacks, so nothing
 /// truncates. VoiceOver reads each game as one element.
 struct PlayerGameLogView: View {
     let log: AthleteGameLog
     var limit = 5
+    /// The team colour, behind a scoring chip.
+    var accent: Color = .accentColor
+    /// The log's league, for the opponents' crests; `nil` draws none.
+    var league: LeagueID? = nil
 
-    /// A stat column's width: four fit beside the game at the default text
-    /// size, as do the widest figures ("24:10", "119.8").
-    @ScaledMetric(relativeTo: .subheadline) private var columnWidth: CGFloat = 48
+    @ScaledMetric(relativeTo: .headline) private var crestSize: CGFloat = 28
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -51,78 +55,108 @@ struct PlayerGameLogView: View {
 
     private func games(_ rows: [GameLogRow], columns: [GameLogColumn]) -> some View {
         VStack(spacing: 0) {
-            if !dynamicTypeSize.isAccessibilitySize {
-                header(columns)
-            }
-
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                if index > 0 || !dynamicTypeSize.isAccessibilitySize {
+                if index > 0 {
                     Divider()
                 }
                 game(row, columns: columns)
-                    .padding(.vertical, Theme.Spacing.s)
+                    .padding(.vertical, Theme.Spacing.m)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text(Self.accessibilityLabel(row, columns: columns)))
             }
         }
     }
 
-    private func header(_ columns: [GameLogColumn]) -> some View {
-        HStack(spacing: Theme.Spacing.s) {
-            Text("Game")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            ForEach(columns) { column in
-                Text(column.label)
-                    .frame(width: columnWidth, alignment: .trailing)
-            }
-        }
-        .font(Theme.Typography.statLabel)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .padding(.bottom, Theme.Spacing.xs)
-        .accessibilityHidden(true)
-    }
-
     @ViewBuilder
     private func game(_ row: GameLogRow, columns: [GameLogColumn]) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(row.opponentSummary)
-                    .font(Theme.Typography.cardTitle)
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                HStack(spacing: Theme.Spacing.s) {
+                    GameResultChip(result: row.result)
+                    Text(row.opponentSummary)
+                        .font(Theme.Typography.cardTitle)
+                }
                 Text(Self.detail(row))
+                    .font(Theme.Typography.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
-                Text(columns.map { "\(row.stats[$0.id] ?? "–") \($0.label)" }.joined(separator: " · "))
-                    .font(Theme.Typography.body.monospacedDigit())
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    chipList(row, columns: columns)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            HStack(spacing: Theme.Spacing.s) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.opponentSummary)
-                        .font(Theme.Typography.cardTitle)
-                    Text(Self.detail(row))
-                        .font(Theme.Typography.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                GameResultChip(result: row.result)
 
-                ForEach(columns) { column in
-                    Text(row.stats[column.id] ?? "–")
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(width: columnWidth, alignment: .trailing)
+                if let league {
+                    TeamLogo(team: Self.opponent(row, league: league), size: crestSize)
                 }
+
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
+                        Text(row.opponentSummary)
+                            .font(Theme.Typography.cardTitle)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: Theme.Spacing.s)
+                        Text(Self.detail(row))
+                            .font(Theme.Typography.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    // One line when the chips fit beside each other, else
+                    // one under another.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: Theme.Spacing.xs) {
+                            chipList(row, columns: columns)
+                        }
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                            chipList(row, columns: columns)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    /// "Oct 4 · W 30-27", leaving out what the feed left out.
+    /// The player's line in the game, a chip a column, in the columns'
+    /// order; a figure the feed left out reads "–".
+    private func chipList(_ row: GameLogRow, columns: [GameLogColumn]) -> some View {
+        ForEach(columns) { column in
+            let value = row.stats[column.id] ?? "–"
+            GameStatChip(
+                value: value,
+                label: column.label,
+                emphasized: gameLogEmphasizes(columnID: column.id, value: value),
+                accent: accent
+            )
+        }
+    }
+
+    /// A stand-in team for the opponent's crest: the log's logo, or a
+    /// monogram from its abbreviation where the feed gave none.
+    private static func opponent(_ row: GameLogRow, league: LeagueID) -> TeamRef {
+        TeamRef(
+            league: league,
+            espnID: row.opponentID.isEmpty ? row.opponentAbbreviation : row.opponentID,
+            displayName: row.opponentName,
+            shortName: row.opponentAbbreviation,
+            abbreviation: row.opponentAbbreviation,
+            location: "",
+            colorHex: "",
+            alternateColorHex: "",
+            logoURL: URL(string: row.opponentLogo),
+            logoDarkURL: nil,
+            logoAsset: nil
+        )
+    }
+
+    /// "Oct 4 · 30-27", leaving out what the feed left out. The result's
+    /// letter is the chip beside it.
     private static func detail(_ row: GameLogRow) -> String {
-        [row.date.map { $0.formatted(.dateTime.month(.abbreviated).day()) } ?? "", row.resultSummary]
+        [row.date.map { $0.formatted(.dateTime.month(.abbreviated).day()) } ?? "", row.score]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -178,5 +212,54 @@ struct PlayerGameLogView: View {
             seasonType: "",
             stats: Dictionary(uniqueKeysWithValues: placeholderColumns.map { ($0.id, "00") })
         )
+    }
+}
+
+/// A game's result as a letter on a tinted square: a win in the outcome
+/// green, a loss in its red (`Theme.Outcome`), a draw or tie in grey. The
+/// letter carries the result; the colour only echoes it (G-4).
+private struct GameResultChip: View {
+    let result: String
+
+    @ScaledMetric(relativeTo: .caption) private var side: CGFloat = 26
+
+    private var color: Color {
+        switch result {
+        case "W": return Theme.Outcome.win
+        case "L": return Theme.Outcome.loss
+        default: return Color(uiColor: .secondaryLabel)
+        }
+    }
+
+    var body: some View {
+        Text(result.isEmpty ? "–" : result)
+            .font(.caption.weight(.heavy))
+            .foregroundStyle(color)
+            .frame(minWidth: side, minHeight: side)
+            .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: side * 0.3, style: .continuous))
+    }
+}
+
+/// One figure of a game's line, "2 G": the number over the inset surface,
+/// or over a wash of the team colour for a goal, touchdown or home run.
+private struct GameStatChip: View {
+    let value: String
+    let label: String
+    let emphasized: Bool
+    let accent: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(value)
+                .font(.subheadline.weight(emphasized ? .heavy : .semibold).monospacedDigit())
+            Text(label)
+                .font(Theme.Typography.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, Theme.Spacing.s)
+        .padding(.vertical, 3)
+        .background(emphasized ? accent.opacity(0.2) : Theme.Surface.insetCard, in: Capsule())
     }
 }
