@@ -9,8 +9,8 @@
 import SwiftUI
 
 /// A player's card in a roster carousel: a round headshot with one line of
-/// detail beneath it. A player no source has a photo of shows their jersey
-/// number on a disc (`PlayerJerseyAvatar`) rather than a grey silhouette.
+/// detail beneath it. A player no source has a photo of shows a grey
+/// silhouette.
 ///
 /// Which detail is shown follows the carousel's current sort, so ordering the
 /// roster by number labels every card with its number.
@@ -18,11 +18,10 @@ struct PlayerCard<Player: RosterPlayer>: View {
     var player: Player
     var state: PlayerSort
     /// The roster's league, for the Wikimedia Commons fallback when ESPN
-    /// has no headshot (`AthleteHeadshot`). `nil` keeps the jersey avatar.
+    /// has no headshot (`AthleteHeadshot`). `nil` keeps the silhouette.
     var league: LeagueID? = nil
-    /// The roster's team, for the jersey avatar's colours and crest, and
-    /// for the soccer photo sources that look players up by club
-    /// (`AthleteHeadshot`). `nil` draws it in the system's grey.
+    /// The roster's team, for the soccer photo sources that look players
+    /// up by club (`AthleteHeadshot`). `nil` never asks them.
     var team: TeamRef? = nil
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -43,8 +42,9 @@ struct PlayerCard<Player: RosterPlayer>: View {
             : AnyLayout(VStackLayout(spacing: 5))
 
         layout {
-            AthleteHeadshot(player, league: league, team: team, drawsSilhouette: false) {
-                PlayerJerseyAvatar(player, team: team, size: headshotSize)
+            AthleteHeadshot(player, league: league, team: team) {
+                Image("blank")
+                    .resizable()
             }
             .aspectRatio(contentMode: .fill)
             .frame(width: headshotSize, height: headshotSize)

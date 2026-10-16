@@ -12,7 +12,8 @@ import SwiftUI
 // Teams, a day in This Week's strip, a favorite's slice of its standings,
 // and its top performer. Each nests in its section's card on the inset
 // surface (X-4), in the team page's language: the team colour with its
-// ink (G-3), crests on white discs, the followed row on a faint band.
+// ink (G-3), crests cut out on it with nothing behind them
+// (`CutoutCrest`), the followed row on a faint band.
 
 // MARK: - My Teams
 
@@ -54,7 +55,7 @@ struct HomeTeamCard: View {
     private var top: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(spacing: Theme.Spacing.s) {
-                HomeCrestDisc(team: team, size: crestSize)
+                CutoutCrest(team: team, size: crestSize, onHex: TeamColors.fillHex(for: team))
                 if let badge = PollRanks.badge(rank: summary.pollRank) {
                     Text(badge)
                         .font(.subheadline.weight(.heavy))
@@ -295,7 +296,10 @@ struct HomeStandingsCard: View {
         let column = lastColumn
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             HStack(spacing: Theme.Spacing.s) {
-                HomeCrestDisc(team: slice.team, size: crestSize + 6)
+                // On the inset surface: the crest as the rows draw theirs,
+                // outlined in Dark Mode only where it would sink into the
+                // card (`crestOutlineRule`).
+                TeamLogo(team: slice.team, size: crestSize + 6)
                 Text(slice.title)
                     .font(.subheadline.bold())
                     .foregroundStyle(.secondary)
@@ -461,22 +465,26 @@ struct HomeStandingsCardPlaceholder: View {
 // MARK: - Top performers
 
 /// A favorite's top performer: the team page's leader card
-/// (`TeamLeaderCard`), with the favorite's crest on a white disc in its
-/// corner to say whose leader it is.
+/// (`TeamLeaderCard`), its headshot found as a roster's is, with the
+/// favorite's crest in its corner, nothing behind it, to say whose leader
+/// it is.
 struct HomePerformerCard: View {
     let performer: HomePerformer
 
-    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 20
 
     var body: some View {
         TeamLeaderCard(
             board: performer.board,
             row: performer.row,
-            teamColor: Color(hexString: TeamColors.fillHex(for: performer.team))
+            teamColor: Color(hexString: TeamColors.fillHex(for: performer.team)),
+            team: performer.team
         )
         .overlay(alignment: .topLeading) {
-            HomeCrestDisc(team: performer.team, size: crestSize)
-                .padding(Theme.Spacing.xs)
+            // On the inset surface: outlined in Dark Mode only where it
+            // would sink into the card (`crestOutlineRule`).
+            TeamLogo(team: performer.team, size: crestSize)
+                .padding(Theme.Spacing.s)
         }
         .contentShape(Theme.Radius.innerShape)
     }

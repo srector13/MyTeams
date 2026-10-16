@@ -906,15 +906,10 @@ private struct TeamBarTitle: View {
     var body: some View {
         // Capped: the bar doesn't grow with the text.
         let size = min(crestSize, 36)
-        let variant = TeamColors.logoVariant(for: team, onBackground: backgroundHex)
-        // A crest that would vanish into the bar is traced in the bar's
-        // ink, at full size and with nothing behind it (B-4, t_fa6748f4).
-        let outlined = BarCrest.needsOutline(team: team, variant: variant, onHex: backgroundHex)
         HStack(spacing: Theme.Spacing.s) {
-            TeamLogo(team: team, size: size, forceVariant: variant)
-                .frame(width: size, height: size)
-                .modifier(CrestOutline(isOn: outlined, inkHex: TeamColors.inkHex(on: backgroundHex)))
-                .accessibilityHidden(true)
+            // A crest that would vanish into the bar is traced in the bar's
+            // ink, at full size and with nothing behind it (B-4, t_fa6748f4).
+            CutoutCrest(team: team, size: size, onHex: backgroundHex)
 
             Text(team.displayName)
                 .font(.headline)
@@ -925,6 +920,30 @@ private struct TeamBarTitle: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("teamPage.header")
+    }
+}
+
+/// A team's crest straight on a colour, as a team page's bar draws it
+/// (`TeamBarTitle`): the crest variant for that colour, nothing behind
+/// it, and only where it would blend in (`BarCrest.needsOutline`) a
+/// die-cut contour in the colour's ink around its own shape
+/// (`CrestOutline`), like a sticker, rather than a disc behind it. The
+/// app's crest on any team-colour background: Home's hero and cards, the
+/// bar. Decorative: the name beside it says whose it is.
+struct CutoutCrest: View {
+    let team: TeamRef
+    let size: CGFloat
+    /// The colour the crest sits on, as six hex digits: the team colour
+    /// of the card, hero or bar behind it (`TeamColors.fillHex(for:)`).
+    let onHex: String
+
+    var body: some View {
+        let variant = TeamColors.logoVariant(for: team, onBackground: onHex)
+        let outlined = BarCrest.needsOutline(team: team, variant: variant, onHex: onHex)
+        TeamLogo(team: team, size: size, forceVariant: variant)
+            .frame(width: size, height: size)
+            .modifier(CrestOutline(isOn: outlined, inkHex: TeamColors.inkHex(on: onHex)))
+            .accessibilityHidden(true)
     }
 }
 

@@ -20,8 +20,14 @@ struct StatLeader: Hashable, Sendable, Identifiable {
     var headshotURL: String
     /// The position's abbreviation: `"G"`, `"RW"`, `"QB"`.
     var position: String
+    /// The shirt number, `"10"`; empty when the feed gave none.
+    var jersey: String = ""
     var teamID: String
     var teamAbbreviation: String
+    /// The club's full and short names, `"Manchester City"` and `"Man
+    /// City"`; empty when the feed gave none.
+    var teamName: String = ""
+    var teamShortName: String = ""
     /// The figure the board ranks by, e.g. `33.484375` points per game.
     var value: Double
     /// The feed's own text for the figure, which is not always the figure.
@@ -29,6 +35,22 @@ struct StatLeader: Hashable, Sendable, Identifiable {
     var displayValue: String
 
     var id: String { athleteID }
+
+    /// A stand-in for the leader's club, built from what the feed says of
+    /// it beside them, for the photo sources that look a player up by name,
+    /// number and club (`AthleteHeadshot`): its id, names and abbreviation,
+    /// no colour and no crest. `nil` without the club's id or name, when
+    /// those sources are skipped.
+    func club(in league: LeagueID) -> TeamRef? {
+        guard !teamID.isEmpty, !teamName.isEmpty else { return nil }
+        return TeamRef(
+            league: league, espnID: teamID,
+            displayName: teamName, shortName: teamShortName.isEmpty ? teamName : teamShortName,
+            abbreviation: teamAbbreviation, location: "",
+            colorHex: "", alternateColorHex: "",
+            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+        )
+    }
 }
 
 /// One of the leaders feed's boards, as the feed names it.
@@ -89,8 +111,11 @@ func parseStatLeaders(from json: JSON) -> StatLeaders {
                 shortName: athlete["shortName"].stringValue,
                 headshotURL: athlete["headshot"]["href"].stringValue,
                 position: athlete["position"]["abbreviation"].stringValue,
+                jersey: athlete["jersey"].stringValue,
                 teamID: team["id"].stringValue,
                 teamAbbreviation: team["abbreviation"].stringValue,
+                teamName: team["displayName"].stringValue,
+                teamShortName: team["shortDisplayName"].stringValue,
                 value: leader["value"].doubleValue,
                 displayValue: leader["displayValue"].stringValue
             )

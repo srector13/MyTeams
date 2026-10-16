@@ -823,7 +823,7 @@ struct PlayerSheetKeyStatTests {
     }
 }
 
-@Suite("Player sheet: rates, totals from the game log, avatars and flags")
+@Suite("Player sheet: rates, totals from the game log, positions and flags")
 struct PlayerSheetHelperTests {
     @Test("Rates a game, and the baseball rates")
     func rates() {
@@ -900,15 +900,8 @@ struct PlayerSheetHelperTests {
         #expect(!gameLogEmphasizes(columnID: "homeRuns", value: "–"))
     }
 
-    @Test("The jersey avatar shows the number, else the position, else the name")
-    func avatarLabel() {
-        #expect(jerseyAvatarLabel(number: "11", position: "Forward", name: "André Luiz") == "11")
-        #expect(jerseyAvatarLabel(number: " ", position: "Wide Receiver", name: "Cyrus Allen") == "WR")
-        #expect(jerseyAvatarLabel(number: "", position: "", name: "André Luiz") == "AL")
-        #expect(jerseyAvatarLabel(number: "", position: "", name: "") == "")
-        #expect(positionInitials("Starting Pitcher") == "SP")
-        #expect(positionInitials("Forward") == "F")
-        #expect(nameInitials("Felix Anudike-Uzomah") == "FA")
+    @Test("A soccer goalkeeper is known by their position")
+    func goalkeeperPosition() {
         #expect(isSoccerGoalkeeper("Goalkeeper"))
         #expect(!isSoccerGoalkeeper("Forward"))
     }

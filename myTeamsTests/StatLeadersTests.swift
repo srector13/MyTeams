@@ -139,6 +139,34 @@ struct StatLeadersParsingTests {
         #expect(haaland.value == 5)
         #expect(haaland.displayValue == "Matches: 5, Goals: 5")
         #expect(haaland.headshotURL == "")
+        // The shirt number and club names, for the soccer photo sources.
+        #expect(haaland.jersey == "9")
+        #expect(haaland.teamID == "382")
+        #expect(haaland.teamName == "Manchester City")
+        #expect(haaland.teamShortName == "Man City")
+    }
+
+    @Test("A leader's club stands in for the photo sources, from the names beside them")
+    func leaderClub() throws {
+        let epl = try leaders("epl_leaders")
+        let haaland = try #require(epl.category(named: "goalsLeaders")?.leaders.first)
+        let club = try #require(haaland.club(in: .premierLeague))
+        #expect(club.id == TeamRef.id(league: .premierLeague, espnID: "382"))
+        #expect(club.displayName == "Manchester City")
+        #expect(club.shortName == "Man City")
+        #expect(club.abbreviation == "MNC")
+        #expect(club.logoURL == nil)
+        #expect(club.colorHex.isEmpty)
+
+        // No short name: the full one again. No id or no name: no club.
+        var leader = haaland
+        leader.teamShortName = ""
+        #expect(leader.club(in: .premierLeague)?.shortName == "Manchester City")
+        leader.teamName = ""
+        #expect(leader.club(in: .premierLeague) == nil)
+        leader = haaland
+        leader.teamID = ""
+        #expect(leader.club(in: .premierLeague) == nil)
     }
 
     @Test("Every league's feed parses, and lists every board its sport shows")
