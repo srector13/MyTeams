@@ -297,6 +297,7 @@ final class GUIAuditScreenshotTests: XCTestCase {
                     game.tap()
                     if app.buttons["gameDetail.close"].waitForExistence(timeout: 8) {
                         pause(3); shot("team\(index)-game-sheet")
+                        app.swipeUp(); pause(1.2); shot("team\(index)-game-sheet-scrolled")
                         app.buttons["gameDetail.close"].tapIfExists(); pause(1)
                     }
                 }
