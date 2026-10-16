@@ -26,13 +26,13 @@ jobs:
         include:
           - slot: iphone
             prefer: 'iPhone 17 Pro|iPhone 17|iPhone 16 Pro'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test05_DynamicTypeAX3 -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test02_EmptyState -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test08_ManyTeamsOverflow'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test05_DynamicTypeAX3'
           - slot: iphone-small
             prefer: 'iPhone 17e|iPhone 16e|iPhone SE|iPhone 13 mini|iPhone 16'
             only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign'
           - slot: ipad
             prefer: 'iPad Pro 13-inch|iPad Pro 11-inch|iPad Air 13-inch|iPad Air 11-inch|iPad'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign'
     steps:
       - uses: actions/checkout@v4
 
@@ -140,7 +140,7 @@ jobs:
         with:
           path: shots
           pattern: shots-*
-      - name: Commit to claude/home-redesign-shots-out
+      - name: Commit to claude/home-redesign-shots-out2
         shell: bash
         run: |
           set -euo pipefail
@@ -152,8 +152,8 @@ jobs:
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -b claude/home-redesign-shots-out
+          git checkout -q -b claude/home-redesign-shots-out2
           git add -A
           git commit -qm "GUI audit screenshots for ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push -f origin claude/home-redesign-shots-out
+          git push -f origin claude/home-redesign-shots-out2
