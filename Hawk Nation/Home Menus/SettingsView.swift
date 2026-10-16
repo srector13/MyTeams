@@ -56,7 +56,7 @@ enum AboutInfo {
 ///
 /// Opened from the gear in Home's or a team page's navigation bar, as a
 /// sheet with its own stack. `Home` presents it, not the page: removing
-/// the page's team in Manage Teams unmounts the page, and Settings stays
+/// the page's team in Edit My Teams unmounts the page, and Settings stays
 /// up (A-5).
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -69,10 +69,6 @@ struct SettingsView: View {
     /// The team picker opened to add teams: the tab bar holds teams only,
     /// so this is the way to follow another (t_fa6748f4).
     @State private var showsAddTeams = false
-
-    /// The app's sharing diagnostics, read as Settings opens, after the
-    /// favorites were published.
-    @State private var sharing: SharedStoreDiagnostics?
 
     var body: some View {
         NavigationStack {
@@ -127,7 +123,7 @@ struct SettingsView: View {
                     Button {
                         showsBrowser = true
                     } label: {
-                        Label("Manage Teams", systemImage: "list.star")
+                        Label("Edit My Teams", systemImage: "list.star")
                     }
                     .accessibilityHint("Add, remove or reorder the teams you follow.")
                     .accessibilityIdentifier("settings.teams")
@@ -147,9 +143,18 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings.photoCredits")
                 }
 
-                // The reader's own API-Football key, for soccer photos
-                // neither ESPN nor Commons has (tier 3).
-                ApiFootballSettingsSection()
+                // The API-Football key and the widget diagnostics: for the
+                // few who need them, a screen of their own rather than the
+                // middle of everyone's Settings.
+                Section {
+                    NavigationLink {
+                        AdvancedSettingsView()
+                    } label: {
+                        Label("Advanced", systemImage: "wrench.and.screwdriver")
+                    }
+                    .accessibilityHint("Your own API-Football key for soccer photos, and widget sharing details.")
+                    .accessibilityIdentifier("settings.advanced")
+                }
 
                 Section {
                     LabeledContent("Version", value: AboutInfo.versionText(info: Bundle.main.infoDictionary))
@@ -159,24 +164,9 @@ struct SettingsView: View {
                 } footer: {
                     logo
                 }
-
-                // What the app was signed with and where it shares the
-                // favorites, to compare with the widget's face on a
-                // re-signed install (`SharedStoreDiagnostics`).
-                Section {
-                    ForEach(sharing?.lines ?? [], id: \.self) { line in
-                        Text(line)
-                            .font(.caption.monospaced())
-                            .textSelection(.enabled)
-                    }
-                } header: {
-                    Text("Widget Sharing")
-                }
-                .accessibilityIdentifier("settings.widgetSharing")
             }
             .onAppear {
                 FavoritesStore.shared.publishToWidgets()
-                sharing = SharedStoreDiagnostics.current()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -209,6 +199,38 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
             .accessibilityLabel("myTeams")
+    }
+}
+
+/// Settings few people need: the reader's own API-Football key, for soccer
+/// photos neither ESPN nor Commons has (tier 3), and what the app was
+/// signed with and where it shares the favorites, to compare with the
+/// widget's face on a re-signed install (`SharedStoreDiagnostics`).
+struct AdvancedSettingsView: View {
+    /// The app's sharing diagnostics, read as the screen opens, after
+    /// Settings published the favorites.
+    @State private var sharing: SharedStoreDiagnostics?
+
+    var body: some View {
+        Form {
+            ApiFootballSettingsSection()
+
+            Section {
+                ForEach(sharing?.lines ?? [], id: \.self) { line in
+                    Text(line)
+                        .font(.caption.monospaced())
+                        .textSelection(.enabled)
+                }
+            } header: {
+                Text("Widget Sharing")
+            }
+            .accessibilityIdentifier("settings.widgetSharing")
+        }
+        .onAppear {
+            sharing = SharedStoreDiagnostics.current()
+        }
+        .navigationTitle("Advanced")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

@@ -12,7 +12,7 @@ import SwiftUI
 
 /// A game's period-by-period score beneath the scoreline: one column per
 /// period (`Linescore.periodLabels`, sized from the feed), then the total.
-/// The home row comes first, as the rest of the sheet puts home first.
+/// The away row comes first, as the scoreboard puts the away side first.
 struct LinescoreView: View {
     let linescore: Linescore
 
@@ -29,7 +29,7 @@ struct LinescoreView: View {
 
             Divider()
 
-            ForEach([linescore.home, linescore.away]) { line in
+            ForEach([linescore.away, linescore.home]) { line in
                 GridRow {
                     BoxScoreText(line.abbreviation, style: .emphasis)
                     ForEach(Array(line.periods.enumerated()), id: \.offset) { _, score in

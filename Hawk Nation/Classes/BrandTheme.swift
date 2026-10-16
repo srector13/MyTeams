@@ -247,6 +247,13 @@ enum BrandTheme: String, CaseIterable, Identifiable, Sendable {
         accentUIColor.map { Color(uiColor: $0) } ?? .accentColor
     }
 
+    /// The theme's own accent for a swatch: `classic`'s is the asset's
+    /// `AccentColor` by name, not `.accentColor`, which follows whatever
+    /// tint the swatch sits under (another theme's, once one is picked).
+    var swatchColor: Color {
+        accentUIColor.map { Color(uiColor: $0) } ?? Color("AccentColor")
+    }
+
     /// A `#RRGGBB` (or bare six-digit) colour; `nil` for anything else.
     private static func uiColor(_ hex: String) -> UIColor? {
         let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines).trimmingPrefix("#")

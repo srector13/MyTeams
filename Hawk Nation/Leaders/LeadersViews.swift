@@ -69,9 +69,8 @@ struct LeadersSection<Player: RosterPlayer>: View {
             if model.leaders.isEmpty {
                 switch model.leadersState {
                 case .loading:
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding()
+                    // Skeleton cards, as the other sections load (X-6).
+                    loadingCarousel
                 case .loaded:
                     SectionStatusView(message: "No team leaders yet")
                         .frame(maxWidth: .infinity)
@@ -114,6 +113,25 @@ struct LeadersSection<Player: RosterPlayer>: View {
                 onPick: { pickedLeader = $0 }
             )
         }
+    }
+
+    /// Placeholder cards in the carousel's place while the leaders load,
+    /// laid out as it is so the section keeps its height. Still: nothing
+    /// to scroll to.
+    private var loadingCarousel: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Theme.Spacing.m) {
+                ForEach(0..<5, id: \.self) { _ in
+                    LoadingLeaderCard()
+                }
+            }
+            .padding(.bottom, Theme.Spacing.l)
+        }
+        .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+        .scrollDisabled(true)
+        .scrollIndicators(.hidden)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Loading"))
     }
 
     /// A team leader's card, which opens their player sheet on this page
@@ -211,6 +229,29 @@ private struct TeamLeaderCard: View {
     }
 }
 
+/// A `TeamLeaderCard`'s placeholder while the leaders load: its headshot,
+/// figure, label and name as skeleton blocks, at its size (X-6).
+private struct LoadingLeaderCard: View {
+    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 110
+    @ScaledMetric(relativeTo: .body) private var headshotSize: CGFloat = 56
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            LoadingViewCircle()
+                .frame(width: headshotSize, height: headshotSize)
+            LoadingView()
+                .frame(width: 48, height: 24)
+            LoadingView()
+                .frame(width: 64, height: 10)
+            LoadingView()
+                .frame(width: 80, height: 12)
+        }
+        .frame(width: cardWidth)
+        .padding(.vertical, 10)
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+    }
+}
+
 /// The team colour beside a figure or title drawn in label ink: a thin
 /// capsule as tall as the text, for the leader cards and the player
 /// sheet's section titles (B-3). Put it in an `HStack` sized to its text
@@ -289,6 +330,8 @@ struct LeagueLeadersView: View {
         }
         // Full height: ten-deep boards are a long list (X-9).
         .presentationDetents([.large])
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .task(id: league) { await load() }
     }
 

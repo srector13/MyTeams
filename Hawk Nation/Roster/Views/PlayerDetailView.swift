@@ -103,6 +103,70 @@ extension PlayerSheetCell {
             return title
         }
     }
+
+    /// Whether a feed value says nothing: empty, or one of the placeholders
+    /// the feed and the parsers stand in for a missing value ("N/A", "--",
+    /// "-"), whatever its case or padding.
+    static func isMissing(_ value: String) -> Bool {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || ["n/a", "--", "-"].contains(trimmed.lowercased())
+    }
+
+    /// Whether the cell's figure is missing or zero however it's written
+    /// ("0", "0.0", ".000/.000/.000", "0:00"), or its rate is zero or over
+    /// no attempts. A fact is never empty in this sense.
+    var isEmptyFigure: Bool {
+        switch self {
+        case .fact:
+            return false
+        case .stat(_, let info):
+            return Self.isMissing(info)
+                || info.trimmingCharacters(in: .whitespacesAndNewlines).allSatisfy { "0.,:/%-".contains($0) }
+        case .percentage(_, let progress):
+            return !progress.isFinite || progress == 0
+        }
+    }
+}
+
+extension PlayerSheetGrid {
+    /// Whether the grid is a season with nothing in it yet: "0" games
+    /// played, or every figure zero or missing, as a college line reads in
+    /// October. The sheet says so in a line rather than drawing a grid of
+    /// 0.0s. A grid with no cells at all isn't one: it has its own message.
+    var hasNoFigures: Bool {
+        let cells = sections.flatMap(\.rows).flatMap { $0 }
+        guard !cells.isEmpty else { return false }
+        let noGames = cells.contains { cell in
+            guard case .stat(let title, _) = cell, title == "Games Played" else { return false }
+            return cell.isEmptyFigure
+        }
+        return noGames || cells.allSatisfy(\.isEmptyFigure)
+    }
+
+    /// The About card's facts with something in them, trimmed: a fact the
+    /// feed left empty or filled with "N/A" or "--" (a player opened from a
+    /// box score has little else) is left out. Position is too: the sheet's
+    /// header shows it.
+    var aboutFacts: [(title: String, info: String)] {
+        sections.flatMap(\.rows).flatMap { $0 }.compactMap { cell -> (title: String, info: String)? in
+            guard case .fact(let title, let info) = cell, title != "Position",
+                  !PlayerSheetCell.isMissing(info)
+            else { return nil }
+            return (title: title, info: info.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    /// The columns a stat grid lays `cells` out in, given the `fitting`
+    /// that fit across it at their narrowest (P-4): one fewer where all of
+    /// them would leave a lone cell on the last row and one fewer fills
+    /// every row, as ten cells in threes left "Average Turnovers" alone.
+    static func columnCount(fitting: Int, cells: Int) -> Int {
+        let columns = max(fitting, 1)
+        if columns > 2, cells % columns == 1, cells % (columns - 1) == 0 {
+            return columns - 1
+        }
+        return columns
+    }
 }
 
 extension BasketballPlayer: PlayerSheetDescribing {
@@ -116,7 +180,7 @@ extension BasketballPlayer: PlayerSheetDescribing {
             [
                 .fact(title: "Height", info: height),
                 .fact(title: "Weight", info: weight),
-                .fact(title: "HomeTown", info: hometown),
+                .fact(title: "Hometown", info: hometown),
             ],
         ])
     }
@@ -180,7 +244,7 @@ extension FootBallPlayer: PlayerSheetDescribing {
                 .fact(title: "College", info: college),
             ],
             [
-                .fact(title: "HomeTown", info: hometown),
+                .fact(title: "Hometown", info: hometown),
                 .fact(title: "Height", info: height),
                 .fact(title: "Weight", info: weight),
             ],
@@ -222,7 +286,7 @@ extension BaseballPlayer: PlayerSheetDescribing {
         PlayerSheetGrid(rows: [
             [
                 .fact(title: "Position", info: position),
-                .fact(title: "Home Town", info: hometown),
+                .fact(title: "Hometown", info: hometown),
                 .fact(title: "College", info: college),
             ],
             [
@@ -497,7 +561,7 @@ extension HockeyPlayer: PlayerSheetDescribing {
             [
                 .fact(title: "Height", info: height),
                 .fact(title: "Weight", info: weight),
-                .fact(title: "HomeTown", info: hometown),
+                .fact(title: "Hometown", info: hometown),
             ],
         ])
     }
@@ -587,6 +651,8 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     @State private var gameLogVisible = false
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
+    /// The stat grids' width, for their column count; zero until measured.
+    @State private var gridWidth: CGFloat = 0
 
     init(player: Player, team: TeamRef) {
         self.player = player
@@ -642,6 +708,8 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
         // Full height: the header alone fills most of a medium detent.
         .presentationDetents([.large])
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .presentationDragIndicator(.visible)
         .task(id: season) {
             await loadStatistics()
@@ -864,7 +932,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         VStack(spacing: Theme.Spacing.m) {
             statisticsCard
 
-            if !player.playerID.isEmpty {
+            // No log to show for a season with no games yet: the stats
+            // card already says so.
+            if !player.playerID.isEmpty && !(loaded && statistics.hasNoFigures) {
                 gameLogCard
             }
 
@@ -1022,7 +1092,11 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 statisticsSkeleton
             }
         } else if loaded {
-            statisticsBody
+            if statistics.hasNoFigures {
+                noFiguresState
+            } else {
+                statisticsBody
+            }
         } else {
             // The placeholder line's layout, redacted, until the real one
             // lands (D-7).
@@ -1066,12 +1140,17 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                     }
 
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: cellMinimumWidth), spacing: Theme.Spacing.s, alignment: .top)],
+                        columns: statColumns(count: section.rows.joined().count),
                         spacing: Theme.Spacing.m
                     ) {
                         ForEach(Array(section.rows.joined().enumerated()), id: \.offset) { _, cell in
                             cellView(cell)
                         }
+                    }
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.width
+                    } action: { width in
+                        gridWidth = width
                     }
                 }
             }
@@ -1080,6 +1159,54 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 emptyMessage(message)
             }
         }
+    }
+
+    /// A stat grid's columns: as many as fit at `cellMinimumWidth`, so
+    /// fewer as the text grows (P-4), less one where that leaves a lone
+    /// cell on the last row (`PlayerSheetGrid.columnCount`). Adaptive until
+    /// the grid has been measured.
+    private func statColumns(count: Int) -> [GridItem] {
+        let spacing = Theme.Spacing.s
+        guard gridWidth > 0 else {
+            return [GridItem(.adaptive(minimum: cellMinimumWidth), spacing: spacing, alignment: .top)]
+        }
+        let fitting = Int((gridWidth + spacing) / (cellMinimumWidth + spacing))
+        let columns = PlayerSheetGrid.columnCount(fitting: fitting, cells: count)
+        return Array(repeating: GridItem(.flexible(), spacing: spacing, alignment: .top), count: columns)
+    }
+
+    /// A season the player has no figures in yet (`hasNoFigures`), as a
+    /// college line reads before tip-off: one short line in place of a grid
+    /// of zeros. The season picker above stays, for a past season's line.
+    private var noFiguresState: some View {
+        let current = statisticsSeason == currentSeason
+        let title: String = current ? "No stats yet this season" : "No stats for this season"
+        var detail: String = current
+            ? "Numbers show up here once games are played."
+            : "Nothing was recorded for this player that season."
+        if current && seasons.count > 1 {
+            detail += " Pick an earlier season above to look back."
+        }
+        return VStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+                .padding(.bottom, Theme.Spacing.xs)
+
+            Text(title)
+                .font(Theme.Typography.cardTitle)
+
+            Text(detail)
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.s)
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("playerDetail.noStats")
     }
 
     /// Stand-in headline tiles while a line with nothing to lay out yet
@@ -1119,14 +1246,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     // MARK: About
 
-    /// The biography facts with something in them. Position is left
-    /// out: the header shows it.
+    /// The biography facts with something in them, less "N/A"s and
+    /// Position (`aboutFacts`). With none left the About card is hidden.
     private var facts: [(title: String, info: String)] {
-        player.about.sections.flatMap(\.rows).flatMap { $0 }.compactMap { cell -> (title: String, info: String)? in
-            guard case .fact(let title, let info) = cell, title != "Position" else { return nil }
-            let trimmed = info.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty ? nil : (title: title, info: trimmed)
-        }
+        player.about.aboutFacts
     }
 
     private var aboutCard: some View {
@@ -1169,7 +1292,10 @@ private struct FeaturedStatTile: View {
             Text(value)
                 .font(.title.weight(.black).monospacedDigit())
                 .lineLimit(1)
-                .minimumScaleFactor(0.5)
+                // No further: half size read as a different figure from its
+                // neighbours. A hockey "17:15" still fits four across on a
+                // 375 pt phone at 0.7.
+                .minimumScaleFactor(0.7)
 
             Text(abbreviation)
                 .font(Theme.Typography.statLabel)

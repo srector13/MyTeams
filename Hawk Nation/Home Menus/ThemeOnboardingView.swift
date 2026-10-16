@@ -79,8 +79,9 @@ enum ThemeOnboarding {
 
 /// The first-launch theme step: the logo, then the same palette grid as
 /// Settings (`ThemePicker`), each tile with its logo, accent and app icon.
-/// A tap applies the theme at once, the iOS app icon included
-/// (`AppIconSwitcher`).
+/// A tap applies the theme's accent and logo at once; the iOS app icon
+/// (`AppIconSwitcher`), which iOS confirms with an alert, changes once, on
+/// Continue.
 ///
 /// Two ways out, both final (`ThemeOnboarding.complete`): Continue keeps
 /// the theme picked; Skip puts back `classic`. Not dismissable by a swipe,
@@ -90,8 +91,6 @@ struct ThemeOnboardingView: View {
     let onFinish: () -> Void
 
     @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
-    /// Whether iOS refused the last icon change.
-    @State private var iconFailed = false
 
     var body: some View {
         NavigationStack {
@@ -117,18 +116,16 @@ struct ThemeOnboardingView: View {
                         .font(Theme.Typography.caption)
                         .foregroundStyle(.secondary)
 
-                    if iconFailed {
-                        Label("The app icon couldn't change, so the classic icon stays.", systemImage: "exclamationmark.triangle")
-                            .font(Theme.Typography.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("onboarding.theme.iconFailed")
-                    }
                 }
                 .padding(Theme.Spacing.l)
             }
             // Always reachable, however far the grid scrolls.
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaBar(edge: .bottom) {
                 Button {
+                    let chosen = theme
+                    Task {
+                        await AppIconSwitcher.apply(chosen)
+                    }
                     finish()
                 } label: {
                     Text("Continue")
@@ -136,8 +133,9 @@ struct ThemeOnboardingView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .padding(Theme.Spacing.l)
-                .background(.bar)
+                .buttonBorderShape(.capsule)
+                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.vertical, Theme.Spacing.m)
                 .accessibilityIdentifier("onboarding.theme.continue")
             }
             .toolbar {
@@ -155,11 +153,6 @@ struct ThemeOnboardingView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .interactiveDismissDisabled()
-        .onChange(of: theme) { _, theme in
-            Task {
-                iconFailed = !(await AppIconSwitcher.apply(theme))
-            }
-        }
     }
 
     private func finish() {

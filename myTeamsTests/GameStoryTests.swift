@@ -64,6 +64,7 @@ struct GameStoryTimelineTests {
 
         #expect(story.abbreviation(teamID: "12") == "KC")
         #expect(story.homeAbbreviation == "KC")
+        #expect(story.awayAbbreviation == "IND")
     }
 
     /// nba_summary_final_401811028: Cavaliers (away, 5) at Hawks (home, 1),

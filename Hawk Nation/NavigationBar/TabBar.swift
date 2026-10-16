@@ -700,6 +700,13 @@ private struct TeamPageBody: View {
     @State private var chrome = TeamPageChrome()
 
     @Environment(\.containerSize) private var containerSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// The tallest the hero is drawn at regular width (an iPad), where half
+    /// the window ran the team colour half way down the sidebar beside a
+    /// page that only shows it behind the summary and the rounded top
+    /// (B-14). Never below the summary and room to pull beneath it.
+    static let maxRegularHeroHeight: CGFloat = 320
 
     /// The team colour, or the fallback its badge takes when the feed has
     /// none, so the bar's ink and crest variant are picked against what is
@@ -714,9 +721,19 @@ private struct TeamPageBody: View {
 
     /// Tall enough to sit behind the summary and the page's rounded top
     /// with room to spare for pulling the page down, on any device and at
-    /// any text size.
+    /// any text size; capped at regular width (`maxRegularHeroHeight`).
     private var heroHeight: CGFloat {
-        max(containerSize.height / 2, chrome.headerHeight + containerSize.height / 4)
+        let height = max(containerSize.height / 2, chrome.headerHeight + containerSize.height / 4)
+        guard sizeClass == .regular else { return height }
+        let cap = max(Self.maxRegularHeroHeight, chrome.headerHeight + Theme.Radius.page * 4)
+        return min(height, cap)
+    }
+
+    /// The bar's ink on the team colour: the title's (`TeamBarTitle`), for
+    /// the bar's controls too, which took the app's accent and read as cyan
+    /// on blue or blue on red.
+    private var barInk: Color {
+        Color(hexString: TeamColors.inkHex(on: heroHex))
     }
 
     /// The team colour behind the status bar and the navigation bar, and
@@ -818,6 +835,7 @@ private struct TeamPageBody: View {
             if isVisit {
                 ToolbarItem(placement: .topBarTrailing) {
                     FollowTeamButton(team: team)
+                        .tint(barInk)
                 }
             }
 
@@ -826,7 +844,10 @@ private struct TeamPageBody: View {
                     showSettings()
                 } label: {
                     Label("Settings", systemImage: "gearshape")
+                        .foregroundStyle(barInk)
                 }
+                // In the bar's ink, not the app's accent (H-6).
+                .tint(barInk)
                 .accessibilityLabel("Settings")
                 .accessibilityIdentifier("home.settings")
             }
@@ -954,6 +975,8 @@ private struct BrandBarLogo: View {
             // Fixed: brand presence, not a control that grows with text.
             .frame(height: BrandLogo.bar)
             .teamInk(onHex: backgroundHex)
+            // The ink, not the app's accent, should the bar tint its items.
+            .tint(Color(hexString: TeamColors.inkHex(on: backgroundHex)))
             .accessibilityLabel("myTeams")
             .accessibilityAddTraits(.isImage)
             .accessibilityIdentifier("home.brandLogo")

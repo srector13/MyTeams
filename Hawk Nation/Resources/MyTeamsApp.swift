@@ -76,6 +76,11 @@ struct MyTeamsApp: App {
                 // The tint reaches every screen and sheet under the root,
                 // and changes the moment Settings does.
                 .brandTheme(brandTheme)
+                // Dark crests with no dark variant, outlined on Dark Mode's
+                // cards (`TeamLogo`), measured as the bar's crests are.
+                .environment(\.crestOutlineRule, { @MainActor @Sendable team in
+                    BarCrest.needsOutline(team: team, variant: .default, onHex: "1C1C1E")
+                })
                 .onOpenURL { url in
                     open(url)
                 }

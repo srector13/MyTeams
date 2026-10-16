@@ -118,7 +118,7 @@ struct HomeFeedTests {
         #expect(games.first?.team == chiefs)
     }
 
-    @Test("The news feed is every story across the favorites, newest first, each once")
+    @Test("The news feed is every story across the favorites, dealt in turn, each once")
     func headlinesMerged() {
         let shared = article("Shared story", hoursAgo: 1)
         let articles = [
@@ -126,9 +126,71 @@ struct HomeFeedTests {
             jayhawks.id: [article("Kansas one", hoursAgo: 2), shared, article("Kansas three", hoursAgo: 3), article("Kansas four", hoursAgo: 30)],
         ]
         let headlines = HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles)
-        // Uncapped: the day-old "Kansas four" is in too.
+        // A round each: the shared story is the Chiefs' (first to list
+        // it), each round newest first. Uncapped: the day-old "Kansas
+        // four" is in too.
         #expect(headlines.map(\.article.title) == ["Shared story", "Kansas one", "Kansas three", "Chiefs two", "Chiefs three", "Kansas four"])
         #expect(headlines.first?.team == chiefs)
+    }
+
+    @Test("One busy feed doesn't fill the top of the news: the favorites take turns")
+    func headlinesRoundRobin() {
+        let articles = [
+            // Out of order in the feed: each favorite's own stories still go
+            // newest first.
+            chiefs.id: [
+                article("Chiefs two", hoursAgo: 2), article("Chiefs one", hoursAgo: 1),
+                article("Chiefs three", hoursAgo: 3), article("Chiefs four", hoursAgo: 4),
+            ],
+            jayhawks.id: [article("Kansas one", hoursAgo: 10), article("Kansas two", hoursAgo: 20)],
+        ]
+        let headlines = HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles)
+        #expect(headlines.map(\.article.title) == [
+            "Chiefs one", "Kansas one",
+            "Chiefs two", "Kansas two",
+            "Chiefs three",
+            "Chiefs four",
+        ])
+    }
+
+    @Test("A round's stories at the same moment go in favorites order")
+    func headlinesTieInFavoritesOrder() {
+        let articles = [
+            chiefs.id: [article("Chiefs one", hoursAgo: 1)],
+            jayhawks.id: [article("Kansas one", hoursAgo: 1)],
+        ]
+        #expect(HomeFeed.headlines(teams: [jayhawks, chiefs], articles: articles).map(\.article.title) == ["Kansas one", "Chiefs one"])
+        #expect(HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles).map(\.article.title) == ["Chiefs one", "Kansas one"])
+    }
+
+    // MARK: Collapsing
+
+    @Test("Collapsed Upcoming keeps its first games under their days, and drops the days after")
+    func upcomingPrefix() {
+        let day1 = Self.calendar.startOfDay(for: Self.now)
+        let day2 = day1.addingTimeInterval(86_400)
+        let day3 = day2.addingTimeInterval(86_400)
+        let days = [
+            HomeDay(date: day1, games: [
+                HomeGame(team: chiefs, game: game(id: "1", start: Self.now)),
+                HomeGame(team: jayhawks, game: game(id: "2", start: Self.now)),
+            ]),
+            HomeDay(date: day2, games: [
+                HomeGame(team: chiefs, game: game(id: "3", start: Self.now)),
+                HomeGame(team: jayhawks, game: game(id: "4", start: Self.now)),
+                HomeGame(team: jayhawks, game: game(id: "5", start: Self.now)),
+            ]),
+            HomeDay(date: day3, games: [HomeGame(team: chiefs, game: game(id: "6", start: Self.now))]),
+        ]
+
+        let collapsed = HomeFeed.prefix(days, games: HomeFeed.collapsedGameCount)
+        #expect(HomeFeed.collapsedGameCount == 4)
+        #expect(collapsed.map(\.date) == [day1, day2])
+        #expect(collapsed.map { $0.games.map(\.id) } == [["1", "2"], ["3", "4"]])
+
+        // Room for them all: unchanged.
+        #expect(HomeFeed.prefix(days, games: 10) == days)
+        #expect(HomeFeed.prefix(days, games: 0).isEmpty)
     }
 
     @Test("With no game live, upcoming or recent, Home is the news feed alone")

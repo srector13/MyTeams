@@ -15,7 +15,8 @@ import SwiftUI
 /// Reached from Settings' Appearance section. The accent and logo change at
 /// once, app-wide: the root reads the same key (`MyTeamsApp`). The app icon
 /// changes through iOS (`AppIconSwitcher`), which confirms it with an alert
-/// of its own.
+/// of its own, so it changes once, as the reader leaves the screen, rather
+/// than with every tile tried.
 struct ThemeSettingsView: View {
     @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
     /// Whether iOS refused the last icon change.
@@ -44,9 +45,13 @@ struct ThemeSettingsView: View {
         }
         .navigationTitle("Theme")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: theme) { _, theme in
+        .onAppear {
+            // Shown again if the icon couldn't follow the theme last time.
+            iconFailed = AppIconSwitcher.currentTheme != theme && !theme.isDefault
+        }
+        .onDisappear {
             Task {
-                iconFailed = !(await AppIconSwitcher.apply(theme))
+                await AppIconSwitcher.apply(theme)
             }
         }
     }
@@ -69,7 +74,7 @@ struct ThemePicker: View {
 
     /// What changing the theme does to the app icon, said wherever the
     /// picker is.
-    static let iconNote = "Changes the accent color, the myTeams logo and the app icon together. iOS shows a message of its own when the app icon changes. If the icon can't change, the classic icon stays. The launch screen always shows the classic logo."
+    static let iconNote = "Changes the accent color and the myTeams logo right away. The app icon follows when you're done, and iOS confirms the change with a message of its own."
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -103,32 +108,27 @@ struct ThemePicker: View {
                         .frame(width: 32, height: 32)
                         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                     Circle()
-                        .fill(theme.accentColor)
+                        .fill(theme.swatchColor)
                         .frame(width: 16, height: 16)
                     Spacer(minLength: 0)
                     if selected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.body.weight(.bold))
                             .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, theme.accentColor)
+                            .foregroundStyle(.white, theme.swatchColor)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(theme.title)
-                        .font(Theme.Typography.caption.weight(.semibold))
-                        .foregroundStyle(selected ? Color.primary : Color.secondary)
-                    Text(theme.appIconName ?? "AppIcon")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                Text(theme.title)
+                    .font(Theme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .padding(Theme.Spacing.s)
             .overlay {
                 Theme.Radius.innerShape
-                    .strokeBorder(selected ? theme.accentColor : Color.clear, lineWidth: 2)
+                    .strokeBorder(selected ? theme.swatchColor : Color.clear, lineWidth: 2)
             }
             .contentShape(Rectangle())
         }

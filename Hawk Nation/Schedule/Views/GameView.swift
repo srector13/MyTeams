@@ -316,7 +316,10 @@ private struct StatusPill: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .foregroundStyle(.primary)
+        // The label colour itself, not `.primary`: that resolves to the
+        // header's inherited ink (white on a dark team colour), unreadable
+        // on the near-white inset surface in light mode.
+        .foregroundStyle(Color.primary)
         .padding(.horizontal, Theme.Spacing.s)
         .padding(.vertical, Theme.Spacing.xs)
         .background(Theme.Surface.insetCard, in: Theme.Radius.chip)

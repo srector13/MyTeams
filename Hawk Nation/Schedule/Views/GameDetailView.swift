@@ -8,10 +8,6 @@
 
 import SwiftUI
 
-/// The band at the top of a game sheet left to the system grabber and the
-/// close button floating over it: the button's 44 pt and its inset.
-private let closeButtonClearance: CGFloat = 44 + Theme.Spacing.m
-
 /// The sheet a schedule card opens: the venue, the scoreline and the box
 /// score, refreshed while the game is live.
 ///
@@ -26,10 +22,12 @@ private let closeButtonClearance: CGFloat = 44 + Theme.Spacing.m
 struct GameDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// The venue header's height at the default text size; it grows with
-    /// the text over it.
-    @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 200
+    /// the text over it. Short enough that the medium detent shows the
+    /// scoreboard and linescore beneath it.
+    @ScaledMetric(relativeTo: .body) private var headerHeight: CGFloat = 140
 
     /// The scoreboard's crests, which scale with the team names under them
     /// (B-3).
@@ -67,6 +65,34 @@ struct GameDetailView: View {
         game.team.isEmpty ? team.shortName : game.team
     }
 
+    /// The away side's name, as the scoreboard labels it.
+    private var awayName: String { game.gameHome ? game.opponent : teamLabel }
+
+    /// The home side's name, as the scoreboard labels it.
+    private var homeName: String { game.gameHome ? teamLabel : game.opponent }
+
+    /// The away column's heading over the comparison rows: the feed's
+    /// abbreviation where the summary gave one, else the side's name.
+    private var awayColumnLabel: String {
+        [linescore?.away.abbreviation ?? "", story.awayAbbreviation].first { !$0.isEmpty } ?? awayName
+    }
+
+    /// The home column's heading, as `awayColumnLabel`.
+    private var homeColumnLabel: String {
+        [linescore?.home.abbreviation ?? "", story.homeAbbreviation].first { !$0.isEmpty } ?? homeName
+    }
+
+    /// Medium and large on iPhone; large alone in regular width, where the
+    /// medium detent left a small form sheet showing only the scoreboard.
+    /// An iPad form sheet can report a compact width to its content, so
+    /// the idiom decides there too.
+    private var detents: Set<PresentationDetent> {
+        if horizontalSizeClass == .regular || UIDevice.current.userInterfaceIdiom == .pad {
+            return [.large]
+        }
+        return [.medium, .large]
+    }
+
     var body: some View {
         ScrollView(.vertical) {
             if loading {
@@ -91,7 +117,7 @@ struct GameDetailView: View {
                             message("This game has been postponed.")
                         } else if game.dateAsDate <= Date(), let boxScore {
                             scoreboard(
-                                score: "\(boxScore.homeScore) - \(boxScore.awayScore)",
+                                score: "\(boxScore.awayScore) - \(boxScore.homeScore)",
                                 total: boxScore.homeScore + boxScore.awayScore
                             )
 
@@ -102,8 +128,17 @@ struct GameDetailView: View {
                             // How the game went, before the figures.
                             storyView
 
+                            if !boxScore.rows.isEmpty {
+                                StatColumnsHeader(away: awayColumnLabel, home: homeColumnLabel)
+                            }
                             ForEach(boxScore.rows) { row in
-                                StatRowView(title: row.title, homeStat: row.home, awayStat: row.away)
+                                StatRowView(
+                                    title: row.title,
+                                    homeStat: row.home,
+                                    awayStat: row.away,
+                                    homeName: homeName,
+                                    awayName: awayName
+                                )
                             }
 
                             // The sport's own tables, beneath the
@@ -126,28 +161,36 @@ struct GameDetailView: View {
             Spacer()
         }
         .scrollIndicators(.hidden)
+        // What scrolls up passes behind a firm edge under the buttons, not
+        // under the bare glass of the buttons themselves.
+        .scrollEdgeEffectStyle(.hard, for: .top)
         // No background of its own: the system sheet draws the surface
-        // (glass at the medium detent), and the venue header runs under the
-        // grabber to the sheet's top edge.
-        .overlay(alignment: .topTrailing) {
-            SheetCloseButton()
-                // Pinned to its 44 pt circle, as the crest picker's "+" is.
-                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                .accessibilityIdentifier("gameDetail.close")
-                .padding(Theme.Spacing.m)
-        }
-        .overlay(alignment: .topLeading) {
-            if !loading {
-                shareButton
+        // (glass at the medium detent). Share and close sit in a bar of
+        // their own beside the grabber, and the venue header starts below
+        // it, so no content rests under them.
+        .safeAreaBar(edge: .top) {
+            HStack(alignment: .top) {
+                if !loading {
+                    shareButton
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                }
+                Spacer(minLength: 0)
+                SheetCloseButton()
+                    // Pinned to its 44 pt circle, as the crest picker's "+" is.
                     .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                    .padding(Theme.Spacing.m)
+                    .accessibilityIdentifier("gameDetail.close")
             }
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.top, Theme.Spacing.m)
+            .padding(.bottom, Theme.Spacing.xs)
         }
         // Drawn again as the score or status changes.
         .onChange(of: shareLine, initial: true) {
             shareImage = renderShareImage()
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents(detents)
+        // A page-sized sheet on iPad, not the small form sheet.
+        .presentationSizing(.page)
         .presentationDragIndicator(.visible)
         // The roster's player sheet, over this one. Its colours and the
         // league its statistics load from are the followed team's: both
@@ -213,6 +256,7 @@ struct GameDetailView: View {
             GameStoryView(
                 story: story,
                 league: league,
+                followedIsHome: game.gameHome,
                 player: { [soccerLineups, hockey] athleteID in
                     GameSheetPlayer(athleteID: athleteID, soccerLineups: soccerLineups, hockey: hockey)
                 },
@@ -227,17 +271,16 @@ struct GameDetailView: View {
     ///
     /// At least `headerHeight` tall, and taller when the text needs it: the
     /// venue and its wash sit behind the text rather than fixing its height.
-    /// The text starts below the grabber and close button; the venue runs
-    /// on under them, and the sheet's own corners round it.
+    /// It starts below the bar holding the share and close buttons.
     private var header: some View {
         VStack(spacing: 0) {
             Text(game.competitionName)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .padding(.top, closeButtonClearance)
+                .padding(.top, Theme.Spacing.m)
 
-            Spacer(minLength: Theme.Spacing.m)
+            Spacer(minLength: Theme.Spacing.s)
 
             headerLine(game.time)
             headerLine(game.date)
@@ -246,7 +289,7 @@ struct GameDetailView: View {
                 headerLine(broadcast)
             }
 
-            Spacer(minLength: Theme.Spacing.m)
+            Spacer(minLength: Theme.Spacing.s)
 
             if !venueLine.isEmpty {
                 headerLine(venueLine)
@@ -345,7 +388,7 @@ struct GameDetailView: View {
             .font(.subheadline.bold())
             .multilineTextAlignment(.center)
             .foregroundStyle(.white)
-            .padding(.bottom, Theme.Spacing.s)
+            .padding(.bottom, Theme.Spacing.xs)
     }
 
     // MARK: - Card
@@ -369,8 +412,9 @@ struct GameDetailView: View {
     /// scores, about the width of most.
     private static let placeholderScore = "00 - 00"
 
-    /// Both crests and the scoreline (`score`, home first), home team on
-    /// the left. At accessibility text sizes the scoreline sits above the
+    /// Both crests and the scoreline (`score`, away first), away team on
+    /// the left, as the title's "Away at Home" and the Home tab's live tile
+    /// read. At accessibility text sizes the scoreline sits above the
     /// two sides, so none of the three is squeezed into a third of the
     /// width. `total`, both scores summed, rolls the scoreline's digits as
     /// a live game refreshes (X-12).
@@ -381,19 +425,19 @@ struct GameDetailView: View {
                 scoreline(score, total: total)
 
                 HStack(alignment: .top) {
-                    side(followed: game.gameHome, alignment: .leading)
-                    side(followed: !game.gameHome, alignment: .trailing)
+                    side(followed: !game.gameHome, alignment: .leading)
+                    side(followed: game.gameHome, alignment: .trailing)
                 }
             }
         } else {
             HStack(alignment: .top) {
                 HStack() {
-                    side(followed: game.gameHome, alignment: .leading)
+                    side(followed: !game.gameHome, alignment: .leading)
 
                     scoreline(score, total: total)
                         .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
 
-                    side(followed: !game.gameHome, alignment: .trailing)
+                    side(followed: game.gameHome, alignment: .trailing)
                 }
             }
         }
@@ -459,12 +503,12 @@ struct GameDetailView: View {
 
     // MARK: - Share
 
-    /// "Chiefs 27–24 Bills · Final": the scoreline as the card reads it,
-    /// home side first, and its status; before a score, the matchup and
-    /// date.
+    /// "Bills 24–27 Chiefs · Final": the scoreline as the scoreboard reads
+    /// it, away side first, and its status; before a score, the matchup
+    /// and date.
     private var shareLine: String {
-        let left = game.gameHome ? teamLabel : game.opponent
-        let right = game.gameHome ? game.opponent : teamLabel
+        let left = awayName
+        let right = homeName
         guard let boxScore, !game.cancelled, !game.postponed else {
             return "\(left) vs \(right) · \(game.date)"
         }
@@ -479,7 +523,7 @@ struct GameDetailView: View {
                 .filter { !$0.isEmpty }
                 .joined(separator: " ")
         }
-        return "\(left) \(boxScore.homeScore)–\(boxScore.awayScore) \(right)" + (status.isEmpty ? "" : " · \(status)")
+        return "\(left) \(boxScore.awayScore)–\(boxScore.homeScore) \(right)" + (status.isEmpty ? "" : " · \(status)")
     }
 
     /// Shares the scoreboard image, the score line and the game's ESPN page:
@@ -517,7 +561,7 @@ struct GameDetailView: View {
     private func renderShareImage() -> Image? {
         guard let boxScore, !game.cancelled, !game.postponed else { return nil }
         let renderer = ImageRenderer(content:
-            scoreboard(score: "\(boxScore.homeScore) - \(boxScore.awayScore)")
+            scoreboard(score: "\(boxScore.awayScore) - \(boxScore.homeScore)")
                 .padding(Theme.Spacing.xl)
                 .frame(width: 360)
                 .background(Color.white)

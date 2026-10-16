@@ -154,15 +154,16 @@ struct OnboardingWalkthroughView: View {
             // The dots on a backing, so they show on light and dark alike.
             .indexViewStyle(.page(backgroundDisplayMode: .always))
             .background(Theme.Surface.content)
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaBar(edge: .bottom) {
                 Button(action: onNext) {
                     Text(page.buttonTitle)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
                 .controlSize(.large)
-                .padding(Theme.Spacing.l)
-                .background(.bar)
+                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.vertical, Theme.Spacing.m)
                 .accessibilityIdentifier(page.buttonIdentifier)
             }
             .toolbar {
@@ -187,33 +188,37 @@ private struct WalkthroughPageView: View {
     let isCurrent: Bool
 
     var body: some View {
-        // Scrolls only when the text is too large to fit.
-        ScrollView {
-            VStack(spacing: Theme.Spacing.xl) {
-                sketch
-                    .padding(Theme.Spacing.l)
-                    .frame(maxWidth: 380)
-                    .contentCard()
-                    .accessibilityHidden(true)
+        // Scrolls only when the text is too large to fit; otherwise the
+        // sketch and words sit centred in the page rather than at its top.
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: Theme.Spacing.xl) {
+                    sketch
+                        .padding(Theme.Spacing.l)
+                        .frame(maxWidth: 380)
+                        .contentCard()
+                        .accessibilityHidden(true)
 
-                VStack(spacing: Theme.Spacing.s) {
-                    Text(page.headline)
-                        .font(.title2.weight(.bold))
-                        .accessibilityAddTraits(.isHeader)
-                    Text(page.caption)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: Theme.Spacing.s) {
+                        Text(page.headline)
+                            .font(.title2.weight(.bold))
+                            .accessibilityAddTraits(.isHeader)
+                        Text(page.caption)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 380)
                 }
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 380)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Theme.Spacing.l)
+                .padding(.top, Theme.Spacing.l)
+                // Clear of the page indicator.
+                .padding(.bottom, Theme.Spacing.xl * 2)
+                .frame(minHeight: proxy.size.height)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, Theme.Spacing.l)
-            .padding(.top, Theme.Spacing.xl)
-            // Clear of the page indicator.
-            .padding(.bottom, Theme.Spacing.xl * 2)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .scrollBounceBehavior(.basedOnSize)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(page.accessibilityIdentifier)
     }

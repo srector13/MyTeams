@@ -30,6 +30,8 @@ struct NewsDetailView: View {
             // Full height: a hand-off to Safari, whose page and bars need
             // the room (X-9).
             .presentationDetents([.large])
+            // A page-sized sheet on iPad, not the small form sheet.
+            .presentationSizing(.page)
         } else {
             ContentUnavailableView {
                 Label {
