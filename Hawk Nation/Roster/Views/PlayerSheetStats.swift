@@ -148,36 +148,6 @@ func isSoccerGoalkeeper(_ position: String) -> Bool {
     position.lowercased().contains("goalkeeper")
 }
 
-/// A position's initials, three at most: "WR" for "Wide Receiver", "F" for
-/// "Forward", "SP" for "Starting Pitcher"; empty for no position.
-func positionInitials(_ position: String) -> String {
-    position
-        .split(whereSeparator: { $0.isWhitespace || $0 == "-" || $0 == "/" })
-        .compactMap(\.first)
-        .prefix(3)
-        .map { String($0).uppercased() }
-        .joined()
-}
-
-/// The first and last names' first letters ("FA" for "Felix
-/// Anudike-Uzomah"), one for a single name, none for no name.
-func nameInitials(_ name: String) -> String {
-    let words = name.split(whereSeparator: \.isWhitespace)
-    guard let first = words.first?.first else { return "" }
-    guard words.count > 1, let last = words.last?.first else { return String(first).uppercased() }
-    return "\(first)\(last)".uppercased()
-}
-
-/// What a missing headshot's jersey avatar shows: the shirt number, else
-/// the position's initials, else the name's; empty with none of them.
-func jerseyAvatarLabel(number: String, position: String, name: String) -> String {
-    let number = number.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !number.isEmpty { return number }
-    let initials = positionInitials(position.trimmingCharacters(in: .whitespacesAndNewlines))
-    if !initials.isEmpty { return initials }
-    return nameInitials(name)
-}
-
 /// An NFL player's headline statistics by position group: a passer's
 /// yards, touchdowns, interceptions and rating; a runner's yards,
 /// touchdowns and yards a carry; a receiver's catches, yards, touchdowns

@@ -15,6 +15,10 @@ struct HomeHeroStyle {
     /// The flat colour behind the status bar, the navigation bar and the
     /// top of the hero, so the three meet without a seam.
     let fill: Color
+    /// `fill` as six hex digits, for the crests cut out on it
+    /// (`CutoutCrest`): the team's, or for the neutral band its near-black
+    /// base, which its ink and a crest's contrast are judged against.
+    let fillHex: String
     /// The colour the hero deepens to at its foot: `fill` again for a
     /// team; a darker brand tint for the neutral band.
     let footFill: Color
@@ -41,6 +45,7 @@ struct HomeHeroStyle {
             let hex = TeamColors.fillHex(for: team)
             let barHex = TeamColors.inkHex(on: hex)
             fill = Color(hexString: hex)
+            fillHex = hex
             footFill = fill
             ink = TeamColors.ink(on: team)
             barInk = Color(hexString: barHex)
@@ -48,6 +53,7 @@ struct HomeHeroStyle {
         } else {
             let base = Color(hexString: Self.neutralBaseHex)
             fill = base.mix(with: accent, by: Self.neutralAccentShare)
+            fillHex = Self.neutralBaseHex
             footFill = base.mix(with: accent, by: Self.neutralFootAccentShare)
             ink = .white
             barInk = .white
@@ -59,9 +65,10 @@ struct HomeHeroStyle {
 /// The top of Home, over the hero colour, under the bar's title and date
 /// (`HomeHeroStyle`): the game that matters most right now
 /// (`HomeFeed.featured`) — the one under way, the next one, or one just
-/// played. Its kicker, the matchup away side first with each crest on a
-/// white disc, the countdown, live score or final score between them, the
-/// start and channel beneath, and the way into the game's sheet.
+/// played. Its kicker, the matchup away side first with each crest cut
+/// out on the hero's colour (`CutoutCrest`), the countdown, live score or
+/// final score between them, the start and channel beneath, and the way
+/// into the game's sheet.
 ///
 /// Plain scrolling content, as a team page's summary (`TeamPageHeader`)
 /// is: it scrolls under the bar with the page, never over it.
@@ -209,14 +216,15 @@ struct HomeHero: View {
         .accessibilityLabel(spokenMatchup(featured))
     }
 
-    /// One side: its crest on a white disc, so it reads on any team colour,
-    /// over its short name.
+    /// One side: its crest straight on the hero's colour, traced in its
+    /// ink only where it would blend in (`CutoutCrest`), over its short
+    /// name.
     private func side(_ featured: HomeFeaturedGame, isFavorite: Bool) -> some View {
         VStack(spacing: Theme.Spacing.xs) {
             if isFavorite {
-                HomeCrestDisc(team: featured.team, size: crestSize)
+                CutoutCrest(team: featured.team, size: crestSize, onHex: style.fillHex)
             } else {
-                HomeOpponentCrest(game: featured.game, league: featured.team.league, size: crestSize)
+                HomeOpponentCrest(game: featured.game, league: featured.team.league, size: crestSize, onHex: style.fillHex)
             }
             Text(isFavorite ? featured.team.shortName : opponentName(featured.game))
                 .font(.subheadline.weight(isFavorite ? .bold : .semibold))
@@ -338,9 +346,10 @@ struct HomeHero: View {
     /// and a line saying so.
     private var quietContent: some View {
         VStack(spacing: Theme.Spacing.s) {
-            HStack(spacing: -Theme.Spacing.s) {
+            // Side by side: crests with nothing behind them don't stack.
+            HStack(spacing: Theme.Spacing.s) {
                 ForEach(Array(teams.prefix(5))) { team in
-                    HomeCrestDisc(team: team, size: crestSize * 0.75)
+                    CutoutCrest(team: team, size: crestSize * 0.75, onHex: style.fillHex)
                 }
             }
             .accessibilityHidden(true)
@@ -430,63 +439,44 @@ private struct HomeCountdown: View {
     }
 }
 
-/// A favorite's crest on a white disc: legible on any team colour, light
-/// or dark, whatever the crest's own colours.
-struct HomeCrestDisc: View {
-    let team: TeamRef
-    let size: CGFloat
-
-    var body: some View {
-        TeamLogo(team: team, size: size * 0.7, forceVariant: .default)
-            .frame(width: size, height: size)
-            .background(Color.white, in: Circle())
-            .overlay {
-                Circle()
-                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5)
-            }
-            .accessibilityHidden(true)
-    }
-}
-
-/// An opponent's crest on a white disc, from the schedule's logo, as a
-/// schedule card draws it; a monogram where the feed gives none.
+/// An opponent's crest straight on the hero's colour, cut out as the
+/// favorite's is (`CutoutCrest`): the schedule's logo, stored and measured
+/// under the opponent's id, so it is traced in the hero's ink only where
+/// it would blend in; a monogram where the feed gives none. An opponent
+/// the feed gave no id has nothing to store its crest under, so its logo
+/// is drawn bare.
 struct HomeOpponentCrest: View {
     let game: Game
     let league: LeagueID
     let size: CGFloat
+    /// The colour behind it, as six hex digits (`HomeHeroStyle.fillHex`).
+    let onHex: String
 
-    /// A stand-in team for the monogram: the opponent's name and an
-    /// abbreviation from it, in a colour picked from its id.
+    /// A stand-in team for the crest: the opponent's id and the schedule's
+    /// logo, or for the monogram its name and an abbreviation from it, in
+    /// a colour picked from its id.
     private var standIn: TeamRef {
         TeamRef(
             league: league, espnID: game.opponentID.isEmpty ? game.opponent : game.opponentID,
             displayName: game.opponent, shortName: game.opponent,
             abbreviation: String(game.opponent.prefix(3)).uppercased(), location: "",
             colorHex: "", alternateColorHex: "",
-            logoURL: nil, logoDarkURL: nil, logoAsset: nil
+            logoURL: game.opponentID.isEmpty ? nil : URL(string: game.opponentLogo),
+            logoDarkURL: nil, logoAsset: nil
         )
     }
 
     var body: some View {
-        let inner = size * 0.7
-        Group {
-            if game.opponentLogo.isEmpty {
-                MonogramTeam(team: standIn, size: inner)
-            } else {
-                RemoteImage(url: URL(string: game.opponentLogo), showsProgress: false) {
-                    MonogramTeam(team: standIn, size: inner)
-                }
-                .aspectRatio(contentMode: .fit)
+        if game.opponentID.isEmpty, !game.opponentLogo.isEmpty {
+            RemoteImage(url: URL(string: game.opponentLogo), showsProgress: false) {
+                MonogramTeam(team: standIn, size: size)
             }
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+        } else {
+            CutoutCrest(team: standIn, size: size, onHex: onHex)
         }
-        .frame(width: inner, height: inner)
-        .frame(width: size, height: size)
-        .background(Color.white, in: Circle())
-        .overlay {
-            Circle()
-                .strokeBorder(Color.black.opacity(0.08), lineWidth: 0.5)
-        }
-        .accessibilityHidden(true)
     }
 }
 

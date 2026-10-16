@@ -10,8 +10,9 @@ import SwiftUI
 import UIKit
 
 /// An athlete's photo: ESPN's headshot, else the first photo the sources
-/// after it have (`HeadshotTiers`), else `placeholder`: the card's blank
-/// or the sheet's jersey avatar.
+/// after it have (`HeadshotTiers`), else ESPN's grey silhouette, or
+/// `placeholder` (the app's own silhouette, `Image("blank")`) where ESPN's
+/// image would not load at all.
 ///
 /// For soccer the sources are, in order: FotMob, while the reader has
 /// turned that experiment on (`FotMobHeadshotStore`); API-Football, with
@@ -41,11 +42,6 @@ struct AthleteHeadshot<Placeholder: View>: View {
     /// look them up by those; `nil` without a team, or outside soccer.
     private let query: SoccerHeadshotQuery?
     private let showsProgress: Bool
-    /// Whether ESPN's generic silhouette is drawn while it is all there is.
-    /// `false` shows `placeholder` in its place: the sheet's and the
-    /// card's jersey avatar (`PlayerJerseyAvatar`) say more than a grey
-    /// outline. The other tiers are asked either way.
-    private let drawsSilhouette: Bool
     private let placeholder: Placeholder
 
     /// Whether ESPN's image failed to load, or there was no URL.
@@ -73,8 +69,6 @@ struct AthleteHeadshot<Placeholder: View>: View {
     ///   - name: the athlete's name, for FotMob and TheSportsDB.
     ///   - number: their shirt number, likewise.
     ///   - team: the roster's club; `nil` never asks FotMob or TheSportsDB.
-    ///   - drawsSilhouette: whether ESPN's silhouette is drawn; `false`
-    ///     shows `placeholder` instead.
     init(
         photo: String,
         espnID: String,
@@ -83,7 +77,6 @@ struct AthleteHeadshot<Placeholder: View>: View {
         number: String = "",
         team: TeamRef? = nil,
         showsProgress: Bool = true,
-        drawsSilhouette: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.espnURL = URL(string: photo)
@@ -96,7 +89,6 @@ struct AthleteHeadshot<Placeholder: View>: View {
             self.query = nil
         }
         self.showsProgress = showsProgress
-        self.drawsSilhouette = drawsSilhouette
         self.placeholder = placeholder()
     }
 
@@ -160,7 +152,7 @@ struct AthleteHeadshot<Placeholder: View>: View {
         Group {
             if let drawn {
                 fallbackImage(drawn)
-            } else if espnFailed || (espnIsSilhouette && !drawsSilhouette) {
+            } else if espnFailed {
                 placeholder
             } else {
                 RemoteImage(url: espnURL, showsProgress: showsProgress, onLoad: { didLoad in
@@ -368,7 +360,6 @@ extension AthleteHeadshot {
         league: LeagueID?,
         team: TeamRef? = nil,
         showsProgress: Bool = true,
-        drawsSilhouette: Bool = true,
         @ViewBuilder placeholder: () -> Placeholder
     ) {
         self.init(
@@ -379,7 +370,6 @@ extension AthleteHeadshot {
             number: player.number,
             team: team,
             showsProgress: showsProgress,
-            drawsSilhouette: drawsSilhouette,
             placeholder: placeholder
         )
     }

@@ -179,7 +179,7 @@ enum SoccerPhotoSettings {
 /// Names compare as words (`ApiFootball.tokens`): lowercased, accents and
 /// ligatures folded, apostrophes dropped. A join that finds two players,
 /// or two clubs, it cannot tell apart finds none: a wrong face is worse
-/// than the jersey avatar.
+/// than the silhouette.
 enum HeadshotNameMatching {
     /// `"Martin Ødegaard"` → `["martin", "odegaard"]`.
     static func words(_ text: String) -> [String] {

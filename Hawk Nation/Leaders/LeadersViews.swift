@@ -138,7 +138,7 @@ struct LeadersSection<Player: RosterPlayer>: View {
     /// (`TeamNavigator`).
     @ViewBuilder
     private func leaderButton(_ leader: TeamLeader) -> some View {
-        let card = TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill)
+        let card = TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill, team: team)
         if let navigator, !leader.row.leader.athleteID.isEmpty {
             Button {
                 navigator.open(team, playerID: leader.row.leader.athleteID)
@@ -186,6 +186,9 @@ struct TeamLeaderCard: View {
     let board: LeaderBoard
     let row: LeaderBoardRow
     let teamColor: Color
+    /// The leader's team, whose league and club the headshot's other
+    /// sources look the player up by (`AthleteHeadshot`).
+    let team: TeamRef
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -198,7 +201,7 @@ struct TeamLeaderCard: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            LeaderHeadshot(url: row.leader.headshotURL, size: headshotSize)
+            LeaderHeadshot(leader: row.leader, league: team.league, team: team, size: headshotSize)
 
             // Label ink on the inset card, the team colour as an accent
             // bar beside it: a navy or gold figure vanished in one
@@ -268,16 +271,32 @@ struct TeamAccentBar: View {
     }
 }
 
-/// A leader's headshot in a circle, or a silhouette when the feed has none.
+/// A leader's headshot in a circle, found as a roster player's is
+/// (`AthleteHeadshot`): ESPN's, else for soccer FotMob, API-Football and
+/// TheSportsDB, then Wikimedia Commons; a grey silhouette where none has
+/// one. Long-press a fallback photo for its credit.
 private struct LeaderHeadshot: View {
-    let url: String
+    let leader: StatLeader
+    let league: LeagueID
+    /// The leader's club, for the soccer sources that look a player up by
+    /// club; `nil` skips them.
+    let team: TeamRef?
     let size: CGFloat
 
     var body: some View {
-        RemoteImage(url: URL(string: url), showsProgress: false) {
-            Image(systemName: "person.crop.circle.fill")
+        AthleteHeadshot(
+            // No headshot in the feed counts as ESPN's silhouette, as on a
+            // roster (`headshotURL`), so the other sources are asked.
+            photo: leader.headshotURL.isEmpty ? missingHeadshot : leader.headshotURL,
+            espnID: leader.athleteID,
+            league: league,
+            name: leader.name,
+            number: leader.jersey,
+            team: team,
+            showsProgress: false
+        ) {
+            Image("blank")
                 .resizable()
-                .foregroundStyle(.tertiary)
         }
         .aspectRatio(contentMode: .fill)
         .frame(width: size, height: size)
@@ -372,7 +391,7 @@ struct LeagueLeadersView: View {
     /// sheet on it (`onPick`), for a leader the feed gave a team.
     private func leaderRow(_ row: LeaderBoardRow, label: String) -> some View {
         let followed = row.leader.teamID == followedTeamID
-        let content = LeaderRow(row: row, label: label, followed: followed)
+        let content = LeaderRow(row: row, label: label, followed: followed, league: league)
         return Group {
             if let onPick, Self.canPick(row.leader) {
                 Button {
@@ -434,6 +453,8 @@ private struct LeaderRow: View {
     let row: LeaderBoardRow
     let label: String
     let followed: Bool
+    /// The board's league, for the headshot's other sources.
+    let league: LeagueID
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -459,7 +480,9 @@ private struct LeaderRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: rankWidth, alignment: .trailing)
 
-                LeaderHeadshot(url: row.leader.headshotURL, size: headshotSize)
+                // A league's leaders play for every club: each is looked up
+                // by the club the feed names beside them.
+                LeaderHeadshot(leader: row.leader, league: league, team: row.leader.club(in: league), size: headshotSize)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: Theme.Spacing.xs) {
