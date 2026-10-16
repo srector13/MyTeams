@@ -1,0 +1,150 @@
+    t =   174.20s         Checking existence of `Any (First Match)`
+    t =   174.48s Get all elements bound by index for: Elements matching predicate 'identifier BEGINSWITH "roster.player"'
+    t =   174.64s Find the Any (Element at index 0)
+    t =   176.88s Tap "roster.player.4912218" Button
+    t =   176.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   176.89s     Find the "roster.player.4912218" Button
+    t =   177.03s     Check for interrupting elements affecting "roster.player.4912218" Button
+    t =   177.19s     Synthesize event
+    t =   177.54s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   179.10s Waiting 8.0s for "playerDetail.close" Button to exist
+    t =   180.21s     Checking `Expect predicate `existsNoRetry == 1` for object "playerDetail.close" Button`
+    t =   180.23s         Checking existence of `"playerDetail.close" Button`
+    t =   184.45s Added attachment named '05-ax3-light__10-team2-player'
+    t =   184.45s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   184.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   184.46s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   184.65s     Check for interrupting elements affecting "myTeams" Application
+    t =   184.79s     Synthesize event
+    t =   185.24s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   192.68s Added attachment named '05-ax3-light__11-team2-player-scrolled'
+    t =   192.69s Checking existence of `"playerDetail.section" Any`
+    t =   192.86s Get number of matches for: Descendants matching type Button
+    t =   192.97s Checking existence of `"playerDetail.close" Button`
+    t =   193.81s Find the "playerDetail.close" Button
+    t =   193.96s Tap "playerDetail.close" Button
+    t =   193.96s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   193.97s     Find the "playerDetail.close" Button
+    t =   194.14s     Check for interrupting elements affecting "playerDetail.close" Button
+    t =   194.32s     Synthesize event
+    t =   194.64s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   196.97s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   196.97s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   196.98s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   197.07s     Check for interrupting elements affecting "myTeams" Application
+    t =   197.44s     Synthesize event
+    t =   197.91s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   198.39s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   198.39s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   198.41s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   198.67s     Check for interrupting elements affecting "myTeams" Application
+    t =   198.81s     Synthesize event
+    t =   199.34s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   200.14s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   200.14s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   200.15s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   200.25s     Check for interrupting elements affecting "myTeams" Application
+    t =   200.48s     Synthesize event
+    t =   200.97s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   201.44s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   201.44s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   201.46s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   202.14s     Check for interrupting elements affecting "myTeams" Application
+    t =   202.67s     Synthesize event
+    t =   203.18s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   204.10s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   204.10s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   204.11s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   204.34s     Check for interrupting elements affecting "myTeams" Application
+    t =   204.63s     Synthesize event
+    t =   205.10s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   205.86s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   205.86s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   205.88s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   206.20s     Check for interrupting elements affecting "myTeams" Application
+    t =   206.42s     Synthesize event
+    t =   206.94s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   207.43s Waiting 8.0s for Any (First Match) to exist
+    t =   208.49s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   208.49s         Checking existence of `Any (First Match)`
+    t =   209.34s         Capturing element debug description
+    t =   209.44s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   209.44s         Checking existence of `Any (First Match)`
+    t =   210.14s         Capturing element debug description
+    t =   210.44s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   210.45s         Checking existence of `Any (First Match)`
+    t =   211.28s         Capturing element debug description
+    t =   211.44s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   211.44s         Checking existence of `Any (First Match)`
+    t =   212.10s         Capturing element debug description
+    t =   212.48s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   212.48s         Checking existence of `Any (First Match)`
+    t =   213.73s         Capturing element debug description
+    t =   214.46s     Checking `Expect predicate `existsNoRetry == 1` for object Any (First Match)`
+    t =   214.46s         Checking existence of `Any (First Match)`
+    t =   215.69s         Capturing element debug description
+    t =   215.70s     Checking existence of `Any (First Match)`
+    t =   218.40s Collecting debug information to assist test failure triage
+    t =   218.40s     Requesting snapshot of accessibility hierarchy for app with pid 17752
+    t =   218.78s Waiting 5.0s for "home.settings" Button to exist
+    t =   219.84s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =   219.84s         Checking existence of `"home.settings" Button`
+    t =   219.98s Checking existence of `"settings.done" Button`
+    t =   220.10s Tap "home.settings" Button
+    t =   220.10s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   220.11s     Find the "home.settings" Button
+    t =   220.24s     Check for interrupting elements affecting "home.settings" Button
+    t =   220.43s     Synthesize event
+    t =   220.88s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   222.46s Waiting 4.0s for "settings.done" Button to exist
+    t =   223.52s     Checking `Expect predicate `existsNoRetry == 1` for object "settings.done" Button`
+    t =   223.52s         Checking existence of `"settings.done" Button`
+    t =   223.82s Checking existence of `"settings.done" Button`
+    t =   224.00s Checking existence of `"settings.done" Button`
+    t =   224.18s Checking existence of `"settings.done" Button`
+    t =   226.32s Added attachment named '05-ax3-light__12-settings'
+    t =   226.32s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   226.32s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   226.33s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   226.46s     Check for interrupting elements affecting "myTeams" Application
+    t =   226.59s     Synthesize event
+    t =   227.03s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   229.59s Added attachment named '05-ax3-light__13-settings-scrolled'
+    t =   229.60s Checking existence of `"settings.theme" Button`
+    t =   229.82s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   229.82s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   229.83s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   229.99s     Check for interrupting elements affecting "myTeams" Application
+    t =   230.13s     Synthesize event
+    t =   230.59s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   231.96s Checking existence of `"settings.theme" Button`
+    t =   232.15s Find the "settings.theme" Button
+    t =   232.50s Checking existence of `"settings.theme" Button`
+    t =   232.86s Find the "settings.theme" Button
+    t =   233.10s Checking existence of `"settings.theme" Button`
+    t =   233.28s Tap "settings.theme" Button
+    t =   233.28s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   233.28s     Find the "settings.theme" Button
+    t =   233.53s     Check for interrupting elements affecting "settings.theme" Button
+    t =   233.69s     Synthesize event
+    t =   234.06s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   236.94s Added attachment named '05-ax3-light__14-settings-theme'
+    t =   236.95s Terminate PolarReailty.Hawk-Nation:17752
+    t =   237.99s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test05_DynamicTypeAX3]' passed (238.888 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-16 02:00:29.465.
+	 Executed 1 test, with 0 failures (0 unexpected) in 238.888 (238.891) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-16 02:00:29.466.
+	 Executed 1 test, with 0 failures (0 unexpected) in 238.888 (238.892) seconds
+Test Suite 'Selected tests' passed at 2026-10-16 02:00:29.467.
+	 Executed 1 test, with 0 failures (0 unexpected) in 238.888 (238.893) seconds
+2026-10-16 02:00:31.033 xcodebuild[14684:44007] [MT] IDETestOperationsObserverDebug: 271.553 elapsed -- Testing started completed.
+2026-10-16 02:00:31.033 xcodebuild[14684:44007] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-16 02:00:31.033 xcodebuild[14684:44007] [MT] IDETestOperationsObserverDebug: 271.553 sec, +271.553 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

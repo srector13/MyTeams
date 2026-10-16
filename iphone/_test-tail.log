@@ -1,0 +1,150 @@
+    t =   198.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   198.46s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   199.15s     Check for interrupting elements affecting "myTeams" Application
+    t =   201.45s     Synthesize event
+    t =   201.97s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   204.17s Added attachment named '11-home-dark__06-scroll5'
+    t =   204.18s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   204.18s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   204.19s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   204.82s     Check for interrupting elements affecting "myTeams" Application
+    t =   205.82s     Synthesize event
+    t =   206.26s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   208.86s Added attachment named '11-home-dark__07-scroll6'
+    t =   208.86s Checking existence of `"home.customize" Button`
+    t =   209.40s Find the "home.customize" Button
+    t =   210.31s Checking existence of `"home.customize" Button`
+    t =   210.61s Find the "home.customize" Button
+    t =   211.17s Checking existence of `"home.customize" Button`
+    t =   211.68s Find the "home.customize" Button
+    t =   212.09s Checking existence of `"home.customize" Button`
+    t =   212.52s Find the "home.customize" Button
+    t =   213.12s Tap "home.customize" Button
+    t =   213.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   213.16s     Find the "home.customize" Button
+    t =   213.59s     Check for interrupting elements affecting "home.customize" Button
+    t =   213.83s     Synthesize event
+    t =   214.25s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   216.94s Added attachment named '11-home-dark__08-customize'
+    t =   216.95s Checking existence of `"home.customize.done" Button`
+    t =   217.47s Find the "home.customize.done" Button
+    t =   218.20s Tap "home.customize.done" Button
+    t =   218.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   218.22s     Find the "home.customize.done" Button
+    t =   218.73s     Check for interrupting elements affecting "home.customize.done" Button
+    t =   219.03s     Synthesize event
+    t =   219.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   221.21s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   221.21s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   221.32s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   221.56s     Check for interrupting elements affecting "myTeams" Application
+    t =   221.76s     Synthesize event
+    t =   222.22s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   224.76s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   224.76s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   224.77s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   225.29s     Check for interrupting elements affecting "myTeams" Application
+    t =   225.61s     Synthesize event
+    t =   226.12s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   229.08s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   229.08s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   229.09s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   229.68s     Check for interrupting elements affecting "myTeams" Application
+    t =   230.70s     Synthesize event
+    t =   231.16s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   233.27s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   233.27s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   233.29s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   233.68s     Check for interrupting elements affecting "myTeams" Application
+    t =   234.03s     Synthesize event
+    t =   234.57s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   235.34s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   235.34s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   235.76s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   236.02s     Check for interrupting elements affecting "myTeams" Application
+    t =   236.33s     Synthesize event
+    t =   236.94s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   237.45s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   237.45s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   237.47s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   237.75s     Check for interrupting elements affecting "myTeams" Application
+    t =   238.02s     Synthesize event
+    t =   238.47s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   239.01s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   239.01s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   239.02s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   239.21s     Check for interrupting elements affecting "myTeams" Application
+    t =   239.60s     Synthesize event
+    t =   240.06s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   240.56s Swipe down Target Application 'PolarReailty.Hawk-Nation'
+    t =   240.56s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   240.57s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   241.01s     Check for interrupting elements affecting "myTeams" Application
+    t =   241.29s     Synthesize event
+    t =   241.72s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   243.23s Get number of matches for: Elements matching predicate 'identifier BEGINSWITH "home.week.day."'
+    t =   243.53s Find the Button (Element at index 4)
+    t =   243.85s Tap "home.week.day.2026-10-17" Button
+    t =   243.85s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   243.86s     Find the "home.week.day.2026-10-17" Button
+    t =   244.04s     Check for interrupting elements affecting "home.week.day.2026-10-17" Button
+    t =   244.22s     Synthesize event
+    t =   244.59s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   246.42s Added attachment named '11-home-dark__09-week-day'
+    t =   246.42s Waiting 5.0s for "home.myTeams.football/nfl:12" Any to exist
+    t =   247.43s     Checking `Expect predicate `existsNoRetry == 1` for object "home.myTeams.football/nfl:12" Any`
+    t =   247.43s         Checking existence of `"home.myTeams.football/nfl:12" Any`
+    t =   248.05s Find the "home.myTeams.football/nfl:12" Any
+    t =   249.05s Tap "home.myTeams.football/nfl:12" Button
+    t =   249.05s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   249.07s     Find the "home.myTeams.football/nfl:12" Button
+    t =   249.59s     Check for interrupting elements affecting "home.myTeams.football/nfl:12" Button
+    t =   249.94s     Synthesize event
+    t =   250.30s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   257.51s Added attachment named '11-home-dark__10-team-from-card'
+    t =   257.52s Terminate PolarReailty.Hawk-Nation:37667
+    t =   258.59s Setting appearance mode to Light
+    t =   260.61s     Wait for com.apple.springboard to idle
+    t =   260.61s Open PolarReailty.Hawk-Nation
+    t =   260.62s     Launch PolarReailty.Hawk-Nation
+2026-10-16 02:13:42.783 xcodebuild[33210:90293] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-16 02:13:42.783 xcodebuild[33210:90293] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =   262.13s         Setting up automation session
+    t =   264.62s         Wait for PolarReailty.Hawk-Nation to idle
+    t =   268.16s Waiting 20.0s for "home.settings" Button to exist
+    t =   269.23s     Checking `Expect predicate `existsNoRetry == 1` for object "home.settings" Button`
+    t =   269.23s         Checking existence of `"home.settings" Button`
+    t =   274.95s Added attachment named '11-home-fixtures__01-midseason-top'
+    t =   274.96s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   274.96s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   274.97s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   275.57s     Check for interrupting elements affecting "myTeams" Application
+    t =   276.73s     Synthesize event
+    t =   277.20s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   281.15s Added attachment named '11-home-fixtures__02-midseason-scroll1'
+    t =   281.18s Swipe up Target Application 'PolarReailty.Hawk-Nation'
+    t =   281.18s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   281.20s     Find the Target Application 'PolarReailty.Hawk-Nation'
+    t =   281.66s     Check for interrupting elements affecting "myTeams" Application
+    t =   282.04s     Synthesize event
+    t =   282.53s     Wait for PolarReailty.Hawk-Nation to idle
+    t =   286.40s Added attachment named '11-home-fixtures__03-midseason-scroll2'
+    t =   286.45s Terminate PolarReailty.Hawk-Nation:39596
+    t =   287.57s Tear Down
+Test Case '-[myTeamsUITests.GUIAuditScreenshotTests test11_HomeRedesign]' passed (289.517 seconds).
+Test Suite 'GUIAuditScreenshotTests' passed at 2026-10-16 02:14:11.682.
+	 Executed 1 test, with 0 failures (0 unexpected) in 289.517 (289.522) seconds
+Test Suite 'myTeamsUITests.xctest' passed at 2026-10-16 02:14:11.684.
+	 Executed 1 test, with 0 failures (0 unexpected) in 289.517 (289.524) seconds
+Test Suite 'Selected tests' passed at 2026-10-16 02:14:11.685.
+	 Executed 1 test, with 0 failures (0 unexpected) in 289.517 (289.529) seconds
+2026-10-16 02:14:13.010 xcodebuild[33210:90293] [MT] IDETestOperationsObserverDebug: 328.471 elapsed -- Testing started completed.
+2026-10-16 02:14:13.010 xcodebuild[33210:90293] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-16 02:14:13.010 xcodebuild[33210:90293] [MT] IDETestOperationsObserverDebug: 328.471 sec, +328.471 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/MyTeams/MyTeams/audit.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
