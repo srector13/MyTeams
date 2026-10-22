@@ -403,3 +403,159 @@ struct GameSheetStoryTests {
         #expect(GameSheetPlayer(athleteID: "", soccerLineups: nil, hockey: hockey) == nil)
     }
 }
+
+// MARK: - The sheet's timeline (G3, G6) and win-probability marks (G4)
+
+@Suite("Game sheet timeline lines")
+struct GameSheetTimelineLineTests {
+    private func event(_ id: String) -> TimelineEvent {
+        TimelineEvent(
+            id: id, period: 1, periodLabel: "", clock: "", teamID: "", homeAway: "",
+            kind: .score, text: "", athleteIDs: [], homeScore: nil, awayScore: nil
+        )
+    }
+
+    @Test("Five events show by default, the latest; all of them once expanded")
+    func collapsedTimeline() {
+        #expect(GameStoryView.collapsedCount == 5)
+        let events = (1...11).map { event("\($0)") }
+        #expect(GameStoryView.visibleEvents(events, showsAll: false).map(\.id) == ["7", "8", "9", "10", "11"])
+        #expect(GameStoryView.visibleEvents(events, showsAll: true).count == 11)
+        // No more than five: nothing to collapse.
+        let short = Array(events.prefix(5))
+        #expect(GameStoryView.visibleEvents(short, showsAll: false).count == 5)
+    }
+
+    @Test("Score deltas only where a score can be worth more than one")
+    func pointDeltas() {
+        #expect(GameStoryView.showsPointDeltas(.football))
+        #expect(GameStoryView.showsPointDeltas(.basketball))
+        #expect(GameStoryView.showsPointDeltas(.baseball))
+        #expect(!GameStoryView.showsPointDeltas(.soccer))
+        #expect(!GameStoryView.showsPointDeltas(.hockey))
+    }
+
+    @Test("Soccer minutes take a prime")
+    func soccerMinute() {
+        #expect(TimelineEvent.soccerMinute("10'") == "10\u{2032}")
+        #expect(TimelineEvent.soccerMinute("90'+5'") == "90+5\u{2032}")
+        #expect(TimelineEvent.soccerMinute("45'+1'") == "45+1\u{2032}")
+        #expect(TimelineEvent.soccerMinute("") == "")
+    }
+
+    /// epl_summary_final_401879301: Arsenal (home) 3–0 Coventry City.
+    @Test("EPL: one line per goal or card, the followed team's score first")
+    func eplLines() throws {
+        let story = try story("epl_summary_final_401879301")
+        let timeline = story.timeline
+
+        let goal = try #require(timeline.first)
+        #expect(goal.athleteNames == ["Kai Havertz", "Riccardo Calafiori"])
+        #expect(goal.detail == "")
+        let home = SoccerEventLine(event: goal, teamAbbreviation: story.abbreviation(teamID: goal.teamID), followedIsHome: true)
+        #expect(home.minute == "15\u{2032}")
+        #expect(home.glyph == .goal)
+        #expect(home.title == "Kai Havertz")
+        #expect(home.caption == "Assist Riccardo Calafiori · ARS")
+        #expect(home.score == "1–0")
+        // Followed from Coventry's side, the same goal reads 0–1.
+        let away = SoccerEventLine(event: goal, teamAbbreviation: "ARS", followedIsHome: false)
+        #expect(away.score == "0–1")
+
+        let saka = SoccerEventLine(event: timeline[1], teamAbbreviation: "ARS", followedIsHome: true)
+        #expect(saka.title == "Bukayo Saka")
+        #expect(saka.caption == "ARS")
+        #expect(saka.score == "2–0")
+
+        let card = SoccerEventLine(event: timeline[2], teamAbbreviation: story.abbreviation(teamID: timeline[2].teamID), followedIsHome: true)
+        #expect(card.minute == "27\u{2032}")
+        #expect(card.glyph == .yellowCard)
+        #expect(card.title == "Caleb Yirenkyi")
+        #expect(card.caption == "Yellow card · COV")
+        #expect(card.score == nil)
+        // No commentary in the line.
+        #expect(!card.accessibilityText.contains("bad foul"))
+        #expect(card.accessibilityText == "Yellow card, minute 27, Caleb Yirenkyi, Yellow card · COV")
+    }
+
+    /// bundes_summary_final_401884790: Kane's penalty (39') and header (54').
+    @Test("Bundesliga: a penalty and a header name how the goal went in")
+    func goalDetails() throws {
+        let timeline = try story("bundes_summary_final_401884790").timeline
+        let penalty = try #require(timeline.first { $0.detail == "Penalty" })
+        #expect(penalty.clock == "39'")
+        #expect(SoccerEventLine(event: penalty, teamAbbreviation: "MUN", followedIsHome: true).caption == "Penalty · MUN")
+
+        let header = try #require(timeline.first { $0.detail == "Header" })
+        #expect(header.clock == "54'")
+        let line = SoccerEventLine(event: header, teamAbbreviation: "MUN", followedIsHome: true)
+        #expect(line.title == "Harry Kane")
+        #expect(line.caption == "Header · assist Michael Olise · MUN")
+    }
+
+    @Test("A goal the feed names no one for still reads")
+    func unnamedGoal() {
+        var goal = event("1")
+        goal.clock = "3'"
+        goal.homeScore = 0
+        goal.awayScore = 1
+        let line = SoccerEventLine(event: goal, teamAbbreviation: "", followedIsHome: false)
+        #expect(line.title == "Goal")
+        #expect(line.caption == "")
+        #expect(line.score == "1–0")
+    }
+
+    @Test("Other sports' running scores read the followed team's first")
+    func teamFirstScores() throws {
+        // Colts (away) scored first at Arrowhead: 0–7 for the Chiefs.
+        let first = try #require(try story("chiefs_summary_final_401872945").timeline.first)
+        #expect(teamFirstRunningScore(first, followedIsHome: true) == "0–7")
+        #expect(teamFirstRunningScore(first, followedIsHome: false) == "7–0")
+    }
+}
+
+@Suite("Game sheet win-probability marks")
+struct WinProbabilityMarkTests {
+    @Test("Each point carries its play's period, from plays or drives", arguments: [
+        ("chiefs_summary_final_401872945", [1, 2, 3, 4, 5], [1, 40, 94, 131, 178]),
+        ("nba_summary_final_401811028", [1, 2, 3, 4], [0, 109, 231, 358]),
+        ("ncaaf_summary_final_401856769", [1, 2, 3, 4], [1, 42, 95, 132]),
+        ("royals_summary_final_401817094", Array(1...9), [0, 10, 22, 29, 35, 41, 50, 57, 68]),
+    ] as [(String, [Int], [Int])])
+    func periodStarts(fixture: String, periods: [Int], indices: [Int]) throws {
+        let starts = try story(fixture).winProbabilityPeriodStarts
+        #expect(starts.map(\.period) == periods)
+        #expect(starts.map(\.index) == indices)
+    }
+
+    @Test("NFL: quarters, then overtime, centred over each stretch")
+    func nflMarks() throws {
+        let story = try story("chiefs_summary_final_401872945")
+        let marks = WinProbabilityMarks(
+            starts: story.winProbabilityPeriodStarts,
+            pointCount: story.winProbability.count,
+            style: .quarters
+        )
+        #expect(marks.labels == ["Q1", "Q2", "Q3", "Q4", "OT"])
+        #expect(marks.boundaries == [40, 94, 131, 178])
+        #expect(marks.centers == [20, 67, 112.5, 154.5, 194])
+        #expect(marks.label(at: 9) == "")
+    }
+
+    @Test("Labels per sport")
+    func labels() {
+        #expect(WinProbabilityMarks.label(period: 2, style: .halves) == "H2")
+        #expect(WinProbabilityMarks.label(period: 3, style: .halves) == "OT")
+        #expect(WinProbabilityMarks.label(period: 6, style: .quarters) == "2OT")
+        #expect(WinProbabilityMarks.label(period: 7, style: .unnamed) == "7")
+        #expect(WinProbabilityMarks.label(period: 3, style: .periods) == "P3")
+    }
+
+    @Test("No marks without placed points")
+    func empty() {
+        let marks = WinProbabilityMarks(starts: [], pointCount: 10, style: .quarters)
+        #expect(marks == WinProbabilityMarks(starts: [], pointCount: 0, style: .halves))
+        #expect(marks.labels.isEmpty)
+        #expect(marks.boundaries.isEmpty)
+    }
+}
