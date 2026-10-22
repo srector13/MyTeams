@@ -252,3 +252,47 @@ func scheduleForm(games: [Game], league: LeagueID, last: Int = 5, now: Date = Da
         .map(\.element.outcome)
     return Array(ordered.suffix(last))
 }
+
+/// One way of writing a score everywhere it appears (a schedule card, a
+/// game log row, a game sheet, a Home card): the followed team's score
+/// first, an en dash between, and the result's letter in front where there
+/// is one, so "W 30–27" and "L 0–4" read the same on every screen. The
+/// feeds disagree (a game log puts the winner first, "4-0" for a 0-4
+/// loss), so everything goes through here.
+enum ScoreLine {
+    /// The en dash between two scores.
+    static let separator = "–"
+
+    /// `team` then `opponent`: "30–27".
+    static func score(team: String, opponent: String) -> String {
+        "\(team)\(separator)\(opponent)"
+    }
+
+    /// The result's letter and the score, team first: "W 30–27". No
+    /// letter, no prefix.
+    static func result(_ letter: String, team: String, opponent: String) -> String {
+        let trimmed = letter.trimmingCharacters(in: .whitespaces)
+        let line = score(team: team, opponent: opponent)
+        return trimmed.isEmpty ? line : "\(trimmed) \(line)"
+    }
+
+    /// A feed's winner-first score ("33-30", "33-30 OT", "4-0") turned team
+    /// first for the team's `result` letter: a loss's two numbers swap, a
+    /// win's and a draw's stay; any suffix ("OT", "SO", "(5-4 PEN)") is
+    /// kept. A score that isn't two numbers comes back as it was, with an
+    /// en dash for a hyphen.
+    static func teamFirst(winnerFirst: String, result: String) -> String {
+        let text = winnerFirst.trimmingCharacters(in: .whitespaces)
+        let head = text.prefix { $0.isNumber || $0 == "-" || $0 == "–" }
+        let parts = head.split(whereSeparator: { $0 == "-" || $0 == "–" })
+        guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }) else {
+            return text.replacingOccurrences(of: "-", with: separator)
+        }
+        let suffix = text.dropFirst(head.count).trimmingCharacters(in: .whitespaces)
+        let isLoss = result.trimmingCharacters(in: .whitespaces).uppercased().hasPrefix("L")
+        let first = isLoss ? String(parts[1]) : String(parts[0])
+        let second = isLoss ? String(parts[0]) : String(parts[1])
+        let line = score(team: first, opponent: second)
+        return suffix.isEmpty ? line : "\(line) \(suffix)"
+    }
+}

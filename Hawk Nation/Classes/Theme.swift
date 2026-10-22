@@ -94,6 +94,43 @@ enum Theme {
         static var chrome: Glass { .regular }
     }
 
+    /// Text colours beyond the system's label hierarchy.
+    enum Palette {
+        /// Small grey text: dates, venues, bylines, captions and figure
+        /// labels at footnote size and below. The system's secondary label
+        /// (#8A8A8E, 3.4:1 on white and 3.3:1 on a grouped card) is below
+        /// WCAG AA at those sizes; this reaches 5.2:1 on white and 4.7:1 on
+        /// a grouped card in light mode, and 6.0:1 on the dark inset card.
+        /// Increase Contrast darkens it further, as it does the system's.
+        /// Keep `.secondary` for large titles, where 3:1 is enough.
+        static let metadataLightHex = "6C6C70"
+        static let metadataDarkHex = "AEAEB2"
+        static let metadataLightHighContrastHex = "48484A"
+        static let metadataDarkHighContrastHex = "D1D1D6"
+
+        static let metadata: Color = {
+            let light = hexColor(metadataLightHex)
+            let dark = hexColor(metadataDarkHex)
+            let lightHigh = hexColor(metadataLightHighContrastHex)
+            let darkHigh = hexColor(metadataDarkHighContrastHex)
+            return Color(uiColor: UIColor { traits in
+                let high = traits.accessibilityContrast == .high
+                if traits.userInterfaceStyle == .dark { return high ? darkHigh : dark }
+                return high ? lightHigh : light
+            })
+        }()
+
+        private static func hexColor(_ hex: String) -> UIColor {
+            let value = UInt32(hex, radix: 16) ?? 0
+            return UIColor(
+                red: CGFloat((value >> 16) & 0xFF) / 255,
+                green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255,
+                alpha: 1
+            )
+        }
+    }
+
     /// The widest a page's column of content runs (B-14): about a
     /// readable line's width. An iPhone's screen is narrower, so it only
     /// caps an iPad's, where rows and cards ran the width of the screen.

@@ -218,6 +218,88 @@ enum TeamColors {
         return .dark
     }
 
+    /// The grouped surfaces a team accent (a bar, a dash, a track's fill, a
+    /// followed row's tint) is drawn on: the lighter of the two in light
+    /// mode and the lighter of the two in dark (the inset card), which are
+    /// the harder of each pair to stand out on.
+    static let lightAccentSurfaceHex = "F2F2F7"
+    static let darkAccentSurfaceHex = "2C2C2E"
+
+    /// WCAG's bar for marks that aren't text (bars, rules, outlines).
+    static let minimumAccentContrast = 3.0
+
+    /// `hex` moved `fraction` of the way to `target`, channel by channel.
+    static func mixHex(_ hex: String, toward target: String, by fraction: Double) -> String {
+        func channels(_ hex: String) -> [Double]? {
+            let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines).trimmingPrefix("#")
+            guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+            return [Double((value >> 16) & 0xFF), Double((value >> 8) & 0xFF), Double(value & 0xFF)]
+        }
+        guard let from = channels(hex), let to = channels(target) else { return hex }
+        let t = min(max(fraction, 0), 1)
+        return zip(from, to)
+            .map { String(format: "%02X", Int(($0 + ($1 - $0) * t).rounded())) }
+            .joined()
+    }
+
+    /// A colour's hue in degrees, or `nil` for a grey (or not a colour).
+    static func hue(hex: String) -> Double? {
+        let digits = hex.trimmingCharacters(in: .whitespacesAndNewlines).trimmingPrefix("#")
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        let r = Double((value >> 16) & 0xFF) / 255
+        let g = Double((value >> 8) & 0xFF) / 255
+        let b = Double(value & 0xFF) / 255
+        let high = max(r, g, b), low = min(r, g, b), spread = high - low
+        guard spread > 0.08 else { return nil }
+        let raw: Double
+        if high == r { raw = (g - b) / spread }
+        else if high == g { raw = (b - r) / spread + 2 }
+        else { raw = (r - g) / spread + 4 }
+        let degrees = raw * 60
+        return degrees < 0 ? degrees + 360 : degrees
+    }
+
+    /// A team accent that reads on `surfaceHex` (3:1, `minimumAccentContrast`):
+    /// the team colour when it already does; else its alternate colour when
+    /// that does and is the same family of colour (within 30° of hue, so a
+    /// navy's light blue, never a red's gold); else the team colour moved
+    /// towards white on a dark surface, or black on a light one, until it
+    /// does. Navy, the Royals' blue and the Jayhawks' blue vanish on a
+    /// dark card at their own strength (1.0 to 1.9:1).
+    static func accentHex(_ baseHex: String, alternate: String? = nil, on surfaceHex: String) -> String {
+        if let ratio = contrastRatio(baseHex, surfaceHex), ratio >= minimumAccentContrast { return baseHex }
+        if let alternate,
+           let ratio = contrastRatio(alternate, surfaceHex), ratio >= minimumAccentContrast,
+           let baseHue = hue(hex: baseHex), let alternateHue = hue(hex: alternate) {
+            let gap = abs(baseHue - alternateHue)
+            if min(gap, 360 - gap) <= 30 { return alternate }
+        }
+        let target = (relativeLuminance(hex: surfaceHex) ?? 0) < 0.5 ? "FFFFFF" : "000000"
+        for step in 1...20 {
+            let candidate = mixHex(baseHex, toward: target, by: Double(step) / 20)
+            if let ratio = contrastRatio(candidate, surfaceHex), ratio >= minimumAccentContrast {
+                return candidate
+            }
+        }
+        return target
+    }
+
+    /// The team's accent for marks on content cards: `accentHex(_:alternate:on:)`
+    /// against the light grouped surface in light mode and the dark one in
+    /// dark mode, so a team-colour bar, dash, track or row tint stays
+    /// visible in both.
+    static func accent(for team: TeamRef) -> Color {
+        let fill = fillHex(for: team)
+        let alternate = team.alternateColorHex
+        let light = accentHex(fill, alternate: alternate, on: lightAccentSurfaceHex)
+        let dark = accentHex(fill, alternate: alternate, on: darkAccentSurfaceHex)
+        let lightColor = UIColor(Color(hexString: light))
+        let darkColor = UIColor(Color(hexString: dark))
+        return Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? darkColor : lightColor
+        })
+    }
+
     /// The SF Symbol badging a team with no abbreviation.
     static func symbolName(for kind: SportKind) -> String {
         switch kind {

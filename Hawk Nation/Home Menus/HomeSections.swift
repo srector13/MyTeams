@@ -1272,10 +1272,56 @@ struct TeamPageHeader: View {
 }
 
 /// One result in a form guide: its letter in a small capsule.
+///
+/// Given the colour it sits on (`ink` and `fill`), a win is a solid ink
+/// pill with its letter cut out in the fill, a loss an ink outline and a
+/// draw a faint ink wash, so the three read apart at a glance and the win's
+/// letter clears 4.5:1 (the translucent capsules measured 3.3:1 on red).
+/// Without them it keeps the older translucent look, in the inherited
+/// foreground style.
 struct FormCapsule: View {
     let outcome: Record.Outcome
+    /// The header's text colour, which the pill is drawn in.
+    var ink: Color?
+    /// The colour behind the pill, which a win's letter is drawn in.
+    var fill: Color?
+
+    init(outcome: Record.Outcome, ink: Color? = nil, fill: Color? = nil) {
+        self.outcome = outcome
+        self.ink = ink
+        self.fill = fill
+    }
 
     var body: some View {
+        if let ink, let fill {
+            solid(ink: ink, fill: fill)
+        } else {
+            translucent
+        }
+    }
+
+    /// A fixed circle a little over the letter's height, so a row of them
+    /// lines up; it grows with Dynamic Type.
+    @ScaledMetric(relativeTo: .caption2) private var diameter: CGFloat = 20
+
+    private func solid(ink: Color, fill: Color) -> some View {
+        Text(outcome.letter)
+            .font(.caption2.weight(.heavy))
+            .foregroundStyle(outcome == .win ? fill : ink)
+            .frame(minWidth: diameter, minHeight: diameter)
+            .background {
+                switch outcome {
+                case .win:
+                    Capsule().fill(ink)
+                case .draw:
+                    Capsule().fill(ink.opacity(0.22))
+                case .loss:
+                    Capsule().strokeBorder(ink, lineWidth: 1.25)
+                }
+            }
+    }
+
+    private var translucent: some View {
         Text(outcome.letter)
             .font(.caption2.weight(.bold))
             .monospaced()
@@ -1341,5 +1387,30 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
             .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)
             .background(Theme.Surface.content, in: Theme.Radius.pageShape)
         }
+    }
+}
+
+/// The one way a section header offers more (F6): a text button, "See All"
+/// and a chevron, in the accent, trailing the title. At least 44 pt tall.
+/// Icons stay for what filters or sorts a section in place.
+struct SeeAllLink: View {
+    var title: String = "See All"
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 2) {
+                Text(title)
+                Image(systemName: "chevron.forward")
+                    .font(.footnote.weight(.semibold))
+                    .imageScale(.small)
+            }
+            .font(.body)
+            .frame(minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityIdentifier(identifier)
     }
 }
