@@ -428,7 +428,7 @@ struct GameLogTests {
         let regular = log.rows[6]
         #expect(regular.id == "401811028")
         #expect(regular.seasonType == "2025-26 Regular Season")
-        #expect(regular.opponentAbbreviation == "CLE" && regular.resultSummary == "W 124-102")
+        #expect(regular.opponentAbbreviation == "CLE" && regular.resultSummary == "W 124–102")
         #expect(regular.note.isEmpty)
 
         #expect(log.rows.last?.id == "401812679")
@@ -451,7 +451,7 @@ struct GameLogTests {
         #expect(latest.date == utc(1_790_536_200))  // 2026-09-27T19:10:00.000+00:00
         #expect(latest.opponentID == "5" && latest.opponentAbbreviation == "CLE")
         #expect(latest.isHome)
-        #expect(latest.resultSummary == "W 3-2")
+        #expect(latest.resultSummary == "W 3–2")
         #expect(latest.stats["atBats"] == "4")
         #expect(latest.stats["hits"] == "0")
         #expect(latest.stats["avg"] == ".281")
@@ -459,7 +459,7 @@ struct GameLogTests {
 
         let previous = log.rows[1]
         #expect(previous.date == utc(1_790_464_200))  // 2026-09-26T23:10:00.000+00:00
-        #expect(previous.resultSummary == "L 11-5")
+        #expect(previous.resultSummary == "L 5–11")
         #expect(previous.stats["hits"] == "2" && previous.stats["doubles"] == "1")
 
         #expect(log.headlineColumns.map(\.id) == ["atBats", "hits", "homeRuns", "RBIs"])
