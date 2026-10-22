@@ -437,3 +437,15 @@ struct HomeFeedTests {
         #expect(HomeFeed.combinedState([.failed, .failed]) == .failed)
     }
 }
+
+@Suite("Home iPad performer grid")
+struct HomePerformerGridTests {
+    @Test("Four performers make a 2 × 2, never 3 + 1; three or fewer sit in one row")
+    func columns() {
+        #expect(HomeView.performerGridColumns(for: 1) == 1)
+        #expect(HomeView.performerGridColumns(for: 3) == 3)
+        #expect(HomeView.performerGridColumns(for: 4) == 2)
+        #expect(HomeView.performerGridColumns(for: 5) == 3)
+        #expect(HomeView.performerGridColumns(for: 6) == 3)
+    }
+}

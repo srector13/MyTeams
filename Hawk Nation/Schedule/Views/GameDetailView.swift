@@ -71,8 +71,10 @@ struct GameDetailView: View {
     /// The followed team's name beside its crest: the schedule feed's name
     /// for it, from the same field as the opponent's name opposite, or the
     /// catalog's short name when the feed gave none.
+    /// The followed team as the rest of the app names it ("Sporting", as
+    /// in its tab), else the feed's name for it ("Kansas City").
     private var teamLabel: String {
-        game.team.isEmpty ? team.shortName : game.team
+        team.shortName.isEmpty ? game.team : team.shortName
     }
 
     /// The opponent's side in the summary's header: its abbreviation and

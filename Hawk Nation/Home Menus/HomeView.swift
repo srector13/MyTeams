@@ -698,7 +698,10 @@ private struct HomeDashboard: View {
                     }
                 } else if isRegular {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: Self.performerGridMinimum), spacing: Theme.Spacing.m, alignment: .top)],
+                        columns: Array(
+                            repeating: GridItem(.flexible(minimum: Self.performerGridMinimum), spacing: Theme.Spacing.m, alignment: .top),
+                            count: Self.performerGridColumns(for: performers.count)
+                        ),
                         spacing: Theme.Spacing.m
                     ) {
                         ForEach(performers) { performer in
@@ -720,6 +723,16 @@ private struct HomeDashboard: View {
     /// The narrowest a performer's column runs in the iPad's grid: a
     /// leader card's width.
     private static let performerGridMinimum: CGFloat = 120
+
+    /// The iPad grid's columns for `count` performers: three across, or
+    /// two where three would leave one card alone on the last row (four
+    /// performers make a 2 × 2, not 3 + 1, F7). Never more columns than
+    /// cards.
+    nonisolated static func performerGridColumns(for count: Int) -> Int {
+        guard count > 1 else { return 1 }
+        if count <= 3 { return count }
+        return count % 3 == 1 && count % 2 == 0 ? 2 : 3
+    }
 
     private func performerButton(_ performer: HomePerformer) -> some View {
         Button {
