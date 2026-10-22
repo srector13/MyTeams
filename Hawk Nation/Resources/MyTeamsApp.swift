@@ -52,12 +52,20 @@ struct MyTeamsApp: App {
     var body: some Scene {
         WindowGroup {
             Home(deepLinkedTeamID: $deepLinkedTeamID, deepLinkedGame: $deepLinkedGame)
+                // The theme's own accent as the tint, by colour rather than
+                // `.accentColor`, so every button, toggle and checkmark, and
+                // the sheets Home opens, take the chosen theme and never
+                // the system's blue (O3). `brandTheme(_:)` below sets the
+                // same for the rest, and the window's UIKit tint.
+                .tint(brandTheme.swatchColor)
                 // Accessibility settings a UI test asked for at launch;
                 // nothing otherwise (`Theme.LaunchAccessibility`).
                 .launchAccessibilityOverrides()
-                // Once, on a fresh install: the walkthrough, then the
-                // theme step. Inside the theme's root modifier, so its
-                // tiles and logo follow the choice as it is made.
+                // Once, on a fresh install: the walkthrough, the theme
+                // step, then for a reader following no team the teams
+                // step. Inside the theme's root modifier, so its tiles and
+                // logo follow the choice as it is made; the flow tints
+                // itself in the theme too (O3).
                 .sheet(isPresented: Binding(
                     get: { !themeOnboardingCompleted },
                     set: { presented in

@@ -201,6 +201,21 @@ struct BrowsableSport: Identifiable, Hashable, Sendable {
         }
         return order.map { BrowsableSport(kind: $0, leagues: leagues[$0] ?? []) }
     }()
+
+    /// `labels` as one line, "NBA · WNBA · NCAAM", that wraps only after a
+    /// separator, never before one or inside a league's name: each name
+    /// and the dot after it are held together by no-break spaces, so no
+    /// line starts with "·" (S4).
+    static func leagueList(_ labels: [String]) -> String {
+        labels
+            .map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }
+            .joined(separator: "\u{00A0}· ")
+    }
+
+    /// This sport's leagues as `leagueList(_:)` writes them.
+    var leagueLine: String {
+        Self.leagueList(leagues.map(\.label))
+    }
 }
 
 // MARK: - Conference sections
@@ -251,8 +266,24 @@ struct ConferenceSection: Identifiable, Hashable, Sendable {
 ///
 /// With the search field focused and empty, the teams last followed from a
 /// search are offered under "Recent" (`RecentSearches`, C-7).
+///
+/// Also onboarding's last step, "Pick Your Teams" (O5), given `onboarding`:
+/// the same sports, search and rows, the picks under "Picked", and in place
+/// of the Done checkmark a Skip, and a Done below that stays disabled until
+/// a team is picked (`OnboardingTeamsStep`).
 struct TeamBrowserView: View {
     var title = "Teams"
+    /// Set when the picker is onboarding's last step; `nil` everywhere else.
+    var onboarding: OnboardingTeams? = nil
+
+    /// What onboarding's teams step does when it's left.
+    struct OnboardingTeams {
+        /// Done, with at least one team picked: the picks are already
+        /// followed, as everywhere in the picker.
+        let onDone: @MainActor () -> Void
+        /// Skip: leaves for Home with whatever is followed, maybe nothing.
+        let onSkip: @MainActor () -> Void
+    }
 
     /// A screen pushed onto the picker's stack.
     enum Route: Hashable {
@@ -261,6 +292,10 @@ struct TeamBrowserView: View {
     }
 
     @Environment(\.dismiss) private var dismiss
+
+    /// The brand theme, whose accent tints the picker however it's
+    /// presented, never the system's blue (O3).
+    @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
 
     @State private var path: [Route] = []
     @State private var catalogs: [LeagueID: [TeamRef]] = [:]
@@ -293,6 +328,16 @@ struct TeamBrowserView: View {
         return nil
     }
 
+    /// The reader's teams' header: "Picked" in onboarding (O5).
+    private var myTeamsHeader: String {
+        onboarding == nil ? "My Teams" : "Picked"
+    }
+
+    /// The sports' header: "Browse by Sport" in onboarding (O5).
+    private var sportsHeader: String {
+        onboarding == nil ? "Sports" : "Browse by Sport"
+    }
+
     /// `league`'s teams, alphabetical by location.
     private func teams(in league: LeagueID) -> [TeamRef] {
         (catalogs[league] ?? []).sorted {
@@ -309,10 +354,24 @@ struct TeamBrowserView: View {
     var body: some View {
         NavigationStack(path: $path) {
             // Edit only once there's an order to change or a team to remove
-            // in bulk: an empty list has nothing to edit.
-            page(title, showsEditButton: myTeams.count > 1) {
+            // in bulk: an empty list has nothing to edit. Onboarding's picks
+            // are a short list, removed with a tap or a swipe.
+            page(
+                onboarding == nil ? title : OnboardingTeamsStep.title,
+                showsEditButton: onboarding == nil && myTeams.count > 1,
+                isRoot: true
+            ) {
+                if onboarding != nil {
+                    Section {
+                        Text(OnboardingTeamsStep.caption)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityIdentifier("onboarding.teams")
+                }
+
                 if !myTeams.isEmpty {
-                    Section("My Teams") {
+                    Section(myTeamsHeader) {
                         ForEach(myTeams) { team in
                             row(team)
                                 .swipeActions {
@@ -325,7 +384,7 @@ struct TeamBrowserView: View {
                     }
                 }
 
-                Section("Sports") {
+                Section(sportsHeader) {
                     ForEach(BrowsableSport.all) { sport in
                         NavigationLink(value: Route.sport(sport.kind)) {
                             sportRow(sport)
@@ -367,6 +426,7 @@ struct TeamBrowserView: View {
         // Full height, however it was opened: a searchable list
         // of every league's teams has no useful partial height (X-9).
         .presentationDetents([.large])
+        .tint(theme.swatchColor)
     }
 
     // MARK: Pages
@@ -374,13 +434,17 @@ struct TeamBrowserView: View {
     /// One page of the picker: `content`, or the search results while there
     /// is a query, under the shared search field and Done button. With the
     /// field focused and still empty, recent searches come first.
+    /// In onboarding (`onboarding`) the search field stays in view under
+    /// the title, Skip leads the first page in place of the checkmark, and
+    /// Done sits below every page.
     private func page<Content: View>(
         _ title: String,
         showsEditButton: Bool = false,
+        isRoot: Bool = false,
         @ViewBuilder content: () -> Content
     ) -> some View {
         let rows = content()
-        return List {
+        return withOnboardingDoneBar(List {
             if isSearching {
                 searchResults
             } else {
@@ -390,7 +454,12 @@ struct TeamBrowserView: View {
                 rows
             }
         }
-        .searchable(text: $query, isPresented: $isSearchPresented, prompt: "Search all teams")
+        .searchable(
+            text: $query,
+            isPresented: $isSearchPresented,
+            placement: onboarding == nil ? .automatic : .navigationBarDrawer(displayMode: .always),
+            prompt: "Search all teams"
+        )
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -399,17 +468,71 @@ struct TeamBrowserView: View {
                     EditButton()
                 }
             }
-            ToolbarItem(placement: .confirmationAction) {
-                // Following applies as it's tapped, so this confirms
-                // the picks: the system's glass checkmark (X-8).
-                Button(role: .confirm) {
-                    dismiss()
-                } label: {
-                    Label("Done", systemImage: "checkmark")
+            if let onboarding, isRoot {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Skip") {
+                        onboarding.onSkip()
+                    }
+                    .accessibilityHint("Goes to Home without picking a team. You can add teams there.")
+                    .accessibilityIdentifier("onboarding.teams.skip")
                 }
-                .accessibilityIdentifier("teamBrowser.done")
+            }
+            // Onboarding finishes with its own Done, below the list.
+            if onboarding == nil {
+                ToolbarItem(placement: .confirmationAction) {
+                    // Following applies as it's tapped, so this confirms
+                    // the picks: the system's glass checkmark (X-8).
+                    Button(role: .confirm) {
+                        dismiss()
+                    } label: {
+                        Label("Done", systemImage: "checkmark")
+                    }
+                    .accessibilityIdentifier("teamBrowser.done")
+                }
+            }
+        })
+    }
+
+    /// `page` with onboarding's Done below it; `page` alone otherwise.
+    @ViewBuilder
+    private func withOnboardingDoneBar(_ page: some View) -> some View {
+        if let onboarding {
+            page.safeAreaBar(edge: .bottom) {
+                onboardingDoneBar(onboarding)
+            }
+        } else {
+            page
+        }
+    }
+
+    /// Onboarding's Done, always in reach: disabled until a team is
+    /// picked, then counting the picks (`OnboardingTeamsStep`).
+    private func onboardingDoneBar(_ onboarding: OnboardingTeams) -> some View {
+        let picked = store.teamIDs.count
+        let canFinish = OnboardingTeamsStep.canFinish(pickedCount: picked)
+        return VStack(spacing: Theme.Spacing.xs) {
+            Button {
+                onboarding.onDone()
+            } label: {
+                Text(OnboardingTeamsStep.doneTitle(pickedCount: picked))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .disabled(!canFinish)
+            .accessibilityHint(canFinish ? "Goes to Home with your teams." : "Pick a team first.")
+            .accessibilityIdentifier("onboarding.teams.done")
+
+            if !canFinish {
+                Text(OnboardingTeamsStep.disabledNote)
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.metadata)
+                    .multilineTextAlignment(.center)
             }
         }
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.m)
     }
 
     /// A sport's leagues.
@@ -506,12 +629,14 @@ struct TeamBrowserView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(sport.kind.browserTitle)
                     .font(.headline)
-                Text(sport.leagues.map(\.label).joined(separator: " · "))
+                // Wraps between leagues only, never before a "·" (S4).
+                Text(sport.leagueLine)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                // Information, so the readable grey, not tertiary (F1, S4).
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.Palette.metadata)
             }
 
             Spacer(minLength: 0)
@@ -635,7 +760,7 @@ struct TeamBrowserView: View {
                         .foregroundStyle(Color.primary)
                     Text("“\(recent.query)”")
                         .font(.caption)
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
                 }
 
                 Spacer(minLength: 0)
@@ -693,7 +818,7 @@ struct TeamBrowserView: View {
                     .font(.caption2.weight(.semibold))
                     .padding(.vertical, 2)
                     .padding(.horizontal, 6)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .background(Color.secondary.opacity(0.15))
                     .clipShape(.capsule)
 
@@ -704,7 +829,7 @@ struct TeamBrowserView: View {
                         .font(.caption2.weight(.semibold))
                         .padding(.vertical, 2)
                         .padding(.horizontal, 6)
-                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                        .foregroundStyle(Theme.Palette.metadata)
                         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
                 }
 

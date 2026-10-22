@@ -9,16 +9,18 @@
 import SwiftUI
 
 /// The first-launch walkthrough: a few pages that show what the app does,
-/// before the theme step (`ThemeOnboarding`) that ends the flow.
+/// before the theme step (`ThemeOnboarding`) and, for a reader who follows
+/// no team yet, the teams step (`OnboardingTeamsStep`) that end the flow.
 ///
 /// It has no flag of its own. It is offered whenever the theme step is
 /// (`ThemeOnboarding.isPending`), so an install that predates the flow, or
 /// has finished it, sees neither.
 enum OnboardingWalkthrough {
-    /// A page of the walkthrough, in order.
+    /// A page of the walkthrough, in order. The game page leads: it shows
+    /// Home's Next Up hero as the reader will see it (O1).
     enum Page: Int, CaseIterable, Identifiable, Sendable {
-        case roster
         case schedule
+        case roster
         case stats
 
         var id: Self { self }
@@ -28,16 +30,16 @@ enum OnboardingWalkthrough {
 
         var headline: String {
             switch self {
-            case .roster: "Know Your Roster"
             case .schedule: "Never Miss a Game"
+            case .roster: "Know Your Roster"
             case .stats: "Follow the Numbers"
             }
         }
 
         var caption: String {
             switch self {
+            case .schedule: "A countdown to your team's next game, live scores while it's on, and the final when it ends."
             case .roster: "Browse every player on your team, with numbers and positions."
-            case .schedule: "Upcoming games and final scores, all at a glance."
             case .stats: "Player and team stats, from leaders to box scores."
             }
         }
@@ -58,42 +60,91 @@ enum OnboardingWalkthrough {
         }
     }
 
-    /// Where the flow is: a walkthrough page, or the theme step after them.
+    /// Where the flow is: a walkthrough page, the theme step after them,
+    /// or the teams step after that.
     enum Step: Hashable, Sendable {
         case walkthrough(Page)
         case theme
+        case teams
 
         /// Where the flow opens.
-        static let first = Step.walkthrough(.roster)
+        static let first = Step.walkthrough(.schedule)
 
-        /// The page shown, or `nil` on the theme step.
+        /// The page shown, or `nil` on the theme and teams steps.
         var page: Page? {
             if case .walkthrough(let page) = self { page } else { nil }
         }
 
         /// After Next or Get Started: the next page, or the theme step
-        /// after the last. The theme step finishes the flow itself.
+        /// after the last; after the theme step, the teams step, which the
+        /// flow offers only to a reader following no team
+        /// (`needsTeamsStep(followedCount:)`). The teams step finishes the
+        /// flow itself.
         var advanced: Step {
             switch self {
             case .walkthrough(let page): page.next.map(Step.walkthrough) ?? .theme
-            case .theme: .theme
+            case .theme, .teams: .teams
             }
         }
 
-        /// After Skip: straight to the theme step, which can be skipped
-        /// in its turn.
-        var skipped: Step { .theme }
+        /// After Skip: from the pages, straight to the theme step, which
+        /// can be skipped in its turn, on to the teams step.
+        var skipped: Step {
+            switch self {
+            case .walkthrough: .theme
+            case .theme, .teams: .teams
+            }
+        }
+    }
+
+    /// Whether the flow goes on to the teams step after the theme step:
+    /// only with no team followed. Favorites restored from iCloud, or set
+    /// by a UI test's launch (`FavoritesStore.launchFavoritesKey`), end the
+    /// flow at the theme step, as before the teams step existed.
+    static func needsTeamsStep(followedCount: Int) -> Bool {
+        followedCount == 0
+    }
+}
+
+/// Onboarding's last step, "Pick Your Teams" (O5): the team picker
+/// (`TeamBrowserView`, given its `onboarding`), whose Done stays disabled
+/// until a team is picked. What the step says, and that rule.
+enum OnboardingTeamsStep {
+    static let title = "Pick Your Teams"
+    static let caption = "Choose at least one. Each gets its own tab with its schedule, roster, standings and news."
+    /// Under Done while it's disabled.
+    static let disabledNote = "Done stays greyed out until you pick a team."
+
+    /// Whether Done can finish onboarding: one team picked at least.
+    static func canFinish(pickedCount: Int) -> Bool {
+        pickedCount >= 1
+    }
+
+    /// "Done", then "Done · 1 team", "Done · 2 teams" as teams are picked.
+    static func doneTitle(pickedCount: Int) -> String {
+        switch pickedCount {
+        case ..<1: "Done"
+        case 1: "Done · 1 team"
+        default: "Done · \(pickedCount) teams"
+        }
     }
 }
 
 /// The first-launch sheet: the walkthrough's pages, then the theme step
-/// (`ThemeOnboardingView`), which marks the flow complete. Not dismissable
-/// by a swipe, so leaving is always through the theme step.
+/// (`ThemeOnboardingView`), then, with no team followed yet, the teams
+/// step (`TeamBrowserView` in onboarding), after which it marks the flow
+/// complete and Home shows the picks. Not dismissable by a swipe, so
+/// leaving is always through the last step.
+///
+/// Tinted in the theme as it's chosen, so its buttons and checks are never
+/// the system's blue (O3).
 struct OnboardingFlowView: View {
-    /// Called once the theme step is finished or skipped.
+    /// Called once the flow is finished or skipped, after it is marked
+    /// complete (`ThemeOnboarding.complete`).
     let onFinish: () -> Void
 
     @State private var step = OnboardingWalkthrough.Step.first
+    @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
     private var settings = AdaptiveSettings()
 
     init(onFinish: @escaping () -> Void) {
@@ -102,26 +153,35 @@ struct OnboardingFlowView: View {
 
     var body: some View {
         Group {
-            if step.page != nil {
+            switch step {
+            case .walkthrough:
                 OnboardingWalkthroughView(
                     page: Binding(
-                        get: { step.page ?? .roster },
+                        get: { step.page ?? .schedule },
                         set: { step = .walkthrough($0) }
                     ),
                     onNext: { move(to: step.advanced) },
                     onSkip: { move(to: step.skipped) }
                 )
                 .transition(transition)
-            } else {
-                ThemeOnboardingView(onFinish: onFinish)
+            case .theme:
+                ThemeOnboardingView(onFinish: { finishTheme() })
                     .transition(transition)
+            case .teams:
+                TeamBrowserView(onboarding: TeamBrowserView.OnboardingTeams(
+                    onDone: { finish() },
+                    onSkip: { finish() }
+                ))
+                .transition(transition)
             }
         }
         .interactiveDismissDisabled()
+        .tint(theme.swatchColor)
+        .environment(\.brandTheme, theme)
     }
 
-    /// The theme step slides in after the pages, as one more page would;
-    /// under Reduce Motion it just takes their place.
+    /// Each step slides in after the last, as one more page would; under
+    /// Reduce Motion it just takes its place.
     private var transition: AnyTransition {
         settings.reduceMotion
             ? .identity
@@ -132,6 +192,22 @@ struct OnboardingFlowView: View {
         withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
             step = next
         }
+    }
+
+    /// After the theme's Continue or Skip: the teams step for a reader
+    /// following none, the end of the flow otherwise.
+    private func finishTheme() {
+        if OnboardingWalkthrough.needsTeamsStep(followedCount: FavoritesStore.shared.teamIDs.count) {
+            move(to: .teams)
+        } else {
+            finish()
+        }
+    }
+
+    /// Marks the flow complete for good, which closes the sheet.
+    private func finish() {
+        ThemeOnboarding.complete()
+        onFinish()
     }
 }
 
@@ -150,21 +226,25 @@ struct OnboardingWalkthroughView: View {
                         .tag(page)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            // The dots on a backing, so they show on light and dark alike.
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            // The page dots are drawn below (`WalkthroughPageDots`): the
+            // system's current dot vanished on the light page (O2).
+            .tabViewStyle(.page(indexDisplayMode: .never))
             .background(Theme.Surface.content)
             .safeAreaBar(edge: .bottom) {
-                Button(action: onNext) {
-                    Text(page.buttonTitle)
-                        .frame(maxWidth: .infinity)
+                VStack(spacing: Theme.Spacing.l) {
+                    WalkthroughPageDots(current: page)
+
+                    Button(action: onNext) {
+                        Text(page.buttonTitle)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .accessibilityIdentifier(page.buttonIdentifier)
                 }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
                 .padding(.horizontal, Theme.Spacing.l)
                 .padding(.vertical, Theme.Spacing.m)
-                .accessibilityIdentifier(page.buttonIdentifier)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -174,6 +254,26 @@ struct OnboardingWalkthroughView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+}
+
+/// The walkthrough's page indicator: the current page a dark capsule, the
+/// others grey dots, legible on the light page and the dark alike (O2).
+/// One element to VoiceOver, "Page 1 of 3"; the pages swipe as before.
+private struct WalkthroughPageDots: View {
+    let current: OnboardingWalkthrough.Page
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            ForEach(OnboardingWalkthrough.Page.allCases) { page in
+                Capsule()
+                    .fill(page == current ? Color.primary : Color(uiColor: .systemGray2))
+                    .frame(width: page == current ? 22 : 8, height: 8)
+            }
+        }
+        .motionAnimation(Theme.Motion.stateChange, value: current)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page \(current.number) of \(OnboardingWalkthrough.Page.allCases.count)")
     }
 }
 
@@ -194,9 +294,10 @@ private struct WalkthroughPageView: View {
             ScrollView {
                 VStack(spacing: Theme.Spacing.xl) {
                     sketch
-                        .padding(Theme.Spacing.l)
                         .frame(maxWidth: 380)
-                        .contentCard()
+                        // A picture of the app: it keeps its proportions at
+                        // the largest text sizes, where the words still grow.
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .accessibilityHidden(true)
 
                     VStack(spacing: Theme.Spacing.s) {
@@ -213,8 +314,7 @@ private struct WalkthroughPageView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, Theme.Spacing.l)
                 .padding(.top, Theme.Spacing.l)
-                // Clear of the page indicator.
-                .padding(.bottom, Theme.Spacing.xl * 2)
+                .padding(.bottom, Theme.Spacing.xl)
                 .frame(minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -223,29 +323,136 @@ private struct WalkthroughPageView: View {
         .accessibilityIdentifier(page.accessibilityIdentifier)
     }
 
+    /// The game page's hero on its own team colour, as Home draws it; the
+    /// others' sketches on a content card, as a team page's sections are.
     @ViewBuilder
     private var sketch: some View {
         switch page {
-        case .roster: RosterSketch()
-        case .schedule: ScheduleSketch()
-        case .stats: StatsSketch(isCurrent: isCurrent)
+        case .schedule:
+            NextUpSketch()
+        case .roster:
+            RosterSketch()
+                .padding(Theme.Spacing.l)
+                .contentCard()
+        case .stats:
+            StatsSketch(isCurrent: isCurrent)
+                .padding(Theme.Spacing.l)
+                .contentCard()
         }
     }
 }
 
 // MARK: - Sketches
 
-/// A sketch's heading, as a section's on a team's page.
+/// The teams the sketches show: the app's own catalog (`TeamCatalog`), so
+/// their crests draw from the bundle, offline, as the reader's will.
+private enum SketchTeams {
+    /// The Next Up hero's team.
+    static let chiefs = TeamCatalog.seeded(league: .nfl, espnID: "12")
+    /// The roster's and stats' team.
+    static let jayhawks = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")
+    /// The hero's opponent, as ESPN lists it: its crest loads, and is
+    /// kept, as any opponent's does (`TeamLogo`).
+    static let chargers = TeamRef(
+        league: .nfl,
+        espnID: "24",
+        displayName: "Los Angeles Chargers",
+        shortName: "Chargers",
+        abbreviation: "LAC",
+        location: "Los Angeles",
+        colorHex: "0080C6",
+        alternateColorHex: "FFC20E",
+        logoURL: URL(string: "https://a.espncdn.com/i/teamlogos/nfl/500/lac.png"),
+        logoDarkURL: nil,
+        logoAsset: nil
+    )
+}
+
+/// Home's Next Up hero as it looks (O1): the team's colour, both crests cut
+/// out on it (`CutoutCrest`), the countdown between them, the start and
+/// channel beneath. Every word in the colour's ink, never the accent (F2).
+private struct NextUpSketch: View {
+    private struct Unit: Identifiable, Sendable {
+        let value: String
+        let label: String
+        var id: String { label }
+    }
+
+    private static let countdown = [
+        Unit(value: "2", label: "DAYS"),
+        Unit(value: "4", label: "HRS"),
+        Unit(value: "18", label: "MIN"),
+    ]
+
+    @ScaledMetric(relativeTo: .title3) private var crestSize: CGFloat = 52
+
+    var body: some View {
+        if let team = SketchTeams.chiefs {
+            let fillHex = TeamColors.fillHex(for: team)
+            VStack(spacing: Theme.Spacing.m) {
+                Text("Next up")
+                    .textCase(.uppercase)
+                    .font(.caption.weight(.heavy))
+
+                HStack(alignment: .center, spacing: Theme.Spacing.s) {
+                    side(team, onHex: fillHex, isFavorite: true)
+                    HStack(spacing: Theme.Spacing.s) {
+                        ForEach(Self.countdown) { unit in
+                            VStack(spacing: 0) {
+                                Text(unit.value)
+                                    .font(.title2.weight(.heavy).monospacedDigit())
+                                Text(unit.label)
+                                    .font(.caption2.weight(.semibold))
+                            }
+                        }
+                    }
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    side(SketchTeams.chargers, onHex: fillHex, isFavorite: false)
+                }
+
+                Text("Sun · 8:25 PM · CBS")
+                    .font(Theme.Typography.footnote.weight(.semibold))
+                    .opacity(0.9)
+            }
+            .foregroundStyle(TeamColors.ink(on: team))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.Spacing.l)
+            .padding(.horizontal, Theme.Spacing.m)
+            .background(team.color, in: Theme.Radius.cardShape)
+        }
+    }
+
+    private func side(_ team: TeamRef, onHex: String, isFavorite: Bool) -> some View {
+        VStack(spacing: Theme.Spacing.xs) {
+            CutoutCrest(team: team, size: crestSize, onHex: onHex)
+            Text(team.shortName)
+                .font(.subheadline.weight(isFavorite ? .bold : .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// A sketch's heading, as a section's on a team's page: the team's crest,
+/// where it has one, or the section's symbol.
 private struct SketchHeader: View {
     let title: String
     let systemImage: String
+    var team: TeamRef?
 
     @Environment(\.brandTheme) private var brandTheme
+    @ScaledMetric(relativeTo: .title3) private var crestSize: CGFloat = 24
 
     var body: some View {
         HStack(spacing: Theme.Spacing.s) {
-            Image(systemName: systemImage)
-                .foregroundStyle(brandTheme.accentColor)
+            if let team {
+                TeamLogo(team: team, size: crestSize)
+            } else {
+                Image(systemName: systemImage)
+                    .foregroundStyle(brandTheme.accentColor)
+            }
             Text(title)
             Spacer(minLength: 0)
         }
@@ -253,7 +460,8 @@ private struct SketchHeader: View {
     }
 }
 
-/// The roster: a few player rows, number badge, name and position.
+/// The roster: a few player rows under the team's crest, number badge,
+/// name and position.
 private struct RosterSketch: View {
     private struct Player: Identifiable {
         let number: String
@@ -273,7 +481,7 @@ private struct RosterSketch: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            SketchHeader(title: "Roster", systemImage: "person.3.fill")
+            SketchHeader(title: "Roster", systemImage: "person.3.fill", team: SketchTeams.jayhawks)
 
             ForEach(Self.players) { player in
                 HStack(spacing: Theme.Spacing.m) {
@@ -288,7 +496,7 @@ private struct RosterSketch: View {
                             .font(Theme.Typography.cardTitle)
                         Text(player.position)
                             .font(Theme.Typography.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Palette.metadata)
                     }
                     .lineLimit(1)
 
@@ -297,67 +505,6 @@ private struct RosterSketch: View {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
-                }
-            }
-        }
-    }
-}
-
-/// The schedule: three game cards, two results and the next game.
-private struct ScheduleSketch: View {
-    private struct Game: Identifiable {
-        let status: String
-        let opponent: String
-        let abbreviation: String
-        let color: Color
-        let result: String
-        let isFinal: Bool
-        var id: String { opponent }
-    }
-
-    private static let games = [
-        Game(status: "FINAL", opponent: "Wildcats", abbreviation: "WIL", color: .orange, result: "W 78–71", isFinal: true),
-        Game(status: "FINAL", opponent: "@ Tigers", abbreviation: "TIG", color: .indigo, result: "L 64–70", isFinal: true),
-        Game(status: "SAT", opponent: "Bears", abbreviation: "BEA", color: .green, result: "7:00 PM", isFinal: false),
-    ]
-
-    @Environment(\.brandTheme) private var brandTheme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            SketchHeader(title: "Schedule", systemImage: "calendar")
-
-            HStack(spacing: Theme.Spacing.s) {
-                ForEach(Self.games) { game in
-                    VStack(spacing: Theme.Spacing.xs) {
-                        Text(game.status)
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(game.isFinal ? Color.secondary : brandTheme.accentColor)
-
-                        Circle()
-                            .fill(game.color)
-                            .frame(width: 36, height: 36)
-                            .overlay {
-                                Text(game.abbreviation)
-                                    .font(.caption2.weight(.black))
-                                    .foregroundStyle(.white)
-                            }
-
-                        Text(game.opponent)
-                            .font(.footnote.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-
-                        Text(game.result)
-                            .font(Theme.Typography.statLabel.monospacedDigit())
-                            .foregroundStyle(game.isFinal ? Color.primary : Color.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.m)
-                    .padding(.horizontal, Theme.Spacing.xs)
-                    .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
                 }
             }
         }
@@ -405,7 +552,7 @@ private struct StatsSketch: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            SketchHeader(title: "Stats", systemImage: "chart.bar.fill")
+            SketchHeader(title: "Stats", systemImage: "chart.bar.fill", team: SketchTeams.jayhawks)
 
             HStack(spacing: Theme.Spacing.s) {
                 ForEach(Self.figures) { figure in
@@ -415,7 +562,7 @@ private struct StatsSketch: View {
                             .foregroundStyle(brandTheme.accentColor)
                         Text(figure.label)
                             .font(Theme.Typography.statLabel)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Palette.metadata)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.s)
@@ -431,7 +578,7 @@ private struct StatsSketch: View {
                         Spacer(minLength: Theme.Spacing.s)
                         Text(bar.value)
                             .font(Theme.Typography.statLabel.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.Palette.metadata)
                     }
                     Capsule()
                         .fill(Color(uiColor: .tertiarySystemFill))

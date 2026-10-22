@@ -47,34 +47,48 @@ struct AlertsSettingsView: View {
     private var preferences: AlertPreferencesStore { .shared }
 
     var body: some View {
+        let blocked = alertsBlocked
+        let statuses: [TeamRef.ID: AlertsTeamRowStatus] = Dictionary(
+            teams.map { team in
+                (team.id, AlertsTeamRowStatus(kinds: store.alertKinds(for: team.id), blocked: blocked))
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        // The teams that send alerts first (S2).
+        let ordered: [TeamRef] = AlertsTeamRowStatus.onFirst(teams) { statuses[$0.id]?.isOn ?? true }
+        let isMixed = Set(statuses.values.map(\.isOn)).count > 1
         List {
             Section {
+                // Off, asked or not: one banner, whose button turns them on
+                // (S2). On: the status, and nothing to do.
                 if let row = model.notificationsRow {
                     statusRow(row, identifier: "alerts.notifications")
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                 }
-                statusRow(model.liveActivitiesRow, identifier: "alerts.liveActivities")
+                // Beside the banner only when it too needs turning on.
+                if !blocked || !model.activitiesEnabled {
+                    statusRow(model.liveActivitiesRow, identifier: "alerts.liveActivities")
+                }
             }
 
             Section {
-                ForEach(teams) { team in
-                    teamRow(team)
+                ForEach(ordered) { team in
+                    teamRow(team, status: statuses[team.id] ?? AlertsTeamRowStatus(kinds: nil, blocked: blocked))
                 }
             } header: {
                 Text("Game Alerts")
             } footer: {
-                if alertsBlocked {
-                    Text("Allow notifications above for these alerts to arrive. Each team keeps its choice until then.")
-                } else {
-                    Text("Starts, scores, period ends and finals for each team turned on. With the app closed, iOS decides when scores are checked, and may check rarely if you seldom open the app.")
-                }
+                Text(gameAlertsFooter(blocked: blocked, isMixed: isMixed))
             }
 
             Section {
                 ForEach(ScoreAlertKind.allCases, id: \.self) { kind in
                     kindToggle(kind)
+                        // Dimmed while notifications are off, still
+                        // editable: the choices are kept for then (S2).
+                        .opacity(blocked ? 0.5 : 1)
                 }
             } header: {
                 Text("Alert Types")
@@ -116,20 +130,23 @@ struct AlertsSettingsView: View {
     // MARK: Pieces
 
     private func statusRow(_ row: AlertsStatusRow, identifier: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label {
-                Text(row.title)
-            } icon: {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            // The title in its own column beside the symbol, however
+            // large the text (A2).
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
                 // Hierarchical, and red when off, so the symbol carries the
                 // state as well as the title does (A-1).
                 Image(systemName: row.systemImage)
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(row.tint == .off ? AnyShapeStyle(.red) : AnyShapeStyle(.tint))
+                    .accessibilityHidden(true)
+                Text(row.title)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .font(.body.weight(.semibold))
             Text(row.detail)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.subheadline)
+                .foregroundStyle(Theme.Palette.metadata)
             if let action = row.action, let title = row.actionTitle,
                let label = row.actionAccessibilityLabel {
                 Button(title) {
@@ -149,38 +166,53 @@ struct AlertsSettingsView: View {
     }
 
     /// Whether the system holds every alert back: notifications not allowed
-    /// yet, or turned off. Unknown until the permission is read.
+    /// yet, or turned off. Unknown, and so not blocked, until the
+    /// permission is read.
     private var alertsBlocked: Bool {
-        switch model.permission {
-        case .notDetermined?, .denied?: true
-        case .granted?, nil: false
-        }
+        model.notificationsBlocked
     }
 
-    /// A team's row: its alerts at a glance, pushing to their settings.
-    /// A team that's on reads "Not Allowed" while notifications are off,
-    /// rather than an "On" no alert would follow.
-    private func teamRow(_ team: TeamRef) -> some View {
-        let kinds = store.alertKinds(for: team.id)
-        let isOff = kinds.map(\.isEmpty) ?? false
-        let status = alertsBlocked && !isOff ? "Not Allowed" : TeamAlertsView.status(kinds)
-        return NavigationLink {
+    /// Under the teams: while notifications are off, that the choices
+    /// wait for them; otherwise what the alerts are and when they're
+    /// checked. Either way, that the teams sending alerts lead, when some
+    /// don't.
+    private func gameAlertsFooter(blocked: Bool, isMixed: Bool) -> String {
+        let main = blocked
+            ? "Your choices are saved and start working once notifications are on."
+            : "Starts, scores, period ends and final scores for each team turned on. With the app closed, iOS decides when scores are checked, and may check rarely if you seldom open the app."
+        return isMixed ? main + " Teams you get alerts for are shown first." : main
+    }
+
+    /// A team's row: its crest, its name over its league, and its alerts
+    /// at a glance, pushing to their settings. While notifications are off
+    /// a small bell-slash stands in for the choice, which is kept (S2).
+    private func teamRow(_ team: TeamRef, status: AlertsTeamRowStatus) -> some View {
+        NavigationLink {
             TeamAlertsView(team: team)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Spacing.m) {
                 TeamLogo(team: team, size: crestSize)
                     .frame(width: crestSize, height: crestSize)
                     .accessibilityHidden(true)
-                Text(team.displayName)
-                Text(team.league.badge)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(status)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(team.displayName)
+                    Text(team.league.badge)
+                        .font(Theme.Typography.caption)
+                        .foregroundStyle(Theme.Palette.metadata)
+                }
+                Spacer(minLength: Theme.Spacing.s)
+                if let text = status.text {
+                    Text(text)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: "bell.slash")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Palette.metadata)
+                        .accessibilityHidden(true)
+                }
             }
         }
-        .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge): \(status)")
+        .accessibilityLabel("Game alerts for \(team.displayName), \(team.league.badge): \(status.spoken)")
         .accessibilityHint("Shows this team's alert settings.")
         .accessibilityIdentifier("alerts.team.\(team.id)")
     }
@@ -241,13 +273,9 @@ struct TeamAlertsView: View {
     private var store: FavoritesStore { .shared }
     private var preferences: AlertPreferencesStore { .shared }
 
-    /// What a team's row says of its alerts.
+    /// What a team's row says of its alerts (`AlertsTeamRowStatus`).
     static func status(_ kinds: AlertMask?) -> String {
-        switch kinds {
-        case nil: "On"
-        case let kinds? where kinds.isEmpty: "Off"
-        default: "Custom"
-        }
+        AlertsTeamRowStatus.choice(kinds)
     }
 
     private var kinds: AlertMask? { store.alertKinds(for: team.id) }

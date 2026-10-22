@@ -68,7 +68,7 @@ struct ApiFootballSettingsSection: View {
                     Text("API-Football Usage")
                     Text(usage.summary)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("settings.apiFootball.usage")

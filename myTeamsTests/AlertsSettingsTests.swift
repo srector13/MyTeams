@@ -55,22 +55,28 @@ struct AlertsSettingsTests {
         #expect(AlertPermission(status) == expected)
     }
 
-    @Test("Not asked yet offers to ask")
+    @Test("Not asked yet: the banner offers to turn them on, by asking")
     func notDeterminedRow() {
         let row = AlertsStatusRow.notifications(.notDetermined)
         #expect(row.action == .ask)
-        #expect(row.actionTitle == "Ask Now")
+        #expect(row.actionTitle == "Turn On Notifications")
         #expect(row.actionAccessibilityLabel == "Allow notifications")
+        #expect(row.title == "Notifications are off")
+        #expect(row.detail == "Turn them on to get alerts for your teams' games.")
+        #expect(row.systemImage == "bell.slash")
+        #expect(row.tint == .off)
     }
 
-    @Test("Denied offers Settings")
+    @Test("Denied: the same banner, whose button opens Settings")
     func deniedRow() {
         let row = AlertsStatusRow.notifications(.denied)
         #expect(row.action == .openSettings)
-        #expect(row.actionTitle == "Open Settings")
+        #expect(row.actionTitle == "Turn On Notifications")
         #expect(row.actionAccessibilityLabel == "Open Settings to turn on notifications")
-        #expect(row.title == "Notifications Off")
+        #expect(row.title == "Notifications are off")
         #expect(row.tint == .off)
+        // One banner whichever way they're off.
+        #expect(row.detail == AlertsStatusRow.notifications(.notDetermined).detail)
     }
 
     @Test("Granted offers nothing")
@@ -90,13 +96,83 @@ struct AlertsSettingsTests {
         #expect(off.actionAccessibilityLabel == "Open Settings to turn on Live Activities")
         #expect(off.detail.contains("Settings"))
         #expect(off.tint == .off)
+        // Its button says where it goes.
+        #expect(off.actionTitle == "Open Settings")
         let on = AlertsStatusRow.liveActivities(enabled: true)
         #expect(on.action == nil)
         #expect(on.title == "Live Activities On")
         #expect(on.tint == .standard)
     }
 
+    // MARK: Team rows
+
+    @MainActor
+    @Test("A team row shows its choice; while notifications are off, a bell-slash in its place, the choice still spoken")
+    func teamRowStatus() {
+        let on = AlertsTeamRowStatus(kinds: nil, blocked: false)
+        #expect(on.text == "On")
+        #expect(on.spoken == "On")
+        #expect(on.isOn)
+
+        let off = AlertsTeamRowStatus(kinds: AlertMask(), blocked: false)
+        #expect(off.text == "Off")
+        #expect(!off.isOn)
+
+        let custom = AlertsTeamRowStatus(kinds: .finals, blocked: false)
+        #expect(custom.text == "Custom")
+        #expect(custom.isOn)
+
+        // Blocked: no "Not Allowed" on every row, the choice kept.
+        let blocked = AlertsTeamRowStatus(kinds: nil, blocked: true)
+        #expect(blocked.text == nil)
+        #expect(blocked.choice == "On")
+        #expect(blocked.spoken == "On, notifications off")
+        #expect(blocked.isOn)
+        let blockedOff = AlertsTeamRowStatus(kinds: AlertMask(), blocked: true)
+        #expect(blockedOff.text == nil)
+        #expect(blockedOff.spoken == "Off, notifications off")
+
+        #expect(TeamAlertsView.status(.finals) == "Custom")
+    }
+
+    @Test("Teams that send alerts come first, each group in its order")
+    func onFirst() {
+        let ordered = AlertsTeamRowStatus.onFirst(["a", "B", "c", "D", "e"]) { $0.uppercased() == $0 }
+        #expect(ordered == ["B", "D", "a", "c", "e"])
+        #expect(AlertsTeamRowStatus.onFirst([Int]()) { _ in true }.isEmpty)
+    }
+
+    @Test("Settings' Alerts row reads On only once allowed with a team on; nothing before the permission is read")
+    func summary() {
+        #expect(AlertsSummary.value(permission: nil, anyTeamOn: true) == nil)
+        #expect(AlertsSummary.value(permission: .granted, anyTeamOn: true) == "On")
+        #expect(AlertsSummary.value(permission: .granted, anyTeamOn: false) == "Off")
+        #expect(AlertsSummary.value(permission: .denied, anyTeamOn: true) == "Off")
+        #expect(AlertsSummary.value(permission: .notDetermined, anyTeamOn: true) == "Off")
+    }
+
+    @Test("The finals toggle reads Final Scores")
+    func kindTitles() {
+        #expect(ScoreAlertKind.finals.title == "Final Scores")
+        #expect(ScoreAlertKind.starts.title == "Game Starts")
+        #expect(ScoreAlertKind.scores.title == "Score Updates")
+    }
+
     // MARK: Model
+
+    @MainActor
+    @Test("Blocked until granted, and not before the permission is read", arguments: [
+        (AlertPermission.notDetermined, true),
+        (.denied, true),
+        (.granted, false),
+    ])
+    func blocked(permission: AlertPermission, expected: Bool) async {
+        let model = FakeSystem(permission: permission).model()
+        #expect(!model.notificationsBlocked)
+        await model.refresh()
+        #expect(model.notificationsBlocked == expected)
+        #expect(permission.blocksAlerts == expected)
+    }
 
     @MainActor
     @Test("Refreshing reads both settings", arguments: [AlertPermission.notDetermined, .denied, .granted])

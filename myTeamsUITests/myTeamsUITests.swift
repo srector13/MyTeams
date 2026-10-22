@@ -129,6 +129,36 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["teamBrowser.sport.basketball"].waitForExistence(timeout: 5))
     }
 
+    /// A first launch that follows no team ends onboarding on Pick Your
+    /// Teams (O5), after the theme step: its Done is disabled until a team
+    /// is picked, the sports are there to browse, and Skip lands on Home's
+    /// empty state. (With teams followed, the theme step ends it, as
+    /// `HomeUITests`' onboarding tests show.)
+    @MainActor
+    func testOnboardingEndsOnTeamsStep() throws {
+        let app = launch(following: Self.noTeams, environment: ["MYTEAMS_ONBOARDING": "1"])
+
+        let walkthroughSkip = app.buttons["onboarding.walkthrough.skip"]
+        XCTAssertTrue(walkthroughSkip.waitForExistence(timeout: 10), "The walkthrough never showed.")
+        walkthroughSkip.tap()
+
+        let themeContinue = app.buttons["onboarding.theme.continue"]
+        XCTAssertTrue(themeContinue.waitForExistence(timeout: 5), "Skip didn't go to the theme step.")
+        themeContinue.tap()
+
+        let done = app.buttons["onboarding.teams.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 5), "Following no team, the theme step didn't hand off to Pick Your Teams.")
+        XCTAssertFalse(done.isEnabled, "Done is enabled with no team picked.")
+        XCTAssertTrue(app.buttons["teamBrowser.sport.basketball"].waitForExistence(timeout: 5), "Pick Your Teams has no sports to browse.")
+        XCTAssertFalse(app.buttons["teamBrowser.done"].exists, "Pick Your Teams kept the browser's checkmark.")
+
+        let skip = app.buttons["onboarding.teams.skip"]
+        XCTAssertTrue(skip.exists, "No Skip on Pick Your Teams.")
+        skip.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5), "Skip didn't close onboarding.")
+        XCTAssertTrue(app.buttons["home.addTeams"].waitForExistence(timeout: 5), "Skip didn't land on Home's empty state.")
+    }
+
     /// The four bundled teams, as `TeamRef.id`s: they resolve from the app
     /// bundle, with no catalog to load. A fresh install follows none, so
     /// launches that need teams name them.
