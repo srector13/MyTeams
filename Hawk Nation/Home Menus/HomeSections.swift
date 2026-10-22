@@ -181,11 +181,30 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
 
     @State private var selectedPlayer: Player?
 
+    /// The carousel's width, measured, from which each card's is worked
+    /// out (`RosterPeek`); 0 until it's laid out.
+    @State private var carouselWidth: CGFloat = 0
+
+    /// The narrowest a card gets: a little over its headshot, which scales
+    /// with the caption (`PlayerCard`).
+    @ScaledMetric(relativeTo: .caption) private var minimumCardWidth: CGFloat = 64
+
     /// Where a player's sheet zooms from: their card (X-13).
     @Namespace private var cardZoom
 
     /// At accessibility text sizes the carousel becomes a vertical list.
     private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    /// Each card's width, so the row shows whole cards and half of the
+    /// next (T3); `nil` until the carousel has been measured.
+    private var cardWidth: CGFloat? {
+        guard carouselWidth > 0 else { return nil }
+        return RosterPeek.cardWidth(
+            visibleWidth: carouselWidth - Theme.Spacing.l,
+            spacing: Theme.Spacing.m,
+            minimum: minimumCardWidth
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading) {
@@ -245,6 +264,7 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                         // its final height while the roster loads.
                         ForEach(0..<5, id: \.self) { _ in
                             LoadingPlayerView()
+                                .frame(width: cardWidth)
                         }
                     case .loaded:
                         // Either the feed listed nobody, or the filter
@@ -261,12 +281,19 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
                     ForEach(model.players) { player in
                         playerButton(player) {
                             card(player)
+                                .frame(width: cardWidth)
+                                .environment(\.rosterCardWidth, cardWidth)
                         }
                     }
                 }
             }
             .scrollTargetLayout()
             .padding(.bottom, Theme.Spacing.l)
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            carouselWidth = width
         }
         // The margins inset the first and last cards in line with the
         // header, and the cards still scroll out to the card's edges (T-4).
@@ -303,9 +330,33 @@ struct RosterSection<Player: RosterPlayer, Card: View, Detail: View, FilterMenu:
     }
 }
 
+extension EnvironmentValues {
+    /// The width a roster carousel gives each card (`RosterPeek`), which a
+    /// card's caption wraps to (`PlayerCard`); `nil` outside the carousel.
+    @Entry var rosterCardWidth: CGFloat? = nil
+}
+
+/// How wide a roster carousel's cards are, so the row shows a run of whole
+/// cards and half of the next, and reads as one that scrolls (T3, F7):
+/// four and a half on an iPhone, more on an iPad.
+enum RosterPeek {
+    /// The card width that fits the most whole cards, each at least
+    /// `minimum` wide, and half a card into `visibleWidth`, with `spacing`
+    /// after each card: `n` cards, `n` gaps and half a card fill it.
+    static func cardWidth(visibleWidth: CGFloat, spacing: CGFloat, minimum: CGFloat) -> CGFloat {
+        guard visibleWidth > 0, minimum > 0 else { return max(minimum, 0) }
+        let fits = ((visibleWidth - minimum / 2) / (minimum + spacing)).rounded(.down)
+        let whole = max(fits, 1)
+        return max(minimum, (visibleWidth - whole * spacing) / (whole + 0.5))
+    }
+}
+
 /// The schedule carousel, opened scrolled to the next game still to be played.
 ///
-/// `card` draws one game; `detail` is the sheet a tap opens.
+/// `card` draws one game; `detail` is the sheet a tap opens. The header's
+/// "See All" opens the whole schedule as a list (`FullScheduleSheet`, F6),
+/// where the remaining games can go on the calendar. A season played out
+/// says so with the record, rather than a carousel of old results (T8).
 struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     let model: TeamModel<Player>
 
@@ -321,8 +372,8 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     /// The game whose new-event sheet is up, from its card's menu (R-7).
     @State private var calendarDraft: EventDraft?
 
-    /// What the last season sync did, or why it couldn't (R-7).
-    @State private var calendarMessage: String?
+    /// The whole schedule's sheet, from the header's "See All" (F6).
+    @State private var showsFullSchedule = false
 
     /// Where a game's sheet zooms from: its card (X-13).
     @Namespace private var cardZoom
@@ -332,48 +383,44 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     /// Opens the opponent's page (t_8d15e070); absent in previews.
     @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
 
-    /// The carousel's height: a game card's, scaled with the text in it.
-    @ScaledMetric(relativeTo: GameView.metricsTextStyle) private var cardHeight = GameView.baseHeight
-
     /// At accessibility text sizes the carousel becomes a vertical list.
     private var usesStackedLayout: Bool { dynamicTypeSize.isAccessibilitySize }
 
-    private var record: String {
-        // The league's record rule decides how abandoned and unflagged
-        // fixtures count (`RecordRule`); its sport decides the columns —
-        // "10-6", soccer's "4-0-1", hockey's "40-30-12". See `Record.Format`.
-        model.displayRecord().summary
+    /// The season's record for a season played out: the schedule's, as
+    /// the header counts it, or the standings row's for a schedule that is
+    /// already empty (`TeamHeaderSummary.standingsRecord`).
+    private var completedRecord: String? {
+        if !model.games.isEmpty { return model.displayRecord().summary }
+        return model.standings.flatMap { TeamHeaderSummary.standingsRecord(of: model.team.espnID, in: $0) }
+    }
+
+    /// Whether the season is over (T8): see `TeamHeaderSummary.seasonComplete`.
+    private var seasonComplete: Bool {
+        TeamHeaderSummary.seasonComplete(
+            games: model.games,
+            nextGame: model.nextGame,
+            standingsRecord: completedRecord,
+            scheduleLoaded: model.scheduleState == .loaded,
+            now: Date()
+        )
     }
 
     var body: some View {
+        let complete = seasonComplete
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "calendar", title: "Schedule") {
-                // No "0-0" over a schedule with no games in it yet.
+                // The one way to more (F6): the whole schedule as a list.
                 if !model.games.isEmpty {
-                    Text(record)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                if !seasonDrafts.isEmpty {
-                    GlassEffectContainer(spacing: Theme.Spacing.s) {
-                        SectionHeaderMenu(
-                            title: "Calendar",
-                            systemImage: "calendar.badge.plus",
-                            identifier: "schedule.calendar"
-                        ) {
-                            Button {
-                                syncSeason()
-                            } label: {
-                                Label("Add Remaining Games", systemImage: "calendar.badge.plus")
-                            }
-                            .accessibilityIdentifier("schedule.calendar.season")
-                        }
+                    SeeAllLink(identifier: "schedule.seeAll") {
+                        showsFullSchedule = true
                     }
                 }
             }
             .padding([.leading, .top, .trailing])
 
-            if model.games.isEmpty && model.scheduleState != .loading {
+            if complete {
+                seasonCompletePanel
+            } else if model.games.isEmpty && model.scheduleState != .loading {
                 // A line, not a carousel's height of empty card: a team
                 // between seasons has nothing scheduled for months.
                 scheduleStatus
@@ -395,17 +442,41 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
             EventEditSheet(draft: draft) { calendarDraft = nil }
                 .ignoresSafeArea()
         }
-        .alert(
-            "Calendar",
-            isPresented: Binding(
-                get: { calendarMessage != nil },
-                set: { if !$0 { calendarMessage = nil } }
+        .sheet(isPresented: $showsFullSchedule) {
+            FullScheduleSheet(
+                team: model.team,
+                games: model.games,
+                openingIndex: max(model.nextGame - (complete ? 0 : 1), 0),
+                card: card,
+                detail: detail
             )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(calendarMessage ?? "")
         }
+    }
+
+    /// A season played out (T8): its record, where next season's games
+    /// will appear, and the way to the season just played, in place of a
+    /// carousel of old results or "Nothing scheduled".
+    private var seasonCompletePanel: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(completedRecord.map { "Season complete · \($0)" } ?? "Season complete")
+                .font(Theme.Typography.cardTitle)
+                .monospacedDigit()
+            Text("Next season's schedule appears here when \(model.team.league.badge) releases it.")
+                .font(Theme.Typography.footnote)
+                .foregroundStyle(Theme.Palette.metadata)
+                .fixedSize(horizontal: false, vertical: true)
+            if !model.games.isEmpty {
+                SeeAllLink(title: "Full Schedule", identifier: "schedule.full") {
+                    showsFullSchedule = true
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Spacing.m)
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+        .padding([.horizontal, .bottom])
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule.seasonComplete")
     }
 
     /// What a schedule with no games says, compact: one line once the feed
@@ -427,33 +498,12 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
         }
     }
 
-    /// The games a season sync would write: those still to come with a
-    /// real start time (`CalendarEventBuilder.seasonDrafts`).
-    private var seasonDrafts: [EventDraft] {
-        CalendarEventBuilder.seasonDrafts(for: model.games, team: model.team)
-    }
-
-    /// Adds the remaining games to the team's own calendar, or brings the
-    /// ones added before up to date: a rescheduled game is moved, never
-    /// added twice (R-7).
-    private func syncSeason() {
-        let drafts = seasonDrafts
-        let title = CalendarEventBuilder.calendarTitle(for: model.team)
-        Task {
-            do {
-                calendarMessage = try await CalendarWriter.syncSeason(drafts, calendarTitle: title).message
-            } catch {
-                calendarMessage = error.localizedDescription
-            }
-        }
-    }
-
     private var scheduleCarousel: some View {
         ScrollView(.horizontal) {
             // Realised on demand: every schedule card mounted eagerly
             // was the reason a quiet Home screen still made hundreds
-            // of requests a minute.
-            LazyHStack(spacing: Theme.Spacing.m) {
+            // of requests a minute. Each card sizes to its content (F7).
+            LazyHStack(alignment: .top, spacing: Theme.Spacing.m) {
                 if model.games.isEmpty {
                     // Only while loading: a schedule that answered with
                     // no games, or failed, is `scheduleStatus`'s line.
@@ -467,7 +517,6 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
                 }
             }
             .scrollTargetLayout()
-            .frame(height: cardHeight)
             .padding(.bottom, Theme.Spacing.l)
         }
         // Open on the last result rather than the next fixture, so the
@@ -530,69 +579,194 @@ struct ScheduleSection<Player: RosterPlayer, Card: View, Detail: View>: View {
     }
 }
 
-/// The league standings: the table the followed team plays in, its row
-/// picked out in the team's colour.
+/// The whole schedule, as a sheet from the Schedule section's "See All"
+/// (F6) or a finished season's "Full Schedule" (T8): every game's card in
+/// a list, opened at the next game (or the last result), each opening its
+/// game's sheet. The way to put the remaining games on the calendar (R-7),
+/// which the section's header used to hold as an icon menu.
+private struct FullScheduleSheet<Card: View, Detail: View>: View {
+    let team: TeamRef
+    let games: [Game]
+    /// The game the list opens at.
+    let openingIndex: Int
+    let card: (Game) -> Card
+    let detail: (Game) -> Detail
+
+    @State private var selectedGame: Game?
+
+    /// The game at the top of the list.
+    @State private var position: Game.ID?
+
+    /// What the last season sync did, or why it couldn't (R-7).
+    @State private var calendarMessage: String?
+
+    init(
+        team: TeamRef,
+        games: [Game],
+        openingIndex: Int,
+        @ViewBuilder card: @escaping (Game) -> Card,
+        @ViewBuilder detail: @escaping (Game) -> Detail
+    ) {
+        self.team = team
+        self.games = games
+        self.openingIndex = openingIndex
+        self.card = card
+        self.detail = detail
+        let opening = min(max(openingIndex, 0), max(games.count - 1, 0))
+        self._position = State(initialValue: games.indices.contains(opening) ? games[opening].id : nil)
+    }
+
+    /// The games a season sync would write: those still to come with a
+    /// real start time (`CalendarEventBuilder.seasonDrafts`).
+    private var seasonDrafts: [EventDraft] {
+        CalendarEventBuilder.seasonDrafts(for: games, team: team)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical) {
+                LazyVStack(spacing: Theme.Spacing.m) {
+                    ForEach(games) { game in
+                        Button {
+                            selectedGame = game
+                        } label: {
+                            card(game)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("schedule.full.game.\(game.id)")
+                    }
+                }
+                .scrollTargetLayout()
+                .padding(Theme.Spacing.m)
+                // A readable column on an iPad's page-sized sheet.
+                .readableContentWidth(600)
+            }
+            .scrollPosition(id: $position, anchor: .top)
+            .background(Theme.Surface.content)
+            .navigationTitle("Schedule")
+            .navigationSubtitle(team.displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if !seasonDrafts.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            syncSeason()
+                        } label: {
+                            Label("Add Remaining Games", systemImage: "calendar.badge.plus")
+                        }
+                        .accessibilityIdentifier("schedule.calendar.season")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // One close button for every sheet (T6).
+                    SheetCloseButton()
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        .accessibilityIdentifier("schedule.full.close")
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+        }
+        // Full height: a season is a long list (X-9).
+        .presentationDetents([.large])
+        .presentationSizing(.page)
+        .sheet(item: $selectedGame) { game in
+            detail(game)
+        }
+        .alert(
+            "Calendar",
+            isPresented: Binding(
+                get: { calendarMessage != nil },
+                set: { if !$0 { calendarMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(calendarMessage ?? "")
+        }
+    }
+
+    /// Adds the remaining games to the team's own calendar, or brings the
+    /// ones added before up to date: a rescheduled game is moved, never
+    /// added twice (R-7).
+    private func syncSeason() {
+        let drafts = seasonDrafts
+        let title = CalendarEventBuilder.calendarTitle(for: team)
+        Task {
+            do {
+                calendarMessage = try await CalendarWriter.syncSeason(drafts, calendarTitle: title).message
+            } catch {
+                calendarMessage = error.localizedDescription
+            }
+        }
+    }
+}
+
+/// The league standings on a team page: the table the followed team plays
+/// in, its row picked out in the team's accent (F3).
+///
+/// A division or other short table shows whole; a longer one shows two
+/// places either side of the team (`StandingsGroup.snapshotRows`, T5), and
+/// "See All" (F6) or "Full … Standings" opens every table in a sheet
+/// (`FullStandingsSheet`), where a league of several tables offers the
+/// others.
 ///
 /// The columns follow the standings' kind: a soccer table's wins, draws,
 /// losses, goal difference and points; hockey's wins, losses, overtime
 /// losses and points; everyone else's wins and losses and games behind; a
-/// poll's rank and record. A league of several tables (conferences, college
-/// divisions) offers the others from the header's menu. A soccer table marks
-/// the zones its feed notes (qualification, relegation) in their colours,
-/// with a legend beneath.
+/// poll's rank and record. A soccer table marks the zones its feed notes
+/// (qualification, relegation) in their colours, and clincher marks are
+/// spelled out, in legends beneath.
 ///
-/// The header names the season the tables are for (`"2026-27"`), which is
-/// not always the one under way. A college league's rows prefix ranked
-/// teams with their poll rank, `"#7 Kansas"` (`PollRanks`, R-5).
+/// The table's caption names the season the tables are for (`"2026-27"`),
+/// which is not always the one under way. A college league's rows prefix
+/// ranked teams with their poll rank, `"#7 Kansas"` (`PollRanks`, R-5).
 struct StandingsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let team: TeamRef
 
-    /// The table on show, when the reader has picked one other than the
-    /// team's own.
-    @State private var selectedGroupID: StandingsGroup.ID?
-
     /// The league's poll, for a college league; empty otherwise.
     @State private var pollRanks = PollRanks.empty
+
+    @State private var showsFullStandings = false
 
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "list.number", title: "Standings") {
-                // The season the tables are for, which may not be the one
-                // asked for (`Standings.seasonDisplayName`).
-                if let season = model.standings?.seasonDisplayName, !season.isEmpty {
-                    Text(season)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .accessibilityLabel("Season \(season)")
-                        .accessibilityIdentifier("standings.season")
-                }
-                if let standings = model.standings, standings.groups.count > 1 {
-                    GlassEffectContainer(spacing: Theme.Spacing.s) {
-                        SectionHeaderMenu(
-                            title: "Select standings group",
-                            systemImage: "rectangle.stack",
-                            identifier: "standings.group"
-                        ) {
-                            ForEach(standings.groups) { group in
-                                Button(group.name) { selectedGroupID = group.id }
-                            }
-                        }
+                if let standings = model.standings, !standings.isEmpty {
+                    SeeAllLink(identifier: "standings.seeAll") {
+                        showsFullStandings = true
                     }
                 }
             }
             .padding([.leading, .top, .trailing])
 
-            if let standings = model.standings, let group = shownGroup(in: standings) {
-                StandingsTable(
-                    kind: standings.kind,
-                    group: group,
-                    league: team.league,
-                    followedID: team.espnID,
-                    teamColor: team.color,
-                    pollRanks: pollRanks
-                )
+            if let standings = model.standings, let group = standings.teamPageGroup(for: team.espnID) {
+                let rows = group.snapshotRows(around: team.espnID)
+                let isSnapshot = rows.count < group.entries.count
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    StandingsTable(
+                        kind: standings.kind,
+                        group: group,
+                        league: team.league,
+                        followedID: team.espnID,
+                        accent: TeamColors.accent(for: team),
+                        pollRanks: pollRanks,
+                        rows: rows,
+                        season: standings.seasonDisplayName,
+                        footnote: isSnapshot ? snapshotNote(group: group) : nil
+                    )
+
+                    if isSnapshot {
+                        SeeAllLink(
+                            title: "Full \(group.shortTitle(kind: standings.kind, leagueName: team.league.descriptor.displayName)) Standings",
+                            identifier: "standings.full"
+                        ) {
+                            showsFullStandings = true
+                        }
+                    }
+                }
                 .padding([.horizontal, .bottom])
             } else {
                 switch model.standingsState {
@@ -615,28 +789,126 @@ struct StandingsSection<Player: RosterPlayer>: View {
         .task(id: team.league) {
             pollRanks = await PollRankStore.shared.ranks(for: team.league)
         }
+        .sheet(isPresented: $showsFullStandings) {
+            if let standings = model.standings {
+                FullStandingsSheet(standings: standings, team: team, pollRanks: pollRanks)
+            }
+        }
     }
 
-    /// The reader's pick, else the team's own table, else the first — a
-    /// poll the team is not ranked in, say.
-    private func shownGroup(in standings: Standings) -> StandingsGroup? {
-        if let selectedGroupID, let picked = standings.groups.first(where: { $0.id == selectedGroupID }) {
-            return picked
+    /// What a snapshot leaves out: "Showing 2 places either side of the
+    /// Royals", or the top rows of a table without the team.
+    private func snapshotNote(group: StandingsGroup) -> String {
+        let shown = StandingsGroup.snapshotReach * 2 + 1
+        guard group.entries.contains(where: { $0.teamID == team.espnID }) else {
+            return "Showing the top \(shown)"
         }
-        return standings.group(containing: team.espnID) ?? standings.groups.first { !$0.entries.isEmpty }
+        // "the Royals", but a club goes by its name alone: "Freiburg".
+        let name = team.league.descriptor.kind == .soccer ? team.shortName : "the \(team.shortName)"
+        return "Showing \(StandingsGroup.snapshotReach) places either side of \(name)"
     }
 }
 
-/// One standings table, drawn in the columns its kind keeps.
+/// Every table in a league's standings, as a sheet from a team page's
+/// Standings section (T5): the team's own table first on screen, the
+/// others a pick away from the menu, each whole.
+private struct FullStandingsSheet: View {
+    let standings: Standings
+    let team: TeamRef
+    let pollRanks: PollRanks
+
+    /// The table on show, when the reader has picked one other than the
+    /// team's own.
+    @State private var selectedGroupID: StandingsGroup.ID?
+
+    /// The reader's pick, else the team's own table, else the first.
+    private var shownGroup: StandingsGroup? {
+        if let selectedGroupID, let picked = standings.groups.first(where: { $0.id == selectedGroupID }) {
+            return picked
+        }
+        return standings.teamPageGroup(for: team.espnID)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical) {
+                if let group = shownGroup {
+                    StandingsTable(
+                        kind: standings.kind,
+                        group: group,
+                        league: team.league,
+                        followedID: team.espnID,
+                        accent: TeamColors.accent(for: team),
+                        pollRanks: pollRanks,
+                        season: standings.seasonDisplayName
+                    )
+                    .padding(Theme.Spacing.l)
+                    .contentCard()
+                    .padding(Theme.Spacing.m)
+                    .readableContentWidth(600)
+                }
+            }
+            .background(Theme.Surface.content)
+            .navigationTitle("Standings")
+            .navigationSubtitle(standings.seasonDisplayName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // Picks the table on show: filters in place, so an icon (F6).
+                if standings.groups.count > 1 {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Menu {
+                            ForEach(standings.groups) { group in
+                                Button(group.name) { selectedGroupID = group.id }
+                            }
+                        } label: {
+                            Label("Select standings group", systemImage: "rectangle.stack")
+                        }
+                        .accessibilityIdentifier("standings.group")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // One close button for every sheet (T6).
+                    SheetCloseButton()
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        .accessibilityIdentifier("standings.full.close")
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+        }
+        .presentationDetents([.large])
+        .presentationSizing(.page)
+    }
+}
+
+/// One standings table, drawn in the columns its kind keeps: all its rows,
+/// or the run of them `rows` names (a team page's snapshot, T5), each
+/// ranked by its place in the whole table.
 private struct StandingsTable: View {
     let kind: StandingsKind
     let group: StandingsGroup
     let league: LeagueID
     let followedID: String
-    let teamColor: Color
+    /// The followed team's accent (`TeamColors.accent(for:)`, F3), which
+    /// tints and outlines its row so it stays visible in dark mode too.
+    let accent: Color
     /// The league's poll, whose ranks prefix the team names (R-5). A poll
     /// table already ranks its rows in the # column, so it prefixes none.
     var pollRanks: PollRanks = .empty
+    /// The rows shown, by index into `group.entries`; all of them when
+    /// `nil`.
+    var rows: Range<Int>? = nil
+    /// The season the table is for, after its name in the caption.
+    var season: String = ""
+    /// A line under the legends, such as what a snapshot leaves out.
+    var footnote: String? = nil
+
+    /// The rows on show, each with its index in the whole table.
+    private var shownEntries: [(offset: Int, element: StandingsEntry)] {
+        let all = Array(group.entries.enumerated())
+        guard let rows else { return all.map { (offset: $0.offset, element: $0.element) } }
+        let clamped = rows.clamped(to: all.indices)
+        return all[clamped].map { (offset: $0.offset, element: $0.element) }
+    }
 
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -705,23 +977,48 @@ private struct StandingsTable: View {
         }
     }
 
+    /// `"AFC West · 2026"`: the table's name and the season it's for.
+    private var caption: String {
+        let title = group.title(kind: kind, leagueName: league.descriptor.displayName)
+        let season = season.trimmingCharacters(in: .whitespaces)
+        // A soccer table's season already leads its feed name.
+        guard !season.isEmpty, !title.contains(season) else { return title }
+        return "\(title) · \(season)"
+    }
+
     var body: some View {
         let columns = columns
+        let shown = shownEntries
         let zones = group.zones
+        let clinchers = StandingsClincher.legend(for: shown.map(\.element))
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text(group.title(kind: kind, leagueName: league.descriptor.displayName))
+            Text(caption)
                 .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Palette.metadata)
+                .accessibilityIdentifier("standings.season")
 
             // Too wide for the screen at accessibility sizes: it scrolls
             // sideways rather than squeezing the team names out.
-            table(columns, zoned: !zones.isEmpty)
+            table(columns, rows: shown, zoned: !zones.isEmpty)
                 .scrollsSidewaysAtAccessibilitySizes()
 
             if !zones.isEmpty {
                 legend(zones)
             }
+
+            // What the clincher marks mean, the marks on show only (T5).
+            let notes = clinchers + [footnote].compactMap { $0 }
+            if !notes.isEmpty {
+                Text(notes.joined(separator: " · "))
+                    .font(Theme.Typography.caption)
+                    .foregroundStyle(Theme.Palette.metadata)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("standings.clinchers")
+            }
         }
+        // A table no wider than reads across (T10): on an iPad's page the
+        // names and their figures drifted 600 pt apart.
+        .frame(maxWidth: 600, alignment: .leading)
     }
 
     /// What each zone's bar means, one line per zone, top of the table
@@ -731,7 +1028,7 @@ private struct StandingsTable: View {
             ForEach(zones, id: \.note) { zone in
                 Text(zone.note)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .padding(.leading, Theme.Spacing.s)
                     .overlay(alignment: .leading) {
                         ZoneBar(colorHex: zone.colorHex)
@@ -742,9 +1039,9 @@ private struct StandingsTable: View {
         .accessibilityIdentifier("standings.legend")
     }
 
-    /// The table's rows. A `zoned` table insets the rank column, marked
+    /// The table's `rows`. A `zoned` table insets the rank column, marked
     /// rows or not, to leave room for the zone bars and keep it in line.
-    private func table(_ columns: [Column], zoned: Bool) -> some View {
+    private func table(_ columns: [Column], rows: [(offset: Int, element: StandingsEntry)], zoned: Bool) -> some View {
         Grid(alignment: .leading, horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.xs) {
             GridRow {
                 Text("#")
@@ -757,18 +1054,18 @@ private struct StandingsTable: View {
                 }
             }
             .font(Theme.Typography.statLabel)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Palette.metadata)
             // Each row says its own columns (`accessibilityLabel(for:)`).
             .accessibilityHidden(true)
 
-            ForEach(Array(group.entries.enumerated()), id: \.element.id) { position, entry in
+            ForEach(rows, id: \.element.id) { position, entry in
                 let followed = entry.teamID == followedID
                 let rank = entry.rank ?? position + 1
                 GridRow {
                     // The zone bar runs the row's full height: the cell is
                     // stretched to the row's tallest (the crest) first.
                     Text("\(rank)")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
                         .padding(.leading, zoned ? Theme.Spacing.s : 0)
                         .frame(maxHeight: .infinity)
                         .overlay(alignment: .leading) {
@@ -792,10 +1089,12 @@ private struct StandingsTable: View {
                         if followed {
                             FollowedMarker()
                         }
+                        // Spelled out in the legend beneath (T5); readable
+                        // grey, not tertiary, as it carries information.
                         if !entry.clincher.isEmpty {
                             Text(entry.clincher)
                                 .font(.caption2)
-                                .foregroundStyle(.tertiary)
+                                .foregroundStyle(Theme.Palette.metadata)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -839,14 +1138,20 @@ private struct StandingsTable: View {
         }
     }
 
-    /// The followed team's row picked out in a faint wash of its colour,
-    /// the table's full width; nothing when the table on show doesn't
-    /// hold the team.
+    /// The followed team's row picked out in a faint wash of its accent
+    /// and an outline in it, the table's full width (F3: an accent that
+    /// clears 3:1 on the card in dark mode as in light, where the Royals'
+    /// own blue vanished); nothing when the rows on show don't hold the
+    /// team.
     @ViewBuilder
     private var followedBand: some View {
-        if let frame = followedRowFrame, group.entries.contains(where: { $0.teamID == followedID }) {
-            RoundedRectangle(cornerRadius: Theme.Spacing.xs, style: .continuous)
-                .fill(teamColor.opacity(Theme.selectionWashOpacity(contrast: contrast)))
+        if let frame = followedRowFrame, shownEntries.contains(where: { $0.element.teamID == followedID }) {
+            let shape = RoundedRectangle(cornerRadius: Theme.Spacing.xs, style: .continuous)
+            shape
+                .fill(accent.opacity(Theme.selectionWashOpacity(contrast: contrast)))
+                .overlay {
+                    shape.strokeBorder(accent, lineWidth: 1)
+                }
                 // The row's 2 pt of padding above and below its cells, and
                 // a little room either side of the text.
                 .frame(height: frame.height + 4)
@@ -1008,35 +1313,72 @@ extension StandingsGroup {
     }
 }
 
-/// The news feed at the foot of a team page: the team's latest stories,
-/// up to `shownCount`. The feed runs back months; Home's merged feed is
-/// the place for more.
+/// Which of a team's stories its page lists, and in what order (T7).
+enum TeamPageNews {
+    /// The most stories the section lists before "More … News".
+    static let shownCount = 4
+
+    /// `articles` with the stories tagged with `teamID` first, each group
+    /// in the feed's order: a league-wide preview mentions the team only
+    /// in passing, where a story tagged with it is about it.
+    static func ordered(_ articles: [News], teamID: String) -> [News] {
+        let tagged = articles.filter { article in article.teams.contains { $0.espnID == teamID } }
+        let untagged = articles.filter { article in !article.teams.contains { $0.espnID == teamID } }
+        return tagged + untagged
+    }
+}
+
+/// The news at the foot of a team page: up to `TeamPageNews.shownCount`
+/// of the team's latest stories, those tagged with the team first, then
+/// "More <Team> News" for the rest (T7).
 struct NewsSection<Player: RosterPlayer>: View {
     let model: TeamModel<Player>
     let teamColor: Color
 
-    /// The most stories the section lists. Computed: a generic type can't
-    /// store a static.
-    static var shownCount: Int { 8 }
+    /// The most stories the section lists while collapsed. Computed: a
+    /// generic type can't store a static.
+    static var shownCount: Int { TeamPageNews.shownCount }
 
     @State private var selectedArticle: News?
+
+    /// Whether the reader asked for the rest of the stories.
+    @State private var showsAll = false
 
     /// Opens a team a story is about (t_8d15e070); absent in previews.
     @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
 
+    private var settings = AdaptiveSettings()
+
     /// Where an article's sheet zooms from: its card (X-13).
     @Namespace private var cardZoom
 
+    init(model: TeamModel<Player>, teamColor: Color) {
+        self.model = model
+        self.teamColor = teamColor
+    }
+
+    private func setShowsAll(_ value: Bool) {
+        withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
+            showsAll = value
+        }
+    }
+
     var body: some View {
+        let ordered = TeamPageNews.ordered(model.articles, teamID: model.team.espnID)
+        let hasMore = ordered.count > Self.shownCount
         VStack(alignment: .leading) {
-            SectionHeader(systemImage: "book", title: "News")
-                .padding([.horizontal, .top])
+            SectionHeader(systemImage: "book", title: "News") {
+                if hasMore && !showsAll {
+                    SeeAllLink(identifier: "news.seeAll") { setShowsAll(true) }
+                }
+            }
+            .padding([.horizontal, .top])
 
             VStack(alignment: .center, spacing: Theme.Spacing.m) {
                 if model.articles.isEmpty {
                     switch model.newsState {
                     case .loading:
-                        ForEach(0..<5, id: \.self) { _ in
+                        ForEach(0..<Self.shownCount, id: \.self) { _ in
                             LoadingNewsView()
                         }
                     case .loaded:
@@ -1047,29 +1389,18 @@ struct NewsSection<Player: RosterPlayer>: View {
                         }
                     }
                 } else {
-                    ForEach(model.articles.prefix(Self.shownCount)) { article in
-                        Button {
-                            selectedArticle = article
-                        } label: {
-                            NewsView(article: article)
+                    ForEach(showsAll ? ordered : Array(ordered.prefix(Self.shownCount))) { article in
+                        articleButton(article)
+                    }
+
+                    if hasMore {
+                        Button(showsAll ? "Show Fewer Stories" : "More \(model.team.shortName) News") {
+                            setShowsAll(!showsAll)
                         }
-                        .buttonStyle(.plain)
-                        .zoomSource(id: article.id, in: cardZoom)
-                        .accessibilityIdentifier("news.article")
-                        // A tap opens the story; the teams it's about are
-                        // a long press away, and VoiceOver actions through
-                        // the menu (t_8d15e070).
-                        .contextMenu {
-                            if let navigator {
-                                ForEach(article.teams) { team in
-                                    Button {
-                                        navigator.open(teamID: TeamRef.id(league: model.team.league, espnID: team.espnID))
-                                    } label: {
-                                        Label(team.name, systemImage: "person.3")
-                                    }
-                                }
-                            }
-                        }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("news.more")
                     }
                 }
             }
@@ -1084,43 +1415,99 @@ struct NewsSection<Player: RosterPlayer>: View {
                 .zoomTransition(sourceID: article.id, in: cardZoom)
         }
     }
+
+    private func articleButton(_ article: News) -> some View {
+        Button {
+            selectedArticle = article
+        } label: {
+            NewsView(article: article)
+        }
+        .buttonStyle(.plain)
+        .zoomSource(id: article.id, in: cardZoom)
+        .accessibilityIdentifier("news.article")
+        // A tap opens the story; the teams it's about are a long press
+        // away, and VoiceOver actions through the menu (t_8d15e070).
+        .contextMenu {
+            if let navigator {
+                ForEach(article.teams) { team in
+                    Button {
+                        navigator.open(teamID: TeamRef.id(league: model.team.league, espnID: team.espnID))
+                    } label: {
+                        Label(team.name, systemImage: "person.3")
+                    }
+                }
+            }
+        }
+    }
 }
 
-/// What a team page's header says under the team's name: the record, the
-/// team's place in its table, and the next game. Each is `nil` until its
-/// feed has something to say.
+/// What a team page's header says under the team's name, on two lines in
+/// one template for every team (T1): the record and the team's place in
+/// its table, `"4-0 · 1st AFC West"`; then the last five results and the
+/// next game, `"Next vs Chargers · Sun, Oct 18"`, or `"Season complete"`.
+/// Each is `nil` until its feed has something to say.
 struct TeamHeaderSummary: Equatable, Sendable {
     /// The season record so far, `"10-6"`, in its sport's shape.
     var record: String?
-    /// The team's place in its table, `"3rd in AFC West"`, or its poll
-    /// rank, `"No. 5 in AP Top 25"`.
+    /// The team's place in its table, short enough to sit beside the record
+    /// on one line: `"1st AFC West"` in a division, `"13th in AL"`,
+    /// `"15th in West"`, or its poll rank, `"No. 5 in AP Top 25"`.
     var standing: String?
     /// The next game still to be played, `"vs Raiders · Sun, Oct 12"`.
     var nextGame: String?
     /// The last five decided league games, oldest first, drawn as W/D/L
-    /// capsules beside the record (`scheduleForm`, R-5). Empty before any.
+    /// capsules beside the next game (`scheduleForm`, R-5). Empty before any.
     var form: [Record.Outcome]
+    /// Whether the season is over (`seasonComplete`, T8).
+    var seasonComplete: Bool
 
-    init(record: String? = nil, standing: String? = nil, nextGame: String? = nil, form: [Record.Outcome] = []) {
+    /// How long after a schedule's last game, every game played, the season
+    /// counts as over: past a playoff team's wait for its next round, so a
+    /// schedule whose postseason isn't listed yet doesn't read as done.
+    static let settledInterval: TimeInterval = 14 * 24 * 60 * 60
+
+    init(
+        record: String? = nil,
+        standing: String? = nil,
+        nextGame: String? = nil,
+        form: [Record.Outcome] = [],
+        seasonComplete: Bool = false
+    ) {
         self.record = record
         self.standing = standing
         self.nextGame = nextGame
         self.form = form
+        self.seasonComplete = seasonComplete
     }
 
     /// The summary from a team page's model: `record` as the schedule
     /// section counts it, the team's row in `standings`, `games[nextGame]`
     /// if it's still to be played, and the form from the same games the
-    /// record is counted from.
-    init(team: TeamRef, games: [Game], nextGame: Int, record: Record, standings: Standings?) {
-        self.record = games.isEmpty
-            ? standings.flatMap { Self.standingsRecord(of: team.espnID, in: $0) }
-            : record.summary
+    /// record is counted from. `scheduleLoaded` is whether the schedule
+    /// feed has answered, without which an empty schedule says nothing.
+    init(
+        team: TeamRef,
+        games: [Game],
+        nextGame: Int,
+        record: Record,
+        standings: Standings?,
+        scheduleLoaded: Bool = true,
+        now: Date = Date()
+    ) {
+        let standingsRecord = standings.flatMap { Self.standingsRecord(of: team.espnID, in: $0) }
+        self.record = games.isEmpty ? standingsRecord : record.summary
         self.standing = standings.flatMap {
             Self.standing(of: team.espnID, in: $0, leagueName: team.league.descriptor.displayName)
         }
         self.nextGame = Self.upcoming(games: games, nextGame: nextGame)
         self.form = scheduleForm(games: games, league: team.league)
+        self.seasonComplete = Self.seasonComplete(
+            games: games,
+            nextGame: nextGame,
+            standingsRecord: standingsRecord,
+            scheduleLoaded: scheduleLoaded,
+            now: now
+        )
     }
 
     /// `"Last 5: won, won, lost, drew, won"`, oldest first, for VoiceOver;
@@ -1130,27 +1517,39 @@ struct TeamHeaderSummary: Equatable, Sendable {
         return "Last \(form.count): " + form.map(\.spokenName).joined(separator: ", ")
     }
 
-    /// The record and standing on one line, `"10-6 · 3rd in AFC West"`.
+    /// The header's first line, the record and standing, `"10-6 · 2nd AFC
+    /// West"`.
     var recordLine: String? {
         let parts = [record, standing].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// The words on the header's second line, after the form: `"Next vs
+    /// Raiders · Sun, Oct 12"`, else `"Season complete"` once it is, else
+    /// `nil`.
+    var detailLine: String? {
+        if let nextGame { return "Next \(nextGame)" }
+        return seasonComplete ? "Season complete" : nil
+    }
+
     /// The team's place in the table that holds it, or `nil` where the
-    /// feed ranks nobody yet. A soccer table goes by `leagueName`,
-    /// `"3rd in Bundesliga"`, not the feed's season-prefixed name (see
-    /// `StandingsGroup.title(kind:leagueName:)`).
+    /// feed ranks nobody yet: `"1st AFC West"` in a division, `"13th in
+    /// AL"` or `"3rd in Bundesliga"` in anything wider, by the table's
+    /// short title (`StandingsGroup.shortTitle(kind:leagueName:)`), so the
+    /// line fits beside the record without wrapping.
     static func standing(of teamID: String, in standings: Standings, leagueName: String? = nil) -> String? {
         guard let group = standings.group(containing: teamID),
               let rank = group.entries.first(where: { $0.teamID == teamID })?.rank,
               rank > 0
         else { return nil }
-        let title = group.title(kind: standings.kind, leagueName: leagueName)
+        let title = group.shortTitle(kind: standings.kind, leagueName: leagueName)
         switch standings.kind {
         case .rankings:
             return "No. \(rank) in \(title)"
         case .pointsTable, .records:
-            return "\(ordinalString(rank)) in \(title)"
+            return StandingsGroup.isDivisionTitle(title)
+                ? "\(ordinalString(rank)) \(title)"
+                : "\(ordinalString(rank)) in \(title)"
         }
     }
 
@@ -1174,16 +1573,40 @@ struct TeamHeaderSummary: Equatable, Sendable {
         let date = game.dateAsDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
         return "\(game.gameHome ? "vs" : "at") \(game.opponent) · \(date)"
     }
+
+    /// Whether the team's season is over (T8), once the schedule feed has
+    /// answered (`scheduleLoaded`): a schedule already empty whose
+    /// standings row has a record (`standingsRecord`, the Royals in
+    /// October), or one with nothing left to play — every game played,
+    /// called off or postponed — whose last game is `settledInterval` past.
+    static func seasonComplete(
+        games: [Game],
+        nextGame: Int,
+        standingsRecord: String?,
+        scheduleLoaded: Bool,
+        now: Date
+    ) -> Bool {
+        guard scheduleLoaded else { return false }
+        if games.isEmpty { return standingsRecord != nil }
+        guard upcoming(games: games, nextGame: nextGame) == nil,
+              games.allSatisfy({ $0.completed || $0.cancelled || $0.postponed }),
+              let last = games.filter(\.completed).map(\.dateAsDate).max()
+        else { return false }
+        return now.timeIntervalSince(last) >= settledInterval
+    }
 }
 
 /// The top of a team page, over the team colour, under the bar's crest and
-/// name (`TeamBarTitle`): the team's record, standing and next game. Drawn
-/// in the ink for the team colour (`teamInk(on:)`). Plain scrolling
-/// content: it scrolls under the bar with the cards, never over them.
+/// name (`TeamBarTitle`), in one template for every team (T1): the record
+/// and standing on the first line, the last five results as W/D/L
+/// capsules and the next game on the second. Drawn in the ink for the
+/// team colour (`teamInk(on:)`, F2), the capsules too (`FormCapsule`, F4).
+/// Plain scrolling content: it scrolls under the bar with the cards, never
+/// over them. Centred at regular width (T10).
 ///
 /// A college team in its league's poll leads the record with its rank,
-/// `"#7"`, and the last five results follow it as W/D/L capsules (R-5);
-/// where the line can't hold both, the capsules go beneath it.
+/// `"#7"` (R-5). Where the second line can't hold the capsules and the
+/// next game, the game goes beneath them.
 struct TeamPageHeader: View {
     let team: TeamRef
     let summary: TeamHeaderSummary
@@ -1191,33 +1614,37 @@ struct TeamPageHeader: View {
     /// The league's poll, for a college team; empty otherwise.
     @State private var pollRanks = PollRanks.empty
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
     /// The team's poll rank, or `nil` unranked.
     private var pollRank: Int? {
         pollRanks.rank(of: team.espnID)
     }
 
+    private var centred: Bool { sizeClass == .regular }
+
+    private var horizontalAlignment: HorizontalAlignment { centred ? .center : .leading }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            if summary.recordLine != nil || pollRank != nil || !summary.form.isEmpty {
+        VStack(alignment: horizontalAlignment, spacing: Theme.Spacing.s) {
+            rankAndRecord
+
+            if !summary.form.isEmpty || summary.detailLine != nil {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: Theme.Spacing.s) {
-                        rankAndRecord
                         formGuide
+                        detail
                     }
-                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                        rankAndRecord
+                    VStack(alignment: horizontalAlignment, spacing: Theme.Spacing.xs) {
                         formGuide
+                        detail
                     }
                 }
             }
-
-            if let nextGame = summary.nextGame {
-                Label(nextGame, systemImage: "calendar")
-                    .font(Theme.Typography.footnote.weight(.semibold))
-            }
         }
+        .multilineTextAlignment(centred ? .center : .leading)
         .teamInk(on: team)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: centred ? .center : .leading)
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.top, Theme.Spacing.s)
         .padding(.bottom, Theme.Spacing.xl)
@@ -1228,8 +1655,8 @@ struct TeamPageHeader: View {
         }
     }
 
-    /// `"#7 4-0 · 16th in Big 12 Conference"`: the poll rank, where there
-    /// is one, before the record line.
+    /// `"#7 4-0 · 16th in Big 12"`: the poll rank, where there is one,
+    /// before the record line.
     @ViewBuilder
     private var rankAndRecord: some View {
         let recordLine = summary.recordLine
@@ -1253,15 +1680,27 @@ struct TeamPageHeader: View {
         }
     }
 
+    /// The next game, or that the season is over.
+    @ViewBuilder
+    private var detail: some View {
+        if let line = summary.detailLine {
+            Text(line)
+                .font(Theme.Typography.footnote.weight(.semibold))
+        }
+    }
+
     /// The last five results as capsules, oldest first. The letter carries
     /// the result; the fill only echoes it (a win solid, a draw faint, a
-    /// loss outlined), in the header's ink so it reads on any team colour.
+    /// loss outlined), in the header's ink with a win's letter cut out in
+    /// the team colour, so it reads on any team colour (F4).
     @ViewBuilder
     private var formGuide: some View {
         if let label = summary.formAccessibilityLabel {
+            let ink = TeamColors.ink(on: team)
+            let fill = Color(hexString: TeamColors.fillHex(for: team))
             HStack(spacing: 3) {
                 ForEach(Array(summary.form.enumerated()), id: \.offset) { _, outcome in
-                    FormCapsule(outcome: outcome)
+                    FormCapsule(outcome: outcome, ink: ink, fill: fill)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -1361,14 +1800,26 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
     }
 
     @Environment(\.containerSize) private var containerSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(TeamPageChrome.self) private var chrome: TeamPageChrome?
+
+    /// The widest the page's column runs at regular width (an iPad), where
+    /// its sections stand in two columns (T10); each table in them is
+    /// capped narrower still.
+    static var regularWidth: CGFloat { 1100 }
+
+    /// The column's cap: two columns' worth at regular width, a readable
+    /// line's on an iPhone (where it changes nothing).
+    private var columnWidth: CGFloat {
+        sizeClass == .regular ? Self.regularWidth : Theme.readableWidth
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
                 // In line with the cards' column; the team colour behind
                 // it is `TeamPage`'s, full-bleed.
-                .readableContentWidth()
+                .readableContentWidth(columnWidth)
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.height
                 } action: { height in
@@ -1379,9 +1830,9 @@ struct TeamHomeLayout<Header: View, Content: View>: View {
                 content
             }
             .padding(Theme.Spacing.m)
-            // A readable column on an iPad, centred on the grouped page,
-            // which stays full-bleed (B-14); the full width on an iPhone.
-            .readableContentWidth()
+            // A column on an iPad, centred on the grouped page, which
+            // stays full-bleed (B-14); the full width on an iPhone.
+            .readableContentWidth(columnWidth)
             // At least a screen tall, so a page still loading covers the hero
             // rather than leaving it showing beneath a short page.
             .frame(maxWidth: .infinity, minHeight: containerSize.height, alignment: .top)

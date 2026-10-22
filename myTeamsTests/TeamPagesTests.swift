@@ -59,6 +59,57 @@ struct TeamPagesTests {
     }
 }
 
+// MARK: - Roster peek and team news (T3, T7)
+
+@Suite("Team pages: roster peek and news")
+struct TeamPageLayoutTests {
+    @Test("A roster row shows four and a half cards on an iPhone, more on an iPad (T3)")
+    func rosterPeek() {
+        let spacing: CGFloat = 12
+        let minimum: CGFloat = 64
+        func visibleCards(_ width: CGFloat) -> CGFloat {
+            let card = RosterPeek.cardWidth(visibleWidth: width, spacing: spacing, minimum: minimum)
+            #expect(card >= minimum)
+            return width / (card + spacing)
+        }
+        // An iPhone's card, less its leading margin: 4 whole cards and half.
+        let phone = RosterPeek.cardWidth(visibleWidth: 342, spacing: spacing, minimum: minimum)
+        #expect(abs(4 * (phone + spacing) + phone / 2 - 342) < 0.001)
+        #expect(visibleCards(342) > 4 && visibleCards(342) < 5)
+        // A wider column fits more whole cards, still with half of the next.
+        let pad = RosterPeek.cardWidth(visibleWidth: 1000, spacing: spacing, minimum: minimum)
+        let whole = ((1000 - pad / 2) / (pad + spacing)).rounded()
+        #expect(whole > 4)
+        #expect(abs(whole * (pad + spacing) + pad / 2 - 1000) < 0.001)
+        // Never narrower than the minimum, however narrow the row.
+        #expect(RosterPeek.cardWidth(visibleWidth: 40, spacing: spacing, minimum: minimum) == minimum)
+        #expect(RosterPeek.cardWidth(visibleWidth: 0, spacing: spacing, minimum: minimum) == minimum)
+    }
+
+    private func story(_ title: String, teams: [String]) -> News {
+        News(
+            author: nil, title: title, articleDescription: nil,
+            url: URL(string: "https://www.espn.com/\(title)")!, urlToImage: nil,
+            publishedAt: Date(timeIntervalSince1970: 1_790_000_000), content: nil, source: "ESPN",
+            teams: teams.map { NewsTeam(espnID: $0, name: $0) }
+        )
+    }
+
+    @Test("Stories tagged with the team come first, each group in the feed's order; four are shown (T7)")
+    func teamNewsFirst() {
+        let feed = [
+            story("preview", teams: []),
+            story("chiefs-win", teams: ["12"]),
+            story("rankings", teams: ["7", "13"]),
+            story("mahomes", teams: ["12", "13"]),
+        ]
+        #expect(TeamPageNews.ordered(feed, teamID: "12").map(\.title) == ["chiefs-win", "mahomes", "preview", "rankings"])
+        // Nothing tagged: the feed's order.
+        #expect(TeamPageNews.ordered(feed, teamID: "99").map(\.title) == feed.map(\.title))
+        #expect(TeamPageNews.shownCount == 4)
+    }
+}
+
 // MARK: - Feed refresh (A-3, C-1)
 
 /// Counts each feed's requests, answering every one with an empty success —

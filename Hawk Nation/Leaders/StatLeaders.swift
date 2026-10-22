@@ -98,6 +98,25 @@ struct StatLeaders: Hashable, Sendable {
     }
 }
 
+extension StatLeaders {
+    /// How old a stored leaders document may be for the team page's
+    /// season caption (`LeadersSection`): the season's name changes once a
+    /// year, so a day-old copy names it as well as a fresh one.
+    static let captionCacheAge: TimeInterval = 24 * 60 * 60
+
+    /// The season the boards are for, as a team page's Leaders card names
+    /// it (T6): `"2025-26 regular season"`. A season type that only repeats
+    /// the name, as a soccer feed's does (`"2026-27 English Premier
+    /// League"` twice), is dropped; empty when the feed names no season.
+    var cardCaption: String {
+        let name = seasonName.trimmingCharacters(in: .whitespaces)
+        let type = seasonType.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return "" }
+        guard !type.isEmpty, !name.localizedCaseInsensitiveContains(type) else { return name }
+        return "\(name) \(type.lowercased())"
+    }
+}
+
 /// Reads a leaders document. See `StatLeaders`.
 func parseStatLeaders(from json: JSON) -> StatLeaders {
     let requested = json["requestedSeason"]

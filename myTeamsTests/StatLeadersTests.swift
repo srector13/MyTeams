@@ -127,6 +127,22 @@ struct StatLeadersParsingTests {
         #expect(nhl.category(named: "savePct")?.leaders.first?.value == 0.921)  // Scott Wedgewood
     }
 
+    @Test("A team page's Leaders card names the season the boards are for (T6)")
+    func cardCaption() throws {
+        // requestedSeason: "2025-26", "Regular Season".
+        #expect(try leaders("nba_leaders").cardCaption == "2025-26 regular season")
+        #expect(StatLeaders(season: 2026, seasonName: "2026", seasonType: "Regular Season", categories: []).cardCaption
+            == "2026 regular season")
+        // A soccer feed's type repeats its name: said once.
+        #expect(StatLeaders(
+            season: 2026, seasonName: "2026-27 English Premier League",
+            seasonType: "2026-27 English Premier League", categories: []
+        ).cardCaption == "2026-27 English Premier League")
+        #expect(StatLeaders(season: 2026, seasonName: "2026", seasonType: "", categories: []).cardCaption == "2026")
+        // No season named, no caption.
+        #expect(StatLeaders.empty.cardCaption == "")
+    }
+
     @Test("Premier League: the soccer boards, with no headshots")
     func premierLeague() throws {
         let epl = try leaders("epl_leaders")

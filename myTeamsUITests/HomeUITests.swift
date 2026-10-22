@@ -349,7 +349,7 @@ final class HomeUITests: XCTestCase {
 
         let addTeams = app.buttons["home.addTeams"]
         XCTAssertTrue(addTeams.waitForExistence(timeout: 10), "No Add your first team on an empty Home.")
-        XCTAssertTrue(homeTab(app).isSelected)
+        XCTAssertFalse(app.tabBars.firstMatch.exists, "An empty Home shows a tab bar (H9).")
 
         let done = app.buttons["teamBrowser.done"]
         for _ in 0..<3 where !done.exists {

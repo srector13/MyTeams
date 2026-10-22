@@ -173,7 +173,10 @@ struct StandingsParsingTests {
         let ncaaf = try standings("ncaaf_standings", .collegeFootball)
         let big12 = try #require(ncaaf.group(containing: "2305"))
         #expect(big12.title(kind: ncaaf.kind, leagueName: "NCAA Football") == "Big 12 Conference")
-        #expect(TeamHeaderSummary.standing(of: "2305", in: ncaaf, leagueName: "NCAA Football") == "16th in Big 12 Conference")
+        // The header goes by the feed's short name, so it fits beside the
+        // record (T1).
+        #expect(big12.shortName == "Big 12")
+        #expect(TeamHeaderSummary.standing(of: "2305", in: ncaaf, leagueName: "NCAA Football") == "16th in Big 12")
     }
 
     // MARK: Basketball
@@ -404,6 +407,114 @@ struct StandingsParsingTests {
 }
 
 // MARK: - Streak and conference columns (R-5)
+
+@Suite("Standings on a team page")
+struct StandingsSnapshotTests {
+    /// A table of `count` teams, ids "1" to "\(count)", first place first.
+    private func table(_ count: Int) -> StandingsGroup {
+        StandingsGroup(id: "t", name: "Table", abbreviation: "", entries: (1...count).map { place in
+            StandingsEntry(
+                teamID: "\(place)", name: "Team \(place)", shortName: "\(place)", abbreviation: "",
+                logoURL: nil, record: Record(wins: 0, losses: 0, format: .winLoss), rank: place,
+                gamesBehind: "", conferenceRecord: "", goalDifference: "", streak: "",
+                note: "", noteColorHex: "", clincher: ""
+            )
+        })
+    }
+
+    @Test("A division or other short table shows whole (T5)")
+    func shortTableWhole() {
+        #expect(table(4).snapshotRows(around: "2") == 0..<4)
+        #expect(table(StandingsGroup.wholeTableLimit).snapshotRows(around: "8") == 0..<StandingsGroup.wholeTableLimit)
+        #expect(!table(5).isSnapshot(around: "3"))
+        // A short table without the team shows whole too.
+        #expect(table(4).snapshotRows(around: "99") == 0..<4)
+    }
+
+    @Test("A long table shows two places either side of the team, slid to keep five at either end (T5)")
+    func longTableAroundTheTeam() {
+        let american = table(15)
+        // The Royals, 13th of 15: 11th to 15th.
+        #expect(american.snapshotRows(around: "13") == 10..<15)
+        #expect(american.snapshotRows(around: "8") == 5..<10)
+        #expect(american.isSnapshot(around: "8"))
+        // Near the top or the foot, still five rows.
+        #expect(american.snapshotRows(around: "1") == 0..<5)
+        #expect(american.snapshotRows(around: "2") == 0..<5)
+        #expect(american.snapshotRows(around: "15") == 10..<15)
+        // A poll the team isn't ranked in: its top five.
+        #expect(american.snapshotRows(around: "99") == 0..<5)
+    }
+
+    @Test("The NBA's 15-team conference is a snapshot; the Sun Belt's 7-team division is whole")
+    func capturedTables() throws {
+        let nba = parseStandings(from: try Fixture.json("nba_standings"), league: .nba)
+        let east = try #require(nba.groups.first)
+        let team = try #require(east.entries.dropFirst(7).first)
+        let rows = east.snapshotRows(around: team.teamID)
+        #expect(rows.count == StandingsGroup.snapshotReach * 2 + 1)
+        #expect(east.entries[rows].contains { $0.teamID == team.teamID })
+
+        let ncaaf = parseStandings(from: try Fixture.json("ncaaf_standings"), league: .collegeFootball)
+        let division = try #require(ncaaf.groups.first { $0.entries.count == 7 })
+        #expect(division.snapshotRows(around: division.entries[3].teamID) == division.entries.indices)
+    }
+
+    @Test("Tables go by short names in the header: AL, West, Big 12, a division as it is")
+    func shortTitles() {
+        func group(_ name: String, shortName: String = "") -> StandingsGroup {
+            StandingsGroup(id: name, name: name, abbreviation: "", entries: [], shortName: shortName)
+        }
+        #expect(group("American League").shortTitle(kind: .records, leagueName: "MLB") == "AL")
+        #expect(group("National League").shortTitle(kind: .records, leagueName: "MLB") == "NL")
+        #expect(group("American League East").shortTitle(kind: .records, leagueName: "MLB") == "AL East")
+        #expect(group("Western Conference").shortTitle(kind: .records, leagueName: "MLS") == "West")
+        #expect(group("Big 12 Conference", shortName: "Big 12").shortTitle(kind: .records, leagueName: nil) == "Big 12")
+        #expect(group("Sun Belt Conference").shortTitle(kind: .records, leagueName: nil) == "Sun Belt")
+        #expect(group("AFC West").shortTitle(kind: .records, leagueName: "NFL") == "AFC West")
+        #expect(group("2026-27 German Bundesliga").shortTitle(kind: .pointsTable, leagueName: "Bundesliga") == "Bundesliga")
+        #expect(StandingsGroup.isDivisionTitle("AFC West"))
+        #expect(StandingsGroup.isDivisionTitle("NL Central"))
+        #expect(!StandingsGroup.isDivisionTitle("Mountain West"))
+        #expect(!StandingsGroup.isDivisionTitle("West"))
+    }
+
+    @Test("The clincher legend spells out the marks on show, in the feed's words (T5)")
+    func clincherLegend() throws {
+        let wnba = parseStandings(from: try Fixture.json("wnba_standings"), league: .wnba)
+        let dream = try #require(wnba.entry(for: "20"))
+        #expect(dream.clincherNote == "Clinched Playoff Berth")
+        let legend = StandingsClincher.legend(for: wnba.groups.flatMap(\.entries))
+        #expect(legend.contains("x Clinched Playoff Berth"))
+        #expect(legend.contains("e Eliminated From Playoffs"))
+        // Each mark once.
+        #expect(Set(legend).count == legend.count)
+
+        func entry(_ id: String, _ mark: String, note: String = "") -> StandingsEntry {
+            StandingsEntry(
+                teamID: id, name: id, shortName: id, abbreviation: "", logoURL: nil,
+                record: Record(wins: 0, losses: 0, format: .winLoss), rank: nil,
+                gamesBehind: "", conferenceRecord: "", goalDifference: "", streak: "",
+                note: "", noteColorHex: "", clincher: mark, clincherNote: note
+            )
+        }
+        // Without the feed's words, the marks every league shares are
+        // spelled out; any other is left out rather than guessed.
+        #expect(StandingsClincher.legend(for: [entry("1", "e"), entry("2", "z"), entry("3", "e"), entry("4", "")])
+            == ["e Eliminated From Playoffs"])
+        #expect(StandingsClincher.legend(for: [entry("1", "z", note: "Clinched Division")]) == ["z Clinched Division"])
+    }
+
+    @Test("A team page shows the team's own table, else the first with rows")
+    func teamPageGroup() throws {
+        let nba = parseStandings(from: try Fixture.json("nba_standings"), league: .nba)
+        let west = try #require(nba.groups.last)
+        let team = try #require(west.entries.first)
+        #expect(nba.teamPageGroup(for: team.teamID)?.id == west.id)
+        #expect(nba.teamPageGroup(for: "no-such-team")?.id == nba.groups.first?.id)
+        #expect(Standings.empty.teamPageGroup(for: "1") == nil)
+    }
+}
 
 @Suite("Standings extra columns")
 struct StandingsExtraColumnTests {

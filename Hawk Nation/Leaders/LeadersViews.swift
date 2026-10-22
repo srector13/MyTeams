@@ -27,9 +27,14 @@ struct LeadersSection<Player: RosterPlayer>: View {
     /// previews.
     @Environment(TeamNavigator.self) private var navigator: TeamNavigator?
 
-    /// The team colour as a fill, with a fallback for a team the feed gave
-    /// no colour, which would otherwise draw clear (B-3).
-    private var teamFill: Color { Color(hexString: TeamColors.fillHex(for: team)) }
+    /// The season the leaders are for, `"2025-26 regular season"`, once
+    /// it's known (`StatLeaders.cardCaption`, T6).
+    @State private var seasonCaption = ""
+
+    /// The team's accent for the cards' bars and the league sheet's rows:
+    /// its colour, or a lighter or darker one where that wouldn't stand out
+    /// on the card, in light mode or dark (F3, T9).
+    private var teamAccent: Color { TeamColors.accent(for: team) }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -43,28 +48,23 @@ struct LeadersSection<Player: RosterPlayer>: View {
     var body: some View {
         VStack(alignment: .leading) {
             SectionHeader(systemImage: "trophy", title: "Leaders") {
-                // A standard glass control, like the other sections' header
-                // menus (T-1), rather than bare text in the team colour,
-                // whose contrast depended on the team (T-6). The glass draws
-                // the ink, so it reads whatever the team colour; the chevron
-                // says it opens somewhere.
-                Button {
+                // The one way to more (F6), named for where it goes: the
+                // whole league's boards, "NFL ›".
+                SeeAllLink(title: team.league.badge, identifier: "leaders.league") {
                     showingLeague = true
-                } label: {
-                    HStack(spacing: Theme.Spacing.xs) {
-                        Text("\(team.league.badge) Leaders")
-                            .font(.subheadline)
-                        Image(systemName: "chevron.right")
-                            .imageScale(.small)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                    }
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .accessibilityIdentifier("leaders.league")
+                .accessibilityLabel("\(team.league.badge) Leaders")
             }
             .padding([.leading, .top, .trailing])
+
+            // The season the figures are for (T6), once it's known.
+            if !seasonCaption.isEmpty, !model.leaders.isEmpty {
+                Text(seasonCaption)
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.metadata)
+                    .padding(.horizontal)
+                    .accessibilityIdentifier("leaders.season")
+            }
 
             if model.leaders.isEmpty {
                 switch model.leadersState {
@@ -109,9 +109,23 @@ struct LeadersSection<Player: RosterPlayer>: View {
             LeagueLeadersView(
                 league: team.league,
                 followedTeamID: team.espnID,
-                teamColor: teamFill,
+                teamColor: teamAccent,
                 onPick: { pickedLeader = $0 }
             )
+        }
+        // The season's name, which the page's model doesn't keep: the
+        // team's leaders document it just loaded, from the feed cache it
+        // was stored in, so no second request in the usual case. Again
+        // whenever the boards change.
+        .task(id: model.leaders) {
+            guard !model.leaders.isEmpty else { return }
+            let team = team
+            let (result, _) = await HTTPClient.withFeedCache(.preferCache(maxAge: StatLeaders.captionCacheAge)) {
+                await downloadStatLeaders(league: team.league, teamID: team.espnID, depth: 1)
+            }
+            if case .success(let leaders) = result {
+                seasonCaption = leaders.cardCaption
+            }
         }
     }
 
@@ -138,7 +152,7 @@ struct LeadersSection<Player: RosterPlayer>: View {
     /// (`TeamNavigator`).
     @ViewBuilder
     private func leaderButton(_ leader: TeamLeader) -> some View {
-        let card = TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamFill, team: team)
+        let card = TeamLeaderCard(board: leader.board, row: leader.row, teamColor: teamAccent, team: team)
         if let navigator, !leader.row.leader.athleteID.isEmpty {
             Button {
                 navigator.open(team, playerID: leader.row.leader.athleteID)
@@ -215,7 +229,7 @@ struct TeamLeaderCard: View {
 
             Text(board.label)
                 .font(Theme.Typography.statLabel)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Palette.metadata)
                 .multilineTextAlignment(.center)
 
             Text(row.leader.shortName.isEmpty ? row.leader.name : row.leader.shortName)
@@ -335,16 +349,15 @@ struct LeagueLeadersView: View {
                 .navigationSubtitle(subtitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        // Read-only: nothing to confirm, so it closes, as
-                        // the system's glass xmark (X-8).
-                        Button(role: .close) {
-                            dismiss()
-                        } label: {
-                            Label("Close", systemImage: "xmark")
-                        }
-                        .accessibilityIdentifier("leagueLeaders.close")
+                    ToolbarItem(placement: .topBarTrailing) {
+                        // Read-only: nothing to confirm, so it closes, with
+                        // the one close button every sheet has (T6, X-8).
+                        SheetCloseButton()
+                            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                            .accessibilityIdentifier("leagueLeaders.close")
                     }
+                    // The button draws its own glass circle.
+                    .sharedBackgroundVisibility(.hidden)
                 }
         }
         // Full height: ten-deep boards are a long list (X-9).
@@ -427,7 +440,7 @@ struct LeagueLeadersView: View {
     /// "2025-26 · Regular Season". A soccer feed names its season type
     /// after the season ("2026-27 English Premier League" twice), so a
     /// repeat is dropped.
-    private static func caption(_ leaders: StatLeaders) -> String {
+    static func caption(_ leaders: StatLeaders) -> String {
         var parts = [leaders.seasonName]
         if leaders.seasonType != leaders.seasonName { parts.append(leaders.seasonType) }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
@@ -477,7 +490,7 @@ private struct LeaderRow: View {
             HStack(spacing: 10) {
                 Text("\(row.rank)")
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .frame(width: rankWidth, alignment: .trailing)
 
                 // A league's leaders play for every club: each is looked up
@@ -498,12 +511,12 @@ private struct LeaderRow: View {
 
                     Text([row.leader.teamAbbreviation, row.leader.position].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
 
                     if let detail = row.detail {
                         Text(detail)
                             .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Theme.Palette.metadata)
                             .lineLimit(stacksFigure ? nil : 2)
                     }
                 }
@@ -518,7 +531,7 @@ private struct LeaderRow: View {
                     .font(.headline.monospacedDigit())
                 Text(label)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
             }
         }
         // One VoiceOver element per row, which says when it's the
@@ -530,8 +543,10 @@ private struct LeaderRow: View {
 }
 
 /// A leaderboard row's background: the followed team's players picked out
-/// in its colour. On the row itself, which may be a button around a
-/// `LeaderRow` (`LeagueLeadersView.leaderRow`), where the list reads it.
+/// in a wash of its accent (T6; `TeamColors.accent(for:)` from the team
+/// page, so it shows in dark mode too, F3). On the row itself, which may
+/// be a button around a `LeaderRow` (`LeagueLeadersView.leaderRow`), where
+/// the list reads it.
 private struct LeaderRowBackground: ViewModifier {
     let followed: Bool
     let teamColor: Color

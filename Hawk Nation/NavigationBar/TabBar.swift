@@ -88,6 +88,10 @@ struct Home: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
 
+    /// The reader's theme, whose accent tints the selected tab unless it is
+    /// a grey that would make the selected tab the dimmest (A4).
+    @Environment(\.brandTheme) private var brandTheme
+
     // Spelled out: the private state makes the memberwise init private.
     init(deepLinkedTeamID: Binding<TeamRef.ID?>, deepLinkedGame: Binding<WidgetDeepLink.GameTarget?> = .constant(nil)) {
         self._deepLinkedTeamID = deepLinkedTeamID
@@ -192,11 +196,18 @@ struct Home: View {
                     // follows teams.
                     Theme.Surface.content
                         .ignoresSafeArea()
-                } else {
+                } else if !HomeTabs.showsTabBar(teamCount: teams.count) {
                     // With no favorites — a fresh install, or every team
-                    // unfollowed — the bar holds Home alone, and Home's
-                    // empty state is the way in rather than a sheet at
-                    // launch (t_afe5c297).
+                    // unfollowed — Home's empty state alone, with no bar
+                    // holding nothing but Home (H9): its "Add your first
+                    // team" is the way in rather than a sheet at launch
+                    // (t_afe5c297). The bar arrives with the first team.
+                    HomeView(
+                        teams: teams,
+                        addTeams: { showsBrowser = true },
+                        showSettings: { showsSettings = true }
+                    )
+                } else {
                     tabs
                 }
             }
@@ -286,6 +297,10 @@ struct Home: View {
                 teamTab(team, inMore: true)
             }
         }
+        // The selected tab in full-strength label ink where the theme's
+        // accent is a grey dimmer than the other tabs' labels (A4). Each
+        // tab's page puts the theme's tint back (`TabPageChrome`).
+        .tint(HomeTabs.selectedTabUsesLabelInk(brandTheme) ? Color.primary : brandTheme.accentColor)
         // The bar shrinks to the selected tab as the page scrolls down and
         // comes back on scrolling up or a tap, as the system's apps do.
         .tabBarMinimizeBehavior(voiceOver || switchControl ? .never : .onScrollDown)
@@ -308,6 +323,7 @@ struct Home: View {
                 addTeams: { showsBrowser = true },
                 showSettings: { showsSettings = true }
             )
+            .modifier(TabPageChrome(theme: brandTheme))
         } label: {
             Label("Home", systemImage: "house")
         }
@@ -319,6 +335,7 @@ struct Home: View {
     private func teamTab(_ team: TeamRef, inMore: Bool) -> some TabContent<TeamRef.ID> {
         Tab(value: team.id) {
             teamPage(team, inMore: inMore)
+                .modifier(TabPageChrome(theme: brandTheme))
         } label: {
             Label {
                 Text(team.shortName)
@@ -835,6 +852,7 @@ private struct TeamPageBody: View {
             if isVisit {
                 ToolbarItem(placement: .topBarTrailing) {
                     FollowTeamButton(team: team)
+                        .foregroundStyle(barInk)
                         .tint(barInk)
                 }
             }
@@ -843,14 +861,26 @@ private struct TeamPageBody: View {
                 Button {
                     showSettings()
                 } label: {
-                    Label("Settings", systemImage: "gearshape")
+                    // Drawn here rather than on the bar's shared glass,
+                    // which tinted the glyph with the team colour beneath
+                    // it (the Chiefs' gear read pink): the glyph in the
+                    // bar's ink on a faint ink-washed circle (F2, H-6).
+                    Image(systemName: "gearshape")
+                        .font(.body.weight(.semibold))
                         .foregroundStyle(barInk)
+                        .frame(width: 44, height: 44)
+                        .background(barInk.opacity(0.16), in: Circle())
+                        .overlay {
+                            Circle().strokeBorder(barInk.opacity(0.35), lineWidth: 1)
+                        }
+                        .contentShape(.circle)
                 }
-                // In the bar's ink, not the app's accent (H-6).
+                .buttonStyle(.plain)
                 .tint(barInk)
                 .accessibilityLabel("Settings")
                 .accessibilityIdentifier("home.settings")
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         // The system bar in the team colour too, and the scheme that reads
         // on it whatever is scrolled beneath.
@@ -1050,6 +1080,54 @@ enum HomeTabs {
     static func barCount(teamCount: Int, barCapacity: Int?) -> Int {
         guard let barCapacity, teamCount > barCapacity else { return teamCount }
         return max(0, barCapacity - 1)
+    }
+
+    /// Whether `Home` shows the tab bar for `teamCount` favorites: only with
+    /// a team to switch to. With none, a bar holding Home alone offered
+    /// nothing; the empty state stands alone until the first team (H9).
+    static func showsTabBar(teamCount: Int) -> Bool {
+        teamCount > 0
+    }
+
+    /// Whether the selected tab is drawn in full-strength label ink rather
+    /// than the theme's accent (A4): for a theme whose accent is a grey
+    /// (Graphite's), which made the selected tab dimmer than the others'
+    /// white labels in dark mode. A colourful accent stands out by its
+    /// colour, and keeps it.
+    static func selectedTabUsesLabelInk(_ theme: BrandTheme) -> Bool {
+        let accents = [theme.accentLightHex, theme.accentDarkHex].compactMap { $0 }
+        guard !accents.isEmpty else { return false }
+        return accents.contains { TeamColors.hue(hex: $0) == nil }
+    }
+
+    /// Whether the tab bar gets an opaque background (A1): under Reduce
+    /// Transparency, the system's or the stand-in a UI test asks for at
+    /// launch (`Theme.LaunchAccessibility`), as the other primitives honour
+    /// it, so rows never show through the bar.
+    static func opaqueBar(systemReduceTransparency: Bool, launch: Theme.LaunchAccessibility = .current) -> Bool {
+        systemReduceTransparency || launch.reduceTransparency
+    }
+}
+
+/// What every tab's page sets on the bar and under it: the theme's tint
+/// back for the page's own controls (the tab view's may be label ink, A4),
+/// and under Reduce Transparency an opaque tab bar (A1), where the glass
+/// let the rows beneath show through.
+private struct TabPageChrome: ViewModifier {
+    let theme: BrandTheme
+
+    @Environment(\.accessibilityReduceTransparency) private var systemReduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let tinted = content.tint(theme.accentColor)
+        if HomeTabs.opaqueBar(systemReduceTransparency: systemReduceTransparency) {
+            tinted
+                .toolbarBackground(Theme.Surface.contentCard, for: .tabBar)
+                .toolbarBackgroundVisibility(.visible, for: .tabBar)
+        } else {
+            tinted
+        }
     }
 }
 
