@@ -114,6 +114,48 @@ struct HomeTeamSummary: Identifiable, Equatable, Sendable {
     let status: Status
 
     var id: TeamRef.ID { team.id }
+
+    /// The foot's text for "nothing scheduled": a team with no record yet
+    /// has its season's state in the header, so the foot says what's next
+    /// instead of repeating it (H2).
+    static let nothingScheduledText = "No games on the schedule yet"
+
+    /// What the header shows in the record's place before there is one:
+    /// "Preseason" or "Season over", the state the foot would otherwise
+    /// repeat; "No record yet" for a season under way that the feeds
+    /// haven't counted.
+    var headerStatusText: String {
+        switch status {
+        case .loading, .preseason: Status.preseason.text
+        case .seasonOver: Status.seasonOver.text
+        case .live, .next, .last: "No record yet"
+        }
+    }
+
+    /// The foot's line, so the team's status shows once (H2): where its
+    /// season is — the game under way, the next game, the last result —
+    /// unless the header already says it, when it says what's next:
+    /// `nothingScheduledText`.
+    var footText: String {
+        guard header.record == nil else { return status.text }
+        switch status {
+        case .preseason, .seasonOver: return Self.nothingScheduledText
+        case .loading, .live, .next, .last: return status.text
+        }
+    }
+}
+
+/// Home's news section (`HomeFeed.homeNews`, H5): the few fresh stories it
+/// shows, and the rest, which wait behind "More News".
+struct HomeNewsSelection: Equatable, Sendable {
+    /// Up to `HomeFeed.homeNewsLimit` stories from the last
+    /// `HomeFeed.homeNewsMaxAge`, dealt in turn across the favorites.
+    let shown: [HomeHeadline]
+    /// Every other story, in the feed's order, older ones included.
+    let more: [HomeHeadline]
+    /// Whether any story was held back for its age alone, so the section
+    /// can say where the older ones went.
+    let holdsOlderStories: Bool
 }
 
 /// A favorite's slice of its standings table for Home (`HomeFeed
@@ -196,9 +238,9 @@ extension HomeFeed {
     /// first: one busy feed (an NFL team's mid-season) otherwise filled the
     /// first screen on its own. Each favorite's stories keep their own
     /// newest-first order; each round — every favorite's newest story not
-    /// yet dealt — goes newest first, so the freshest story leads. No cap:
-    /// Home's news feed is the page's bottom layer and draws its rows
-    /// lazily.
+    /// yet dealt — goes newest first, so the freshest story leads. No cap
+    /// here: Home's section shows the first few fresh ones (`homeNews`) and
+    /// the rest behind "More News".
     static func headlines(teams: [TeamRef], articles: [TeamRef.ID: [News]]) -> [HomeHeadline] {
         var seen: Set<String> = []
         var feeds: [[HomeHeadline]] = []
@@ -229,6 +271,37 @@ extension HomeFeed {
                 .map(\.headline)
         }
         return dealt
+    }
+
+    /// The most stories Home's news section shows before "More News".
+    static let homeNewsLimit = 5
+
+    /// How old a story can be and still be one of those (H5): older ones
+    /// wait in More News.
+    static let homeNewsMaxAge: TimeInterval = 3 * 24 * 60 * 60
+
+    /// Home's news section from the dealt feed (`headlines`): its first
+    /// `homeNewsLimit` stories no older than `homeNewsMaxAge` at `now`,
+    /// still in turn across the favorites — each favorite's stories are
+    /// newest first, so skipping the old ones keeps the deal — and the
+    /// rest, in the feed's order, for More News.
+    static func homeNews(_ headlines: [HomeHeadline], now: Date) -> HomeNewsSelection {
+        let earliest = now.addingTimeInterval(-homeNewsMaxAge)
+        var shown: [HomeHeadline] = []
+        var more: [HomeHeadline] = []
+        var holdsOlderStories = false
+        for headline in headlines {
+            let isFresh = headline.article.publishedAt >= earliest
+            if isFresh && shown.count < homeNewsLimit {
+                shown.append(headline)
+            } else {
+                more.append(headline)
+                if !isFresh {
+                    holdsOlderStories = true
+                }
+            }
+        }
+        return HomeNewsSelection(shown: shown, more: more, holdsOlderStories: holdsOlderStories)
     }
 
     /// The feed's stories about `team`, for the news filter's chip: those

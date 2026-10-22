@@ -52,34 +52,95 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Home")
-            // Today's date under the title, as Leaders puts its season there.
-            .navigationSubtitle(model.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
+                // The title with today's date under it, as Leaders puts
+                // its season there, both in the bar's ink over the hero
+                // colour (H1, F2): the system subtitle took a translucent
+                // grey that turned pink on a red team, at 1.5:1.
+                ToolbarItem(placement: .principal) {
+                    HomeBarTitle(date: model.now, ink: barInk)
+                }
+                // A title, not a button: no glass behind it.
+                .sharedBackgroundVisibility(.hidden)
+
                 // The way to Settings and its alerts from where the app
                 // opens, as a team page has it (A-5).
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSettings()
-                    } label: {
-                        if let barInk {
-                            Label("Settings", systemImage: "gearshape")
-                                .foregroundStyle(barInk)
-                        } else {
-                            Label("Settings", systemImage: "gearshape")
-                        }
-                    }
-                    // In the bar's ink over the hero colour, not the app's
-                    // accent (H-6).
-                    .tint(barInk)
-                    .accessibilityLabel("Settings")
-                    .accessibilityIdentifier("home.settings")
+                    HomeSettingsButton(ink: barInk, action: showSettings)
                 }
+                // Over the hero colour the button draws its own circle in
+                // the ink, so the system glass can't wash the gear into
+                // the team colour; on the plain bar, the standard glass.
+                .sharedBackgroundVisibility(barInk == nil ? .automatic : .hidden)
             }
         }
         // Mounted only while Home's tab is on screen, so it refreshes only
         // then; a change of favorites starts it over.
         .task(id: teams.map(\.id)) { await model.run(teams: teams) }
+    }
+}
+
+/// Home's title in the bar, today's date beneath it: in the bar's ink over
+/// the hero colour (H1), or the label and metadata colours on the plain
+/// bar of the empty state. One element to VoiceOver.
+private struct HomeBarTitle: View {
+    let date: Date
+    /// White or black for the hero colour (`HomeHeroStyle.barInk`); `nil`
+    /// on the plain bar.
+    let ink: Color?
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text("Home")
+                .font(.headline)
+                .foregroundStyle(ink ?? Color.primary)
+            Text(date.formatted(.dateTime.weekday(.wide).month(.wide).day()))
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(ink.map { AnyShapeStyle($0.opacity(0.92)) } ?? AnyShapeStyle(Theme.Palette.metadata))
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// The gear to Settings. Over the hero colour: the gear in the bar's ink
+/// on a faint circle of it, ringed in it, 44 pt across (H1, T-1), never
+/// the theme's accent. On the plain bar: the standard bar button.
+private struct HomeSettingsButton: View {
+    let ink: Color?
+    let action: @MainActor () -> Void
+
+    var body: some View {
+        if let ink {
+            Button {
+                action()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(ink)
+                    .frame(width: 44, height: 44)
+                    .background(ink.opacity(0.16), in: Circle())
+                    .overlay {
+                        Circle()
+                            .strokeBorder(ink.opacity(0.35), lineWidth: 1)
+                    }
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("home.settings")
+        } else {
+            Button {
+                action()
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("home.settings")
+        }
     }
 }
 
@@ -133,8 +194,10 @@ private struct HomeGameSelection: Identifiable {
 /// rather than showing through them.
 ///
 /// On an iPhone the sections are one readable column; at regular width (an
-/// iPad) two, My Teams and This Week on the left and the rest on the right,
-/// each in the reader's order, centred no wider than `regularMaxWidth`.
+/// iPad) two balanced ones, My Teams and This Week on the left, Standings
+/// and Top Performers on the right, each in the reader's order, with the
+/// news full width beneath them (H10), centred no wider than
+/// `regularMaxWidth`.
 private struct HomeDashboard: View {
     let model: HomeViewModel
     let style: HomeHeroStyle
@@ -157,12 +220,10 @@ private struct HomeDashboard: View {
     @State private var selectedDay: Date?
     /// The news feed's team, or `nil` for every favorite's stories.
     @State private var newsFilter: TeamRef.ID?
-    /// Whether the news runs on past its first `collapsedNewsCount`
-    /// stories, so the sections and Customize Home below stay in reach.
+    /// Whether the news section runs on past its few fresh stories
+    /// (`HomeFeed.homeNews`) into the rest: "More News".
     @State private var showsAllNews = false
 
-    /// The stories Home shows before "More News".
-    private static let collapsedNewsCount = 10
     /// The hero's height, which the colour behind it must cover.
     @State private var heroHeight: CGFloat = 0
 
@@ -289,11 +350,14 @@ private struct HomeDashboard: View {
     // MARK: Page
 
     /// The grouped page under the hero: the reader's sections, in one
-    /// column or two, then the way to customize them.
+    /// column or, on an iPad, two balanced ones — the teams and their week
+    /// on the left, the tables on the right — with the news full width
+    /// beneath both (H10); then More News and Customize Home.
     private func page(_ layout: HomeSectionLayout) -> some View {
         let visible = layout.visible
-        let leading = visible.filter(\.isLeadingColumn)
-        let trailing = visible.filter { !$0.isLeadingColumn }
+        let leading = visible.filter { $0.regularColumn == .leading }
+        let trailing = visible.filter { $0.regularColumn == .trailing }
+        let below = visible.filter { $0.regularColumn == .fullWidth }
         return VStack(spacing: Theme.Spacing.m) {
             if isRegular && !leading.isEmpty && !trailing.isEmpty {
                 HStack(alignment: .top, spacing: Theme.Spacing.m) {
@@ -304,11 +368,14 @@ private struct HomeDashboard: View {
                     column(trailing)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if !below.isEmpty {
+                    column(below)
+                }
             } else {
                 column(visible)
             }
 
-            customizeButton
+            footButtons(showsNews: visible.contains(.news))
         }
         .padding(Theme.Spacing.m)
         // A readable column on an iPhone's width and an iPad's, centred on
@@ -340,26 +407,51 @@ private struct HomeDashboard: View {
         }
     }
 
-    /// "Customize Home", at the foot of the page.
-    private var customizeButton: some View {
-        Button {
-            showsCustomize = true
-        } label: {
-            Label("Customize Home", systemImage: "slider.horizontal.3")
-                .font(.subheadline.weight(.semibold))
+    /// The page's foot: "More News (N)" while the news holds stories back,
+    /// and "Customize Home", in one button style (H6). Stacked on an
+    /// iPhone, side by side on an iPad.
+    private func footButtons(showsNews: Bool) -> some View {
+        let news = newsSelection
+        let showsMore = showsNews && !news.selection.more.isEmpty
+        let layout = isRegular && !usesStackedLayout
+            ? AnyLayout(HStackLayout(spacing: Theme.Spacing.m))
+            : AnyLayout(VStackLayout(spacing: Theme.Spacing.s))
+        return layout {
+            if showsMore {
+                Button {
+                    withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
+                        showsAllNews.toggle()
+                    }
+                } label: {
+                    Text(showsAllNews ? "Show Fewer Stories" : "More News (\(news.selection.more.count))")
+                }
+                .buttonStyle(HomeFootButtonStyle())
+                .frame(maxWidth: isRegular ? Self.footButtonWidth : nil)
+                .accessibilityIdentifier("home.news.more")
+            }
+
+            Button {
+                showsCustomize = true
+            } label: {
+                Text("Customize Home")
+            }
+            .buttonStyle(HomeFootButtonStyle())
+            .frame(maxWidth: isRegular ? Self.footButtonWidth : nil)
+            .accessibilityHint("Show, hide and reorder Home's sections.")
+            .accessibilityIdentifier("home.customize")
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
         .frame(maxWidth: .infinity)
-        .padding(.top, Theme.Spacing.s)
-        .accessibilityHint("Show, hide and reorder Home's sections.")
-        .accessibilityIdentifier("home.customize")
+        .padding(.top, Theme.Spacing.xs)
     }
+
+    /// The width of each foot button side by side on an iPad.
+    private static let footButtonWidth: CGFloat = 300
 
     // MARK: My Teams
 
-    /// A card per favorite (`HomeTeamCard`), opening its tab.
+    /// A card per favorite (`HomeTeamCard`), opening its tab: a carousel
+    /// with the next card peeking and page dots on an iPhone (H2), two
+    /// columns with nothing to scroll on an iPad (H10).
     private var myTeamsSection: some View {
         let summaries = model.teamSummaries
         return accessorySection(systemImage: HomeSectionKind.myTeams.systemImage, title: "My Teams", identifier: "home.section.myTeams") {
@@ -378,16 +470,13 @@ private struct HomeDashboard: View {
                 StackedCarousel(items: summaries) { summary in
                     teamButton(summary)
                 }
+            } else if isRegular {
+                cardGrid(summaries) { summary in
+                    teamButton(summary)
+                }
             } else {
-                carousel {
-                    // Not lazy: a card per favorite, laid out together so
-                    // each is as tall as the tallest.
-                    HStack(alignment: .top, spacing: Theme.Spacing.m) {
-                        ForEach(summaries) { summary in
-                            teamButton(summary)
-                        }
-                    }
-                    .fixedSize(horizontal: false, vertical: true)
+                HomeCarousel(items: summaries, share: Self.wideCardShare) { summary in
+                    teamButton(summary)
                 }
             }
         }
@@ -408,8 +497,8 @@ private struct HomeDashboard: View {
     // MARK: This Week
 
     /// The strip of days from `HomeFeed.weekDaysBack` ago to
-    /// `HomeFeed.weekDaysAhead` on, and the picked day's games as schedule
-    /// cards; one line when the week has none.
+    /// `HomeFeed.weekDaysAhead` on, and the picked day's games as cards
+    /// that say whose game each is (H3); one line when the week has none.
     private var weekSection: some View {
         let week = model.week
         let hasGames = week.contains { !$0.games.isEmpty }
@@ -463,9 +552,11 @@ private struct HomeDashboard: View {
         }
     }
 
-    /// The picked day's games as the team page's schedule cards
-    /// (`GameView`), each opening its sheet; placeholders while the
-    /// seasons load; one line on a quiet day.
+    /// The picked day's games as Home's game cards (`GameView` in its
+    /// `.home` style), each opening its sheet and as tall as its content:
+    /// a carousel with the next card peeking on an iPhone, two columns on
+    /// an iPad; placeholders while the seasons load; one line on a quiet
+    /// day.
     @ViewBuilder
     private func dayGames(_ day: HomeWeekDay?) -> some View {
         if let day, !day.games.isEmpty {
@@ -473,13 +564,13 @@ private struct HomeDashboard: View {
                 StackedCarousel(items: day.games) { entry in
                     weekGameButton(entry)
                 }
+            } else if isRegular {
+                cardGrid(day.games, matchesHeights: false) { entry in
+                    weekGameButton(entry)
+                }
             } else {
-                carousel {
-                    LazyHStack(spacing: Theme.Spacing.m) {
-                        ForEach(day.games) { entry in
-                            weekGameButton(entry)
-                        }
-                    }
+                HomeCarousel(items: day.games, share: Self.wideCardShare, matchesHeights: false, showsDots: false) { entry in
+                    weekGameButton(entry)
                 }
             }
         } else if model.seasonsLoading {
@@ -501,9 +592,9 @@ private struct HomeDashboard: View {
         }
     }
 
-    /// A game's schedule card, under the identifier of what it is: a
-    /// result (`home.result.<id>`), a game under way (`home.live.<id>`),
-    /// or one to come (`home.upcoming.<id>`).
+    /// A game's card, under the identifier of what it is: a result
+    /// (`home.result.<id>`), a game under way (`home.live.<id>`), or one to
+    /// come (`home.upcoming.<id>`).
     private func weekGameButton(_ entry: HomeGame) -> some View {
         let liveScore = model.liveScore(for: entry.game, team: entry.team)
         let identifier: String
@@ -515,7 +606,7 @@ private struct HomeDashboard: View {
             identifier = "home.upcoming.\(entry.id)"
         }
         return gameButton(entry, source: "week", identifier: identifier) {
-            GameView(game: entry.game, team: entry.team, liveScore: liveScore)
+            GameView(game: entry.game, team: entry.team, liveScore: liveScore, style: .home)
         }
         .accessibilityLabel(
             "\(entry.team.shortName): "
@@ -530,8 +621,9 @@ private struct HomeDashboard: View {
     // MARK: Standings
 
     /// Each favorite's slice of its table (`HomeStandingsCard`), opening its
-    /// tab; skeletons while the tables load; nothing once they have, if no
-    /// table holds a favorite.
+    /// tab: a carousel with the next card peeking and page dots on an
+    /// iPhone (H4), stacked in the column on an iPad; skeletons while the
+    /// tables load; nothing once they have, if no table holds a favorite.
     @ViewBuilder
     private var standingsSection: some View {
         let slices = model.standingsSlices
@@ -550,13 +642,16 @@ private struct HomeDashboard: View {
                     StackedCarousel(items: slices) { slice in
                         standingsButton(slice)
                     }
-                } else {
-                    carousel {
-                        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-                            ForEach(slices) { slice in
-                                standingsButton(slice)
-                            }
+                } else if isRegular {
+                    VStack(spacing: Theme.Spacing.m) {
+                        ForEach(slices) { slice in
+                            standingsButton(slice)
                         }
+                    }
+                    .padding([.horizontal, .bottom])
+                } else {
+                    HomeCarousel(items: slices, share: Self.wideCardShare) { slice in
+                        standingsButton(slice)
                     }
                 }
             }
@@ -579,7 +674,8 @@ private struct HomeDashboard: View {
 
     /// Each favorite's leader on its first board (`HomePerformerCard`),
     /// opening their player sheet on the favorite's page, as a team page's
-    /// leader cards do; skeletons while the leaders load.
+    /// leader cards do: a carousel with page dots on an iPhone (H4), a
+    /// grid on an iPad; skeletons while the leaders load.
     @ViewBuilder
     private var performersSection: some View {
         let performers = model.performers
@@ -600,18 +696,30 @@ private struct HomeDashboard: View {
                     StackedCarousel(items: performers) { performer in
                         performerButton(performer)
                     }
-                } else {
-                    carousel {
-                        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-                            ForEach(performers) { performer in
-                                performerButton(performer)
-                            }
+                } else if isRegular {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: Self.performerGridMinimum), spacing: Theme.Spacing.m, alignment: .top)],
+                        spacing: Theme.Spacing.m
+                    ) {
+                        ForEach(performers) { performer in
+                            performerButton(performer)
                         }
+                    }
+                    .padding([.horizontal, .bottom])
+                } else {
+                    // The leader cards keep their own width; the row
+                    // still shows a sliver of the next.
+                    HomeCarousel(items: performers, share: nil) { performer in
+                        performerButton(performer)
                     }
                 }
             }
         }
     }
+
+    /// The narrowest a performer's column runs in the iPad's grid: a
+    /// leader card's width.
+    private static let performerGridMinimum: CGFloat = 120
 
     private func performerButton(_ performer: HomePerformer) -> some View {
         Button {
@@ -628,64 +736,76 @@ private struct HomeDashboard: View {
 
     // MARK: News
 
-    /// The favorites' stories, dealt in turn across them
-    /// (`HomeFeed.headlines`), uncapped: with more than one favorite, a
-    /// chip for each to narrow it to theirs; the first story large, the
-    /// rest as compact rows, drawn as they scroll in.
-    @ViewBuilder
-    private var newsSection: some View {
+    /// The news as the section draws it: the filter's team, if one is
+    /// picked, and the stories shown and held back (`HomeFeed.homeNews`).
+    private var newsSelection: (filterTeam: TeamRef?, feed: [HomeHeadline], selection: HomeNewsSelection) {
         let all = model.headlines
         let filterTeam = newsFilter.flatMap { id in model.teams.first { $0.id == id } }
-        let shown = filterTeam.map { HomeFeed.headlines(all, about: $0) } ?? all
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            SectionHeader(systemImage: HomeSectionKind.news.systemImage, title: "News")
-                .padding(.horizontal)
-                .padding(.top, Theme.Spacing.s)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("home.section.news")
+        let feed = filterTeam.map { HomeFeed.headlines(all, about: $0) } ?? all
+        return (filterTeam: filterTeam, feed: feed, selection: HomeFeed.homeNews(feed, now: model.now))
+    }
 
-            if model.teams.count > 1 && !all.isEmpty {
-                newsFilters(selected: filterTeam)
-            }
-
-            if let lead = shown.first {
-                newsButton(lead) {
-                    HomeNewsLeadCard(headline: lead)
+    /// The favorites' news in a section card like the others (H5): with
+    /// more than one favorite, a chip for each to narrow it, the row
+    /// running to the card's edge; then up to five stories from the last
+    /// three days, dealt in turn across the favorites, the first large.
+    /// The rest wait behind More News at the page's foot, and show here
+    /// once it's tapped.
+    private var newsSection: some View {
+        let news = newsSelection
+        let shown = news.selection.shown
+        return section(systemImage: HomeSectionKind.news.systemImage, title: "News", identifier: "home.section.news") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                if model.teams.count > 1 && !model.headlines.isEmpty {
+                    newsFilters(selected: news.filterTeam)
                 }
 
-                let rest = Array(shown.dropFirst())
-                let visible = showsAllNews ? rest : Array(rest.prefix(Self.collapsedNewsCount - 1))
-                LazyVStack(spacing: Theme.Spacing.s) {
-                    ForEach(visible) { headline in
-                        newsButton(headline) {
-                            HomeNewsRow(headline: headline)
+                if !news.feed.isEmpty {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, headline in
+                            if index > 0 {
+                                Divider()
+                            }
+                            newsButton(headline) {
+                                if index == 0 {
+                                    HomeNewsLeadCard(headline: headline)
+                                } else {
+                                    HomeNewsRow(headline: headline)
+                                }
+                            }
+                        }
+
+                        if showsAllNews {
+                            LazyVStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                                ForEach(news.selection.more) { headline in
+                                    Divider()
+                                    newsButton(headline) {
+                                        HomeNewsRow(headline: headline)
+                                    }
+                                }
+                            }
+                        } else if news.selection.holdsOlderStories {
+                            Text(shown.isEmpty
+                                ? "Nothing new in the last three days. Older stories are in More News."
+                                : "Older stories are in More News.")
+                                .font(Theme.Typography.footnote)
+                                .foregroundStyle(Theme.Palette.metadata)
+                                .accessibilityIdentifier("home.news.older")
                         }
                     }
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                } else if let filterTeam = news.filterTeam {
+                    compactLine("No stories about the \(filterTeam.shortName) right now.", identifier: "home.news.filterEmpty")
+                } else {
+                    newsStatus
                 }
-
-                if rest.count > Self.collapsedNewsCount - 1 {
-                    Button(showsAllNews ? "Show Fewer Stories" : "More News (\(rest.count - visible.count))") {
-                        withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
-                            showsAllNews.toggle()
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .frame(maxWidth: .infinity)
-                    .accessibilityIdentifier("home.news.more")
-                }
-            } else if let filterTeam {
-                compactLine("No stories about the \(filterTeam.shortName) right now.", identifier: "home.news.filterEmpty")
-                    .contentCard()
-            } else {
-                newsStatus
             }
         }
     }
 
-    /// "All", then a chip per favorite, the picked one filled.
+    /// "All", then a chip per favorite, the picked one filled: in line with
+    /// the stories, scrolling to the card's edge (H5).
     private func newsFilters(selected: TeamRef?) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: Theme.Spacing.s) {
@@ -702,7 +822,7 @@ private struct HomeDashboard: View {
                 }
             }
         }
-        .contentMargins(.horizontal, Theme.Spacing.xs, for: .scrollContent)
+        .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
         .scrollIndicators(.hidden)
     }
 
@@ -738,15 +858,15 @@ private struct HomeDashboard: View {
     private var newsStatus: some View {
         switch model.headlinesState {
         case .loading:
-            ForEach(0..<3, id: \.self) { _ in
-                LoadingNewsView()
-                    .padding(Theme.Spacing.m)
-                    .contentCard()
+            VStack(spacing: Theme.Spacing.m) {
+                ForEach(0..<3, id: \.self) { _ in
+                    LoadingNewsView()
+                }
             }
+            .padding([.horizontal, .bottom])
         case .loaded:
             SectionStatusView(message: "No news right now.")
                 .frame(maxWidth: .infinity)
-                .contentCard()
         case .failed:
             SectionStatusView(message: "Couldn't load the news") {
                 Task { [model] in
@@ -754,7 +874,6 @@ private struct HomeDashboard: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .contentCard()
         }
     }
 
@@ -800,26 +919,53 @@ private struct HomeDashboard: View {
         .accessibilityIdentifier(identifier)
     }
 
-    /// A section's cards side by side, scrolling sideways, as a team page's
-    /// carousels do: inset in line with the header, coming to rest on a
-    /// card's leading edge (T-4, T-8). No glass: it's content (§5.2).
+    /// The share of a carousel's width a wide card takes on an iPhone:
+    /// four fifths, so the next card's edge shows beside it (F7).
+    private static let wideCardShare = HomeCarouselShare(count: 5, span: 4)
+
+    /// Cards in two columns, nothing to scroll sideways (H10): an iPad's
+    /// My Teams and This Week. With `matchesHeights`, each card fills its
+    /// row's height, so the feet of a row's team cards line up.
+    private func cardGrid<Item: Identifiable, Card: View>(
+        _ items: [Item],
+        matchesHeights: Bool = true,
+        @ViewBuilder card: @escaping (Item) -> Card
+    ) -> some View {
+        Grid(alignment: .topLeading, horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.m) {
+            ForEach(Array(stride(from: 0, to: items.count, by: 2)), id: \.self) { start in
+                GridRow(alignment: .top) {
+                    ForEach(items[start..<min(start + 2, items.count)]) { item in
+                        card(item)
+                            .frame(maxHeight: matchesHeights ? CGFloat.infinity : nil, alignment: .top)
+                    }
+                    if start + 1 >= items.count {
+                        // An odd card out keeps its column's width.
+                        Color.clear
+                            .gridCellUnsizedAxes(.vertical)
+                    }
+                }
+            }
+        }
+        .padding([.horizontal, .bottom])
+    }
+
+    /// A row of placeholders, side by side and inset in line with the
+    /// header, while a section loads.
     private func carousel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         let content = content()
         return ScrollView(.horizontal) {
             content
-                .scrollTargetLayout()
                 .padding(.bottom, Theme.Spacing.l)
         }
         .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
-        .scrollTargetBehavior(.viewAligned)
         .scrollIndicators(.hidden)
     }
 
-    /// One line of secondary text in a section with nothing to show.
+    /// One line of metadata text in a section with nothing to show.
     private func compactLine(_ text: String, identifier: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.Palette.metadata)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding([.horizontal, .bottom])
             .padding(.top, Theme.Spacing.xs)
@@ -847,6 +993,117 @@ private struct HomeDashboard: View {
     }
 }
 
+// MARK: - Carousel
+
+/// How much of a carousel's width each card takes, as
+/// `containerRelativeFrame`'s `count` and `span`: `span` of `count` equal
+/// columns.
+private struct HomeCarouselShare {
+    let count: Int
+    let span: Int
+}
+
+/// A section's cards side by side, scrolling sideways, as a team page's
+/// carousels do: inset in line with the header, coming to rest on a
+/// card's leading edge (T-4, T-8), the next card always peeking in (F7),
+/// and page dots beneath that follow the scroll (H4). No glass: it's
+/// content (§5.2).
+private struct HomeCarousel<Item: Identifiable, Card: View>: View {
+    let items: [Item]
+    /// Each card's share of the row's width; `nil` keeps each card's own.
+    let share: HomeCarouselShare?
+    /// Whether every card is drawn as tall as the tallest, so the feet of
+    /// a row of cards line up; otherwise each is as tall as its content.
+    var matchesHeights = true
+    var showsDots = true
+    @ViewBuilder let card: (Item) -> Card
+
+    /// The card at the row's leading edge.
+    @State private var position: Item.ID?
+
+    var body: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                    ForEach(items) { item in
+                        sized(card(item))
+                    }
+                }
+                // Each card at the row's height when they match (their
+                // stretch fills it), else at its own.
+                .fixedSize(horizontal: false, vertical: true)
+                .scrollTargetLayout()
+            }
+            .contentMargins(.horizontal, Theme.Spacing.l, for: .scrollContent)
+            .scrollTargetBehavior(.viewAligned)
+            .scrollIndicators(.hidden)
+            .scrollPosition(id: $position, anchor: .leading)
+
+            if showsDots && items.count > 1 {
+                HomePageDots(count: items.count, current: currentIndex)
+            }
+        }
+        .padding(.bottom, Theme.Spacing.l)
+    }
+
+    @ViewBuilder
+    private func sized(_ card: Card) -> some View {
+        let stretched = card
+            .frame(maxHeight: matchesHeights ? CGFloat.infinity : nil, alignment: .top)
+        if let share {
+            stretched
+                .containerRelativeFrame(.horizontal, count: share.count, span: share.span, spacing: Theme.Spacing.m)
+        } else {
+            stretched
+        }
+    }
+
+    private var currentIndex: Int {
+        guard let position, let index = items.firstIndex(where: { $0.id == position }) else { return 0 }
+        return index
+    }
+}
+
+/// A carousel's page dots: one per card, the one at the row's leading
+/// edge dark. Decoration: VoiceOver reads the cards themselves.
+private struct HomePageDots: View {
+    let count: Int
+    let current: Int
+
+    @ScaledMetric(relativeTo: .caption2) private var size: CGFloat = 7
+
+    var body: some View {
+        HStack(spacing: size - 1) {
+            ForEach(0..<count, id: \.self) { index in
+                Circle()
+                    .fill(index == current ? Color.primary.opacity(0.75) : Color.secondary.opacity(0.35))
+                    .frame(width: size, height: size)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The page's foot buttons, More News and Customize Home, in one style
+/// (H6): full width (300 pt side by side on an iPad), semibold text in
+/// the app's tint on a capsule of the section cards' surface, at least
+/// 50 pt tall.
+private struct HomeFootButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.tint)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.vertical, Theme.Spacing.m)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .background(Theme.Surface.contentCard, in: Capsule())
+            .contentShape(Capsule())
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
 // MARK: - Live
 
 extension HomeLiveGame {
@@ -859,9 +1116,10 @@ extension HomeLiveGame {
 
 // MARK: - News
 
-/// The news feed's first story, large: its picture across the card, the
-/// favorite it came from as a chip, the headline, the summary, and the
-/// outlet and age. No glass: the feed scrolls (§5.2).
+/// The news section's first story, large: its picture across the section,
+/// the favorite it came from as a chip, the headline, the summary, and the
+/// outlet and age. On the section's card itself (H5). No glass: the page
+/// scrolls (§5.2).
 private struct HomeNewsLeadCard: View {
     let headline: HomeHeadline
 
@@ -894,22 +1152,21 @@ private struct HomeNewsLeadCard: View {
             if let summary = article.articleDescription, !summary.isEmpty {
                 Text(summary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .lineLimit(3)
             }
 
             HomeNewsByline(article: article)
         }
-        .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentCard()
-        .contentShape(Theme.Radius.cardShape)
+        .contentShape(.rect)
     }
 }
 
-/// A story after the first in Home's news feed, compact: a small
-/// thumbnail beside the favorite's chip, the headline and the byline, on a
-/// plain content card. At accessibility sizes the thumbnail goes above.
+/// A story after the first in Home's news section, compact: a small
+/// thumbnail beside the favorite's chip, the headline and the byline, on
+/// the section's card between dividers. At accessibility sizes the
+/// thumbnail goes above.
 private struct HomeNewsRow: View {
     let headline: HomeHeadline
 
@@ -946,10 +1203,8 @@ private struct HomeNewsRow: View {
                 HomeNewsByline(article: headline.article)
             }
         }
-        .padding(Theme.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contentCard()
-        .contentShape(Theme.Radius.cardShape)
+        .contentShape(.rect)
     }
 }
 
@@ -959,8 +1214,8 @@ private struct HomeNewsByline: View {
 
     var body: some View {
         Text("\(article.source) · \(article.publishedAt.formatted(.relative(presentation: .named)))")
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+            .font(.caption)
+            .foregroundStyle(Theme.Palette.metadata)
             .lineLimit(1)
     }
 }

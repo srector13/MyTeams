@@ -20,30 +20,37 @@ import SwiftUI
 /// A favorite's card in My Teams: over its colour, its crest, poll rank and
 /// short name, its record large, its standing and its last five results;
 /// beneath, on the inset surface, where its season is — the game under
-/// way, the next game, the last result, or the season over or to come.
+/// way, the next game, the last result — or, when the header already
+/// shows the season's state, what's next (H2: the status shows once).
 ///
-/// Fixed width in the carousel, scaled with its text; at accessibility
-/// sizes, where My Teams is a vertical list, it spans the list's width.
+/// Every card's coloured header is at least `headerMinHeight` tall and its
+/// foot one line, so the feet line up across a row (H2). The width is the
+/// row's: a share of the carousel on an iPhone, a grid column on an iPad
+/// (H10), the list's width at accessibility sizes.
 struct HomeTeamCard: View {
     let summary: HomeTeamSummary
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .body) private var cardWidth: CGFloat = 196
     @ScaledMetric(relativeTo: .headline) private var crestSize: CGFloat = 32
+    /// The header's height with a record, a one-line standing and form
+    /// pills: the tallest it is outside accessibility sizes.
+    @ScaledMetric(relativeTo: .body) private var headerMinHeight: CGFloat = 136
 
     private var team: TeamRef { summary.team }
     private var fillsRow: Bool { dynamicTypeSize.isAccessibilitySize }
     private var isLoading: Bool { summary.status == .loading }
+    private var fill: Color { Color(hexString: TeamColors.fillHex(for: team)) }
+    private var ink: Color { TeamColors.ink(on: team) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             top
             foot
         }
-        .frame(width: fillsRow ? nil : cardWidth, alignment: .leading)
-        // As tall as the carousel's tallest card, so the feet line up.
-        .frame(maxWidth: fillsRow ? CGFloat.infinity : nil, maxHeight: .infinity, alignment: .top)
+        // As tall as the row's tallest card, its header taking up the
+        // difference, so the feet line up.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.Surface.insetCard)
         // Nested in the section's card (X-4).
         .clipShape(Theme.Radius.innerShape)
@@ -51,7 +58,7 @@ struct HomeTeamCard: View {
     }
 
     /// The team colour, with the crest, name, record, standing and form in
-    /// its ink.
+    /// its ink (F2).
     private var top: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             HStack(spacing: Theme.Spacing.s) {
@@ -69,10 +76,15 @@ struct HomeTeamCard: View {
 
             figures
         }
-        .foregroundStyle(TeamColors.ink(on: team))
+        .foregroundStyle(ink)
         .padding(Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(hexString: TeamColors.fillHex(for: team)))
+        .frame(
+            maxWidth: .infinity,
+            minHeight: fillsRow ? nil : headerMinHeight,
+            maxHeight: .infinity,
+            alignment: .topLeading
+        )
+        .background(fill)
     }
 
     /// The record, standing and form; placeholders while the season loads
@@ -82,8 +94,9 @@ struct HomeTeamCard: View {
         let header = summary.header
         let content = VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             // No record yet (a season not started): the season's state
-            // in the figure's place, not a dash.
-            Text(header.record ?? (isLoading ? "0-0" : summary.status.text))
+            // in the figure's place, not a dash; the foot then says
+            // what's next rather than repeating it.
+            Text(header.record ?? (isLoading ? "0-0" : summary.headerStatusText))
                 .font(header.record == nil && !isLoading ? Theme.Typography.cardTitle : Theme.Typography.statFigure)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -91,17 +104,18 @@ struct HomeTeamCard: View {
             if let standing = header.standing {
                 Text(standing)
                     .font(Theme.Typography.footnote.weight(.semibold))
-                    .lineLimit(fillsRow ? nil : 2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(fillsRow ? nil : 1)
+                    .minimumScaleFactor(0.75)
             } else if isLoading {
                 Text("1st in Conference")
                     .font(Theme.Typography.footnote.weight(.semibold))
             }
 
             if !header.form.isEmpty {
+                // Solid pills on the team colour (F4, H7).
                 HStack(spacing: 3) {
                     ForEach(Array(header.form.enumerated()), id: \.offset) { _, outcome in
-                        FormCapsule(outcome: outcome)
+                        FormCapsule(outcome: outcome, ink: ink, fill: fill)
                     }
                 }
             }
@@ -115,15 +129,17 @@ struct HomeTeamCard: View {
         }
     }
 
-    /// Where the season is, in secondary text on the inset surface.
+    /// Where the season is, or what's next, in the metadata grey on the
+    /// inset surface (F1). One line in a row of cards, so the feet match.
     @ViewBuilder
     private var foot: some View {
-        let status = Label(summary.status.text, systemImage: summary.status.systemImage)
+        let status = Label(summary.footText, systemImage: summary.status.systemImage)
             .font(Theme.Typography.caption.weight(.medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(fillsRow ? nil : 2)
+            .foregroundStyle(Theme.Palette.metadata)
+            .lineLimit(fillsRow ? nil : 1)
+            .minimumScaleFactor(0.85)
             .padding(Theme.Spacing.m)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         if isLoading {
             status
                 .redacted(reason: .placeholder)
@@ -149,6 +165,8 @@ extension HomeTeamSummary {
         }
         if let record = header.record {
             parts.append("record " + record.replacingOccurrences(of: "-", with: " and "))
+        } else {
+            parts.append(headerStatusText)
         }
         if let standing = header.standing {
             parts.append(standing)
@@ -156,7 +174,7 @@ extension HomeTeamSummary {
         if let form = header.formAccessibilityLabel {
             parts.append(form)
         }
-        parts.append(status.text)
+        parts.append(footText)
         return parts.joined(separator: ", ")
     }
 }
@@ -188,7 +206,7 @@ struct HomeWeekDayButton: View {
                 Text(isToday ? "Today" : day.date.formatted(.dateTime.weekday(.abbreviated)))
                     .font(.caption2.weight(.semibold))
                     .textCase(.uppercase)
-                    .foregroundStyle(isSelected || isToday ? Color.primary : Color.secondary)
+                    .foregroundStyle(isSelected || isToday ? Color.primary : Theme.Palette.metadata)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Text(day.date.formatted(.dateTime.day()))
@@ -212,8 +230,10 @@ struct HomeWeekDayButton: View {
     private var dots: some View {
         HStack(spacing: 2) {
             ForEach(Array(day.games.prefix(Self.maxDots))) { entry in
+                // The team's accent, which reads on the inset surface in
+                // light and dark (F3).
                 Circle()
-                    .fill(Color(hexString: TeamColors.fillHex(for: entry.team)))
+                    .fill(TeamColors.accent(for: entry.team))
                     .overlay {
                         Circle()
                             .strokeBorder(Color.primary.opacity(0.25), lineWidth: 0.5)
@@ -263,13 +283,15 @@ struct HomeWeekDayButton: View {
 /// then its row and the rows either side — rank, crest, name, record, and
 /// the points (soccer) or the streak — the favorite's on one continuous
 /// band of its colour, as a team page's standings pick it out (T-7).
+///
+/// As wide as its row gives it: a share of the carousel on an iPhone, the
+/// column on an iPad.
 struct HomeStandingsCard: View {
     let slice: HomeStandingsSlice
 
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @ScaledMetric(relativeTo: .footnote) private var cardWidth: CGFloat = 264
     @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 18
     @ScaledMetric(relativeTo: .footnote) private var rankWidth: CGFloat = 22
     @ScaledMetric(relativeTo: .footnote) private var recordWidth: CGFloat = 48
@@ -302,7 +324,7 @@ struct HomeStandingsCard: View {
                 TeamLogo(team: slice.team, size: crestSize + 6)
                 Text(slice.title)
                     .font(.subheadline.bold())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .lineLimit(fillsRow ? nil : 1)
             }
 
@@ -314,8 +336,7 @@ struct HomeStandingsCard: View {
             }
         }
         .padding(Theme.Spacing.m)
-        .frame(width: fillsRow ? nil : cardWidth, alignment: .leading)
-        .frame(maxWidth: fillsRow ? CGFloat.infinity : nil, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
         .contentShape(Theme.Radius.innerShape)
     }
@@ -335,7 +356,7 @@ struct HomeStandingsCard: View {
             }
         }
         .font(Theme.Typography.statLabel)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Theme.Palette.metadata)
         .padding(.horizontal, Theme.Spacing.xs)
         .accessibilityHidden(true)
     }
@@ -343,7 +364,7 @@ struct HomeStandingsCard: View {
     private func rowView(_ row: HomeStandingsSlice.Row, lastColumn: LastColumn?) -> some View {
         HStack(spacing: Theme.Spacing.s) {
             Text("\(row.rank)")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(row.isFollowed ? Color.primary : Theme.Palette.metadata)
                 .frame(minWidth: rankWidth, alignment: .trailing)
             HStack(spacing: Theme.Spacing.xs) {
                 TeamLogo(team: crestTeam(for: row.entry), size: crestSize)
@@ -374,7 +395,9 @@ struct HomeStandingsCard: View {
         .background {
             if row.isFollowed {
                 RoundedRectangle(cornerRadius: Theme.Spacing.xs, style: .continuous)
-                    .fill(Color(hexString: TeamColors.fillHex(for: slice.team)).opacity(Theme.selectionWashOpacity(contrast: contrast)))
+                    // The team's accent, so the band shows on a dark card
+                    // too (F3).
+                    .fill(TeamColors.accent(for: slice.team).opacity(Theme.selectionWashOpacity(contrast: contrast)))
             }
         }
         .accessibilityElement(children: .ignore)
@@ -477,7 +500,9 @@ struct HomePerformerCard: View {
         TeamLeaderCard(
             board: performer.board,
             row: performer.row,
-            teamColor: Color(hexString: TeamColors.fillHex(for: performer.team)),
+            // The accent bar in the team's accent, visible on a dark card
+            // (F3).
+            teamColor: TeamColors.accent(for: performer.team),
             team: performer.team
         )
         .overlay(alignment: .topLeading) {

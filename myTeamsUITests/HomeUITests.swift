@@ -167,8 +167,9 @@ final class HomeUITests: XCTestCase {
         XCTAssertFalse(app.buttons["home.result.401872945"].exists, "The result stayed on the next game's day.")
     }
 
-    /// With no game this week, This Week is one line and the news feed is
-    /// still there below it, its stories there to open.
+    /// With no game this week, This Week is one line and the news is still
+    /// there below it, its stories there to open, the rest behind More
+    /// News.
     @MainActor
     func testNewsFeedWithoutGames() throws {
         let app = launchWithFixtures(following: Self.chiefs, now: Self.offSeason)
@@ -193,11 +194,22 @@ final class HomeUITests: XCTestCase {
         }
         XCTAssertTrue(row.isHittable, "The feed's first story never scrolled into view.")
 
-        // The feed runs on below the fold, uncapped: still stories after
-        // scrolling well past the first.
-        app.swipeUp()
-        app.swipeUp()
+        // The section shows at most five stories (H5); the rest wait
+        // behind More News at the page's foot, which shows them in place.
+        let shownCount = app.buttons.matching(identifier: "home.news.row").count
+        XCTAssertLessThanOrEqual(shownCount, 5, "Home's news showed more than five stories before More News.")
+        let more = app.buttons["home.news.more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 5), "No More News on Home.")
+        for _ in 0..<6 where !more.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(more.isHittable, "No More News at the foot of the page.")
+        more.tap()
         XCTAssertTrue(app.buttons["home.news.row"].firstMatch.waitForExistence(timeout: 5), "The feed ran out of stories.")
+        XCTAssertGreaterThan(
+            app.buttons.matching(identifier: "home.news.row").count, shownCount,
+            "More News didn't show the rest of the stories."
+        )
     }
 
     /// Home's gear opens Settings, the way to alerts and teams from where
