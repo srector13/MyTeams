@@ -372,8 +372,21 @@ final class myTeamsUITests: XCTestCase {
         let app = launchWithFixtures()
         openFirstTeam(app)
 
-        let cards = app.descendants(matching: .any)
+        var cards = app.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.game."))
+        // A finished season shows "Season complete" in place of the cards
+        // (T8); its games are in the full schedule behind it.
+        let complete = app.descendants(matching: .any)["schedule.seasonComplete"].firstMatch
+        for _ in 0..<15 where !cards.firstMatch.exists && !complete.exists {
+            _ = cards.firstMatch.waitForExistence(timeout: 1)
+        }
+        if !cards.firstMatch.exists, complete.exists {
+            let full = app.buttons["schedule.full"].firstMatch
+            XCTAssertTrue(full.waitForExistence(timeout: 5), "A finished season offers no full schedule.")
+            full.tap()
+            cards = app.descendants(matching: .any)
+                .matching(NSPredicate(format: "identifier BEGINSWITH %@", "schedule.full.game."))
+        }
         XCTAssertTrue(cards.firstMatch.waitForExistence(timeout: 15), "The schedule fixture never loaded.")
         for card in cards.allElementsBoundByIndex.prefix(8) {
             let label = card.label
