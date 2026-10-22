@@ -99,4 +99,32 @@ struct AthleteStatsParsingTests {
         // A failed fetch parses to zeros too.
         #expect(parseBasketballPlayerStats(from: JSON(data: Data())).avgPoints == 0)
     }
+
+    @Test("Shooting attempts are each split's averages times its games, summed (P3)")
+    func basketballAttempts() {
+        // The abridged document has no made-attempted pairs: unknown.
+        let abridged = parseBasketballPlayerStats(from: Self.basketball)
+        #expect(abridged.fieldGoals == nil && abridged.threePointers == nil && abridged.freeThrows == nil)
+
+        // 2 home games at 0.5-1.0 threes and 1 away at 1.0-2.0: 2 of 4,
+        // under the five a bar needs.
+        let paired = JSON(data: Data("""
+        {"splitCategories": [{"splits": [
+          {"displayName": "Home", "stats": ["2", "20.0", "3.0-6.0", "50.0", "0.5-1.0", "50.0", "1.0-1.0", "100.0"]},
+          {"displayName": "Away", "stats": ["1", "20.0", "2.0-5.0", "40.0", "1.0-2.0", "50.0", "0.0-0.0", "0.0"]}
+        ]}]}
+        """.utf8))
+        let stats = parseBasketballPlayerStats(from: paired)
+        #expect(stats.fieldGoals == MadeAttempted(made: 8, attempted: 17))
+        #expect(stats.threePointers == MadeAttempted(made: 2, attempted: 4))
+        #expect(stats.freeThrows == MadeAttempted(made: 2, attempted: 2))
+
+        let threes = PlayerSheetCell.percentage(
+            title: "3-Point Percentage",
+            progress: Double(stats.threePointFieldGoalPct) / 100,
+            attempts: stats.threePointers
+        )
+        #expect(threes.displayValue == "2 of 4")
+        #expect(threes.barFraction == nil)
+    }
 }

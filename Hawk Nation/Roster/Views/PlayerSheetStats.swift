@@ -49,9 +49,9 @@ extension PlayerSheetGrid {
         return featured
     }
 
-    /// The grid's sections less the `featured` cells, less any quiet cell
-    /// with nothing in it (`hidesWhenEmpty`: no one needs "Own Goals 0"),
-    /// and less any section those leave empty.
+    /// The grid's sections less the `featured` cells, and less any section
+    /// that leaves empty. Zero rows stay: `statGroups(excluding:)` decides
+    /// which of these show at first.
     func remainingSections(excluding featured: [PlayerSheetFeaturedCell]) -> [Section] {
         var lifted = Set(featured.map { Self.cellKey(section: $0.section, title: $0.cell.title) })
         var remaining: [Section] = []
@@ -61,7 +61,6 @@ extension PlayerSheetGrid {
                 var kept: [PlayerSheetCell] = []
                 for cell in row {
                     if lifted.remove(Self.cellKey(section: index, title: cell.title)) != nil { continue }
-                    if cell.hidesWhenEmpty && cell.isEmptyFigure { continue }
                     kept.append(cell)
                 }
                 if !kept.isEmpty {
@@ -73,6 +72,35 @@ extension PlayerSheetGrid {
             }
         }
         return remaining
+    }
+
+    /// The groups under the tiles (`remainingSections(excluding:)`), split
+    /// for "Show all stats" (P2): at first a group shows only its figures
+    /// that aren't zero or missing ("Own Goals 0", a reliever's "Wins 0"),
+    /// and a group with none of those doesn't show at all; the rest wait
+    /// behind the button. A grid that is all zeros never gets here: the
+    /// sheet says it has no figures (`hasNoFigures`).
+    func statGroups(excluding featured: [PlayerSheetFeaturedCell]) -> PlayerSheetStatGroups {
+        let all = remainingSections(excluding: featured)
+        var shown: [Section] = []
+        for section in all {
+            let rows = section.rows
+                .map { row in row.filter { !$0.isEmptyFigure } }
+                .filter { !$0.isEmpty }
+            if !rows.isEmpty {
+                shown.append(Section(title: section.title, rows: rows))
+            }
+        }
+        return PlayerSheetStatGroups(shown: shown, all: all)
+    }
+
+    /// What the Season Stats card shows for the grid once it has loaded
+    /// (P8): a fetch that failed, or answered without its season list, is
+    /// not a season with nothing in it.
+    var seasonState: PlayerSheetSeasonState {
+        if loadFailed { return .loadFailed }
+        if hasNoFigures { return .noFigures }
+        return .figures
     }
 
     /// The first cell titled `title`, in the section titled `sectionTitle`
@@ -97,6 +125,29 @@ extension PlayerSheetGrid {
     }
 }
 
+/// The Season Stats card's groups: those shown at first, every one for
+/// "Show all stats", and how many rows the button would add.
+struct PlayerSheetStatGroups: Sendable {
+    var shown: [PlayerSheetGrid.Section]
+    var all: [PlayerSheetGrid.Section]
+
+    /// The rows in `all` that `shown` leaves out: the button's "(5 more)".
+    var hiddenCount: Int {
+        func count(_ sections: [PlayerSheetGrid.Section]) -> Int {
+            sections.reduce(0) { $0 + $1.rows.reduce(0) { $0 + $1.count } }
+        }
+        return count(all) - count(shown)
+    }
+}
+
+/// What a loaded Season Stats card says: its figures, that the season has
+/// none yet, or that they couldn't be loaded, with a Retry (P8).
+enum PlayerSheetSeasonState: Sendable, Equatable {
+    case figures
+    case noFigures
+    case loadFailed
+}
+
 /// A small mark drawn beside a stat row's label.
 enum PlayerStatGlyph: Sendable {
     case yellowCard
@@ -104,11 +155,16 @@ enum PlayerStatGlyph: Sendable {
 }
 
 extension PlayerSheetCell {
-    /// Titles of stats that say little at zero, shown only once they don't.
-    static let quietTitles: Set<String> = ["Own Goals", "Offsides"]
+    /// The fewest attempts a rate is drawn as a bar over (P3): one shot on
+    /// target from two is "1 of 2", not a half-full bar.
+    static let minimumBarAttempts = 5
 
-    /// Whether the cell is left out while it's zero or missing.
-    var hidesWhenEmpty: Bool { Self.quietTitles.contains(title) }
+    /// Whether a rate's attempts, where the feed gives them, are too few
+    /// for a bar.
+    private var hasFewAttempts: Bool {
+        guard case .percentage(_, _, let given) = self, let attempts = given else { return false }
+        return attempts.attempted < Self.minimumBarAttempts
+    }
 
     /// The card a soccer discipline row is drawn with.
     var glyph: PlayerStatGlyph? {
@@ -120,22 +176,26 @@ extension PlayerSheetCell {
     }
 
     /// The figure as a tile or row shows it: the feed's text, "N/A" for
-    /// none, a rate as a whole percentage.
+    /// none, a rate as a whole percentage, or over fewer than
+    /// `minimumBarAttempts` as its makes of its attempts ("0 of 3").
     var displayValue: String {
         switch self {
         case .fact(_, let info), .stat(_, let info):
             return info.isEmpty ? "N/A" : info
-        case .percentage(_, let progress):
-            return progress.isFinite
-                ? progress.formatted(.percent.precision(.fractionLength(0)))
-                : "N/A"
+        case .percentage(_, let progress, let attempts):
+            guard progress.isFinite else { return "N/A" }
+            if let attempts, attempts.attempted > 0, hasFewAttempts {
+                return "\(attempts.made) of \(attempts.attempted)"
+            }
+            return progress.formatted(.percent.precision(.fractionLength(0)))
         }
     }
 
     /// A rate's share of its bar, clamped to 0–1; `nil` for a figure that
-    /// isn't a rate or a rate over no attempts.
+    /// isn't a rate, a rate over no attempts, or one over fewer than
+    /// `minimumBarAttempts` (P3).
     var barFraction: Double? {
-        guard case .percentage(_, let progress) = self, progress.isFinite else { return nil }
+        guard case .percentage(_, let progress, _) = self, progress.isFinite, !hasFewAttempts else { return nil }
         return min(max(progress, 0), 1)
     }
 }
@@ -146,6 +206,75 @@ extension PlayerSheetCell {
 /// any case.
 func isSoccerGoalkeeper(_ position: String) -> Bool {
     position.lowercased().contains("goalkeeper")
+}
+
+/// The four lines of a soccer team, which decide a sheet's tiles and the
+/// order of its groups (P1).
+enum SoccerRole: Sendable, Equatable {
+    case goalkeeper
+    case defender
+    case midfielder
+    case forward
+
+    /// ESPN's "Goalkeeper", "Defender", "Midfielder" and "Forward", and
+    /// the finer names some feeds use ("Center Back", "Attacking
+    /// Midfielder", "Striker"). Anything else reads as a forward, whose
+    /// goals-first line was every outfield player's before.
+    init(position: String) {
+        let lowered = position.lowercased()
+        if lowered.contains("goalkeeper") || lowered.contains("keeper") {
+            self = .goalkeeper
+        } else if lowered.contains("midfield") {
+            self = .midfielder
+        } else if lowered.contains("defender") || lowered.contains("back") || lowered.contains("defen") {
+            self = .defender
+        } else {
+            self = .forward
+        }
+    }
+}
+
+/// A soccer player's tiles by their line (P1), by the feeds' stat names
+/// (`PlayerStatWording.soccer`): a keeper's saves, clean sheets, goals
+/// conceded and save percentage; a defender's appearances, starts, goals
+/// conceded while on the pitch and fouls; a midfielder's appearances,
+/// starts, assists and fouls won; a forward's goals, assists, shots on
+/// target and appearances. Each list runs on with stand-ins, for the
+/// athlete document's shorter line (no fouls, no clean sheets in the
+/// roster's): a name the grid lacks is skipped, and four are shown.
+/// ESPN's feeds carry no tackles, interceptions or clearances.
+func soccerKeyStats(role: SoccerRole) -> [PlayerSheetFeature] {
+    let names: [String]
+    switch role {
+    case .goalkeeper:
+        names = ["saves", "cleanSheet", "goalsConceded", "savePct", "appearances", "starts"]
+    case .defender:
+        names = ["appearances", "starts", "goalsConcededOnPitch", "foulsCommitted",
+                 "totalGoals", "goalAssists", "subIns", "totalShots"]
+    case .midfielder:
+        names = ["appearances", "starts", "goalAssists", "foulsSuffered",
+                 "totalGoals", "subIns", "totalShots"]
+    case .forward:
+        names = ["totalGoals", "goalAssists", "shotsOnTarget", "appearances",
+                 "starts", "totalShots"]
+    }
+    return names.map { PlayerStatWording.soccer($0).feature }
+}
+
+/// Whether a baseball position is a reliever's: ESPN's "Relief Pitcher".
+func isReliefPitcher(_ position: String) -> Bool {
+    let lowered = position.lowercased()
+    return lowered.contains("relief") || lowered.contains("reliever") || lowered.contains("closer")
+}
+
+/// A pitcher's tiles: a starter's ERA, win-loss record, strikeouts and
+/// WHIP; a reliever's ERA, innings, strikeouts and WHIP (P9), as a
+/// reliever's record is mostly "0-0".
+func baseballPitcherKeyStats(position: String) -> [PlayerSheetFeature] {
+    let names = isReliefPitcher(position)
+        ? ["ERA", "innings", "strikeouts", "WHIP"]
+        : ["ERA", "winLoss", "strikeouts", "WHIP"]
+    return names.map { PlayerStatWording.pitching($0).feature }
 }
 
 /// An NFL player's headline statistics by position group: a passer's
@@ -209,6 +338,112 @@ func footballKeyStats(position: String) -> [PlayerSheetFeature] {
         lead = [defense]
     }
     return (lead + [passing, rushing, receiving, defense, kicking, punting]).flatMap { $0 }
+}
+
+// MARK: - Wording
+
+/// What one statistic is called on the player sheet, so a figure reads the
+/// same on its tile, its row and its game-log chip (P7): its row's title,
+/// its tile's short label, its chip's abbreviation, and what VoiceOver
+/// calls its tile. Looked up by the feeds' stat names, one table a sport.
+struct PlayerStatWording: Sendable {
+    var title: String
+    var short: String
+    var abbreviation: String
+    var spoken: String
+
+    init(_ title: String, short: String, abbreviation: String, spoken: String) {
+        self.title = title
+        self.short = short
+        self.abbreviation = abbreviation
+        self.spoken = spoken
+    }
+
+    /// The tile that lifts this statistic out of the grid.
+    var feature: PlayerSheetFeature {
+        PlayerSheetFeature(title, short, spoken: spoken)
+    }
+
+    /// A row with this statistic's figure.
+    func stat(_ info: String) -> PlayerSheetCell {
+        .stat(title: title, info: info)
+    }
+
+    /// The wording for a soccer statistic, by the roster's and athlete
+    /// document's names; the name itself for one the table lacks.
+    static func soccer(_ name: String) -> PlayerStatWording {
+        soccerTable[name] ?? PlayerStatWording(name, short: name, abbreviation: name, spoken: name)
+    }
+
+    /// The soccer wording for a feed name the table knows, else `nil`: for
+    /// a game-log column, which may be any sport's.
+    static func knownSoccer(_ name: String) -> PlayerStatWording? {
+        soccerTable[name]
+    }
+
+    /// The wording for a pitching statistic, by the MLB splits' names.
+    static func pitching(_ name: String) -> PlayerStatWording {
+        pitchingTable[name] ?? PlayerStatWording(name, short: name, abbreviation: name, spoken: name)
+    }
+
+    /// Soccer, by the feeds' names. `goalsConcededOnPitch` is the roster's
+    /// `goalsConceded` for an outfield player: the goals let in while they
+    /// were on the pitch. The rates are the sheet's own.
+    private static let soccerTable: [String: PlayerStatWording] = [
+        "appearances": .init("Games Played", short: "Apps", abbreviation: "GP", spoken: "Appearances"),
+        "starts": .init("Games Started", short: "Starts", abbreviation: "GS", spoken: "Starts"),
+        "subIns": .init("Off the Bench", short: "Off Bench", abbreviation: "SUB", spoken: "Substitute appearances"),
+        "totalGoals": .init("Goals", short: "Goals", abbreviation: "G", spoken: "Goals"),
+        "goalAssists": .init("Assists", short: "Assists", abbreviation: "A", spoken: "Assists"),
+        "totalShots": .init("Shots", short: "Shots", abbreviation: "SH", spoken: "Shots"),
+        "shotsOnTarget": .init("On Target", short: "On Target", abbreviation: "SOT", spoken: "Shots on target"),
+        "shotAccuracy": .init("Shot Accuracy", short: "Accuracy", abbreviation: "SH%", spoken: "Shot accuracy"),
+        "conversionRate": .init("Conversion Rate", short: "Conversion", abbreviation: "CONV", spoken: "Conversion rate"),
+        "goalsPerGame": .init("Goals per Game", short: "Goals/Game", abbreviation: "G/GM", spoken: "Goals per game"),
+        "shotsPerGame": .init("Shots per Game", short: "Shots/Game", abbreviation: "SH/GM", spoken: "Shots per game"),
+        "offsides": .init("Offsides", short: "Offsides", abbreviation: "OFF", spoken: "Offsides"),
+        "foulsCommitted": .init("Fouls Committed", short: "Fouls", abbreviation: "FC", spoken: "Fouls committed"),
+        "foulsSuffered": .init("Fouls Won", short: "Fouls Won", abbreviation: "FW", spoken: "Fouls won"),
+        "yellowCards": .init("Yellow Cards", short: "Yellows", abbreviation: "YC", spoken: "Yellow cards"),
+        "redCards": .init("Red Cards", short: "Reds", abbreviation: "RC", spoken: "Red cards"),
+        "ownGoals": .init("Own Goals", short: "Own Goals", abbreviation: "OG", spoken: "Own goals"),
+        "saves": .init("Saves", short: "Saves", abbreviation: "SV", spoken: "Saves"),
+        "cleanSheet": .init("Clean Sheets", short: "Clean Sheets", abbreviation: "CS", spoken: "Clean sheets"),
+        "goalsConceded": .init("Goals Conceded", short: "Conceded", abbreviation: "GA", spoken: "Goals conceded"),
+        "goalsConcededOnPitch": .init(
+            "Conceded on Pitch", short: "Conceded", abbreviation: "GA",
+            spoken: "Goals conceded while on the pitch"
+        ),
+        "shotsFaced": .init("Shots Faced", short: "Shots Faced", abbreviation: "SF", spoken: "Shots faced"),
+        "savePct": .init("Save Percentage", short: "Save %", abbreviation: "SV%", spoken: "Save percentage"),
+        "savesPerGame": .init("Saves per Game", short: "Saves/Game", abbreviation: "SV/GM", spoken: "Saves per game"),
+        "concededPerGame": .init(
+            "Conceded per Game", short: "Conceded/Game", abbreviation: "GA/GM", spoken: "Goals conceded per game"
+        ),
+    ]
+
+    /// Pitching, by the MLB splits' names (ERA W L SV SVOP GP GS CG IP H R
+    /// ER HR BB K OBA); `winLoss` and `WHIP` are the sheet's own.
+    private static let pitchingTable: [String: PlayerStatWording] = [
+        "ERA": .init("Earned Run Avg.", short: "ERA", abbreviation: "ERA", spoken: "Earned run average"),
+        "winLoss": .init("Win-Loss Record", short: "W-L", abbreviation: "W-L", spoken: "Win-loss record"),
+        "WHIP": .init("WHIP", short: "WHIP", abbreviation: "WHIP", spoken: "Walks and hits per inning pitched"),
+        "innings": .init("Innings Pitched", short: "IP", abbreviation: "IP", spoken: "Innings pitched"),
+        "strikeouts": .init("Strikeouts", short: "K", abbreviation: "K", spoken: "Strikeouts"),
+        "gamesPlayed": .init("Games Played", short: "Games", abbreviation: "GP", spoken: "Games pitched"),
+        "gamesStarted": .init("Games Started", short: "Starts", abbreviation: "GS", spoken: "Games started"),
+        "completeGames": .init("Complete Games", short: "CG", abbreviation: "CG", spoken: "Complete games"),
+        "wins": .init("Wins", short: "W", abbreviation: "W", spoken: "Wins"),
+        "losses": .init("Losses", short: "L", abbreviation: "L", spoken: "Losses"),
+        "saves": .init("Saves", short: "SV", abbreviation: "SV", spoken: "Saves"),
+        "saveOpportunities": .init("Save Opportunities", short: "SVOP", abbreviation: "SVOP", spoken: "Save opportunities"),
+        "hits": .init("Hits Allowed", short: "H", abbreviation: "H", spoken: "Hits allowed"),
+        "runs": .init("Runs Allowed", short: "R", abbreviation: "R", spoken: "Runs allowed"),
+        "earnedRuns": .init("Earned Runs", short: "ER", abbreviation: "ER", spoken: "Earned runs"),
+        "homeRuns": .init("Home Runs Allowed", short: "HR", abbreviation: "HR", spoken: "Home runs allowed"),
+        "walks": .init("Walks", short: "BB", abbreviation: "BB", spoken: "Walks"),
+        "opponentAvg": .init("Opponent Avg.", short: "OBA", abbreviation: "OBA", spoken: "Opponents' batting average"),
+    ]
 }
 
 // MARK: - Rates
@@ -279,9 +514,10 @@ extension AthleteGameLog {
     /// Season totals summed from every logged game, for a season whose
     /// splits the feed hasn't published: the counting columns
     /// (`gameLogCountingStats`) only, the headline ones first under their
-    /// short labels, then the rest in the log's order. A column no game
-    /// gives a number for ("-") is left out; a figure with a fraction (half
-    /// a sack) keeps one place.
+    /// short labels, then the rest in the log's order. A soccer column is
+    /// labelled as the roster's totals are (`PlayerStatWording.soccer`, P7).
+    /// A column no game gives a number for ("-") is left out; a figure with
+    /// a fraction (half a sack) keeps one place.
     var summedTotals: [PlayerSeasonStat] {
         guard !rows.isEmpty else { return [] }
         var ordered = headlineColumns
@@ -306,15 +542,24 @@ extension AthleteGameLog {
                 }
             }
             guard counted else { continue }
+            let wording = PlayerStatWording.knownSoccer(column.id)
             totals.append(PlayerSeasonStat(
                 id: column.id,
-                label: column.displayName,
-                abbreviation: column.label,
+                label: wording?.title ?? column.displayName,
+                abbreviation: wording?.abbreviation ?? column.label,
                 display: whole ? String(Int(total)) : String(format: "%.1f", total)
             ))
         }
         return totals
     }
+}
+
+/// The game-log card's title, counting the games it shows (P7): "Last 4
+/// Games", "Last Game"; "Recent Games" while they load (`nil`) or when
+/// there are none.
+func gameLogCardTitle(shown games: Int?) -> String {
+    guard let games, games > 0 else { return "Recent Games" }
+    return games == 1 ? "Last Game" : "Last \(games) Games"
 }
 
 /// The line over totals summed from the game log: "From the last 4
