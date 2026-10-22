@@ -11,9 +11,10 @@ import Testing
 
 @testable import myTeams
 
-/// What a schedule card says about a game (`GameCardContent`): its status
-/// pill, outcome, live period and detail rows, and the rows it leaves out
-/// for a sparse feed.
+/// What a game's card says about it (`GameCardContent`): its status pill,
+/// matchup, outcome, the result line every card reserves (T4), the live
+/// period and footer, the rows it leaves out for a sparse feed, and how
+/// Home's cards differ from a schedule's (H3).
 @Suite("Schedule game card")
 struct GameCardContentTests {
     /// Fixed so the labels don't depend on the machine running the tests.
@@ -63,8 +64,13 @@ struct GameCardContentTests {
         )
     }
 
-    private func content(_ game: Game, league: LeagueID = .nfl, liveScore: LiveGameScore? = nil) -> GameCardContent {
-        GameCardContent(game: game, league: league, liveScore: liveScore, now: now, calendar: calendar)
+    private func content(
+        _ game: Game,
+        league: LeagueID = .nfl,
+        liveScore: LiveGameScore? = nil,
+        style: GameCardStyle = .schedule
+    ) -> GameCardContent {
+        GameCardContent(game: game, league: league, liveScore: liveScore, now: now, calendar: calendar, style: style, teamName: "Chiefs")
     }
 
     private func time(_ date: Date) -> String {
@@ -140,22 +146,25 @@ struct GameCardContentTests {
         let unreadable = content(game(start: now.addingTimeInterval(-86_400), date: ""))
         #expect(unreadable.phase == .upcoming)
         #expect(unreadable.status == "TBD")
-        #expect(unreadable.dateLine == nil)
+        #expect(!unreadable.details.contains { $0.kind == .date })
     }
 
     // MARK: Outcome
 
-    @Test("A win and a loss show the winner's score first")
+    @Test("A win and a loss show the team's score first, with the result's letter")
     func winAndLoss() {
         let win = content(game(score: "24", opponentScore: "10", win: true, completed: true))
         #expect(win.outcome == .win)
         #expect(win.outcomeLabel == "Win")
-        #expect(win.finalScore == "24 – 10")
+        #expect(win.finalScore == "24–10")
+        #expect(win.resultLine == "W 24–10")
+        #expect(win.slotLine == "W 24–10")
 
         let loss = content(game(score: "10", opponentScore: "24", completed: true))
         #expect(loss.outcome == .loss)
         #expect(loss.outcomeLabel == "Loss")
-        #expect(loss.finalScore == "24 – 10")
+        #expect(loss.finalScore == "10–24")
+        #expect(loss.resultLine == "L 10–24")
     }
 
     @Test("A level result takes the league's word for it")
@@ -164,6 +173,8 @@ struct GameCardContentTests {
         #expect(content(level, league: .mls).outcomeLabel == "Draw")
         #expect(content(level, league: .nfl).outcomeLabel == "Tie")
         #expect(content(level).outcome == .draw)
+        #expect(content(level, league: .mls).resultLine == "D 1–1")
+        #expect(content(level, league: .nfl).resultLine == "T 1–1")
     }
 
     @Test("A finished game with no score published says Final and nothing more")
@@ -173,6 +184,9 @@ struct GameCardContentTests {
         #expect(bare.outcome == nil)
         #expect(bare.outcomeLabel == nil)
         #expect(bare.finalScore == nil)
+        #expect(bare.resultLine == nil)
+        // The line is still held on the card, empty.
+        #expect(bare.slotLine == nil)
     }
 
     // MARK: Live stage
@@ -212,29 +226,78 @@ struct GameCardContentTests {
     @Test("An unnamed opponent reads TBD, not blank")
     func unnamedOpponent() {
         #expect(content(game(opponent: "")).opponent == "TBD")
+        #expect(content(game(opponent: "")).matchup == "vs TBD")
         #expect(content(game(opponent: "Borussia Mönchengladbach")).opponent == "Borussia Mönchengladbach")
+    }
+
+    @Test("A schedule card names the opponent alone; Home's says whose game it is")
+    func matchup() {
+        #expect(content(game(home: true)).matchup == "vs Raiders")
+        #expect(content(game(home: false)).matchup == "@ Raiders")
+        #expect(content(game(home: true, neutralSite: true)).matchup == "vs Raiders")
+
+        #expect(content(game(home: true), style: .home).matchup == "Chiefs vs Raiders")
+        #expect(content(game(home: false), style: .home).matchup == "Chiefs at Raiders")
+        #expect(content(game(home: false), style: .home).connector == "at")
+        #expect(content(game(home: true, neutralSite: true), style: .home).connector == "vs")
     }
 
     // MARK: Details
 
-    @Test("An upcoming game: week, channel and venue; its date is in the header")
+    @Test("An upcoming game: the time in the pill only, the channel in the result line, week and date below")
     func upcomingDetails() {
         let card = content(game(weekText: "Week 5"))
+        #expect(card.status == "Wed \(time(now.addingTimeInterval(3 * 86_400)))")
+        #expect(card.slotLine == "ESPN")
         #expect(card.details == [
             GameCardContent.Detail(kind: .competition, text: "Week 5"),
-            GameCardContent.Detail(kind: .broadcast, text: "ESPN"),
+            GameCardContent.Detail(kind: .date, text: "Wed, Oct 7"),
             GameCardContent.Detail(kind: .venue, text: "Arrowhead Stadium"),
         ])
-        #expect(card.dateLine == "Wed, Oct 7 · \(time(now.addingTimeInterval(3 * 86_400)))")
+        #expect(card.footerLines == ["Week 5 · Wed, Oct 7", "Arrowhead Stadium"])
+        // The time is said once: not again in the footer.
+        #expect(!card.footerLines.joined().contains(time(now.addingTimeInterval(3 * 86_400))))
     }
 
-    @Test("A finished game: its date replaces the channel")
+    @Test("A game more than a week off still gives its time, in the pill")
+    func farOffStart() {
+        let start = now.addingTimeInterval(10 * 86_400)
+        let card = content(game(start: start, date: "Oct 14, 2026"))
+        #expect(card.status == "Oct 14 · \(time(start))")
+        #expect(GameCardContent.cardStartLabel(for: now.addingTimeInterval(25 * 60), now: now, calendar: calendar) == "In 25 min")
+    }
+
+    @Test("A finished game: the result in the line the channel had, the date below")
     func finalDetails() {
         let played = game(score: "24", opponentScore: "10", start: now.addingTimeInterval(-7 * 86_400),
                           date: "Sep 27, 2026", win: true, completed: true)
         #expect(content(played).details.map(\.kind) == [.date, .venue])
         #expect(content(played).details.first?.text == "Sun, Sep 27")
-        #expect(content(played).dateLine == nil)
+        #expect(content(played).slotLine == "W 24–10")
+    }
+
+    @Test("A live game: the period in the pill, the channel below, no date")
+    func liveDetails() {
+        let live = content(game(start: now.addingTimeInterval(-600), clock: "14:14", period: "2"))
+        #expect(live.status == "Live")
+        #expect(live.liveStage == "2nd Quarter · 14:14")
+        #expect(live.slotLine == nil)
+        #expect(live.details.map(\.kind) == [.broadcast, .venue])
+    }
+
+    @Test("Home's card: the league where no week or cup says more, no date, the channel in the result line")
+    func homeDetails() {
+        let upcoming = content(game(), style: .home)
+        #expect(upcoming.footerLines == ["NFL", "Arrowhead Stadium"])
+        #expect(upcoming.slotLine == "ESPN")
+        #expect(!upcoming.details.contains { $0.kind == .date })
+
+        let week = content(game(weekText: "Week 6"), style: .home)
+        #expect(week.footerLines.first == "Week 6")
+
+        let played = content(game(score: "30", opponentScore: "27", win: true, completed: true), style: .home)
+        #expect(played.slotLine == "W 30–27")
+        #expect(!played.details.contains { $0.kind == .date })
     }
 
     @Test("A sparse soccer fixture leaves out every row it has nothing for")
@@ -246,7 +309,9 @@ struct GameCardContentTests {
             competition: .bundesliga, seasonType: 14358, leagueName: "Bundesliga"
         )
         let card = content(sparse, league: .bundesliga)
-        #expect(card.details.isEmpty)
+        // Only its day: no week, channel or venue.
+        #expect(card.details.map(\.kind) == [.date])
+        #expect(card.slotLine == nil)
         #expect(card.liveStage == nil)
         #expect(card.outcomeLabel == nil)
 
@@ -360,7 +425,9 @@ struct GameCardContentTests {
         #expect(augsburg.weekText == "")
         let card = GameCardContent(game: augsburg, league: .bundesliga, now: now, calendar: calendar)
         #expect(card.side == "Away")
-        #expect(card.details == [GameCardContent.Detail(kind: .venue, text: "WWK Arena")])
+        #expect(card.matchup.hasPrefix("@ "))
+        #expect(card.details.last == GameCardContent.Detail(kind: .venue, text: "WWK Arena"))
+        #expect(!card.details.contains { $0.kind == .broadcast || $0.kind == .competition })
 
         // ncaaf_schedule.json 401856812: Arizona State v Kansas, Week 3,
         // at a neutral site though Kansas is listed at home.

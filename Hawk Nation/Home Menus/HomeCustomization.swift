@@ -40,12 +40,25 @@ enum HomeSectionKind: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Whether the section sits in the left column on an iPad (B-14): the
-    /// teams and their week there, the tables and the news on the right.
-    var isLeadingColumn: Bool {
+    /// Where the section sits on an iPad (B-14, H10).
+    enum RegularColumn: Sendable {
+        /// The left column: the teams and their week.
+        case leading
+        /// The right column: the tables, beside them.
+        case trailing
+        /// Full width beneath both columns: the news, whose stories read
+        /// better wide than squeezed into half the page.
+        case fullWidth
+    }
+
+    /// Which column the section takes on an iPad, so the two columns come
+    /// out about the same height (H10): My Teams and This Week on the left,
+    /// Standings and Top Performers on the right, the news under both.
+    var regularColumn: RegularColumn {
         switch self {
-        case .myTeams, .week: true
-        case .standings, .performers, .news: false
+        case .myTeams, .week: .leading
+        case .standings, .performers: .trailing
+        case .news: .fullWidth
         }
     }
 }
@@ -180,7 +193,9 @@ struct HomeCustomizeSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        // Full height, so every section and Restore Default Layout are in
+        // view without dragging the sheet up (H6).
+        .presentationDetents([.large])
     }
 
     /// Whether `kind` shows, saved as it's switched.

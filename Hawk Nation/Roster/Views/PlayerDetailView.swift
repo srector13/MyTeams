@@ -17,10 +17,12 @@ enum PlayerSheetCell: Sendable {
     case fact(title: String, info: String)
     /// A season statistic, drawn as a `StatRow` or a key-stat tile.
     case stat(title: String, info: String)
-    /// A rate drawn as a `StatRow` with a slim bar in the team colour:
+    /// A rate drawn as a `StatRow` with a slim bar in the team's accent:
     /// `progress` runs 0–1, and a non-finite one (a rate over zero
-    /// attempts) reads "N/A".
-    case percentage(title: String, progress: Double)
+    /// attempts) reads "N/A". With its `attempts`, where the feed gives
+    /// them, a rate over fewer than `minimumBarAttempts` reads "0 of 3"
+    /// with no bar (P3).
+    case percentage(title: String, progress: Double, attempts: MadeAttempted? = nil)
 }
 
 /// One card of a player sheet: its cells, optionally under section titles.
@@ -40,6 +42,10 @@ struct PlayerSheetGrid: Sendable {
     /// The seasons the sheet's season picker offers, from the splits
     /// document the grid was read from.
     var seasons: AthleteSeasons = .empty
+    /// Whether the fetch behind the grid failed, or answered without its
+    /// season list: the sheet says it couldn't load the season, with a
+    /// Retry, rather than that there is nothing in it (P8).
+    var loadFailed = false
 
     init(sections: [Section], message: String? = nil) {
         self.sections = sections
@@ -116,7 +122,7 @@ extension PlayerSheetCell {
     /// The label the cell is drawn with, whatever its kind.
     var title: String {
         switch self {
-        case .fact(let title, _), .stat(let title, _), .percentage(let title, _):
+        case .fact(let title, _), .stat(let title, _), .percentage(let title, _, _):
             return title
         }
     }
@@ -139,7 +145,7 @@ extension PlayerSheetCell {
         case .stat(_, let info):
             return Self.isMissing(info)
                 || info.trimmingCharacters(in: .whitespacesAndNewlines).allSatisfy { "0.,:/%-".contains($0) }
-        case .percentage(_, let progress):
+        case .percentage(_, let progress, _):
             return !progress.isFinite || progress == 0
         }
     }
@@ -208,6 +214,7 @@ extension BasketballPlayer: PlayerSheetDescribing {
         let stats = await downloadBasketballPlayerStats(playerID: playerID, league: league, season: season)
         var sheet = Self.grid(stats)
         sheet.seasons = stats.seasons
+        sheet.loadFailed = stats.loadFailed
         return sheet
     }
 
@@ -221,8 +228,9 @@ extension BasketballPlayer: PlayerSheetDescribing {
         ]
     }
 
-    /// Scoring with its shooting rates, rebounding, then the rest.
-    private static func grid(_ stats: BasketballPlayerStats) -> PlayerSheetGrid {
+    /// Scoring with its shooting rates, each over its season's attempts
+    /// where the feed gives them (P3), rebounding, then the rest.
+    static func grid(_ stats: BasketballPlayerStats) -> PlayerSheetGrid {
         func average(_ value: Float) -> String { String(format: "%.1f", value) }
 
         return PlayerSheetGrid(sections: [
@@ -233,9 +241,21 @@ extension BasketballPlayer: PlayerSheetDescribing {
                     .stat(title: "Average Points", info: average(stats.avgPoints)),
                 ],
                 [
-                    .percentage(title: "Field Goal Percentage", progress: Double(stats.fieldGoalPct) / 100),
-                    .percentage(title: "3-Point Percentage", progress: Double(stats.threePointFieldGoalPct) / 100),
-                    .percentage(title: "Free Throw Percentage", progress: Double(stats.freeThrowPct) / 100),
+                    .percentage(
+                        title: "Field Goal Percentage",
+                        progress: Double(stats.fieldGoalPct) / 100,
+                        attempts: stats.fieldGoals
+                    ),
+                    .percentage(
+                        title: "3-Point Percentage",
+                        progress: Double(stats.threePointFieldGoalPct) / 100,
+                        attempts: stats.threePointers
+                    ),
+                    .percentage(
+                        title: "Free Throw Percentage",
+                        progress: Double(stats.freeThrowPct) / 100,
+                        attempts: stats.freeThrows
+                    ),
                 ],
             ]),
             PlayerSheetGrid.Section(title: "Rebounding", rows: [
@@ -285,6 +305,7 @@ extension FootBallPlayer: PlayerSheetDescribing {
         let stats = await downloadFootballPlayerStats(playerID: playerID, league: league, season: season)
         var sheet = Self.grid(stats)
         sheet.seasons = stats.seasons
+        sheet.loadFailed = stats.loadFailed
         return sheet
     }
 
@@ -305,7 +326,7 @@ extension FootBallPlayer: PlayerSheetDescribing {
                     }
                 )
             },
-            message: stats.loaded && stats.groups.isEmpty
+            message: stats.loaded && stats.groups.isEmpty && !stats.loadFailed
                 ? "No season statistics are available for this player yet."
                 : nil
         )
@@ -344,19 +365,17 @@ extension BaseballPlayer: PlayerSheetDescribing {
         )
         var sheet = grid(stats)
         sheet.seasons = stats.seasons
+        sheet.loadFailed = stats.loadFailed
         return sheet
     }
 
-    /// A pitcher's ERA, win-loss record, strikeouts and WHIP; a batter's
-    /// average, home runs, RBIs and OPS.
+    /// A starter's ERA, win-loss record, strikeouts and WHIP, a
+    /// reliever's ERA, innings, strikeouts and WHIP
+    /// (`baseballPitcherKeyStats`); a batter's average, home runs, RBIs and
+    /// OPS.
     var featuredStatistics: [PlayerSheetFeature] {
         if position.contains("Pitcher") {
-            return [
-                PlayerSheetFeature("Earned Run Avg.", "ERA", spoken: "Earned run average"),
-                PlayerSheetFeature("Win-Loss Record", "W-L", spoken: "Win-loss record"),
-                PlayerSheetFeature("Strikeouts", "SO", spoken: "Strikeouts"),
-                PlayerSheetFeature("WHIP", "WHIP", spoken: "Walks and hits per inning pitched"),
-            ]
+            return baseballPitcherKeyStats(position: position)
         }
         return [
             PlayerSheetFeature("Batting Average", "AVG", spoken: "Batting average"),
@@ -366,40 +385,50 @@ extension BaseballPlayer: PlayerSheetDescribing {
         ]
     }
 
-    /// Pitchers get the pitching line; everyone else the batting line.
-    private func grid(_ stats: BaseballPlayerStats) -> PlayerSheetGrid {
+    /// Pitchers get the pitching line, titled from one table
+    /// (`PlayerStatWording.pitching`); everyone else the batting line. A
+    /// reliever's line has no win-loss record: his wins and losses have
+    /// rows of their own, mostly zeros behind "Show all stats" (P9).
+    func grid(_ stats: BaseballPlayerStats) -> PlayerSheetGrid {
         if position.contains("Pitcher") {
+            func pitching(_ name: String, _ info: String) -> PlayerSheetCell {
+                PlayerStatWording.pitching(name).stat(info)
+            }
+            var record: [PlayerSheetCell] = [
+                pitching("ERA", String(format: "%.2f", stats.EarnedRunAverage)),
+            ]
+            if !isReliefPitcher(position) {
+                record.append(pitching("winLoss", "\(stats.wins)-\(stats.losses)"))
+            }
+            record.append(pitching("WHIP", baseballWHIP(walks: stats.walks, hits: stats.hits, innings: stats.innings)))
+            record.append(pitching("innings", "\(stats.innings)"))
+
             return PlayerSheetGrid(sections: [
                 PlayerSheetGrid.Section(title: "Pitching", rows: [
+                    record,
                     [
-                        .stat(title: "Earned Run Avg.", info: String(format: "%.2f", stats.EarnedRunAverage)),
-                        .stat(title: "Win-Loss Record", info: "\(stats.wins)-\(stats.losses)"),
-                        .stat(title: "WHIP", info: baseballWHIP(walks: stats.walks, hits: stats.hits, innings: stats.innings)),
+                        pitching("gamesPlayed", "\(stats.gamesPlayed)"),
+                        pitching("gamesStarted", "\(stats.gamesStarted)"),
+                        pitching("completeGames", "\(stats.completeGames)"),
                     ],
                     [
-                        .stat(title: "Games Played", info: "\(stats.gamesPlayed)"),
-                        .stat(title: "Games Started", info: "\(stats.gamesStarted)"),
-                        .stat(title: "Complete Games", info: "\(stats.completeGames)"),
-                        .stat(title: "Innings Pitched", info: "\(stats.innings)"),
-                    ],
-                    [
-                        .stat(title: "Wins", info: "\(stats.wins)"),
-                        .stat(title: "Losses", info: "\(stats.losses)"),
-                        .stat(title: "Saves", info: "\(stats.saves)"),
-                        .stat(title: "Save Opportunities", info: "\(stats.saveOpportunities)"),
+                        pitching("wins", "\(stats.wins)"),
+                        pitching("losses", "\(stats.losses)"),
+                        pitching("saves", "\(stats.saves)"),
+                        pitching("saveOpportunities", "\(stats.saveOpportunities)"),
                     ],
                 ]),
                 PlayerSheetGrid.Section(title: "Against", rows: [
                     [
-                        .stat(title: "Strikeouts", info: "\(stats.strikeouts)"),
-                        .stat(title: "Walks", info: "\(stats.walks)"),
-                        .stat(title: "Hits", info: "\(stats.hits)"),
-                        .stat(title: "Home Runs", info: "\(stats.homeRuns)"),
+                        pitching("strikeouts", "\(stats.strikeouts)"),
+                        pitching("walks", "\(stats.walks)"),
+                        pitching("hits", "\(stats.hits)"),
+                        pitching("homeRuns", "\(stats.homeRuns)"),
                     ],
                     [
-                        .stat(title: "Runs", info: "\(stats.runs)"),
-                        .stat(title: "Earned Runs", info: "\(stats.earnedRuns)"),
-                        .stat(title: "Opp. Batting Avg.", info: baseballRate(stats.opponentAvg)),
+                        pitching("runs", "\(stats.runs)"),
+                        pitching("earnedRuns", "\(stats.earnedRuns)"),
+                        pitching("opponentAvg", baseballRate(stats.opponentAvg)),
                     ],
                 ]),
             ])
@@ -484,29 +513,16 @@ extension SoccerPlayer: PlayerSheetDescribing {
         return Self.headline(stats, keeper: isSoccerGoalkeeper(position))
     }
 
-    /// A keeper's saves, clean sheets, goals conceded and appearances; an
-    /// outfield player's goals, assists, appearances and starts. Covers
-    /// both the roster's season totals and the athlete document's headline
-    /// figures, which title some stats differently, and skips what a line
-    /// lacks (the roster has no clean sheets; no soccer feed has minutes).
+    /// The player's line on the pitch (`SoccerRole`), which picks the
+    /// tiles and the order of the groups (P1).
+    var soccerRole: SoccerRole { SoccerRole(position: position) }
+
+    /// The tiles for the player's line (`soccerKeyStats(role:)`). One list
+    /// serves both the roster's season totals and the athlete document's
+    /// headline figures, skipping what a line lacks (the roster has no
+    /// clean sheets; no soccer feed has minutes, tackles or interceptions).
     var featuredStatistics: [PlayerSheetFeature] {
-        if isSoccerGoalkeeper(position) {
-            return [
-                PlayerSheetFeature("Goals Saved", "Saves", spoken: "Saves"),
-                PlayerSheetFeature("Saves", "Saves", spoken: "Saves"),
-                PlayerSheetFeature("Clean Sheets", "Clean Sheets", spoken: "Clean sheets"),
-                PlayerSheetFeature("Goals Conceded", "Conceded", spoken: "Goals conceded"),
-                PlayerSheetFeature("Games Played", "Apps", spoken: "Appearances"),
-                PlayerSheetFeature("Starts", "Starts", spoken: "Starts"),
-            ]
-        }
-        return [
-            PlayerSheetFeature("Total Goals", "Goals", spoken: "Goals"),
-            PlayerSheetFeature("Goal Assists", "Assists", spoken: "Assists"),
-            PlayerSheetFeature("Games Played", "Apps", spoken: "Appearances"),
-            PlayerSheetFeature("Games Started", "Starts", spoken: "Starts"),
-            PlayerSheetFeature("Sub Appearances", "Off Bench", spoken: "Substitute appearances"),
-        ]
+        soccerKeyStats(role: soccerRole)
     }
 
     /// The roster's `appearances` counts substitute appearances too, so
@@ -516,78 +532,114 @@ extension SoccerPlayer: PlayerSheetDescribing {
     private var starts: Int { max(appearances - subAppearances, 0) }
 
     /// Keepers get the goalkeeping line; everyone else the outfield line:
-    /// appearances, then attacking (with shot accuracy and conversion as
-    /// bars, and rates a game: no soccer feed carries minutes, so per 90
-    /// can't be worked out), then discipline. Own goals and offsides show
-    /// only once there are some (`PlayerSheetCell.quietTitles`).
+    /// appearances, attacking (with shot accuracy and conversion as rates
+    /// over the shots, and rates a game: no soccer feed carries minutes, so
+    /// per 90 can't be worked out) and discipline, in the order the
+    /// player's line reads them (P1): a defender's discipline before his
+    /// attacking, a forward's attacking first. A defender's appearances
+    /// add the goals let in while he was on the pitch, the roster's
+    /// `goalsConceded` for an outfield player. Every row is titled from one
+    /// table (`PlayerStatWording.soccer`), so a tile and its row agree (P7).
     private var seasonTotals: PlayerSheetGrid {
+        func stat(_ name: String, _ value: Int) -> PlayerSheetCell {
+            PlayerStatWording.soccer(name).stat("\(value)")
+        }
+        func rate(_ name: String, _ made: Int, of attempts: Int) -> PlayerSheetCell {
+            .percentage(
+                title: PlayerStatWording.soccer(name).title,
+                progress: Double(made) / Double(attempts),
+                attempts: MadeAttempted(made: made, attempted: attempts)
+            )
+        }
+        func perGame(_ name: String, _ total: Int) -> PlayerSheetCell {
+            PlayerStatWording.soccer(name).stat(perGameRate(total, games: appearances))
+        }
+
         let discipline = PlayerSheetGrid.Section(title: "Discipline", rows: [
             [
-                .stat(title: "Fouls Committed", info: "\(fouls)"),
-                .stat(title: "Fouls Suffered", info: "\(foulsSuffered)"),
+                stat("foulsCommitted", fouls),
+                stat("foulsSuffered", foulsSuffered),
             ],
             [
-                .stat(title: "Yellow Cards", info: "\(yellowCards)"),
-                .stat(title: "Red Cards", info: "\(redCards)"),
-                .stat(title: "Own Goals", info: "\(ownGoals)"),
+                stat("yellowCards", yellowCards),
+                stat("redCards", redCards),
+                stat("ownGoals", ownGoals),
             ],
         ])
 
-        if isSoccerGoalkeeper(position) {
+        if soccerRole == .goalkeeper {
             return PlayerSheetGrid(sections: [
                 PlayerSheetGrid.Section(title: "Appearances", rows: [
                     [
-                        .stat(title: "Games Played", info: "\(appearances)"),
-                        .stat(title: "Starts", info: "\(starts)"),
+                        stat("appearances", appearances),
+                        stat("starts", starts),
                     ],
                 ]),
                 PlayerSheetGrid.Section(title: "Goalkeeping", rows: [
                     [
-                        .stat(title: "Goals Saved", info: "\(saves)"),
-                        .stat(title: "Goals Conceded", info: "\(goalsConceded)"),
-                        .stat(title: "Shots Faced", info: "\(shotsFaced)"),
+                        stat("saves", saves),
+                        stat("goalsConceded", goalsConceded),
+                        stat("shotsFaced", shotsFaced),
                     ],
                     [
-                        .percentage(title: "Save Percentage", progress: Double(saves) / Double(shotsFaced)),
-                        .stat(title: "Saves per Game", info: perGameRate(saves, games: appearances)),
-                        .stat(title: "Conceded per Game", info: perGameRate(goalsConceded, games: appearances)),
+                        rate("savePct", saves, of: shotsFaced),
+                        perGame("savesPerGame", saves),
+                        perGame("concededPerGame", goalsConceded),
                     ],
                 ]),
                 discipline,
             ])
         }
 
-        return PlayerSheetGrid(sections: [
-            PlayerSheetGrid.Section(title: "Appearances", rows: [
-                [
-                    .stat(title: "Games Played", info: "\(appearances)"),
-                    .stat(title: "Games Started", info: "\(starts)"),
-                    .stat(title: "Sub Appearances", info: "\(subAppearances)"),
-                ],
-            ]),
-            PlayerSheetGrid.Section(title: "Attacking", rows: [
-                [
-                    .stat(title: "Total Goals", info: "\(totalGoals)"),
-                    .stat(title: "Goal Assists", info: "\(goalAssists)"),
-                ],
-                [
-                    .stat(title: "Total Shots", info: "\(totalShots)"),
-                    .stat(title: "Shots On Target", info: "\(shotsOnTarget)"),
-                    .percentage(title: "Shot Accuracy", progress: Double(shotsOnTarget) / Double(totalShots)),
-                    .percentage(title: "Conversion Rate", progress: Double(totalGoals) / Double(totalShots)),
-                ],
-                [
-                    .stat(title: "Goals per Game", info: perGameRate(totalGoals, games: appearances)),
-                    .stat(title: "Shots per Game", info: perGameRate(totalShots, games: appearances)),
-                    .stat(title: "Offsides", info: "\(offsides)"),
-                ],
-            ]),
-            discipline,
+        var appearing: [PlayerSheetCell] = [
+            stat("appearances", appearances),
+            stat("starts", starts),
+            stat("subIns", subAppearances),
+        ]
+        if soccerRole == .defender {
+            appearing.append(stat("goalsConcededOnPitch", goalsConceded))
+        }
+        let appearancesSection = PlayerSheetGrid.Section(title: "Appearances", rows: [appearing])
+        let attacking = PlayerSheetGrid.Section(title: "Attacking", rows: [
+            [
+                stat("totalGoals", totalGoals),
+                stat("goalAssists", goalAssists),
+            ],
+            [
+                stat("totalShots", totalShots),
+                stat("shotsOnTarget", shotsOnTarget),
+                rate("shotAccuracy", shotsOnTarget, of: totalShots),
+                rate("conversionRate", totalGoals, of: totalShots),
+            ],
+            [
+                perGame("goalsPerGame", totalGoals),
+                perGame("shotsPerGame", totalShots),
+                stat("offsides", offsides),
+            ],
         ])
+
+        switch soccerRole {
+        case .defender:
+            return PlayerSheetGrid(sections: [appearancesSection, discipline, attacking])
+        case .forward:
+            return PlayerSheetGrid(sections: [attacking, appearancesSection, discipline])
+        case .midfielder, .goalkeeper:
+            return PlayerSheetGrid(sections: [appearancesSection, attacking, discipline])
+        }
     }
 
-    /// The athlete document's headline figures. See `SoccerPlayerStats`.
+    /// The athlete document's headline figures, titled as the roster's
+    /// are. See `SoccerPlayerStats`. A document that didn't arrive is a
+    /// failed load (P8), not a player with no statistics.
     private static func headline(_ stats: SoccerPlayerStats, keeper: Bool) -> PlayerSheetGrid {
+        func stat(_ name: String, _ info: String) -> PlayerSheetCell {
+            PlayerStatWording.soccer(name).stat(info)
+        }
+        guard !stats.loadFailed else {
+            var failed = PlayerSheetGrid(sections: [])
+            failed.loadFailed = true
+            return failed
+        }
         guard stats.hasFigures else {
             return PlayerSheetGrid(
                 sections: [],
@@ -597,22 +649,22 @@ extension SoccerPlayer: PlayerSheetDescribing {
         if keeper {
             return PlayerSheetGrid(sections: [
                 PlayerSheetGrid.Section(title: "Goalkeeping", rows: [[
-                    .stat(title: "Starts", info: stats.starts),
-                    .stat(title: "Saves", info: stats.saves),
-                    .stat(title: "Clean Sheets", info: stats.cleanSheets),
-                    .stat(title: "Goals Conceded", info: stats.goalsConceded),
+                    stat("starts", stats.starts),
+                    stat("saves", stats.saves),
+                    stat("cleanSheet", stats.cleanSheets),
+                    stat("goalsConceded", stats.goalsConceded),
                 ]]),
             ])
         }
         return PlayerSheetGrid(sections: [
             PlayerSheetGrid.Section(title: "Appearances", rows: [[
-                .stat(title: "Games Started", info: stats.starts),
-                .stat(title: "Sub Appearances", info: stats.substituteAppearances),
+                stat("starts", stats.starts),
+                stat("subIns", stats.substituteAppearances),
             ]]),
             PlayerSheetGrid.Section(title: "Attacking", rows: [[
-                .stat(title: "Total Goals", info: stats.goals),
-                .stat(title: "Goal Assists", info: stats.assists),
-                .stat(title: "Total Shots", info: stats.shots),
+                stat("totalGoals", stats.goals),
+                stat("goalAssists", stats.assists),
+                stat("totalShots", stats.shots),
             ]]),
         ])
     }
@@ -640,6 +692,7 @@ extension HockeyPlayer: PlayerSheetDescribing {
         let line = await downloadHockeyPlayerStats(playerID: playerID, league: league, season: season)
         var sheet = Self.grid(line)
         sheet.seasons = line.seasons
+        sheet.loadFailed = line.loadFailed
         return sheet
     }
 
@@ -673,7 +726,7 @@ extension HockeyPlayer: PlayerSheetDescribing {
         }
         return PlayerSheetGrid(
             sections: stats.isEmpty ? [] : [PlayerSheetGrid.Section(title: title, rows: rows)],
-            message: line.loaded && stats.isEmpty
+            message: line.loaded && stats.isEmpty && !line.loadFailed
                 ? "No season statistics are available for this player yet."
                 : nil
         )
@@ -686,10 +739,13 @@ extension HockeyPlayer: PlayerSheetDescribing {
 /// The sheet a roster card opens: the player over the team's colour, then
 /// their season statistics, recent games and biography on cards over the
 /// grouped page, which scrolls up over the colour as the team page's does
-/// (T-4). On an iPad the cards keep to a readable column (B-14).
+/// (T-4). On an iPad the cards keep to a 640 pt column, the stat groups
+/// two across (P11).
 ///
-/// The header fades as it scrolls under the sheet's top edge, and a compact
-/// bar with the player's name fades in there in its place.
+/// The header fades as it scrolls under the sheet's top edge, the headshot
+/// first so the grabber never sits over it, and a compact bar with the
+/// player's name fades in there in its place. A short page is padded so
+/// the header always finishes collapsing into that bar (P10).
 struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     /// A key-stat tile's narrowest width: four across at the default text
     /// size, fewer as the text grows (P-4).
@@ -701,6 +757,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     @ScaledMetric(relativeTo: .largeTitle) private var headshotSize: CGFloat = 120
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     let player: Player
     let team: TeamRef
@@ -708,6 +765,12 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     @State private var statistics: PlayerSheetGrid
     /// Whether `statistics(league:season:)` has answered for `season`.
     @State private var loaded = false
+    /// Bumped by Retry, to fetch the season again after a failed load (P8).
+    @State private var statisticsAttempt = 0
+    /// Bumped by the game-log card's Retry.
+    @State private var gameLogAttempt = 0
+    /// Whether "Show all stats" has opened the zero rows and groups (P2).
+    @State private var showsAllStats = false
     /// The seasons the picker offers, from the first fetch: a past season's
     /// document lists only itself.
     @State private var seasons: [AthleteSeason] = []
@@ -726,6 +789,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     @State private var gameLogVisible = false
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
+    /// The scroll view's height, which the page grows to fill so a short
+    /// sheet can still scroll the header away (P10).
+    @State private var viewportHeight: CGFloat = 0
     /// The key-stat tiles' width, for their column count; zero until
     /// measured.
     @State private var tileWidth: CGFloat = 0
@@ -736,13 +802,24 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         _statistics = State(initialValue: player.placeholderStatistics)
     }
 
-    /// The team colour as a fill: the hero, the compact bar, the rate bars,
-    /// the cards' accent bars. `fillHex` stands in a fallback for a team the
-    /// feed gave no colour, which would otherwise draw clear (B-1).
+    /// The team colour as a fill: the hero and the compact bar. `fillHex`
+    /// stands in a fallback for a team the feed gave no colour, which would
+    /// otherwise draw clear (B-1).
     private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
 
-    /// The ink that reads on `teamColor` (G-3), for strokes and fills; text
-    /// takes it through `teamInk(on:)`.
+    /// The team's colour as a mark on the cards (F3): the section bars, the
+    /// rate bars, a scoring chip's wash. Lightened where the team colour
+    /// would vanish on a dark card, as navy does.
+    private var accentColor: Color { TeamColors.accent(for: team) }
+
+    /// The hero's own ink, white or black, whichever reads on `teamColor`:
+    /// the name, the position, the headshot's ring (P4).
+    private var heroInk: Color {
+        Color(hexString: TeamColors.inkHex(on: TeamColors.fillHex(for: team)))
+    }
+
+    /// The team's tint on its colour (G-3), its alternate colour where that
+    /// reads: only the number capsule wears it (P4).
     private var inkColor: Color { TeamColors.ink(on: team) }
 
     var body: some View {
@@ -769,6 +846,11 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             } action: { _, offset in
                 scrollOffset = max(offset, 0)
             }
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.containerSize.height
+            } action: { _, height in
+                viewportHeight = height
+            }
         }
         // The grouped page, showing past the foot of a short page.
         .background(Theme.Surface.content)
@@ -787,16 +869,17 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         // A page-sized sheet on iPad, not the small form sheet.
         .presentationSizing(.page)
         .presentationDragIndicator(.visible)
-        .task(id: season) {
+        .task(id: "\(season)#\(statisticsAttempt)") {
             await loadStatistics()
         }
     }
 
     /// Loads the statistics for the picked season, or for the feed's current
     /// one before anything is picked. Adopting that first fetch's season
-    /// into the picker re-runs this, which then has nothing to do.
+    /// into the picker re-runs this, which then has nothing to do; a Retry
+    /// after a failed load fetches again.
     private func loadStatistics() async {
-        guard !loaded || season != statisticsSeason else { return }
+        guard !loaded || season != statisticsSeason || statistics.loadFailed else { return }
         let requested = season.isEmpty ? nil : season
         loaded = false
         let loadedStatistics = await player.statistics(league: team.league, season: requested)
@@ -838,6 +921,33 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         Double(min(max((collapseProgress - 0.75) / 0.25, 0), 1))
     }
 
+    /// The headshot is gone before its top edge reaches the grabber and
+    /// the close button's band: it fades over the first scroll it takes to
+    /// get there, ahead of the rest of the header (P10).
+    private var headshotOpacity: Double {
+        let distance = max(Self.closeButtonClearance - Theme.Spacing.s, 1)
+        return Double(1 - min(max(scrollOffset / distance, 0), 1))
+    }
+
+    /// The page's least height: enough, under the header, for the scroll
+    /// to carry the header all the way under the compact bar however
+    /// little the page holds (P10), and to cover the hero's overscroll.
+    private var pageMinimumHeight: CGFloat {
+        max(Self.heroOverscroll + Self.closeButtonClearance, viewportHeight - Self.closeButtonClearance)
+    }
+
+    /// The page's column: 640 pt on an iPad's regular width (P11), the
+    /// readable width otherwise (a no-op on an iPhone).
+    private var columnWidth: CGFloat {
+        horizontalSizeClass == .regular ? 640 : Theme.readableWidth
+    }
+
+    /// Whether the stat groups sit two across: on an iPad's regular width,
+    /// below the accessibility text sizes (P11).
+    private var groupsInTwoColumns: Bool {
+        horizontalSizeClass == .regular && !dynamicTypeSize.isAccessibilitySize
+    }
+
     /// The team colour behind the header. It never scrolls: the page covers
     /// it. It extends into any landscape side insets (B5).
     private var heroBackdrop: some View {
@@ -864,6 +974,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 .frame(height: Self.closeButtonClearance)
 
             headshot
+                .opacity(headshotOpacity)
 
             VStack(spacing: Theme.Spacing.s) {
                 Text(player.name)
@@ -872,9 +983,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
                 subtitle
             }
-            // The ink that reads on this team's fill, not always white
-            // (B-1, G-3).
-            .teamInk(on: team)
+            // The hero's own white or black, whichever reads on this
+            // team's fill, for every team (P4, B-1); only the number
+            // capsule takes the team's tint.
+            .foregroundStyle(heroInk)
         }
         .padding(.horizontal, Theme.Spacing.l)
         .padding(.bottom, Theme.Spacing.xl)
@@ -897,8 +1009,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     private var position: String { player.position.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     /// The number in an outlined capsule beside the position, or above it
-    /// at accessibility sizes. An outline rather than a tinted fill, so the
-    /// ink keeps its full contrast on the team colour.
+    /// at accessibility sizes, in the team's tint (`inkColor`, P4). An
+    /// outline rather than a tinted fill, so the ink keeps its full
+    /// contrast on the team colour.
     @ViewBuilder
     private var subtitle: some View {
         let layout = dynamicTypeSize.isAccessibilitySize
@@ -908,6 +1021,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             if !number.isEmpty {
                 Text("#\(number)")
                     .font(.headline.monospacedDigit())
+                    .foregroundStyle(inkColor)
                     .padding(.horizontal, Theme.Spacing.s)
                     .padding(.vertical, Theme.Spacing.xs / 2)
                     .overlay {
@@ -936,12 +1050,25 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         }
         .aspectRatio(contentMode: .fill)
         .frame(width: size, height: size)
-        .background(inkColor.opacity(0.15), in: Circle())
+        .background(heroInk.opacity(0.15), in: Circle())
         .clipShape(.circle)
         .overlay {
             Circle()
-                .strokeBorder(inkColor.opacity(0.35), lineWidth: 2)
+                .strokeBorder(heroInk.opacity(0.35), lineWidth: 2)
         }
+        .accessibilityHidden(true)
+    }
+
+    /// The headshot again, small, at the head of the compact bar.
+    private var compactHeadshot: some View {
+        AthleteHeadshot(player, league: team.league, team: team, showsProgress: false) {
+            Image("blank")
+                .resizable()
+        }
+        .aspectRatio(contentMode: .fill)
+        .frame(width: 28, height: 28)
+        .background(heroInk.opacity(0.15), in: Circle())
+        .clipShape(.circle)
         .accessibilityHidden(true)
     }
 
@@ -949,20 +1076,20 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     /// has scrolled away. VoiceOver reads the header instead.
     private var compactBar: some View {
         HStack(spacing: Theme.Spacing.s) {
+            compactHeadshot
+
             Text(player.name)
                 .font(Theme.Typography.cardTitle)
+                .foregroundStyle(heroInk)
             if !number.isEmpty {
                 Text("#\(number)")
                     .font(Theme.Typography.cardTitle.monospacedDigit())
-                    // Half-strength ink on the team colour, firmer under
-                    // Increase Contrast and Reduce Transparency (X-5).
-                    .adaptiveScrim(0.7)
+                    .foregroundStyle(inkColor)
             }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-        .teamInk(on: team)
         // Clear of the close button, and centred.
         .padding(.horizontal, 44 + Theme.Spacing.m * 2)
         .frame(maxWidth: .infinity)
@@ -982,8 +1109,8 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             statisticsCard
 
             // No log to show for a season with no games yet: the stats
-            // card already says so.
-            if !player.playerID.isEmpty && !(loaded && statistics.hasNoFigures) {
+            // card already says so. A failed load may still have games.
+            if !player.playerID.isEmpty && !(loaded && statistics.seasonState == .noFigures) {
                 gameLogCard
             }
 
@@ -991,22 +1118,23 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 aboutCard
             }
         }
-        // A readable column on an iPad's page sheet, where a row of stats
-        // ran 1,300 pt wide (B-14). A no-op on an iPhone.
-        .readableContentWidth()
+        // A column on an iPad's page sheet, where a row of stats ran
+        // 1,300 pt wide (B-14): 640 pt in regular width (P11). A no-op on
+        // an iPhone.
+        .readableContentWidth(columnWidth)
         .padding(Theme.Spacing.m)
         .padding(.bottom, Theme.Spacing.xl)
-        // Tall enough to cover the hero's overscroll on a short page.
-        .frame(maxWidth: .infinity, minHeight: Self.heroOverscroll + Self.closeButtonClearance, alignment: .top)
+        // Tall enough to scroll the header fully away and to cover the
+        // hero's overscroll, however short the page (P10).
+        .frame(maxWidth: .infinity, minHeight: pageMinimumHeight, alignment: .top)
         .background(Theme.Surface.content, in: Theme.Radius.pageShape)
     }
 
-    /// A card's heading: label ink on the card, the team colour as an
-    /// accent bar beside it, as no team colour reads on every surface in
-    /// both appearances (B-3).
+    /// A card's heading: label ink on the card, the team's accent (F3) as
+    /// a bar beside it, so it shows on a dark card too (P5, B-3).
     private func cardTitle(_ title: String) -> some View {
         HStack(spacing: Theme.Spacing.s) {
-            TeamAccentBar(color: teamColor)
+            TeamAccentBar(color: accentColor)
             Text(title)
                 .font(Theme.Typography.sectionTitle)
         }
@@ -1033,7 +1161,9 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 cardTitle("Season Stats")
                     .accessibilityIdentifier("playerDetail.section")
 
-                if seasons.count > 1 {
+                // Whenever a season is known, even after a failed load
+                // (P8).
+                if !seasons.isEmpty {
                     Spacer(minLength: Theme.Spacing.s)
                     seasonPicker
                 }
@@ -1041,6 +1171,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
             statisticsContent
                 .motionAnimation(Theme.Motion.stateChange, value: loaded)
+                .motionAnimation(Theme.Motion.stateChange, value: showsAllStats)
         }
     }
 
@@ -1075,21 +1206,38 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         gameLog.loaded && gameLogAnswers != nil && gameLogAnswers == gameLogRequest
     }
 
+    /// How many games the log card lists.
+    private static var gameLogLimit: Int { 5 }
+
+    /// The `task` id the game log loads under: the season it asks for and
+    /// the Retry count.
+    private var gameLogTaskID: String {
+        let request = gameLogRequest.map { "season:" + $0 } ?? "waiting"
+        return request + "#" + String(gameLogAttempt)
+    }
+
     /// The player's five most recent games in the season shown, fetched
-    /// only once the card scrolls into view.
+    /// only once the card scrolls into view, under a title that counts the
+    /// games it lists (P7).
     private var gameLogCard: some View {
         card {
-            cardTitle("Last 5 Games")
+            cardTitle(gameLogCardTitle(shown: gameLog.loaded ? min(gameLog.rows.count, Self.gameLogLimit) : nil))
 
-            PlayerGameLogView(log: gameLog, limit: 5, accent: teamColor, league: team.league)
-                .motionAnimation(Theme.Motion.stateChange, value: gameLog.loaded)
+            PlayerGameLogView(
+                log: gameLog,
+                limit: Self.gameLogLimit,
+                accent: accentColor,
+                league: team.league,
+                onRetry: { gameLogAttempt += 1 }
+            )
+            .motionAnimation(Theme.Motion.stateChange, value: gameLog.loaded)
         }
         .onScrollVisibilityChange(threshold: 0.1) { visible in
             if visible {
                 gameLogVisible = true
             }
         }
-        .task(id: gameLogRequest) {
+        .task(id: gameLogTaskID) {
             await loadGameLog()
         }
     }
@@ -1122,7 +1270,10 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     @ViewBuilder
     private var statisticsContent: some View {
-        if allCells.isEmpty {
+        if loaded && statistics.seasonState == .loadFailed {
+            // Not "No stats yet": the feed didn't answer (P8).
+            loadFailedState
+        } else if allCells.isEmpty {
             if !loaded {
                 statisticsSkeleton
             } else if !logTotals.isEmpty {
@@ -1136,7 +1287,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 emptyMessage(statistics.message ?? "No season statistics are available for this player yet.")
             }
         } else if loaded {
-            if statistics.hasNoFigures {
+            if statistics.seasonState == .noFigures {
                 noFiguresState
             } else {
                 statisticsBody
@@ -1151,17 +1302,22 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
     /// The key statistics for the player's sport and position as tiles
     /// (`featuredStatistics`), then the rest of the line in titled groups
-    /// of labelled rows, a rate with a bar in the team colour.
+    /// of labelled rows, a rate with a bar in the team's accent. Zero rows,
+    /// and groups of nothing but, wait behind "Show all stats" at the end
+    /// (P2, `statGroups(excluding:)`).
     private var statisticsBody: some View {
         let featured = statistics.featuredCells(for: player.featuredStatistics)
         let wide = featured.filter { $0.feature.spansRow }.map { KeyStat($0) }
         let tiles = featured.filter { !$0.feature.spansRow }.map { KeyStat($0) }
-        let sections = statistics.remainingSections(excluding: featured)
+        let groups = statistics.statGroups(excluding: featured)
+        // The placeholder line, all zeros, keeps its full layout while the
+        // real one loads.
+        let sections = showsAllStats || !loaded ? groups.all : groups.shown
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             if !wide.isEmpty || !tiles.isEmpty {
                 VStack(spacing: Theme.Spacing.s) {
                     ForEach(Array(wide.enumerated()), id: \.offset) { _, stat in
-                        KeyStatTile(stat: stat, accent: teamColor)
+                        KeyStatTile(stat: stat)
                     }
 
                     if !tiles.isEmpty {
@@ -1170,14 +1326,56 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                 }
             }
 
-            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                statSection(section)
-            }
+            statSectionList(sections)
 
             if let message = statistics.message {
                 emptyMessage(message)
             }
+
+            if loaded && groups.hiddenCount > 0 {
+                showAllStatsButton(hidden: groups.hiddenCount)
+            }
         }
+    }
+
+    /// The stat groups one under another, or two across on an iPad
+    /// (`groupsInTwoColumns`, P11).
+    @ViewBuilder
+    private func statSectionList(_ sections: [PlayerSheetGrid.Section]) -> some View {
+        if groupsInTwoColumns && sections.count > 1 {
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: Theme.Spacing.l, alignment: .top),
+                    count: 2
+                ),
+                alignment: .leading,
+                spacing: Theme.Spacing.l
+            ) {
+                ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                    statSection(section)
+                }
+            }
+        } else {
+            ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                statSection(section)
+            }
+        }
+    }
+
+    /// Opens, and closes again, the rows "Show all stats" holds back: the
+    /// zeros, and the groups of nothing but (P2).
+    private func showAllStatsButton(hidden: Int) -> some View {
+        Button {
+            showsAllStats.toggle()
+        } label: {
+            Text(showsAllStats ? "Show fewer stats" : "Show all stats (\(hidden) more)")
+                .font(Theme.Typography.body.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .accessibilityIdentifier("playerDetail.showAllStats")
     }
 
     /// The logged games summed (`logTotals`), under a line saying how many:
@@ -1195,7 +1393,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
         return VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             Label(gameLogTotalsCaption(games: gameLog.rows.count), systemImage: "sum")
                 .font(Theme.Typography.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Palette.metadata)
 
             if !tiles.isEmpty {
                 keyStatGrid(tiles.map { stat in
@@ -1219,7 +1417,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
     private func keyStatGrid(_ stats: [KeyStat]) -> some View {
         LazyVGrid(columns: tileColumns(count: stats.count), spacing: Theme.Spacing.s) {
             ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
-                KeyStatTile(stat: stat, accent: teamColor)
+                KeyStatTile(stat: stat)
             }
         }
         .onGeometryChange(for: CGFloat.self) { proxy in
@@ -1247,7 +1445,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
             if let title = section.title {
                 Text(title)
                     .font(Theme.Typography.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .textCase(.uppercase)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -1257,7 +1455,7 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
                     if index > 0 {
                         Divider()
                     }
-                    StatRow(cell: cell, accent: teamColor)
+                    StatRow(cell: cell, accent: accentColor)
                 }
             }
             .padding(.horizontal, Theme.Spacing.m)
@@ -1298,11 +1496,63 @@ struct PlayerDetailView<Player: PlayerSheetDescribing>: View {
 
                 Text(detail)
                     .font(Theme.Typography.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
             }
             .multilineTextAlignment(.center)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("playerDetail.noStats")
+
+            if let earlier {
+                Button {
+                    season = earlier.value
+                } label: {
+                    Text("Show \(earlier.label) Season")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("playerDetail.earlierSeason")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.s)
+        .frame(maxWidth: .infinity)
+    }
+
+    /// A season whose statistics didn't load: the fetch failed, or the feed
+    /// answered without its season list (P8). Says so, with a Retry that
+    /// fetches the season again (and the game log, if that failed too), and
+    /// keeps the way to the season before. The season picker above stays
+    /// whenever a season is known.
+    private var loadFailedState: some View {
+        let earlier = earlierSeason
+        return VStack(spacing: Theme.Spacing.m) {
+            VStack(spacing: Theme.Spacing.xs) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                    .padding(.bottom, Theme.Spacing.xs)
+
+                Text("Couldn't load this season's stats")
+                    .font(Theme.Typography.cardTitle)
+
+                Text("ESPN didn't send them just now. Check your connection, then try again.")
+                    .font(Theme.Typography.footnote)
+                    .foregroundStyle(Theme.Palette.metadata)
+            }
+            .multilineTextAlignment(.center)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("playerDetail.loadFailed")
+
+            Button {
+                statisticsAttempt += 1
+                if gameLog.loadFailed {
+                    gameLogAttempt += 1
+                }
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("playerDetail.retry")
 
             if let earlier {
                 Button {
@@ -1383,20 +1633,14 @@ extension KeyStat {
 }
 
 /// A key statistic: a large figure over its short label on the inset
-/// surface, under a dash of the team colour. VoiceOver reads it as one
-/// element, "Goals, 7".
+/// surface, without the accent dash it once had (P5): the section's bar
+/// carries the team. VoiceOver reads it as one element, "Goals, 7".
 private struct KeyStatTile: View {
     let stat: KeyStat
-    let accent: Color
 
     var body: some View {
         let value = stat.cell.displayValue
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Capsule()
-                .fill(accent)
-                .frame(width: Theme.Spacing.l, height: 3)
-                .padding(.bottom, 2)
-
             Text(value)
                 .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
                 .lineLimit(1)
@@ -1407,7 +1651,7 @@ private struct KeyStatTile: View {
 
             Text(stat.label)
                 .font(Theme.Typography.statLabel)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Palette.metadata)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
@@ -1422,9 +1666,10 @@ private struct KeyStatTile: View {
 }
 
 /// A season statistic as a row: its label leading, the figure trailing in
-/// tabular digits, a rate's bar in the team colour beneath, a card beside
-/// a booking. Stacked at accessibility sizes so neither truncates;
-/// VoiceOver reads label and figure as one element.
+/// tabular digits, a rate's bar in the team's accent beneath (only over
+/// enough attempts, P3), a card beside a booking. Stacked at
+/// accessibility sizes so neither truncates; VoiceOver reads label and
+/// figure as one element.
 private struct StatRow: View {
     let cell: PlayerSheetCell
     let accent: Color
@@ -1455,8 +1700,7 @@ private struct StatRow: View {
             }
 
             if let fraction = cell.barFraction {
-                ProgressView(value: fraction)
-                    .tint(accent)
+                StatPercentageView(fraction: fraction, color: accent)
             }
         }
         .font(Theme.Typography.body)
@@ -1511,7 +1755,7 @@ private struct FactTile: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(Theme.Typography.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                 Text(shownValue)
                     .font(Theme.Typography.body.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)

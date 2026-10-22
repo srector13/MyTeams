@@ -32,6 +32,11 @@ enum AlertPermission: Equatable, Sendable {
             self = .denied
         }
     }
+
+    /// Whether the system holds every alert back: never allowed yet, or
+    /// turned off. The Alerts settings then show one banner rather than a
+    /// status on every row (S2).
+    var blocksAlerts: Bool { self != .granted }
 }
 
 /// What a status row's button does.
@@ -45,9 +50,9 @@ enum AlertsSettingsAction: Equatable, Sendable {
 /// How a status row's symbol is coloured, so "off" doesn't look like "on"
 /// (A-1). The view maps it to a style; this file stays free of SwiftUI.
 enum AlertsStatusTint: Equatable, Sendable {
-    /// The app's tint: set up, or not yet asked.
+    /// The app's tint: set up.
     case standard
-    /// Red: turned off, and only Settings can turn it back on.
+    /// Red: off, whether never allowed yet or turned off in Settings.
     case off
 }
 
@@ -61,13 +66,18 @@ struct AlertsStatusRow: Equatable, Sendable {
     var systemImage: String
     var action: AlertsSettingsAction?
     var tint: AlertsStatusTint = .standard
+    /// The button's title where it says what the reader gets rather than
+    /// where it goes: "Turn On Notifications" whether it asks or opens
+    /// Settings. `nil` for `action`'s own (`actionTitle`).
+    var buttonTitle: String? = nil
 
     /// The button's title for `action`.
     var actionTitle: String? {
+        guard let action else { return nil }
+        if let buttonTitle { return buttonTitle }
         switch action {
-        case .ask: "Ask Now"
-        case .openSettings: "Open Settings"
-        case nil: nil
+        case .ask: return Self.turnOnNotificationsTitle
+        case .openSettings: return "Open Settings"
         }
     }
 
@@ -80,25 +90,34 @@ struct AlertsStatusRow: Equatable, Sendable {
         }
     }
 
-    /// The score alerts row for a permission state.
+    /// The banner's words while notifications are off, asked or not.
+    static let notificationsOffTitle = "Notifications are off"
+    static let notificationsOffDetail = "Turn them on to get alerts for your teams' games."
+    static let turnOnNotificationsTitle = "Turn On Notifications"
+
+    /// The score alerts row for a permission state. Off, asked or not, it
+    /// is one banner (S2) whose button asks, or once declined opens
+    /// Settings, the only place a denial is undone.
     static func notifications(_ permission: AlertPermission) -> AlertsStatusRow {
         switch permission {
         case .notDetermined:
             AlertsStatusRow(
                 subject: "notifications",
-                title: "Notifications",
-                detail: "Not set up yet. Allow notifications to get alerts for the teams below.",
-                systemImage: "bell.badge",
-                action: .ask
+                title: notificationsOffTitle,
+                detail: notificationsOffDetail,
+                systemImage: "bell.slash",
+                action: .ask,
+                tint: .off
             )
         case .denied:
             AlertsStatusRow(
                 subject: "notifications",
-                title: "Notifications Off",
-                detail: "Alerts are turned off for myTeams. Turn on notifications in Settings to get them.",
+                title: notificationsOffTitle,
+                detail: notificationsOffDetail,
                 systemImage: "bell.slash",
                 action: .openSettings,
-                tint: .off
+                tint: .off,
+                buttonTitle: turnOnNotificationsTitle
             )
         case .granted:
             AlertsStatusRow(
@@ -159,7 +178,7 @@ enum ScoreAlertKind: String, CaseIterable, Sendable {
         switch self {
         case .starts: "Game Starts"
         case .scores: "Score Updates"
-        case .finals: "Finals"
+        case .finals: "Final Scores"
         case .closeGames: "Close Games & Overtime"
         }
     }
@@ -172,6 +191,64 @@ enum ScoreAlertKind: String, CaseIterable, Sendable {
         case .finals: .finals
         case .closeGames: .closeGames
         }
+    }
+}
+
+// MARK: - Team rows
+
+/// What a followed team's row in the Alerts settings says of its alerts.
+///
+/// The team's own choice ("On", "Off", "Custom") is kept while
+/// notifications are off; the row then shows a small bell-slash in its
+/// place rather than a status no alert would follow (S2), and VoiceOver
+/// reads both.
+struct AlertsTeamRowStatus: Equatable, Sendable {
+    /// The team's choice: "On" for the global kinds, "Off", or "Custom".
+    let choice: String
+    /// Whether notifications are off, so the bell-slash stands in.
+    let isBlocked: Bool
+    /// Whether the team sends alerts once notifications allow them.
+    let isOn: Bool
+
+    /// `kinds` is the team's own (`FavoritesStore.alertKinds(for:)`):
+    /// `nil` for the global kinds, `[]` for off.
+    init(kinds: AlertMask?, blocked: Bool) {
+        choice = Self.choice(kinds)
+        isBlocked = blocked
+        isOn = kinds.map { !$0.isEmpty } ?? true
+    }
+
+    /// "On" for the global kinds, "Off" for none, "Custom" for its own.
+    static func choice(_ kinds: AlertMask?) -> String {
+        switch kinds {
+        case nil: "On"
+        case let kinds? where kinds.isEmpty: "Off"
+        default: "Custom"
+        }
+    }
+
+    /// The words at the row's end; `nil` while blocked, when the
+    /// bell-slash shows instead.
+    var text: String? { isBlocked ? nil : choice }
+
+    /// What VoiceOver reads after the team: "On", or "On, notifications
+    /// off" while blocked.
+    var spoken: String { isBlocked ? "\(choice), notifications off" : choice }
+
+    /// `items` with the ones `isOn` picks first, each group in the order
+    /// given: the teams that send alerts lead the list.
+    static func onFirst<Item>(_ items: [Item], isOn: (Item) -> Bool) -> [Item] {
+        items.filter(isOn) + items.filter { !isOn($0) }
+    }
+}
+
+/// The value Settings' Alerts row shows (S1): "On" once notifications are
+/// allowed and a followed team sends alerts, "Off" otherwise; `nil` until
+/// the permission has been read.
+enum AlertsSummary {
+    static func value(permission: AlertPermission?, anyTeamOn: Bool) -> String? {
+        guard let permission else { return nil }
+        return !permission.blocksAlerts && anyTeamOn ? "On" : "Off"
     }
 }
 
@@ -343,6 +420,12 @@ final class AlertsSettingsModel {
     /// The score alerts row; `nil` until the permission has been read.
     var notificationsRow: AlertsStatusRow? {
         permission.map(AlertsStatusRow.notifications)
+    }
+
+    /// Whether the system holds every alert back. `false` until the
+    /// permission is read, so nothing dims before it is known.
+    var notificationsBlocked: Bool {
+        permission?.blocksAlerts ?? false
     }
 
     var liveActivitiesRow: AlertsStatusRow {

@@ -100,6 +100,10 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
     /// a requested sheet.
     @State private var isOnScreen = false
 
+    /// Regular width (an iPad) lays the sections out in two columns under
+    /// the roster (T10).
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
     /// Opens the player sheet asked for with this page, once the page is on
     /// screen and its roster lists the player; forgets one the roster
     /// turns out not to list.
@@ -116,41 +120,34 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
 
     var body: some View {
         TeamHomeLayout {
-            if team.league.descriptor.kind == .other {
-                ContentUnavailableView(
-                    "Not Supported Yet",
-                    systemImage: "sportscourt",
-                    description: Text("Rosters for this sport aren't supported yet.")
-                )
-                .contentCard()
-            } else {
-                RosterSection(model: model) { player in
-                    PlayerCard(player: player, state: model.sort, league: team.league, team: team)
-                } detail: { player in
-                    PlayerDetailView(player: player, team: team)
-                } filterMenu: {
-                    RosterFilterMenu(model: model, entries: team.league.descriptor.rosterFilters)
+            roster
+
+            if sizeClass == .regular {
+                // Two columns under the full-width roster (T10): what's on
+                // and where the team stands, then its players and stories.
+                HStack(alignment: .top, spacing: Theme.Spacing.m) {
+                    VStack(spacing: Theme.Spacing.m) {
+                        schedule
+                        StandingsSection(model: model, team: team)
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    VStack(spacing: Theme.Spacing.m) {
+                        LeadersSection(model: model, team: team)
+                        NewsSection(model: model, teamColor: team.color)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
+            } else {
+                schedule
+
+                StandingsSection(model: model, team: team)
+
+                // The team's stat leaders, and the way into the league's.
+                LeadersSection(model: model, team: team)
+
+                NewsSection(model: model, teamColor: team.color)
             }
-
-            // The league's `RecordRule` decides how abandoned and unflagged
-            // fixtures count in the record.
-            ScheduleSection(model: model) { game in
-                GameView(
-                    game: game,
-                    team: team,
-                    liveScore: model.liveScores[game.gameID]
-                )
-            } detail: { game in
-                GameDetailView(game: game, team: team)
-            }
-
-            StandingsSection(model: model, team: team)
-
-            // The team's stat leaders, and the way into the league's.
-            LeadersSection(model: model, team: team)
-
-            NewsSection(model: model, teamColor: team.color)
         } header: {
             TeamPageHeader(
                 team: team,
@@ -159,7 +156,8 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
                     games: model.games,
                     nextGame: model.nextGame,
                     record: model.displayRecord(),
-                    standings: model.standings
+                    standings: model.standings,
+                    scheduleLoaded: model.scheduleState == .loaded
                 )
             )
         }
@@ -201,6 +199,43 @@ private struct TeamHomeContent<Player: PlayerSheetDescribing>: View {
         }
         .sheet(item: $requestedPlayer) { player in
             PlayerDetailView(player: player, team: team)
+        }
+    }
+}
+
+extension TeamHomeContent {
+    /// The roster carousel, or the note for a sport without rosters.
+    @ViewBuilder
+    var roster: some View {
+        if team.league.descriptor.kind == .other {
+            ContentUnavailableView(
+                "Not Supported Yet",
+                systemImage: "sportscourt",
+                description: Text("Rosters for this sport aren't supported yet.")
+            )
+            .contentCard()
+        } else {
+            RosterSection(model: model) { player in
+                PlayerCard(player: player, state: model.sort, league: team.league, team: team)
+            } detail: { player in
+                PlayerDetailView(player: player, team: team)
+            } filterMenu: {
+                RosterFilterMenu(model: model, entries: team.league.descriptor.rosterFilters)
+            }
+        }
+    }
+
+    /// The schedule carousel. The league's `RecordRule` decides how
+    /// abandoned and unflagged fixtures count in the record.
+    var schedule: some View {
+        ScheduleSection(model: model) { game in
+            GameView(
+                game: game,
+                team: team,
+                liveScore: model.liveScores[game.gameID]
+            )
+        } detail: { game in
+            GameDetailView(game: game, team: team)
         }
     }
 }

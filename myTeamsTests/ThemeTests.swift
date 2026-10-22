@@ -201,3 +201,45 @@ struct ThemeTests {
         #expect(Color(hexString: fill) != .clear)
     }
 }
+
+/// F1 and F3: small grey text and team accents that clear WCAG on the
+/// grouped surfaces they sit on.
+@Suite("Readable greys and team accents")
+struct AccentContrastTests {
+    @Test("Small grey text clears 4.5:1 on white and on a grouped card")
+    func metadataGrey() throws {
+        let onWhite = try #require(TeamColors.contrastRatio(Theme.Palette.metadataLightHex, "FFFFFF"))
+        let onCard = try #require(TeamColors.contrastRatio(Theme.Palette.metadataLightHex, "F2F2F7"))
+        let onDark = try #require(TeamColors.contrastRatio(Theme.Palette.metadataDarkHex, "2C2C2E"))
+        #expect(onWhite >= 4.5)
+        #expect(onCard >= 4.5)
+        #expect(onDark >= 4.5)
+    }
+
+    @Test("Every team accent clears 3:1 on the light and dark grouped surfaces",
+          arguments: [
+              ("E31837", "FFB81C"), ("0051BA", "E8000D"), ("004687", "BD9B60"),
+              ("002A5C", "A7C6ED"), ("000000", "A5ACAF"), ("FFC72C", "00205B"),
+          ])
+    func accents(base: String, alternate: String) throws {
+        for surface in [TeamColors.lightAccentSurfaceHex, TeamColors.darkAccentSurfaceHex] {
+            let accent = TeamColors.accentHex(base, alternate: alternate, on: surface)
+            let ratio = try #require(TeamColors.contrastRatio(accent, surface))
+            #expect(ratio >= TeamColors.minimumAccentContrast, "\(base) on \(surface) gave \(accent)")
+        }
+    }
+
+    @Test("A colour that already reads is kept; a navy takes its own light blue, a red never its gold")
+    func accentChoice() {
+        #expect(TeamColors.accentHex("E31837", alternate: "FFB81C", on: "FFFFFF") == "E31837")
+        #expect(TeamColors.accentHex("002A5C", alternate: "A7C6ED", on: "2C2C2E") == "A7C6ED")
+        #expect(TeamColors.accentHex("E31837", alternate: "FFB81C", on: "2C2C2E") != "FFB81C")
+    }
+
+    @Test("Mixing moves each channel the given share of the way")
+    func mixing() {
+        #expect(TeamColors.mixHex("000000", toward: "FFFFFF", by: 0.5) == "808080")
+        #expect(TeamColors.mixHex("E31837", toward: "FFFFFF", by: 0) == "E31837")
+        #expect(TeamColors.mixHex("E31837", toward: "FFFFFF", by: 1) == "FFFFFF")
+    }
+}

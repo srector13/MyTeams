@@ -341,3 +341,23 @@ struct FormGuideTests {
         #expect(TeamHeaderSummary().formAccessibilityLabel == nil)
     }
 }
+
+@Suite("Score lines")
+struct ScoreLineTests {
+    @Test("Scores read team first with an en dash, result letter in front")
+    func result() {
+        #expect(ScoreLine.score(team: "30", opponent: "27") == "30–27")
+        #expect(ScoreLine.result("W", team: "30", opponent: "27") == "W 30–27")
+        #expect(ScoreLine.result("", team: "0", opponent: "0") == "0–0")
+    }
+
+    @Test("A winner-first feed score turns team first: a loss swaps, a win and a draw stay")
+    func teamFirst() {
+        #expect(ScoreLine.teamFirst(winnerFirst: "4-0", result: "L") == "0–4")
+        #expect(ScoreLine.teamFirst(winnerFirst: "2-1", result: "L") == "1–2")
+        #expect(ScoreLine.teamFirst(winnerFirst: "2-0", result: "W") == "2–0")
+        #expect(ScoreLine.teamFirst(winnerFirst: "3-3", result: "D") == "3–3")
+        #expect(ScoreLine.teamFirst(winnerFirst: "33-30 OT", result: "L") == "30–33 OT")
+        #expect(ScoreLine.teamFirst(winnerFirst: "Postponed", result: "") == "Postponed")
+    }
+}

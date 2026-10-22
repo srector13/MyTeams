@@ -50,9 +50,12 @@ enum AboutInfo {
     }
 }
 
-/// The app's settings: appearance and the theme (`ThemeSettingsView`), game
-/// alerts, the reader's teams, photo credits and the API-Football key, and
-/// what build this is.
+/// The app's settings: the display (appearance and the theme,
+/// `ThemeSettingsView`), the reader's teams and their game alerts, the
+/// advanced settings, and photo credits and what build this is.
+///
+/// Every row leads with a symbol in one column, so the titles line up and
+/// wrap beside it at any text size (`SettingsRowLabelStyle`, S1, A2).
 ///
 /// Opened from the gear in Home's or a team page's navigation bar, as a
 /// sheet with its own stack. `Home` presents it, not the page: removing
@@ -63,6 +66,9 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
+    /// The brand theme, named on the Theme row and tinting the sheets
+    /// opened from here (O3).
+    @AppStorage(BrandTheme.storageKey) private var theme: BrandTheme = .classic
 
     @State private var showsBrowser = false
 
@@ -70,14 +76,30 @@ struct SettingsView: View {
     /// so this is the way to follow another (t_fa6748f4).
     @State private var showsAddTeams = false
 
+    /// The notification permission, for the Alerts row's On or Off.
+    @State private var alerts = AlertsSettingsModel.live()
+
+    private var store: FavoritesStore { .shared }
+
+    /// "On" or "Off" for the Alerts row (`AlertsSummary`); `nil` until the
+    /// permission is read.
+    private var alertsValue: String? {
+        AlertsSummary.value(
+            permission: alerts.permission,
+            anyTeamOn: store.teamIDs.contains { AlertsTeamRowStatus(kinds: store.alertKinds(for: $0), blocked: false).isOn }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Appearance", selection: $appearance) {
+                    Picker(selection: $appearance) {
                         ForEach(AppAppearance.allCases) { option in
                             Text(option.title).tag(option)
                         }
+                    } label: {
+                        Label("Appearance", systemImage: "circle.lefthalf.filled")
                     }
                     .accessibilityHint("Choose light, dark, or the system's appearance.")
                     .accessibilityIdentifier("settings.appearance")
@@ -87,35 +109,25 @@ struct SettingsView: View {
                     NavigationLink {
                         ThemeSettingsView()
                     } label: {
-                        Label("Theme", systemImage: "paintpalette")
+                        LabeledContent {
+                            Text(theme.title)
+                        } label: {
+                            Label("Theme", systemImage: "paintpalette")
+                        }
                     }
                     .accessibilityLabel("Theme")
+                    .accessibilityValue(theme.title)
                     .accessibilityHint("Choose the palette for the accent color, the myTeams logo and the app icon.")
                     .accessibilityIdentifier("settings.theme")
                 } header: {
-                    Text("Appearance")
-                }
-
-                // No header: the row says what it is, and a header repeating
-                // it would be the section's only content (B-9).
-                Section {
-                    // The existing alerts screen: the permission, Live
-                    // Activities and each team's toggle.
-                    NavigationLink {
-                        AlertsSettingsView()
-                    } label: {
-                        Label("Alerts", systemImage: "bell.badge")
-                    }
-                    .accessibilityLabel("Alerts")
-                    .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
-                    .accessibilityIdentifier("settings.alerts")
+                    Text("Display")
                 }
 
                 Section {
                     Button {
                         showsAddTeams = true
                     } label: {
-                        Label("Add Teams", systemImage: "plus.circle")
+                        sheetRow("Add Teams", systemImage: "plus.circle")
                     }
                     .accessibilityHint("Find a team by sport, league or name, and follow it.")
                     .accessibilityIdentifier("settings.addTeams")
@@ -123,24 +135,29 @@ struct SettingsView: View {
                     Button {
                         showsBrowser = true
                     } label: {
-                        Label("Edit My Teams", systemImage: "list.star")
+                        sheetRow("Edit My Teams", systemImage: "list.star")
                     }
                     .accessibilityHint("Add, remove or reorder the teams you follow.")
                     .accessibilityIdentifier("settings.teams")
+
+                    // The alerts screen: the permission, Live Activities and
+                    // each team's alerts. A plain bell: the value says
+                    // whether they're on (S1).
+                    NavigationLink {
+                        AlertsSettingsView()
+                    } label: {
+                        LabeledContent {
+                            Text(alertsValue ?? "")
+                        } label: {
+                            Label("Alerts", systemImage: "bell")
+                        }
+                    }
+                    .accessibilityLabel("Alerts")
+                    .accessibilityValue(alertsValue ?? "")
+                    .accessibilityHint("Choose which teams send game alerts, and allow notifications.")
+                    .accessibilityIdentifier("settings.alerts")
                 } header: {
                     Text("Teams")
-                }
-
-                // Where a player photo came from Wikimedia Commons, its
-                // author and licence (`AthleteHeadshot`).
-                Section {
-                    NavigationLink {
-                        PhotoCreditsView()
-                    } label: {
-                        Label("Photo Credits", systemImage: "photo.on.rectangle")
-                    }
-                    .accessibilityHint("Lists the Wikimedia Commons player photos shown, with their authors and licences.")
-                    .accessibilityIdentifier("settings.photoCredits")
                 }
 
                 // The API-Football key and the widget diagnostics: for the
@@ -154,19 +171,38 @@ struct SettingsView: View {
                     }
                     .accessibilityHint("Your own API-Football key for soccer photos, and widget sharing details.")
                     .accessibilityIdentifier("settings.advanced")
+                } header: {
+                    Text("More")
                 }
 
                 Section {
-                    LabeledContent("Version", value: AboutInfo.versionText(info: Bundle.main.infoDictionary))
-                        .accessibilityIdentifier("settings.version")
+                    // Where a player photo came from Wikimedia Commons, its
+                    // author and licence (`AthleteHeadshot`).
+                    NavigationLink {
+                        PhotoCreditsView()
+                    } label: {
+                        Label("Photo Credits", systemImage: "photo.on.rectangle")
+                    }
+                    .accessibilityHint("Lists the Wikimedia Commons player photos shown, with their authors and licences.")
+                    .accessibilityIdentifier("settings.photoCredits")
+
+                    LabeledContent {
+                        Text(AboutInfo.versionText(info: Bundle.main.infoDictionary))
+                    } label: {
+                        Label("Version", systemImage: "info.circle")
+                    }
+                    .accessibilityIdentifier("settings.version")
                 } header: {
                     Text("About")
                 } footer: {
                     logo
                 }
             }
+            .labelStyle(SettingsRowLabelStyle())
             .onAppear {
                 FavoritesStore.shared.publishToWidgets()
+                // Again on each return from Alerts, where it may change.
+                Task { await alerts.refresh() }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -179,16 +215,38 @@ struct SettingsView: View {
                     } label: {
                         Label("Close", systemImage: "xmark")
                     }
+                    // The toolbar's own icon-only label, not a row's.
+                    .labelStyle(.iconOnly)
                     .accessibilityIdentifier("settings.done")
                 }
             }
         }
+        // The theme's accent on every control, here and in the sheets
+        // opened from here, never the system's blue (O3).
+        .tint(theme.swatchColor)
         .sheet(isPresented: $showsBrowser) {
             TeamBrowserView()
+                .tint(theme.swatchColor)
         }
         .sheet(isPresented: $showsAddTeams) {
             TeamBrowserView(title: "Add Teams")
+                .tint(theme.swatchColor)
         }
+    }
+
+    /// A row that opens a sheet: its symbol and title in the primary
+    /// colour, not the tint a button's label takes, and a chevron, as the
+    /// rows that push have.
+    private func sheetRow(_ title: String, systemImage: String) -> some View {
+        HStack {
+            Label(title, systemImage: systemImage)
+            Spacer(minLength: Theme.Spacing.s)
+            Image(systemName: "chevron.forward")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.Palette.metadata)
+                .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
     }
 
     /// The brand logo, in the art drawn for the scheme on screen: the
@@ -199,6 +257,40 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 24)
             .accessibilityLabel("myTeams")
+    }
+}
+
+/// A settings row's label at any text size: the symbol in a column of its
+/// own, in the tint, and the title in the primary colour beside it,
+/// first baselines aligned. A long title, or a large text size, wraps
+/// within its column rather than under the symbol (A2), and the row's
+/// separator starts where the title does.
+struct SettingsRowLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SettingsRowLabel(configuration: configuration)
+    }
+}
+
+private struct SettingsRowLabel: View {
+    let configuration: LabelStyleConfiguration
+
+    /// The symbol column, which grows with the text beside it.
+    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 28
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.m) {
+            configuration.icon
+                .foregroundStyle(.tint)
+                .frame(width: iconWidth)
+                .accessibilityHidden(true)
+            configuration.title
+                .foregroundStyle(Color.primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                    dimensions[.leading]
+                }
+        }
     }
 }
 

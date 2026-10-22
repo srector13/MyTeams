@@ -18,30 +18,49 @@ struct LoadingGameView : View {
     }
 }
 
-/// A game's card in a schedule carousel.
+/// Where a game's card is drawn, which decides how it names the game.
+enum GameCardStyle: Equatable, Sendable {
+    /// In a team's schedule: the page is the team's, so the card names the
+    /// opponent alone ("@ Raiders", "vs Chargers") under its crest.
+    case schedule
+    /// On Home, among every favorite's games: the card says whose game it
+    /// is ("Chiefs at Dolphins"), the followed team's crest first (H3).
+    case home
+}
+
+/// A game's card in a schedule carousel, and in Home's This Week.
 ///
-/// Over the team's colour: a status pill (the start, "Live" or "Final"),
-/// the opponent's crest, whether the team is home, away or at a neutral
-/// site, the opponent's name, and then the result, the live score and
-/// period, or the full date and time. Beneath, on the inset surface,
-/// whichever of the competition, date, channel and venue the feed gave; a
-/// row the feed left blank is left out rather than drawn empty. What the
-/// card says is worked out by `GameCardContent`, which the tests drive.
+/// Over the team's colour: the status pill (the start, "Live" with the
+/// period, or "Final"), the crests, the matchup, and one line reserved on
+/// every card for the result ("W 30–27", team first, F5), the live score,
+/// or the channel of a game to come, so a result's band and an upcoming
+/// game's are the same height (T4). The start time is in the pill and
+/// nowhere else. Beneath, on the inset surface, what the game is part of,
+/// its date (in a schedule; Home's strip already says the day) and its
+/// venue; a row the feed left blank is left out rather than drawn empty.
+/// What the card says is worked out by `GameCardContent`, which the tests
+/// drive.
 ///
-/// The card scales with Dynamic Type; at accessibility sizes, where the
-/// schedule is a vertical list, it spans the list's width and grows to fit
-/// its text instead (§5.3).
+/// The card is as tall as its content (F7). In a schedule carousel it takes
+/// a slot at least `baseHeight` tall and sits at the top of it, so the row
+/// doesn't change height as it scrolls. The card scales with Dynamic Type; at accessibility
+/// sizes, where the schedule is a vertical list, it spans the list's width
+/// and its text wraps instead (§5.3).
 ///
 /// What differs by sport — what a level result is called, how a period is
-/// named, and how a game in progress is drawn — comes from the league's
-/// `LeagueDescriptor`.
+/// named, and whether a live score marks the lead — comes from the
+/// league's `LeagueDescriptor`.
 struct GameView : View {
 
-    /// The card's size at the default text size, in points. Room for the
-    /// opponent's name on two full lines and three detail rows: at 150 ×
-    /// 160 the name and the channel were clipped by the card's edges.
-    static let baseWidth: CGFloat = 172
-    static let baseHeight: CGFloat = 228
+    /// A schedule card's width at the default text size, in points: room
+    /// for the matchup, the result and a footer line like "Week 4 · Sun,
+    /// Oct 4", with the next card peeking in beside it on an iPhone.
+    static let baseWidth: CGFloat = 200
+    /// The height a schedule card's slot in its carousel takes, at the
+    /// default text size: a little over the tallest card (band and two
+    /// footer lines), which sits at its top; a placeholder's height. The
+    /// card itself is as tall as its content.
+    static let baseHeight: CGFloat = 206
 
     /// The text style the card's size scales with. The card is mostly
     /// footnote and caption text, which grows faster than body text, so it
@@ -57,12 +76,15 @@ struct GameView : View {
     /// schedule feed's own fields.
     var liveScore: LiveGameScore?
 
+    /// A team page's schedule, or Home. On Home the card takes the width
+    /// its row gives it.
+    var style: GameCardStyle = .schedule
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @ScaledMetric(relativeTo: GameView.metricsTextStyle) private var cardWidth = GameView.baseWidth
     @ScaledMetric(relativeTo: GameView.metricsTextStyle) private var cardHeight = GameView.baseHeight
-    @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 32
-    @ScaledMetric(relativeTo: .caption2) private var detailIconWidth: CGFloat = 14
+    @ScaledMetric(relativeTo: .footnote) private var crestSize: CGFloat = 36
     @ScaledMetric(relativeTo: .caption2) private var liveDotSize: CGFloat = 6
 
     /// The card's fill: the team's colour, or the fallback its crest
@@ -71,83 +93,92 @@ struct GameView : View {
     private var teamColor: Color { Color(hexString: TeamColors.fillHex(for: team)) }
 
     /// Text and symbols on `teamColor`: white, black or the team's
-    /// alternate colour, whichever reaches 4.5:1 (G-3). White alone failed
-    /// on light team colours.
+    /// alternate colour, whichever reaches 4.5:1 (G-3, F2). Never the
+    /// theme's accent.
     private var ink: Color { TeamColors.ink(on: team) }
 
     private var league: LeagueDescriptor { team.league.descriptor }
 
     /// At accessibility text sizes the card fills a list row and sizes to
-    /// its text rather than keeping the carousel's fixed shape.
+    /// its text rather than keeping the carousel's width.
     private var fillsRow: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    /// The card's own width: a schedule card's, scaled; `nil` where its row
+    /// decides (Home, or a list at accessibility sizes).
+    private var fixedWidth: CGFloat? {
+        style == .schedule && !fillsRow ? cardWidth : nil
+    }
+
+    /// Whether the live score carries the lead marker (`LiveCardStyle`).
+    private var marksLead: Bool {
+        if case .scoreFirst = league.liveCardStyle { return true }
+        return false
+    }
 
     var body: some View {
         // Once a minute, so "In 12 min" counts down and a game that has
         // reached its start turns live without waiting for a refresh.
         TimelineView(.everyMinute) { context in
-            card(GameCardContent(game: game, league: team.league, liveScore: liveScore, now: context.date))
+            card(GameCardContent(
+                game: game,
+                league: team.league,
+                liveScore: liveScore,
+                now: context.date,
+                style: style,
+                teamName: team.shortName
+            ))
         }
     }
 
     private func card(_ content: GameCardContent) -> some View {
         VStack(spacing: 0) {
             header(content)
-                // Never squeezed: the details give way first.
-                .layoutPriority(1)
-                // A sparse feed's card is all team colour, rather than an
-                // empty inset strip.
-                .frame(maxHeight: content.details.isEmpty && !fillsRow ? CGFloat.infinity : nil, alignment: .top)
                 .background { headerBackground }
                 .clipped()
 
-            if !content.details.isEmpty {
-                details(content.details)
+            if !content.footerLines.isEmpty {
+                footer(content.footerLines)
             }
         }
-        .frame(width: fillsRow ? nil : cardWidth, height: fillsRow ? nil : cardHeight, alignment: .top)
-        .frame(maxWidth: fillsRow ? CGFloat.infinity : nil)
+        .frame(width: fixedWidth, alignment: .top)
+        .frame(maxWidth: fixedWidth == nil ? CGFloat.infinity : nil)
         .background(Theme.Surface.insetCard)
-        // Nested in the schedule section's card (X-4).
+        // Nested in the section's card (X-4).
         .clipShape(Theme.Radius.innerShape)
+        // In a schedule carousel, a row as tall as the tallest card with
+        // each card at its own height at the top of it, so the row keeps
+        // its height as cards are realised while it scrolls (T4).
+        .frame(minHeight: style == .schedule && !fillsRow ? cardHeight : nil, alignment: .top)
     }
 
     // MARK: Header
 
-    /// The status pill, crest, side, opponent and result, in the team's ink.
+    /// The status pill, crests, matchup and the reserved result line, in
+    /// the team's ink.
     private func header(_ content: GameCardContent) -> some View {
-        VStack(spacing: Theme.Spacing.xs) {
+        VStack(spacing: Theme.Spacing.s - 2) {
             HStack(spacing: 0) {
                 StatusPill(content: content, dotSize: liveDotSize)
                 Spacer(minLength: 0)
             }
 
-            crest
-                .frame(width: crestSize, height: crestSize)
+            crests(content)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 2) {
-                Text(content.side)
-                    .font(.caption2.weight(.semibold))
-                    .textCase(.uppercase)
-                    .lineLimit(1)
+            // One line in a carousel, so every band is the same height;
+            // trimmed a little for a long name rather than cut off.
+            Text(content.matchup)
+                .font(style == .home ? Font.headline : Font.subheadline.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(fillsRow ? nil : 1)
+                .minimumScaleFactor(0.65)
+                .allowsTightening(true)
 
-                // Two lines, then a little smaller, and never cut off
-                // mid-word.
-                Text(content.opponent)
-                    .font(.footnote.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(fillsRow ? nil : 2)
-                    .minimumScaleFactor(0.75)
-                    .allowsTightening(true)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            phaseLine(content)
+            resultSlot(content)
         }
         .foregroundStyle(ink)
         .frame(maxWidth: .infinity)
-        .padding(Theme.Spacing.s)
-        .padding(.vertical, fillsRow ? Theme.Spacing.xs : 0)
+        .padding(Theme.Spacing.m)
     }
 
     /// The team's colour, with its crest faint in the corner.
@@ -164,85 +195,59 @@ struct GameView : View {
         }
     }
 
-    /// The opponent's crest, fitted to its square: a wide crest filled past
-    /// its frame and spilled over the text beside it.
+    /// The opponent's crest on a schedule card; on Home the followed
+    /// team's first, "vs" or "at", then the opponent's. Both cut out on the
+    /// team colour as the hero's are, the opponent's through the same
+    /// lookup the hero uses (`HomeOpponentCrest`, H8), so a card never
+    /// shows a grey shield where the hero has the real crest.
     @ViewBuilder
-    private var crest: some View {
-        if game.opponentLogo.isEmpty {
-            Image("blankTeam")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-        } else {
-            RemoteImage(url: URL(string: game.opponentLogo)) {
-                Image("blankTeam")
-                    .resizable()
-            }
-            .aspectRatio(contentMode: .fit)
-        }
-    }
-
-    /// Beneath the opponent: the result, the live state, or the full date
-    /// and time.
-    @ViewBuilder
-    private func phaseLine(_ content: GameCardContent) -> some View {
-        switch content.phase {
-        case .final:
-            if let outcome = content.outcomeLabel {
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
-                    Text(outcome)
-                        .font(.caption.weight(.heavy))
-                        .textCase(.uppercase)
-                    if let score = content.finalScore {
-                        scoreText(score)
-                    }
-                }
-            }
-        case .live:
-            switch league.liveCardStyle {
-            case .periodFirst:
-                VStack(spacing: 2) {
-                    liveStageText(content)
-                    if let liveScore {
-                        liveScoreLine(liveScore, marksLead: false)
-                    }
-                }
-            case .scoreFirst:
-                VStack(spacing: 2) {
-                    if let liveScore {
-                        liveScoreLine(liveScore, marksLead: true)
-                    }
-                    liveStageText(content)
-                }
-            }
-        case .upcoming, .cancelled, .postponed:
-            if let dateLine = content.dateLine {
-                Text(dateLine)
-                    .font(.caption2.weight(.medium))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(fillsRow ? nil : 2)
-                    .minimumScaleFactor(0.8)
+    private func crests(_ content: GameCardContent) -> some View {
+        let onHex = TeamColors.fillHex(for: team)
+        switch style {
+        case .schedule:
+            HomeOpponentCrest(game: game, league: team.league, size: crestSize, onHex: onHex)
+        case .home:
+            HStack(spacing: Theme.Spacing.s + 2) {
+                CutoutCrest(team: team, size: crestSize, onHex: onHex)
+                Text(content.connector)
+                    .font(.caption.weight(.semibold))
+                    .opacity(0.9)
+                HomeOpponentCrest(game: game, league: team.league, size: crestSize, onHex: onHex)
             }
         }
     }
 
-    @ViewBuilder
-    private func liveStageText(_ content: GameCardContent) -> some View {
-        if let stage = content.liveStage {
-            Text(stage)
-                .font(.caption2.weight(.semibold))
-                .monospacedDigit()
-                .multilineTextAlignment(.center)
-                .lineLimit(fillsRow ? nil : 1)
-                .minimumScaleFactor(0.8)
+    /// The line every card keeps under the matchup (T4): the result, the
+    /// live score, or the channel of a game to come; held empty at the same
+    /// height where there's nothing to put in it.
+    private func resultSlot(_ content: GameCardContent) -> some View {
+        ZStack {
+            // Holds the line's height on every card.
+            scoreText(" ")
+                .hidden()
+                .accessibilityHidden(true)
+
+            if content.phase == .live, let liveScore {
+                liveScoreLine(liveScore)
+            } else if let line = content.slotLine {
+                if content.phase == .final {
+                    scoreText(line)
+                } else {
+                    Text(line)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
         }
     }
 
-    /// The live score, its digits rolling as either side scores (G-5).
-    /// Under `LiveCardStyle.scoreFirst`, a triangle beside it says whether
-    /// the followed team leads or trails.
-    private func liveScoreLine(_ liveScore: LiveGameScore, marksLead: Bool) -> some View {
+    /// The live score, team first (F5), its digits rolling as either side
+    /// scores (G-5). Under `LiveCardStyle.scoreFirst`, a triangle beside it
+    /// says whether the followed team leads or trails.
+    private func liveScoreLine(_ liveScore: LiveGameScore) -> some View {
         HStack(spacing: Theme.Spacing.xs) {
-            scoreText("\(liveScore.score) – \(liveScore.opponentScore)")
+            scoreText(ScoreLine.score(team: "\(liveScore.score)", opponent: "\(liveScore.opponentScore)"))
                 .scoreTransition(value: Double(liveScore.score + liveScore.opponentScore))
 
             if marksLead, liveScore.score != liveScore.opponentScore {
@@ -270,36 +275,41 @@ struct GameView : View {
             .minimumScaleFactor(0.8)
     }
 
-    // MARK: Details
+    // MARK: Footer
 
-    /// The competition, date, channel and venue rows, on the inset surface
-    /// in secondary text.
-    private func details(_ details: [GameCardContent.Detail]) -> some View {
+    /// What the game is part of and its date on one line, its venue on the
+    /// next, in the metadata grey on the inset surface (F1).
+    private func footer(_ lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            ForEach(details, id: \.kind) { detail in
-                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.xs) {
-                    Image(systemName: detail.systemImage)
-                        .frame(width: detailIconWidth)
-                        .accessibilityHidden(true)
-                    Text(detail.text)
-                        .lineLimit(fillsRow ? nil : 1)
-                        .minimumScaleFactor(0.8)
-                }
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .lineLimit(fillsRow ? nil : 1)
+                    .minimumScaleFactor(0.8)
             }
         }
-        .font(.caption2.weight(.medium))
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, maxHeight: fillsRow ? nil : CGFloat.infinity, alignment: .topLeading)
-        .padding(Theme.Spacing.s)
+        .font(Theme.Typography.caption)
+        .foregroundStyle(Theme.Palette.metadata)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.s)
     }
 }
 
 /// The card's status: the start ("Today 7:00 PM", "In 12 min"), "Live"
-/// beside a dot, "Final", or the cancellation. Primary text on the inset
-/// surface, so it reads the same over every team's colour.
+/// beside a dot and the period, "Final", or the cancellation. Primary text
+/// on the inset surface, so it reads the same over every team's colour.
 private struct StatusPill: View {
     let content: GameCardContent
     let dotSize: CGFloat
+
+    /// "Live · 2nd Quarter · 14:14" while it's under way: the period rides
+    /// in the pill, so the result line below holds the score.
+    private var text: String {
+        if content.phase == .live, let stage = content.liveStage {
+            return "\(content.status) · \(stage)"
+        }
+        return content.status
+    }
 
     var body: some View {
         HStack(spacing: Theme.Spacing.xs) {
@@ -310,11 +320,11 @@ private struct StatusPill: View {
                     .frame(width: dotSize, height: dotSize)
                     .accessibilityHidden(true)
             }
-            Text(content.status)
+            Text(text)
                 .font(.caption2.weight(.semibold))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.7)
         }
         // The label colour itself, not `.primary`: that resolves to the
         // header's inherited ink (white on a dark team colour), unreadable
@@ -328,7 +338,7 @@ private struct StatusPill: View {
 
 // MARK: - Content
 
-/// What a schedule card says about a game at a moment, worked out from the
+/// What a game's card says about it at a moment, worked out from the
 /// schedule feed's fields alone so the tests can check it. Every optional
 /// is `nil`, and every detail row left out, where the feed gave nothing to
 /// show: the European soccer feeds often carry no channel, and some no
@@ -342,49 +352,58 @@ struct GameCardContent: Equatable {
         case win, loss, draw
     }
 
-    /// A row beneath the card's header.
+    /// A fact for the card's footer.
     struct Detail: Equatable {
         enum Kind: Hashable {
-            /// A cup tie's competition, the week, or the season stage.
+            /// A cup tie's competition, the week, or the season stage; on
+            /// Home, else the league.
             case competition
-            /// The day a finished game was played.
+            /// The day the game is (or was) played, in a schedule.
             case date
+            /// The channel of a game under way; one to come has it in the
+            /// result line.
             case broadcast
             case venue
         }
 
         var kind: Kind
         var text: String
-
-        var systemImage: String {
-            switch kind {
-            case .competition: return "trophy"
-            case .date: return "calendar"
-            case .broadcast: return "tv"
-            case .venue: return "mappin.and.ellipse"
-            }
-        }
     }
 
     /// How long before the start the pill counts down in minutes.
     static let countdownWindow: TimeInterval = 60 * 60
 
     var phase: Phase
-    /// The pill's text.
+    /// The pill's text: the start, with its time ("Sun 3:25 PM", "Oct 14
+    /// · 3:25 PM"), "Live", "Final", or the cancellation. The only place
+    /// the card gives the time (T4).
     var status: String
     /// "Home", "Away" or "Neutral".
     var side: String
     var opponent: String
+    /// Under the crests: "@ Raiders" or "vs Chargers" in a schedule, the
+    /// opponent alone; "Chiefs at Dolphins" or "Sporting vs Salt Lake" on
+    /// Home, the followed team first (H3).
+    var matchup: String
+    /// "vs" at home or a neutral site, "at" away: between Home's crests.
+    var connector: String
     var outcome: Outcome?
     /// "Win", "Loss", or the league's `drawLabel`.
     var outcomeLabel: String?
-    /// The final score, the winner's first: "31 – 10".
+    /// The final score, the team's first (F5): "24–10" for a win, "10–24"
+    /// for a loss.
     var finalScore: String?
+    /// The result's letter and the score, team first: "W 24–10", "L 0–4",
+    /// "T 20–20". Just the outcome's word where the feed gave no score.
+    var resultLine: String?
     /// "2nd Quarter · 14:14", "Halftime", "5th Inning".
     var liveStage: String?
-    /// Under the opponent of a game not played: the full start of one to
-    /// come ("Sun, Oct 12 · 3:25 PM"), the date of a cancelled one.
-    var dateLine: String?
+    /// The line reserved under the matchup on every card (T4): the result
+    /// once it's final, the channel of a game to come; `nil` while it's
+    /// live (the card draws the live score there) or where there's
+    /// nothing to say, when the line is held empty.
+    var slotLine: String?
+    /// The footer's facts, in order.
     var details: [Detail]
 
     init(
@@ -392,13 +411,27 @@ struct GameCardContent: Equatable {
         league: LeagueID,
         liveScore: LiveGameScore? = nil,
         now: Date = Date(),
-        calendar: Calendar = .autoupdatingCurrent
+        calendar: Calendar = .autoupdatingCurrent,
+        style: GameCardStyle = .schedule,
+        teamName: String = ""
     ) {
         let descriptor = league.descriptor
         let phase = Self.phase(of: game, now: now, liveScore: liveScore)
         self.phase = phase
         side = Self.side(of: game)
-        opponent = game.opponent.isEmpty ? "TBD" : game.opponent
+        let opponent = game.opponent.isEmpty ? "TBD" : game.opponent
+        self.opponent = opponent
+
+        let isAway = !game.gameHome && !game.neutralSite
+        let connector = isAway ? "at" : "vs"
+        self.connector = connector
+        let name = teamName.trimmingCharacters(in: .whitespaces)
+        switch style {
+        case .schedule:
+            matchup = "\(isAway ? "@" : "vs") \(opponent)"
+        case .home:
+            matchup = name.isEmpty ? "\(connector) \(opponent)" : "\(name) \(connector) \(opponent)"
+        }
 
         let outcome = Self.outcome(of: game)
         self.outcome = outcome
@@ -409,44 +442,89 @@ struct GameCardContent: Equatable {
             case .draw: return descriptor.drawLabel
             }
         }
-        finalScore = Self.finalScore(of: game, outcome: outcome)
+        let finalScore = Self.finalScore(of: game, outcome: outcome)
+        self.finalScore = finalScore
+        let resultLine: String? = outcome.map { outcome -> String in
+            let word: String
+            let letter: String
+            switch outcome {
+            case .win:
+                word = "Win"
+                letter = "W"
+            case .loss:
+                word = "Loss"
+                letter = "L"
+            case .draw:
+                word = descriptor.drawLabel
+                letter = String(descriptor.drawLabel.prefix(1)).uppercased()
+            }
+            guard finalScore != nil else { return word }
+            return ScoreLine.result(letter, team: game.score, opponent: game.opponentScore)
+        }
+        self.resultLine = resultLine
         liveStage = phase == .live ? Self.liveStage(of: game, league: descriptor) : nil
 
         let hasDate = !game.date.isEmpty
+        let broadcast = Self.broadcast(of: game)
         switch phase {
         case .upcoming:
-            status = hasDate ? Self.startLabel(for: game.dateAsDate, now: now, calendar: calendar) : "TBD"
-            dateLine = hasDate ? Self.fullStart(of: game.dateAsDate, now: now, calendar: calendar) : nil
+            status = hasDate ? Self.cardStartLabel(for: game.dateAsDate, now: now, calendar: calendar) : "TBD"
+            slotLine = broadcast
         case .live:
             status = "Live"
-            dateLine = nil
+            slotLine = nil
         case .final:
             status = "Final"
-            dateLine = nil
+            slotLine = resultLine
         case .cancelled:
             status = "Cancelled"
-            dateLine = hasDate ? Self.fullDate(of: game.dateAsDate, now: now, calendar: calendar) : nil
+            slotLine = nil
         case .postponed:
             status = "Postponed"
-            dateLine = hasDate ? Self.fullDate(of: game.dateAsDate, now: now, calendar: calendar) : nil
+            slotLine = nil
         }
 
         var details: [Detail] = []
-        if let competition = Self.competitionLabel(of: game, league: league) {
-            details.append(Detail(kind: .competition, text: competition))
+        let competition = Self.competitionLabel(of: game, league: league)
+        switch style {
+        case .schedule:
+            if let competition {
+                details.append(Detail(kind: .competition, text: competition))
+            }
+            // A schedule runs over months: each card says its day. A game
+            // under way is today's.
+            if hasDate, phase != .live {
+                details.append(Detail(kind: .date, text: Self.fullDate(of: game.dateAsDate, now: now, calendar: calendar)))
+            }
+        case .home:
+            // Home mixes the favorites' leagues, so a league game names
+            // its league; the strip above already says the day.
+            details.append(Detail(kind: .competition, text: competition ?? descriptor.displayName))
         }
-        // An upcoming or called-off game's date is in its header.
-        if phase == .final, hasDate {
-            details.append(Detail(kind: .date, text: Self.fullDate(of: game.dateAsDate, now: now, calendar: calendar)))
-        }
-        // The channel only matters while there's still a game to watch.
-        if phase == .upcoming || phase == .live, let broadcast = Self.broadcast(of: game) {
+        // Under way, the result line holds the score: the channel goes
+        // here instead.
+        if phase == .live, let broadcast {
             details.append(Detail(kind: .broadcast, text: broadcast))
         }
         if let venue = Self.venue(of: game) {
             details.append(Detail(kind: .venue, text: venue))
         }
         self.details = details
+    }
+
+    /// The footer as drawn: what the game is part of, its date and (while
+    /// it's live) its channel on one line — "Week 4 · Sun, Oct 4" — and
+    /// the venue on the next. No line where the feed gave nothing.
+    var footerLines: [String] {
+        let facts = details.filter { $0.kind != .venue }.map(\.text)
+        var lines: [String] = []
+        if !facts.isEmpty {
+            lines.append(facts.joined(separator: " · "))
+        }
+        if let venue = details.first(where: { $0.kind == .venue }) {
+            lines.append(venue.text)
+        }
+        return lines
     }
 
     // MARK: Rules
@@ -481,14 +559,12 @@ struct GameCardContent: Equatable {
         return .loss
     }
 
-    /// The final score with the winner's figure first, as the card has
-    /// always shown it ("31 – 10" both for a win and a loss); `nil` without
-    /// both figures.
+    /// The final score with the team's figure first (F5): "24–10" for a
+    /// win, "10–24" for a loss; `nil` before a result or without both
+    /// figures.
     static func finalScore(of game: Game, outcome: Outcome?) -> String? {
-        guard let outcome, !game.score.isEmpty, !game.opponentScore.isEmpty else { return nil }
-        return outcome == .loss
-            ? "\(game.opponentScore) – \(game.score)"
-            : "\(game.score) – \(game.opponentScore)"
+        guard outcome != nil, !game.score.isEmpty, !game.opponentScore.isEmpty else { return nil }
+        return ScoreLine.score(team: game.score, opponent: game.opponentScore)
     }
 
     /// The period and clock of a game in progress: "2nd Quarter · 14:14",
@@ -532,6 +608,18 @@ struct GameCardContent: Equatable {
             return "\(start.formatted(style.weekday(.abbreviated))) \(time)"
         }
         return start.formatted(style.month(.abbreviated).day())
+    }
+
+    /// The card's pill for a game still to come: `startLabel`, with the
+    /// start time added where that leaves it out ("Oct 14 · 3:25 PM"), so
+    /// the time is always in the pill and only there (T4). The countdown
+    /// inside the hour stands alone.
+    static func cardStartLabel(for start: Date, now: Date, calendar: Calendar = .autoupdatingCurrent) -> String {
+        let label = startLabel(for: start, now: now, calendar: calendar)
+        let untilStart = start.timeIntervalSince(now)
+        if untilStart > 0, untilStart < countdownWindow { return label }
+        let time = timeLabel(of: start, calendar: calendar)
+        return label.hasSuffix(time) ? label : "\(label) · \(time)"
     }
 
     /// The start time alone, "3:25 PM", in `calendar`'s zone and locale.

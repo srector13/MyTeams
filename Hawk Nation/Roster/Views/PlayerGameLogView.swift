@@ -10,9 +10,11 @@ import SwiftUI
 
 /// The rows of a player sheet's game-log card: the most recent games, each
 /// with its result in a coloured chip, the opponent's crest and name, the
-/// date and score, and the player's line as compact chips ("2 G", "5 SH")
-/// from the log's headline columns (`AthleteGameLog.headlineColumns`). A
-/// goal, touchdown or home run is picked out in the team colour.
+/// score with the team first ("L 0–4", P6, F5) over the date, and the
+/// player's line as compact chips ("2 G", "5 SH") from the log's headline
+/// columns (`AthleteGameLog.headlineColumns`). A goal, touchdown or home
+/// run is picked out in the team's accent. A log that didn't load says so,
+/// with a Retry (P8).
 ///
 /// The chips sit in one line beside the game and wrap under it when they
 /// don't fit; at accessibility sizes each game stacks, so nothing
@@ -20,10 +22,12 @@ import SwiftUI
 struct PlayerGameLogView: View {
     let log: AthleteGameLog
     var limit = 5
-    /// The team colour, behind a scoring chip.
+    /// The team's accent on a content card (F3), behind a scoring chip.
     var accent: Color = .accentColor
     /// The log's league, for the opponents' crests; `nil` draws none.
     var league: LeagueID? = nil
+    /// Fetches the log again after a failed load; `nil` offers no Retry.
+    var onRetry: (() -> Void)? = nil
 
     @ScaledMetric(relativeTo: .headline) private var crestSize: CGFloat = 28
 
@@ -32,14 +36,10 @@ struct PlayerGameLogView: View {
     private var rows: [GameLogRow] { Array(log.rows.prefix(limit)) }
 
     var body: some View {
-        if log.loaded && rows.isEmpty {
-            Text("No games are logged for this player this season.")
-                .font(.subheadline.bold())
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Theme.Spacing.l)
-                .padding(.vertical, Theme.Spacing.s)
-                .frame(maxWidth: .infinity, alignment: .center)
+        if log.loaded && log.loadFailed && rows.isEmpty {
+            failedMessage
+        } else if log.loaded && rows.isEmpty {
+            message("No games are logged for this player this season.")
         } else if rows.isEmpty {
             // Stand-in games, redacted, until the first fetch lands.
             games(Self.placeholderRows, columns: Self.placeholderColumns)
@@ -51,6 +51,35 @@ struct PlayerGameLogView: View {
             games(rows, columns: log.headlineColumns)
                 .loadingPlaceholder()
         }
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline.bold())
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Theme.Spacing.l)
+            .padding(.vertical, Theme.Spacing.s)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// The log didn't arrive: not "no games" (P8).
+    private var failedMessage: some View {
+        VStack(spacing: Theme.Spacing.s) {
+            message("Couldn't load recent games.")
+                .accessibilityIdentifier("playerDetail.gameLogFailed")
+
+            if let onRetry {
+                Button {
+                    onRetry()
+                } label: {
+                    Label("Retry", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("playerDetail.gameLogRetry")
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func games(_ rows: [GameLogRow], columns: [GameLogColumn]) -> some View {
@@ -78,7 +107,7 @@ struct PlayerGameLogView: View {
                 }
                 Text(Self.detail(row))
                     .font(Theme.Typography.footnote.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     chipList(row, columns: columns)
                 }
@@ -93,17 +122,10 @@ struct PlayerGameLogView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                        Text(row.opponentSummary)
-                            .font(Theme.Typography.cardTitle)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Spacer(minLength: Theme.Spacing.s)
-                        Text(Self.detail(row))
-                            .font(Theme.Typography.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
+                    Text(row.opponentSummary)
+                        .font(Theme.Typography.cardTitle)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
 
                     // One line when the chips fit beside each other, else
                     // one under another.
@@ -117,6 +139,21 @@ struct PlayerGameLogView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                // The score team first, over the date (P6).
+                VStack(alignment: .trailing, spacing: Theme.Spacing.xs) {
+                    if !row.resultSummary.isEmpty {
+                        Text(row.resultSummary)
+                            .font(Theme.Typography.body.weight(.semibold).monospacedDigit())
+                    }
+                    if let date = Self.date(row) {
+                        Text(date)
+                            .font(Theme.Typography.caption.monospacedDigit())
+                            .foregroundStyle(Theme.Palette.metadata)
+                    }
+                }
+                .lineLimit(1)
+                .fixedSize()
             }
         }
     }
@@ -153,16 +190,21 @@ struct PlayerGameLogView: View {
         )
     }
 
-    /// "Oct 4 · 30-27", leaving out what the feed left out. The result's
-    /// letter is the chip beside it.
+    /// "Oct 4", or `nil` where the feed's date didn't parse.
+    private static func date(_ row: GameLogRow) -> String? {
+        row.date.map { $0.formatted(.dateTime.month(.abbreviated).day()) }
+    }
+
+    /// "Oct 4 · L 0–4", team first (P6), leaving out what the feed left
+    /// out: the stacked row's line under the opponent.
     private static func detail(_ row: GameLogRow) -> String {
-        [row.date.map { $0.formatted(.dateTime.month(.abbreviated).day()) } ?? "", row.score]
+        [date(row) ?? "", row.resultSummary]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
 
-    /// "October 4, 2026, at Las Vegas Raiders, won 30-27, 225 Passing
-    /// Yards, 2 Passing Touchdowns, …".
+    /// "October 4, 2026, at Las Vegas Raiders, won 30–27, 225 Passing
+    /// Yards, 2 Passing Touchdowns, …", the score team first.
     private static func accessibilityLabel(_ row: GameLogRow, columns: [GameLogColumn]) -> String {
         var parts: [String] = []
         if let date = row.date {
@@ -178,7 +220,7 @@ struct PlayerGameLogView: View {
         case "T": outcome = "tied"
         default: outcome = row.result
         }
-        let result = [outcome, row.score].filter { !$0.isEmpty }.joined(separator: " ")
+        let result = [outcome, row.teamScore].filter { !$0.isEmpty }.joined(separator: " ")
         if !result.isEmpty {
             parts.append(result)
         }
@@ -227,7 +269,7 @@ private struct GameResultChip: View {
         switch result {
         case "W": return Theme.Outcome.win
         case "L": return Theme.Outcome.loss
-        default: return Color(uiColor: .secondaryLabel)
+        default: return Theme.Palette.metadata
         }
     }
 
@@ -254,7 +296,7 @@ private struct GameStatChip: View {
                 .font(.subheadline.weight(emphasized ? .heavy : .semibold).monospacedDigit())
             Text(label)
                 .font(Theme.Typography.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.Palette.metadata)
         }
         .lineLimit(1)
         .fixedSize()

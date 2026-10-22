@@ -54,6 +54,10 @@ struct StandingsEntry: Identifiable, Hashable, Sendable {
     let noteColorHex: String
     /// The playoff clincher mark, `"x"`, `"e"`, `"*"`, or empty.
     let clincher: String
+    /// What the feed says `clincher` means, `"Clinched Playoff Berth"`, or
+    /// empty where it says nothing. The standings legend's words for the
+    /// mark (`StandingsClincher.legend(for:)`).
+    var clincherNote: String = ""
 
     var id: String { teamID }
 }
@@ -67,6 +71,9 @@ struct StandingsGroup: Identifiable, Hashable, Sendable {
     let abbreviation: String
     /// The rows, first place first.
     let entries: [StandingsEntry]
+    /// The feed's short name for the table, `"Big 12"` for `"Big 12
+    /// Conference"`, or empty where it gives none. See `shortTitle`.
+    var shortName: String = ""
 }
 
 /// A league's standings: every table in its tree, in feed order.
@@ -91,6 +98,124 @@ struct Standings: Hashable, Sendable {
     /// A team's row, in whichever table holds it.
     func entry(for teamID: String) -> StandingsEntry? {
         group(containing: teamID)?.entries.first { $0.teamID == teamID }
+    }
+
+    /// The table a team page's Standings card shows: the team's own, else
+    /// the first with rows — a poll the team is not ranked in, say.
+    func teamPageGroup(for teamID: String) -> StandingsGroup? {
+        group(containing: teamID) ?? groups.first { !$0.entries.isEmpty }
+    }
+}
+
+// MARK: - A team page's snapshot
+
+extension StandingsGroup {
+    /// The most rows a team page's Standings card shows a table whole: a
+    /// division (four NFL teams, five in an MLB or NHL division) or a
+    /// small conference. A longer table shows `snapshotReach` places
+    /// either side of the team instead (T5), and the rest is a tap away.
+    static let wholeTableLimit = 8
+
+    /// How many places either side of the team a long table shows.
+    static let snapshotReach = 2
+
+    /// The rows, by index into `entries`, a team page's Standings card
+    /// shows: the whole table when it is no longer than `wholeTableLimit`;
+    /// else `snapshotReach` places either side of `teamID`, slid to keep
+    /// as many rows when the team is near the top or the foot; else, for
+    /// a table without the team, its top rows.
+    func snapshotRows(around teamID: String) -> Range<Int> {
+        guard entries.count > Self.wholeTableLimit else { return entries.indices }
+        let count = Self.snapshotReach * 2 + 1
+        guard let index = entries.firstIndex(where: { $0.teamID == teamID }) else {
+            return 0..<count
+        }
+        let upper = min(entries.count, max(index - Self.snapshotReach, 0) + count)
+        return max(upper - count, 0)..<upper
+    }
+
+    /// Whether `snapshotRows(around:)` leaves rows out.
+    func isSnapshot(around teamID: String) -> Bool {
+        snapshotRows(around: teamID).count < entries.count
+    }
+
+    /// The table's name short enough for a team page's header line beside
+    /// the record (T1): the league's own name for a soccer table (as
+    /// `title(kind:leagueName:)`); the feed's short name where it gives
+    /// one; else the name with the words leagues are known by shortened,
+    /// `"American League"` to `"AL"`, `"Western Conference"` to `"West"`,
+    /// `"Big 12 Conference"` to `"Big 12"`. A division keeps its name,
+    /// `"AFC West"`.
+    func shortTitle(kind: StandingsKind, leagueName: String?) -> String {
+        if kind == .pointsTable { return title(kind: kind, leagueName: leagueName) }
+        let short = shortName.trimmingCharacters(in: .whitespaces)
+        if !short.isEmpty, short.count < name.count { return short }
+        return Self.abbreviated(name)
+    }
+
+    /// The names leagues and conferences go by, and their short forms.
+    private static let knownShortNames: [String: String] = [
+        "American League": "AL",
+        "National League": "NL",
+        "American Football Conference": "AFC",
+        "National Football Conference": "NFC",
+        "Eastern Conference": "East",
+        "Western Conference": "West",
+    ]
+
+    /// `name` as `shortTitle` shortens it without a short name from the
+    /// feed: a known name, a division of one (`"American League East"` to
+    /// `"AL East"`), or a conference without the word.
+    static func abbreviated(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        if let known = knownShortNames[trimmed] { return known }
+        for (long, short) in knownShortNames where trimmed.hasPrefix(long + " ") {
+            return short + trimmed.dropFirst(long.count)
+        }
+        let suffix = " Conference"
+        if trimmed.hasSuffix(suffix), trimmed.count > suffix.count {
+            return String(trimmed.dropLast(suffix.count))
+        }
+        return trimmed
+    }
+
+    /// Whether `shortTitle` names a division of a league's conference,
+    /// `"AFC West"` or `"AL Central"`: the conference's letters and a point
+    /// of the compass. The header line reads `"1st AFC West"` for one, and
+    /// `"13th in AL"` or `"4th in Mountain West"` for anything else.
+    static func isDivisionTitle(_ title: String) -> Bool {
+        let words = title.split(separator: " ").map(String.init)
+        guard words.count == 2 else { return false }
+        return ["AFC", "NFC", "AL", "NL"].contains(words[0])
+            && ["East", "West", "North", "South", "Central"].contains(words[1])
+    }
+}
+
+/// The clincher marks in a standings table (`StandingsEntry.clincher`) and
+/// the legend beneath it that says what they mean (T5).
+enum StandingsClincher {
+    /// The words for the marks every league in the feed uses alike, for a
+    /// row whose feed doesn't say (`StandingsEntry.clincherNote`). Any other
+    /// mark means different things in different leagues, so it is left
+    /// out of the legend rather than guessed.
+    static let commonNotes: [String: String] = [
+        "x": "Clinched Playoff Berth",
+        "e": "Eliminated From Playoffs",
+    ]
+
+    /// `"x Clinched Playoff Berth"`, one per mark in `entries`, in the order
+    /// the rows first show it; marks with no words for them are skipped.
+    static func legend(for entries: some Sequence<StandingsEntry>) -> [String] {
+        var seen = Set<String>()
+        var lines: [String] = []
+        for entry in entries where !entry.clincher.isEmpty {
+            guard seen.insert(entry.clincher).inserted else { continue }
+            let note = entry.clincherNote.isEmpty ? commonNotes[entry.clincher] : entry.clincherNote
+            if let note, !note.isEmpty {
+                lines.append("\(entry.clincher) \(note)")
+            }
+        }
+        return lines
     }
 }
 
@@ -127,7 +252,8 @@ func parseStandings(from json: JSON, league: LeagueID) -> Standings {
                 id: id.isEmpty ? node["name"].stringValue : id,
                 name: node["name"].stringValue,
                 abbreviation: node["abbreviation"].stringValue,
-                entries: rankedInOrder(entries)
+                entries: rankedInOrder(entries),
+                shortName: node["shortName"].stringValue
             ))
         }
         for (_, child) in node["children"] {
@@ -213,7 +339,8 @@ private func parseStandingsEntry(_ entry: JSON, format: Record.Format) -> Standi
         streak: stats.display("streak"),
         note: note["description"].stringValue,
         noteColorHex: note["color"].stringValue.replacingOccurrences(of: "#", with: ""),
-        clincher: stats.display("clincher")
+        clincher: stats.display("clincher"),
+        clincherNote: stats.description("clincher")
     )
 }
 
@@ -268,6 +395,11 @@ private struct StandingsStats {
     /// The stat as the feed displays it, or empty.
     func display(_ key: String) -> String {
         stat(key)?["displayValue"].stringValue ?? ""
+    }
+
+    /// What the feed says the stat's value means, or empty.
+    func description(_ key: String) -> String {
+        stat(key)?["description"].stringValue ?? ""
     }
 }
 

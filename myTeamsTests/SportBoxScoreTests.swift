@@ -277,6 +277,13 @@ struct LinescoreTests {
         #expect(linescore.away == Linescore.Line(homeAway: "away", abbreviation: "DAL", periods: ["15", "22", "29", "21"], total: "87"))
     }
 
+    @Test("The followed team's row comes first, home or away (F5)")
+    func followedRowFirst() throws {
+        let linescore = try #require(Linescore(summary: Fixture.json("wnba_summary_final_401857143"), league: .wnba))
+        #expect(linescore.lines(followedIsHome: true).map(\.abbreviation) == ["IND", "DAL"])
+        #expect(linescore.lines(followedIsHome: false).map(\.abbreviation) == ["DAL", "IND"])
+    }
+
     @Test("Periods past regulation are labelled OT; baseball numbers its innings")
     func overtimeColumns() throws {
         // NFL overtime: four quarters from the format, plus the OT period

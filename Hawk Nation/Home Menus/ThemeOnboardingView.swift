@@ -83,9 +83,11 @@ enum ThemeOnboarding {
 /// (`AppIconSwitcher`), which iOS confirms with an alert, changes once, on
 /// Continue.
 ///
-/// Two ways out, both final (`ThemeOnboarding.complete`): Continue keeps
-/// the theme picked; Skip puts back `classic`. Not dismissable by a swipe,
-/// so leaving is always one of the two.
+/// Two ways on: Continue keeps the theme picked; Skip puts back `classic`.
+/// Either hands back to the flow (`OnboardingFlowView`), which offers the
+/// teams step next or, with teams already followed, marks the flow
+/// complete (`ThemeOnboarding.complete`). Not dismissable by a swipe, so
+/// leaving is always one of the two.
 struct ThemeOnboardingView: View {
     /// Called on Continue or Skip, after the choice is stored.
     let onFinish: () -> Void
@@ -114,7 +116,7 @@ struct ThemeOnboardingView: View {
 
                     Text(ThemePicker.iconNote)
                         .font(Theme.Typography.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
 
                 }
                 .padding(Theme.Spacing.l)
@@ -155,8 +157,10 @@ struct ThemeOnboardingView: View {
         .interactiveDismissDisabled()
     }
 
+    /// The flow, not this step, marks onboarding complete: the sheet
+    /// closes the moment the flag is set (`MyTeamsApp`), and a teams step
+    /// may follow.
     private func finish() {
-        ThemeOnboarding.complete()
         onFinish()
     }
 }

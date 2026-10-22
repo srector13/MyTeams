@@ -12,9 +12,12 @@ import SwiftUI
 
 /// A game's period-by-period score beneath the scoreline: one column per
 /// period (`Linescore.periodLabels`, sized from the feed), then the total.
-/// The away row comes first, as the scoreboard puts the away side first.
+/// The followed team's row comes first, as the scoreboard puts the followed
+/// team first (F5).
 struct LinescoreView: View {
     let linescore: Linescore
+    /// Whether the followed team is the home side, whose row then leads.
+    var followedIsHome = false
 
     var body: some View {
         Grid(alignment: .center, horizontalSpacing: 10, verticalSpacing: 6) {
@@ -29,7 +32,7 @@ struct LinescoreView: View {
 
             Divider()
 
-            ForEach([linescore.away, linescore.home]) { line in
+            ForEach(linescore.lines(followedIsHome: followedIsHome)) { line in
                 GridRow {
                     BoxScoreText(line.abbreviation, style: .emphasis)
                     ForEach(Array(line.periods.enumerated()), id: \.offset) { _, score in
@@ -467,7 +470,7 @@ private struct BoxScoreText: View {
         Text(text)
             .font(style == .heading ? .caption2 : Theme.Typography.caption)
             .fontWeight(style == .body ? .regular : .bold)
-            .foregroundStyle(style == .heading ? HierarchicalShapeStyle.secondary : .primary)
+            .foregroundStyle(style == .heading ? Theme.Palette.metadata : Color.primary)
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.8)

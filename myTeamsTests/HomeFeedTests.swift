@@ -163,6 +163,48 @@ struct HomeFeedTests {
         #expect(HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles).map(\.article.title) == ["Chiefs one", "Kansas one"])
     }
 
+    @Test("Home's news shows five fresh stories in turn; older ones wait in More News")
+    func homeNewsSelection() {
+        let articles = [
+            chiefs.id: [
+                article("Chiefs one", hoursAgo: 1), article("Chiefs two", hoursAgo: 5),
+                article("Chiefs three", hoursAgo: 30), article("Chiefs four", hoursAgo: 40),
+                article("Chiefs old", hoursAgo: 80),
+            ],
+            jayhawks.id: [
+                article("Kansas one", hoursAgo: 2), article("Kansas old", hoursAgo: 100),
+                article("Kansas older", hoursAgo: 200),
+            ],
+        ]
+        let feed = HomeFeed.headlines(teams: [chiefs, jayhawks], articles: articles)
+        let news = HomeFeed.homeNews(feed, now: Self.now)
+
+        // In turn across the favorites, the 100-hour-old Kansas story
+        // skipped though it's dealt in the second round.
+        #expect(news.shown.map(\.article.title) == ["Chiefs one", "Kansas one", "Chiefs two", "Chiefs three", "Chiefs four"])
+        // Everything else, older stories included, in the feed's order.
+        #expect(news.more.map(\.article.title) == ["Kansas old", "Kansas older", "Chiefs old"])
+        #expect(news.holdsOlderStories)
+        #expect(news.shown.count + news.more.count == feed.count)
+    }
+
+    @Test("Home's news shows nothing stale: a quiet week leaves every story in More News")
+    func homeNewsAllOld() {
+        let articles = [chiefs.id: [article("Chiefs old", hoursAgo: 73), article("Chiefs older", hoursAgo: 96)]]
+        let news = HomeFeed.homeNews(HomeFeed.headlines(teams: [chiefs], articles: articles), now: Self.now)
+        #expect(news.shown.isEmpty)
+        #expect(news.more.map(\.article.title) == ["Chiefs old", "Chiefs older"])
+        #expect(news.holdsOlderStories)
+
+        // Three days to the hour is still fresh; fewer than five fresh
+        // stories leave More News empty.
+        let fresh = [chiefs.id: [article("Chiefs one", hoursAgo: 1), article("Chiefs edge", hoursAgo: 72)]]
+        let few = HomeFeed.homeNews(HomeFeed.headlines(teams: [chiefs], articles: fresh), now: Self.now)
+        #expect(few.shown.map(\.article.title) == ["Chiefs one", "Chiefs edge"])
+        #expect(few.more.isEmpty)
+        #expect(!few.holdsOlderStories)
+    }
+
     // MARK: This Week
 
     @Test("This Week runs three days back to seven on, each day's games in start order")
@@ -254,6 +296,22 @@ struct HomeFeedTests {
 
         #expect(HomeFeed.teamSummary(team: chiefs, games: [], live: nil, standings: nil, pollRanks: .empty, now: Self.now).status == .preseason)
         #expect(HomeFeed.teamSummary(team: chiefs, games: nil, live: nil, standings: nil, pollRanks: .empty, now: Self.now).status == .loading)
+    }
+
+    @Test("A team's status shows once: with no record the header says it and the foot says what's next")
+    func teamSummaryStatusOnce() {
+        let preseason = HomeFeed.teamSummary(team: jayhawks, games: [], live: nil, standings: nil, pollRanks: .empty, now: Self.now)
+        #expect(preseason.header.record == nil)
+        #expect(preseason.headerStatusText == "Preseason")
+        #expect(preseason.footText == HomeTeamSummary.nothingScheduledText)
+        #expect(preseason.footText != preseason.headerStatusText)
+
+        // With a record in the header, the foot keeps the season's state.
+        let won = game(id: "1", start: Self.now.addingTimeInterval(-2 * 86_400), completed: true, win: true)
+        let next = game(id: "2", start: Self.now.addingTimeInterval(26 * 3600), opponent: "Chargers")
+        let midSeason = HomeFeed.teamSummary(team: chiefs, games: [won, next], live: nil, standings: nil, pollRanks: .empty, now: Self.now)
+        #expect(midSeason.footText == midSeason.status.text)
+        #expect(midSeason.footText.hasPrefix("Next vs Chargers"))
     }
 
     // MARK: Standings

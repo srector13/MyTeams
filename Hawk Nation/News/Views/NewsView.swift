@@ -86,10 +86,11 @@ struct NewsView: View {
                 .clipShape(Theme.Radius.innerShape)
 
             VStack(alignment: .leading, spacing: 5) {
-                // Hierarchical styles, not `.primary` at half opacity, so
-                // they take vibrancy and Increase Contrast (N-2).
+                // Not `.primary` at half opacity, so they take Increase
+                // Contrast (N-2); the small grey lines in the readable
+                // metadata grey (F1).
                 Text(article.source)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .font(.caption2)
                 Text(article.title)
                     .foregroundStyle(.primary)
@@ -97,7 +98,7 @@ struct NewsView: View {
                 // The feed's byline, where it gives one.
                 if let author = article.author {
                     Text(author)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.Palette.metadata)
                         .font(.caption)
                         .lineLimit(1)
                 }
@@ -106,7 +107,7 @@ struct NewsView: View {
                     .font(.subheadline)
                     .lineLimit(3)
                 Text(article.publishedAt, format: .dateTime.month().day().year())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.Palette.metadata)
                     .font(.caption2)
             }
         }

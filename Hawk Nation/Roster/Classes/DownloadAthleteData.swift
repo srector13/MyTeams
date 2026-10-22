@@ -25,6 +25,17 @@ struct BasketballPlayerStats: Hashable, Sendable {
     var avgPoints: Float
     /// The seasons the splits document offers. See `AthleteSeasons`.
     var seasons: AthleteSeasons = .empty
+    /// The season's field goals, threes and free throws, made of
+    /// attempted: the feed's averages a game times the games, summed over
+    /// the splits read. `nil` where the document doesn't give them, so the
+    /// sheet can't tell how many shots a rate rests on (P3).
+    var fieldGoals: MadeAttempted? = nil
+    var threePointers: MadeAttempted? = nil
+    var freeThrows: MadeAttempted? = nil
+    /// Whether the fetch failed or answered without a season list, so the
+    /// sheet says it couldn't load rather than "No stats yet" (P8). See
+    /// `splitsLoadFailed(_:seasons:)`.
+    var loadFailed = false
 
     /// The value shown before a player's splits have loaded.
     static let empty = BasketballPlayerStats(
@@ -33,6 +44,22 @@ struct BasketballPlayerStats: Hashable, Sendable {
         avgRebounds: 0, avgAssists: 0, avgBlocks: 0, avgSteals: 0, avgFouls: 0,
         avgTurnovers: 0, avgPoints: 0
     )
+}
+
+/// A count of makes out of attempts: a season's field goals, a keeper's
+/// saves of the shots faced. A rate over few attempts reads better as the
+/// pair ("0 of 3") than as a bar (P3).
+struct MadeAttempted: Hashable, Sendable {
+    var made: Int
+    var attempted: Int
+}
+
+/// Whether a splits fetch failed, or answered with a document that lists no
+/// seasons, which every splits document captured does (`filters`): either
+/// way the sheet can't say the player has no figures, only that it couldn't
+/// load them (P8).
+func splitsLoadFailed(_ result: FetchResult, seasons: AthleteSeasons) -> Bool {
+    result.document == nil || seasons.options.isEmpty
 }
 
 /// One statistic in an NFL player's season splits.
@@ -80,6 +107,9 @@ struct FootballPlayerStats: Hashable, Sendable {
     var loaded: Bool
     /// The seasons the splits document offers. See `AthleteSeasons`.
     var seasons: AthleteSeasons = .empty
+    /// Whether the fetch failed or gave no season list. See
+    /// `splitsLoadFailed(_:seasons:)`.
+    var loadFailed = false
 
     static let empty = FootballPlayerStats(groups: [], loaded: false)
 }
@@ -230,12 +260,14 @@ func downloadFootballPlayerStats(
     league: LeagueID,
     season: String? = nil
 ) async -> FootballPlayerStats {
-    // The player sheets have no error state of their own: a failed fetch
-    // reads as an empty document, which each parser renders as no stats.
-    let json = await HTTPClient.shared.fetch(
+    // A failed fetch parses as an empty document; `loadFailed` tells the
+    // sheet it was a failure rather than a season with nothing in it (P8).
+    let result = await HTTPClient.shared.fetch(
         athleteSplitsURL(league: league, athleteID: playerID, season: season)
-    ).document ?? .null
-    return parseFootballPlayerStats(from: json)
+    )
+    var stats = parseFootballPlayerStats(from: result.document ?? .null)
+    stats.loadFailed = splitsLoadFailed(result, seasons: stats.seasons)
+    return stats
 }
 
 /// Builds a football player's stat groups from a splits document. See
@@ -295,6 +327,9 @@ struct SoccerPlayerStats: Hashable, Sendable {
     var goals = "N/A"
     var assists = "N/A"
     var shots = "N/A"
+    /// Whether the athlete document didn't arrive (P8). The document has no
+    /// season list to check.
+    var loadFailed = false
 
     static let empty = SoccerPlayerStats(
         starts: "", saves: "", cleanSheets: "", goalsConceded: "",
@@ -347,6 +382,9 @@ struct BaseballPlayerStats: Hashable, Sendable {
 
     /// The seasons the splits document offers. See `AthleteSeasons`.
     var seasons: AthleteSeasons = .empty
+    /// Whether the fetch failed or gave no season list. See
+    /// `splitsLoadFailed(_:seasons:)`.
+    var loadFailed = false
 
     /// The value shown before a player's splits have loaded, and the base the
     /// loader fills in either the pitching or the batting half of.
@@ -371,10 +409,12 @@ func downloadBasketballPlayerStats(
     league: LeagueID,
     season: String? = nil
 ) async -> BasketballPlayerStats {
-    let json = await HTTPClient.shared.fetch(
+    let result = await HTTPClient.shared.fetch(
         athleteSplitsURL(league: league, athleteID: playerID, season: season)
-    ).document ?? .null
-    return parseBasketballPlayerStats(from: json)
+    )
+    var stats = parseBasketballPlayerStats(from: result.document ?? .null)
+    stats.loadFailed = splitsLoadFailed(result, seasons: stats.seasons)
+    return stats
 }
 
 /// The splits row that is a player's whole season, by the name each feed
@@ -414,6 +454,22 @@ func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
         return zip(values, games).reduce(Float(0)) { $0 + $1.0 * $1.1 } / totalGames
     }
 
+    /// The parts' made-attempted averages for `name` ("5.3-10.2" a game)
+    /// times each part's games, summed and rounded; `nil` when a part
+    /// doesn't give the pair.
+    func totals(_ name: String, _ position: Int) -> MadeAttempted? {
+        guard !parts.isEmpty else { return nil }
+        var made = 0.0
+        var attempted = 0.0
+        for (part, played) in zip(parts, games) {
+            let pair = value(part, name, position).stringValue.split(separator: "-")
+            guard pair.count == 2, let makes = Double(pair[0]), let tries = Double(pair[1]) else { return nil }
+            made += makes * Double(played)
+            attempted += tries * Double(played)
+        }
+        return MadeAttempted(made: Int(made.rounded()), attempted: Int(attempted.rounded()))
+    }
+
     return BasketballPlayerStats(
         gamesPlayed: parts.reduce(0) { $0 + value($1, "gamesPlayed", 0).intValue },
         avgMinutes: average("avgMinutes", 1),
@@ -429,7 +485,10 @@ func parseBasketballPlayerStats(from json: JSON) -> BasketballPlayerStats {
         avgFouls: average("avgFouls", 14),
         avgTurnovers: average("avgTurnovers", 15),
         avgPoints: average("avgPoints", 16),
-        seasons: parseAthleteSeasons(from: json)
+        seasons: parseAthleteSeasons(from: json),
+        fieldGoals: totals("avgFieldGoalsMade-avgFieldGoalsAttempted", 2),
+        threePointers: totals("avgThreePointFieldGoalsMade-avgThreePointFieldGoalsAttempted", 4),
+        freeThrows: totals("Free Throws Made-Attempted Per Game", 6)
     )
 }
 
@@ -465,6 +524,9 @@ struct SplitsSeasonLine: Hashable, Sendable {
     var loaded: Bool
     /// The seasons the document offers. See `AthleteSeasons`.
     var seasons: AthleteSeasons = .empty
+    /// Whether the fetch failed or gave no season list. See
+    /// `splitsLoadFailed(_:seasons:)`.
+    var loadFailed = false
 
     static let empty = SplitsSeasonLine(title: "", stats: [], loaded: false)
 
@@ -529,10 +591,12 @@ func downloadHockeyPlayerStats(
     league: LeagueID,
     season: String? = nil
 ) async -> SplitsSeasonLine {
-    let json = await HTTPClient.shared.fetch(
+    let result = await HTTPClient.shared.fetch(
         athleteSplitsURL(league: league, athleteID: playerID, season: season)
-    ).document ?? .null
-    return parseSplitsSeasonLine(from: json)
+    )
+    var line = parseSplitsSeasonLine(from: result.document ?? .null)
+    line.loadFailed = splitsLoadFailed(result, seasons: line.seasons)
+    return line
 }
 
 /// The stats a hockey player sheet shows from `line`: a goalie's line (one
@@ -556,10 +620,12 @@ func downloadBaseballPlayerStats(
     league: LeagueID,
     season: String? = nil
 ) async -> BaseballPlayerStats {
-    let json = await HTTPClient.shared.fetch(
+    let result = await HTTPClient.shared.fetch(
         athleteSplitsURL(league: league, athleteID: playerID, season: season)
-    ).document ?? .null
-    return parseBaseballPlayerStats(from: json, playerPosition: playerPosition)
+    )
+    var stats = parseBaseballPlayerStats(from: result.document ?? .null, playerPosition: playerPosition)
+    stats.loadFailed = splitsLoadFailed(result, seasons: stats.seasons)
+    return stats
 }
 
 /// Extracts a baseball player's season totals from a splits document. See
@@ -653,10 +719,10 @@ func downloadSoccerPlayerStats(
     playerPosition: String,
     league: LeagueID
 ) async -> SoccerPlayerStats {
-    let json = await HTTPClient.shared.fetch(
-        league.athleteURL(athleteID: playerID)
-    ).document ?? .null
-    return parseSoccerPlayerStats(from: json, playerPosition: playerPosition)
+    let result = await HTTPClient.shared.fetch(league.athleteURL(athleteID: playerID))
+    var stats = parseSoccerPlayerStats(from: result.document ?? .null, playerPosition: playerPosition)
+    stats.loadFailed = result.document == nil
+    return stats
 }
 
 /// Extracts a soccer player's headline statistics from an athlete document.
@@ -796,6 +862,7 @@ struct GameLogRow: Identifiable, Hashable, Sendable {
     /// draw's letter, or empty for a game without one.
     var result: String
     /// Winner's score first, as the feed gives it: `"30-27"`, `"33-30 OT"`.
+    /// Shown team first (`teamScore`).
     var score: String
     /// A postseason game's `eventNote`, e.g. `"East 1st Round - Game 6"`.
     var note: String
@@ -805,9 +872,17 @@ struct GameLogRow: Identifiable, Hashable, Sendable {
     /// feed displays it: `["passingYards": "225", "completionPct": "50.0"]`.
     var stats: [String: String]
 
-    /// `"W 30-27"`, or whichever half the feed gave.
+    /// The score with the player's team first, as every score in the app
+    /// reads (F5): a 0–4 loss the feed gives as `"4-0"` reads `"0–4"`.
+    /// Empty when the feed gave none.
+    var teamScore: String {
+        score.isEmpty ? "" : ScoreLine.teamFirst(winnerFirst: score, result: result)
+    }
+
+    /// `"W 30–27"`, `"L 0–4"`, team first (P6), or whichever half the feed
+    /// gave.
     var resultSummary: String {
-        [result, score].filter { !$0.isEmpty }.joined(separator: " ")
+        [result, teamScore].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
     /// `"@ LV"` or `"vs LV"`, the full name standing in for a missing
@@ -830,6 +905,9 @@ struct AthleteGameLog: Hashable, Sendable {
     /// Whether the fetch has finished; lets a view tell "loading" from
     /// "nothing to show".
     var loaded: Bool
+    /// Whether the fetch failed, so the card says it couldn't load the
+    /// games rather than that there are none (P8).
+    var loadFailed = false
 
     static let empty = AthleteGameLog(columns: [], rows: [], seasons: .empty, loaded: false)
 
@@ -877,21 +955,31 @@ private let gameLogHeadlineSpecs: [[(name: String, label: String)]] = [
     [("points", "PTS"), ("totalRebounds", "REB"), ("assists", "AST"), ("minutes", "MIN")],
     // Baseball: batter, pitcher.
     [("atBats", "AB"), ("hits", "H"), ("homeRuns", "HR"), ("RBIs", "RBI")],
-    [("innings", "IP"), ("hits", "H"), ("earnedRuns", "ER"), ("strikeouts", "K")],
+    [("innings", PlayerStatWording.pitching("innings").abbreviation),
+     ("hits", PlayerStatWording.pitching("hits").abbreviation),
+     ("earnedRuns", PlayerStatWording.pitching("earnedRuns").abbreviation),
+     ("strikeouts", PlayerStatWording.pitching("strikeouts").abbreviation)],
     // Hockey: goaltender, skater.
     [("saves", "SV"), ("goalsAgainst", "GA"), ("savePct", "SV%")],
     [("goals", "G"), ("assists", "A"), ("points", "PTS"), ("plusMinus", "+/-")],
     // Soccer.
-    [("totalGoals", "G"), ("goalAssists", "A"), ("totalShots", "SH"), ("shotsOnTarget", "SOT")],
+    // Chips under the same wording as the sheet's tiles and rows (P7).
+    [("totalGoals", PlayerStatWording.soccer("totalGoals").abbreviation),
+     ("goalAssists", PlayerStatWording.soccer("goalAssists").abbreviation),
+     ("totalShots", PlayerStatWording.soccer("totalShots").abbreviation),
+     ("shotsOnTarget", PlayerStatWording.soccer("shotsOnTarget").abbreviation)],
 ]
 
 /// Loads an athlete's game log in `league`: `season`'s, or the feed's
-/// current season's for `nil`. A failed fetch reads as a loaded, empty log.
+/// current season's for `nil`. A failed fetch reads as a loaded, empty log
+/// marked `loadFailed`.
 func downloadGameLog(athlete: String, league: LeagueID, season: String? = nil) async -> AthleteGameLog {
-    let json = await HTTPClient.shared.fetch(
+    let result = await HTTPClient.shared.fetch(
         seasonURL("\(league.athleteURL(athleteID: athlete))/gamelog", season: season)
-    ).document ?? .null
-    return parseGameLog(from: json)
+    )
+    var log = parseGameLog(from: result.document ?? .null)
+    log.loadFailed = result.document == nil
+    return log
 }
 
 /// Builds an athlete's game log from a game-log document. See

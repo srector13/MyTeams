@@ -54,6 +54,12 @@ struct Linescore: Hashable, Sendable {
 
     /// How many period columns the game has.
     var periodCount: Int { periodLabels.count }
+
+    /// Both rows, the followed team's first (F5), as the sheet's
+    /// scoreboard and comparison rows put it.
+    func lines(followedIsHome: Bool) -> [Line] {
+        followedIsHome ? [home, away] : [away, home]
+    }
 }
 
 /// What the `overtime`th period past regulation is called: "OT", then

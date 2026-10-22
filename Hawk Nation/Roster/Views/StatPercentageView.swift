@@ -8,48 +8,53 @@
 
 import SwiftUI
 
-/// A rate in a player sheet's grid: a system capacity gauge in the team's
-/// colour over its label, or "N/A" when the rate has no attempts behind it.
-/// The grid sets the width (P-4).
+/// A rate's slim bar beneath its row on a player sheet: `fraction` of the
+/// track filled in the team's accent (`TeamColors.accent(for:)`, F3), over
+/// a track in the system fill, which reads on the inset rows in light and
+/// dark alike (P3). The sheet draws one only over enough attempts
+/// (`PlayerSheetCell.minimumBarAttempts`); below that the row reads "0 of
+/// 3" instead.
 ///
-/// The gauge (P-6) speaks the title and the rate as a percentage, so the
-/// label beneath it is hidden from VoiceOver rather than read twice.
+/// Decorative: the row speaks its label and figure, so VoiceOver skips the
+/// bar.
 struct StatPercentageView: View {
-    var progress: Double
+    /// The share filled, clamped to 0–1.
+    var fraction: Double
+    /// The fill: the team's accent on a content card.
     var color: Color
-    var title: String
+
+    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 6
+
+    /// The unfilled track: grey enough to see on the inset surface in
+    /// either appearance, firmer under Increase Contrast.
+    private static var track: Color { Color(uiColor: .systemFill) }
+
+    private var clamped: Double {
+        fraction.isFinite ? min(max(fraction, 0), 1) : 0
+    }
 
     var body: some View {
-        VStack(alignment: .center, spacing: Theme.Spacing.xs) {
-            if(progress.isFinite) {
-                Gauge(value: progress) {
-                    Text(title)
-                } currentValueLabel: {
-                    Text(progress, format: .percent.precision(.fractionLength(0)))
+        Capsule()
+            .fill(Self.track)
+            .frame(height: height)
+            .overlay(alignment: .leading) {
+                GeometryReader { proxy in
+                    Capsule()
+                        .fill(color)
+                        // A sliver at least as wide as the bar is tall, so a
+                        // small share still reads as a mark.
+                        .frame(width: clamped > 0 ? max(proxy.size.width * CGFloat(clamped), height) : 0)
                 }
-                .gaugeStyle(.accessoryCircularCapacity)
-                .tint(color)
-            } else {
-                Text("N/A")
-                    .font(.subheadline.weight(.black))
-                    .multilineTextAlignment(.center)
             }
-
-            Text(title)
-                .font(Theme.Typography.statLabel)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(progress.isFinite)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, Theme.Spacing.s)
+            .accessibilityHidden(true)
     }
 }
 
 #Preview {
-    StatPercentageView(
-        progress: 0.6,
-        color: TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!.color,
-        title: "Test"
-    )
+    VStack(spacing: Theme.Spacing.m) {
+        StatPercentageView(fraction: 0.47, color: .blue)
+        StatPercentageView(fraction: 0.02, color: .blue)
+        StatPercentageView(fraction: 1, color: .blue)
+    }
+    .padding()
 }

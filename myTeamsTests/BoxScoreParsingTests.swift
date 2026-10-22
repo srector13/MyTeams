@@ -515,11 +515,11 @@ struct DetailSheetHeaderTests {
         func line(_ location: String, _ city: String, _ state: String, showsAddress: Bool = true) -> String {
             GameDetailView.formatVenueLine(location: location, city: city, state: state, showsAddress: showsAddress)
         }
-        #expect(line("Children's Mercy Park", "Kansas City", "KS") == "Children's Mercy Park | Kansas City, KS")
-        // A failed summary leaves the address empty: no dangling "| , ".
+        #expect(line("Children's Mercy Park", "Kansas City", "KS") == "Children's Mercy Park · Kansas City, KS")
+        // A failed summary leaves the address empty: no dangling "· , ".
         #expect(line("Allianz Arena", "", "") == "Allianz Arena")
-        #expect(line("Allianz Arena", "Munich", "") == "Allianz Arena | Munich")
-        #expect(line("Allianz Arena", "", "Bavaria") == "Allianz Arena | Bavaria")
+        #expect(line("Allianz Arena", "Munich", "") == "Allianz Arena · Munich")
+        #expect(line("Allianz Arena", "", "Bavaria") == "Allianz Arena · Bavaria")
         #expect(line("", "Munich", "") == "Munich")
         #expect(line("", "", "") == "")
         #expect(line("Allianz Arena", "Munich", "Bavaria", showsAddress: false) == "Allianz Arena")
@@ -533,14 +533,89 @@ struct DetailSheetHeaderTests {
         #expect(GameDetailView.formatAttendance("0", locale: locale) == nil)
     }
 
-    @Test("Even a white host's wash over the black scrim keeps white text at 4.5:1")
+    @Test("Over a white photo, the text's dark ground keeps white text at 4.5:1")
     func scrimClearsContrastOnWhite() throws {
-        // The wash blends the host colour into black: white at the wash's
-        // opacity is the lightest the scrim gets.
-        let channel = Int((255 * GameDetailView.teamWashOpacity).rounded())
+        // Black at the ground's opacity over pure white is the lightest
+        // the ground under the text gets.
+        let channel = Int((255 * (1 - GameDetailView.textScrimOpacity)).rounded())
         let lightest = String(format: "%02X%02X%02X", channel, channel, channel)
         let ratio = try #require(TeamColors.contrastRatio("FFFFFF", lightest))
         #expect(ratio >= TeamColors.minimumInkContrast)
+    }
+
+    @Test("The text's ground fades in above the text and deepens to the foot")
+    func textScrimStops() {
+        let stops = GameDetailView.textScrimStops(textHeight: 96, fade: 48)
+        #expect(stops.map(\.opacity) == [0, GameDetailView.textScrimOpacity, GameDetailView.textScrimFootOpacity])
+        // The text starts a third of the way down the ground.
+        #expect(abs(stops[1].location - 1.0 / 3) < 0.0001)
+        #expect(stops.last?.location == 1)
+        // Every stop from the text down is at least the text's opacity.
+        #expect(stops.filter { $0.location >= stops[1].location }.allSatisfy { $0.opacity >= GameDetailView.textScrimOpacity })
+        // Before the text has been measured, the ground is the fade alone.
+        #expect(GameDetailView.textScrimStops(textHeight: 0, fade: 48)[1].location == 1)
+        #expect(GameDetailView.textScrimStops(textHeight: 0, fade: 0)[1].location == 0)
+    }
+
+    @Test("The header title: short names, the followed team first, @ away and vs at home")
+    func headerTitle() {
+        #expect(GameDetailView.formatTitle(team: "Chiefs", opponent: "Raiders", followedIsHome: false, neutralSite: false) == "Chiefs @ Raiders")
+        #expect(GameDetailView.formatTitle(team: "Chiefs", opponent: "Chargers", followedIsHome: true, neutralSite: false) == "Chiefs vs Chargers")
+        // Neither side is at home at a neutral site.
+        #expect(GameDetailView.formatTitle(team: "Kansas", opponent: "Duke", followedIsHome: false, neutralSite: true) == "Kansas vs Duke")
+        #expect(GameDetailView.formatTitle(team: " Sporting KC ", opponent: "", followedIsHome: true, neutralSite: false) == "Sporting KC")
+        #expect(GameDetailView.formatTitle(team: "", opponent: "", followedIsHome: true, neutralSite: false) == "")
+    }
+
+    @Test("Only a finished game's winner stands out")
+    func scoreEmphasis() {
+        #expect(GameDetailView.scoreEmphasis(team: "30", opponent: "27", completed: true) == GameScoreEmphasis(team: true, opponent: false))
+        #expect(GameDetailView.scoreEmphasis(team: "0", opponent: "4", completed: true) == GameScoreEmphasis(team: false, opponent: true))
+        // Level, live, or no score yet: both figures bold.
+        #expect(GameDetailView.scoreEmphasis(team: "2", opponent: "2", completed: true) == GameScoreEmphasis(team: true, opponent: true))
+        #expect(GameDetailView.scoreEmphasis(team: "14", opponent: "7", completed: false) == GameScoreEmphasis(team: true, opponent: true))
+        #expect(GameDetailView.scoreEmphasis(team: "00", opponent: "", completed: true) == GameScoreEmphasis(team: true, opponent: true))
+    }
+}
+
+/// The paired bars under each team-stat row (G5): each side's share of the
+/// two figures.
+@Suite("Team stat bars")
+struct StatBarSplitTests {
+    private func split(_ team: String, _ opponent: String) -> (Double, Double)? {
+        StatBarSplit(team: team, opponent: opponent).map { ($0.team, $0.opponent) }
+    }
+
+    @Test("Plain figures split by their sum")
+    func plain() throws {
+        let yards = try #require(split("399", "437"))
+        #expect(abs(yards.0 - 399.0 / 836) < 0.0001)
+        #expect(abs(yards.0 + yards.1 - 1) < 0.0001)
+        let shutout = try #require(split("0", "1"))
+        #expect(shutout.0 == 0)
+        #expect(shutout.1 == 1)
+    }
+
+    @Test("Clocks read as seconds, made-attempted by the first number, percentages bare")
+    func shapes() throws {
+        #expect(StatBarSplit.value("24:18") == 1458)
+        #expect(StatBarSplit.value("35:42") == 2142)
+        #expect(StatBarSplit.value("15/30") == 15)
+        #expect(StatBarSplit.value("22-35") == 22)
+        #expect(StatBarSplit.value("45%") == 45)
+        #expect(StatBarSplit.value("12.5") == 12.5)
+        let possession = try #require(split("24:18", "35:42"))
+        #expect(abs(possession.0 - 1458.0 / 3600) < 0.0001)
+    }
+
+    @Test("No bars for figures that aren't numbers, negatives, or two zeros")
+    func none() {
+        #expect(split("", "3") == nil)
+        #expect(split("N/A", "3") == nil)
+        #expect(split("-2", "3") == nil)
+        #expect(split("0", "0") == nil)
+        #expect(split("0%", "0%") == nil)
+        #expect(StatBarSplit.value("24:75") == nil)
     }
 }
 

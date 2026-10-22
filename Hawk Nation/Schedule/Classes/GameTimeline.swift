@@ -49,6 +49,26 @@ struct TimelineEvent: Hashable, Sendable, Identifiable {
     /// The points the event added (`7` for a touchdown and kick, `1` for a
     /// goal); `nil` for a card.
     var points: Int?
+    /// The athletes' names as the feed gives them, scorer first, then the
+    /// assist, for the soccer timeline's one-line events (G6). Read for
+    /// soccer only; empty elsewhere and when the feed names none.
+    var athleteNames: [String] = []
+    /// How a goal went in, from the event's type: "Header", "Penalty",
+    /// "Own goal"; empty for a plain goal, a card and every other sport.
+    var detail: String = ""
+}
+
+extension TimelineEvent {
+    /// A soccer clock as the sheet writes it, with a prime rather than the
+    /// feed's apostrophes: `"10'"` is "10′", `"90'+5'"` is "90+5′". Empty
+    /// for an empty clock.
+    static func soccerMinute(_ clock: String) -> String {
+        let bare = clock
+            .replacingOccurrences(of: "'", with: "")
+            .replacingOccurrences(of: "\u{2032}", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return bare.isEmpty ? "" : "\(bare)\u{2032}"
+    }
 }
 
 /// The home team's chance of winning after one play, from the summary's
@@ -62,6 +82,10 @@ struct WinProbabilityPoint: Hashable, Sendable, Identifiable {
     /// From 0 to 1.
     var homeWinPercentage: Double
     var playID: String
+    /// The period of the play `playID` names, found in the summary's `plays`
+    /// (or, for football, its drives' plays); 0 when neither lists the play,
+    /// as for the opening point before the first snap.
+    var period: Int = 0
 
     var id: Int { index }
 }
@@ -113,6 +137,18 @@ struct GameStory: Hashable, Sendable {
     struct Side: Hashable, Sendable {
         var homeAway: String
         var abbreviation: String
+        /// The team's colours as six hex digits (`team.color`,
+        /// `team.alternateColor`), for the sheet's paired stat bars (G5);
+        /// empty when the header gives none.
+        var color: String = ""
+        var alternateColor: String = ""
+    }
+
+    /// Where a period begins on the win-probability line: the index of the
+    /// first point whose play falls in `period`.
+    struct PeriodStart: Hashable, Sendable {
+        var period: Int
+        var index: Int
     }
 
     var timeline: [TimelineEvent]
@@ -142,6 +178,23 @@ struct GameStory: Hashable, Sendable {
     var awayAbbreviation: String {
         sides.values.first { $0.homeAway == "away" }?.abbreviation ?? ""
     }
+
+    /// The header's `"home"` or `"away"` side, or `nil` when it lists none.
+    func side(homeAway: String) -> Side? {
+        sides.values.first { $0.homeAway == homeAway }
+    }
+
+    /// Where each period starts along `winProbability`, in order, for the
+    /// chart's period marks (G4): one entry per period the points reach, at
+    /// the first point in it. Points whose play the summary doesn't list
+    /// (period 0) mark nothing. Empty when none is placed.
+    var winProbabilityPeriodStarts: [PeriodStart] {
+        var starts: [PeriodStart] = []
+        for point in winProbability where point.period > (starts.last?.period ?? 0) {
+            starts.append(PeriodStart(period: point.period, index: point.index))
+        }
+        return starts
+    }
 }
 
 extension GameStory {
@@ -155,13 +208,15 @@ extension GameStory {
             guard !id.isEmpty else { continue }
             sides[id] = Side(
                 homeAway: competitor["homeAway"].stringValue,
-                abbreviation: competitor["team", "abbreviation"].stringValue
+                abbreviation: competitor["team", "abbreviation"].stringValue,
+                color: competitor["team", "color"].stringValue,
+                alternateColor: competitor["team", "alternateColor"].stringValue
             )
         }
 
         self.sides = sides
         self.timeline = Self.timeline(from: json, sides: sides)
-        self.winProbability = Self.winProbability(from: json["winprobability"])
+        self.winProbability = Self.winProbability(from: json["winprobability"], periods: Self.playPeriods(json))
         self.injuries = Self.injuries(from: json["injuries"], sides: sides)
     }
 
@@ -244,6 +299,13 @@ extension GameStory {
                     .joined(separator: " ")
             }
 
+            // The scorer, then the assist, as the participants list them.
+            var names: [String] = []
+            for participant in event["participants"].arrayValue {
+                let name = trimmed(participant["athlete", "displayName"].stringValue)
+                if !name.isEmpty, !names.contains(name) { names.append(name) }
+            }
+
             var points: Int?
             if kind == .score {
                 switch side {
@@ -266,9 +328,24 @@ extension GameStory {
                 athleteIDs: participants,
                 homeScore: kind == .score ? home : nil,
                 awayScore: kind == .score ? away : nil,
-                points: points
+                points: points,
+                athleteNames: names,
+                detail: kind == .score ? goalDetail(event) : ""
             )
         }
+    }
+
+    /// How a goal went in, from its `type` (`"goal---header"`,
+    /// `"penalty---scored"`) and `ownGoal` flag: "Own goal", "Penalty", or
+    /// the part of the type's text after "Goal - " ("Header", "Volley").
+    /// Empty for a plain goal.
+    private static func goalDetail(_ event: JSON) -> String {
+        let type = event["type", "type"].stringValue
+        if event["ownGoal"].boolValue || type.contains("own-goal") { return "Own goal" }
+        if type.contains("penalty") { return "Penalty" }
+        let text = event["type", "text"].stringValue
+        guard let range = text.range(of: " - ") else { return "" }
+        return trimmed(String(text[range.upperBound...]))
     }
 
     private static func athleteIDs(_ participants: JSON) -> [String] {
@@ -286,17 +363,37 @@ extension GameStory {
 
     // MARK: Win probability
 
-    private static func winProbability(from list: JSON) -> [WinProbabilityPoint] {
+    private static func winProbability(from list: JSON, periods: [String: Int]) -> [WinProbabilityPoint] {
         var points: [WinProbabilityPoint] = []
         for entry in list.arrayValue {
             guard let pct = entry["homeWinPercentage"].double else { continue }
+            let playID = entry["playId"].stringValue
             points.append(WinProbabilityPoint(
                 index: points.count,
                 homeWinPercentage: min(max(pct, 0), 1),
-                playID: entry["playId"].stringValue
+                playID: playID,
+                period: periods[playID] ?? 0
             ))
         }
         return points
+    }
+
+    /// Each play's period by play id: from `plays` (basketball, baseball,
+    /// hockey) and from the drives' plays (football, which has no `plays`).
+    private static func playPeriods(_ json: JSON) -> [String: Int] {
+        var periods: [String: Int] = [:]
+        func add(_ play: JSON) {
+            let id = play["id"].stringValue
+            let period = play["period", "number"].intValue
+            guard !id.isEmpty, period > 0, periods[id] == nil else { return }
+            periods[id] = period
+        }
+        for play in json["plays"].arrayValue { add(play) }
+        for drive in json["drives", "previous"].arrayValue {
+            for play in drive["plays"].arrayValue { add(play) }
+        }
+        for play in json["drives", "current", "plays"].arrayValue { add(play) }
+        return periods
     }
 
     // MARK: Injuries

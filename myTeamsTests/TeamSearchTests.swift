@@ -363,3 +363,44 @@ struct RecentSearchesTests {
         #expect(RecentSearches.load(from: defaults).isEmpty)
     }
 }
+
+/// How the picker writes a sport's leagues (`BrowsableSport.leagueList`,
+/// S4): one line that may wrap only after a separator, so no line starts
+/// with "·" and no league's name is split.
+@Suite("Team browser league lists")
+struct LeagueListTests {
+    private let nbsp = "\u{00A0}"
+
+    @Test("Leagues join with a dot held to the name before it")
+    func joins() {
+        #expect(BrowsableSport.leagueList(["NFL"]) == "NFL")
+        #expect(BrowsableSport.leagueList([]) == "")
+        #expect(BrowsableSport.leagueList(["NBA", "WNBA"]) == "NBA\(nbsp)· WNBA")
+    }
+
+    @Test("The only break opportunities are after a dot, and names keep their words together")
+    func breaksOnlyAfterDots() {
+        let labels = ["MLS", "EPL", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "UCL", "NWSL", "WSL", "Première Ligue"]
+        let line = BrowsableSport.leagueList(labels)
+        // Split where a line may break: at the ordinary spaces.
+        let pieces = line.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        #expect(pieces.count == labels.count)
+        for piece in pieces {
+            #expect(!piece.hasPrefix("·"), "A line could start with a dot: \(piece)")
+        }
+        #expect(pieces.first == "MLS\(nbsp)·")
+        #expect(pieces.last == "Première\(nbsp)Ligue")
+        #expect(pieces.contains("La\(nbsp)Liga\(nbsp)·"))
+        // Read back, the names are all there in order.
+        let names = pieces.map { $0.replacingOccurrences(of: "\(nbsp)·", with: "").replacingOccurrences(of: nbsp, with: " ") }
+        #expect(names == labels)
+    }
+
+    @Test("Every sport the picker lists writes its leagues this way")
+    func everySport() {
+        for sport in BrowsableSport.all {
+            #expect(sport.leagueLine == BrowsableSport.leagueList(sport.leagues.map(\.label)))
+            #expect(!sport.leagueLine.contains(" ·"))
+        }
+    }
+}

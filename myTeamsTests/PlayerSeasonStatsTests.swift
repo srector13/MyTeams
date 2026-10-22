@@ -25,7 +25,7 @@ private func cells(_ grid: PlayerSheetGrid) -> [(title: String, info: String)] {
         switch cell {
         case .stat(let title, let info), .fact(let title, let info):
             return title.isEmpty ? nil : (title, info)
-        case .percentage(let title, let progress):
+        case .percentage(let title, let progress, _):
             return (title, "\(progress)")
         }
     }
@@ -120,7 +120,7 @@ struct SoccerOutfieldStatsTests {
         let sheet = cells(niehues.placeholderStatistics)
         #expect(sheet.first { $0.title == "Games Started" }?.info == "15")
         #expect(sheet.first { $0.title == "Games Played" }?.info == "19")
-        #expect(sheet.first { $0.title == "Total Goals" }?.info == "9")
+        #expect(sheet.first { $0.title == "Goals" }?.info == "9")
     }
 
     @Test("A player listed without totals waits for the athlete summary")
@@ -365,7 +365,9 @@ struct GameLogTests {
         #expect(!latest.isHome)
         #expect(latest.opponentSummary == "@ LV")
         #expect(latest.result == "W")
-        #expect(latest.resultSummary == "W 30-27")
+        // Team first with an en dash (P6): the feed's "30-27".
+        #expect(latest.resultSummary == "W 30–27")
+        #expect(latest.score == "30-27")
         #expect(latest.seasonType == "2026 Regular Season")
         #expect(latest.stats["passingYards"] == "225")
         #expect(latest.stats["passingTouchdowns"] == "2")
@@ -376,7 +378,7 @@ struct GameLogTests {
         let colts = log.rows[2]
         #expect(colts.date == utc(1_789_950_000))  // 2026-09-21T00:20:00.000+00:00
         #expect(colts.isHome && colts.opponentAbbreviation == "IND")
-        #expect(colts.resultSummary == "W 33-30 OT")
+        #expect(colts.resultSummary == "W 33–30 OT")
         #expect(colts.stats["passingYards"] == "382")
 
         #expect(log.headlineColumns.map(\.id) == ["passingYards", "passingTouchdowns", "interceptions", "QBRating"])
@@ -411,7 +413,9 @@ struct GameLogTests {
         #expect(latest.opponentID == "18")
         #expect(latest.opponentName == "New York Knicks")
         #expect(latest.isHome)
-        #expect(latest.resultSummary == "L 140-89")
+        // The feed's winner-first "140-89" reads team first.
+        #expect(latest.resultSummary == "L 89–140")
+        #expect(latest.teamScore == "89–140")
         #expect(latest.note == "East 1st Round - Game 6")
         #expect(latest.seasonType == "2025-26 Postseason")
         #expect(latest.stats["points"] == "3")
@@ -424,7 +428,7 @@ struct GameLogTests {
         let regular = log.rows[6]
         #expect(regular.id == "401811028")
         #expect(regular.seasonType == "2025-26 Regular Season")
-        #expect(regular.opponentAbbreviation == "CLE" && regular.resultSummary == "W 124-102")
+        #expect(regular.opponentAbbreviation == "CLE" && regular.resultSummary == "W 124–102")
         #expect(regular.note.isEmpty)
 
         #expect(log.rows.last?.id == "401812679")
@@ -447,7 +451,7 @@ struct GameLogTests {
         #expect(latest.date == utc(1_790_536_200))  // 2026-09-27T19:10:00.000+00:00
         #expect(latest.opponentID == "5" && latest.opponentAbbreviation == "CLE")
         #expect(latest.isHome)
-        #expect(latest.resultSummary == "W 3-2")
+        #expect(latest.resultSummary == "W 3–2")
         #expect(latest.stats["atBats"] == "4")
         #expect(latest.stats["hits"] == "0")
         #expect(latest.stats["avg"] == ".281")
@@ -455,7 +459,7 @@ struct GameLogTests {
 
         let previous = log.rows[1]
         #expect(previous.date == utc(1_790_464_200))  // 2026-09-26T23:10:00.000+00:00
-        #expect(previous.resultSummary == "L 11-5")
+        #expect(previous.resultSummary == "L 5–11")
         #expect(previous.stats["hits"] == "2" && previous.stats["doubles"] == "1")
 
         #expect(log.headlineColumns.map(\.id) == ["atBats", "hits", "homeRuns", "RBIs"])
@@ -484,10 +488,10 @@ struct GameLogTests {
         #expect(skater.rows.map(\.opponentAbbreviation) == ["EDM", "FLA", "VGK"])
         let latest = try #require(skater.rows.first)
         #expect(latest.date == utc(1_791_424_800))  // 2026-10-08T02:00:00.000+00:00
-        #expect(latest.isHome && latest.resultSummary == "L 5-2")
+        #expect(latest.isHome && latest.resultSummary == "L 2–5")
         #expect(latest.stats["plusMinus"] == "-2")
         #expect(latest.stats["timeOnIcePerGame"] == "24:10")
-        #expect(skater.rows[1].resultSummary == "W 3-2 OT")
+        #expect(skater.rows[1].resultSummary == "W 3–2 OT")
         #expect(skater.rows[1].stats["goals"] == "2")
         #expect(skater.headlineColumns.map(\.id) == ["goals", "assists", "points", "plusMinus"])
 
@@ -506,7 +510,8 @@ struct GameLogTests {
         #expect(latest.date == utc(1_789_826_400))  // 2026-09-19T14:00:00.000+00:00
         #expect(latest.opponentID == "331" && latest.opponentName == "Brighton & Hove Albion")
         #expect(!latest.isHome)
-        #expect(latest.resultSummary == "L 3-0")
+        // A 0–3 loss the feed gives winner first, "3-0".
+        #expect(latest.resultSummary == "L 0–3")
         #expect(latest.stats["totalShots"] == "2")
         #expect(log.rows[1].stats["totalGoals"] == "1")
         #expect(log.headlineColumns.map(\.id) == ["totalGoals", "goalAssists", "totalShots", "shotsOnTarget"])
@@ -516,6 +521,8 @@ struct GameLogTests {
     func edges() {
         let failed = parseGameLog(from: .null)
         #expect(failed.loaded && failed.rows.isEmpty && failed.headlineColumns.isEmpty)
+        // The loader marks a fetch that failed; the parser alone can't tell.
+        #expect(!failed.loadFailed)
 
         let document = JSON(data: Data("""
         {"names": ["a", "b", "c", "d", "e"], "labels": ["A", "B", "C", "D", "E"],
@@ -531,7 +538,7 @@ struct GameLogTests {
         #expect(log.rows.count == 1)
         #expect(log.rows.first?.stats["a"] == "1")
         #expect(log.rows.first?.date == utc(1_791_145_500))
-        #expect(log.rows.first?.resultSummary == "D 1-1")
+        #expect(log.rows.first?.resultSummary == "D 1–1")
         #expect(log.headlineColumns.map(\.label) == ["A", "B", "C", "D"])
     }
 }
@@ -681,56 +688,140 @@ private func cellTitles(_ sections: [PlayerSheetGrid.Section]) -> [String] {
 
 @Suite("Player sheet: key statistics by sport and position", .tags(.golden))
 struct PlayerSheetKeyStatTests {
-    @Test("A soccer outfield player leads with goals, assists, appearances and starts")
-    func soccerOutfield() throws {
-        // nwsl_roster.json Maiara Niehues (402432): 19 appearances, 4 off
-        // the bench, 9 goals, 0 assists, 46 shots, 2 offsides, 0 own goals.
+    @Test("A midfielder leads with appearances, starts, assists and fouls won (P1)")
+    func soccerMidfielder() throws {
+        // nwsl_roster.json Maiara Niehues (402432, Midfielder): 19
+        // appearances, 4 off the bench, 9 goals, 0 assists, 46 shots (16 on
+        // target), 24 fouls, 22 fouled, 2 offsides, 0 own goals.
         let niehues = try #require(parseSoccerRoster(from: try Fixture.json("nwsl_roster")).first { $0.playerID == "402432" })
+        #expect(niehues.soccerRole == .midfielder)
         let grid = niehues.placeholderStatistics
         let featured = grid.featuredCells(for: niehues.featuredStatistics)
-        #expect(featured.map(\.cell.title) == ["Total Goals", "Goal Assists", "Games Played", "Games Started"])
-        #expect(featured.map(\.feature.abbreviation) == ["Goals", "Assists", "Apps", "Starts"])
-        // VoiceOver: "Goals, 9".
-        #expect(featured.map(\.spokenTitle) == ["Goals", "Assists", "Appearances", "Starts"])
-        #expect(featured.map(\.cell.displayValue) == ["9", "0", "19", "15"])
+        #expect(featured.map(\.cell.title) == ["Games Played", "Games Started", "Assists", "Fouls Won"])
+        #expect(featured.map(\.feature.abbreviation) == ["Apps", "Starts", "Assists", "Fouls Won"])
+        // VoiceOver: "Appearances, 19".
+        #expect(featured.map(\.spokenTitle) == ["Appearances", "Starts", "Assists", "Fouls won"])
+        #expect(featured.map(\.cell.displayValue) == ["19", "15", "0", "22"])
 
+        // A midfielder's groups: appearances, attacking, discipline.
         let rest = grid.remainingSections(excluding: featured)
         #expect(rest.map(\.title) == ["Appearances", "Attacking", "Discipline"])
         let titles = cellTitles(rest)
-        #expect(!titles.contains("Total Goals") && !titles.contains("Games Played"))
-        // Offsides has two; no own goals, so no row for them.
-        #expect(titles.contains("Offsides"))
-        #expect(!titles.contains("Own Goals"))
+        #expect(!titles.contains("Games Played") && !titles.contains("Fouls Won"))
         #expect(titles.contains("Shot Accuracy") && titles.contains("Conversion Rate"))
 
         let cells = rest.flatMap(\.rows).flatMap { $0 }
+        #expect(cells.first { $0.title == "Goals" }?.displayValue == "9")
         #expect(cells.first { $0.title == "Goals per Game" }?.displayValue == "0.47")
         #expect(cells.first { $0.title == "Shots per Game" }?.displayValue == "2.42")
+        // 46 shots: enough for a bar.
         let accuracy = try #require(cells.first { $0.title == "Shot Accuracy" }?.barFraction)
         #expect(abs(accuracy - 16.0 / 46.0) < 0.0001)
         #expect(cells.first { $0.title == "Yellow Cards" }?.glyph == .yellowCard)
         #expect(cells.first { $0.title == "Red Cards" }?.glyph == .redCard)
         #expect(cells.first { $0.title == "Fouls Committed" }?.glyph == nil)
+
+        // Only the own goals are zero: one row behind "Show all stats".
+        let groups = grid.statGroups(excluding: featured)
+        #expect(groups.hiddenCount == 1)
+        #expect(!cellTitles(groups.shown).contains("Own Goals"))
+        #expect(cellTitles(groups.all).contains("Own Goals"))
     }
 
-    @Test("A goalkeeper leads with saves, goals conceded, appearances and starts")
+    @Test("A defender leads with appearances, starts, goals conceded on the pitch and fouls (P1)")
+    func soccerDefender() throws {
+        // sporting_roster.json Zorhan Bassong (286194, Defender): 14
+        // appearances, 4 off the bench, 19 conceded while on, 22 fouls, 7
+        // fouled, 5 yellows, no reds, 1 own goal, 1 assist, 10 shots (2 on
+        // target), no goals, no offsides.
+        let bassong = try #require(parseSoccerRoster(from: try Fixture.json("sporting_roster")).first { $0.playerID == "286194" })
+        #expect(bassong.soccerRole == .defender)
+        let grid = bassong.placeholderStatistics
+        let featured = grid.featuredCells(for: bassong.featuredStatistics)
+        #expect(featured.map(\.feature.abbreviation) == ["Apps", "Starts", "Conceded", "Fouls"])
+        #expect(featured.map(\.cell.title) == ["Games Played", "Games Started", "Conceded on Pitch", "Fouls Committed"])
+        #expect(featured.map(\.cell.displayValue) == ["14", "10", "19", "22"])
+
+        // A defender's groups: appearances, discipline, then attacking.
+        let groups = grid.statGroups(excluding: featured)
+        #expect(groups.all.map(\.title) == ["Appearances", "Discipline", "Attacking"])
+        #expect(groups.shown.map(\.title) == ["Appearances", "Discipline", "Attacking"])
+        // Zero rows hide inside groups that have figures (P2): no red
+        // cards, goals, conversion, goals a game or offsides.
+        let shown = cellTitles(groups.shown)
+        #expect(shown == [
+            "Off the Bench",
+            "Fouls Won", "Yellow Cards", "Own Goals",
+            "Assists", "Shots", "On Target", "Shot Accuracy", "Shots per Game",
+        ])
+        #expect(groups.hiddenCount == 5)
+        #expect(cellTitles(groups.all).contains("Red Cards"))
+    }
+
+    @Test("A forward leads with goals, assists, shots on target and appearances (P1)")
+    func soccerForward() throws {
+        // epl_roster.json Bukayo Saka (280555, Forward): 5 appearances, 3
+        // goals, 0 assists, 15 shots, 9 on target.
+        let saka = try #require(parseSoccerRoster(from: try Fixture.json("epl_roster")).first { $0.playerID == "280555" })
+        #expect(saka.soccerRole == .forward)
+        let grid = saka.placeholderStatistics
+        let featured = grid.featuredCells(for: saka.featuredStatistics)
+        #expect(featured.map(\.feature.abbreviation) == ["Goals", "Assists", "On Target", "Apps"])
+        #expect(featured.map(\.cell.displayValue) == ["3", "0", "9", "5"])
+        // A forward's attacking comes first.
+        #expect(grid.remainingSections(excluding: featured).map(\.title) == ["Attacking", "Appearances", "Discipline"])
+    }
+
+    @Test("Soccer lines by position, whatever the feed calls them")
+    func soccerRoles() {
+        #expect(SoccerRole(position: "Goalkeeper") == .goalkeeper)
+        #expect(SoccerRole(position: "Defender") == .defender)
+        #expect(SoccerRole(position: "Center Back") == .defender)
+        #expect(SoccerRole(position: "Midfielder") == .midfielder)
+        #expect(SoccerRole(position: "Attacking Midfielder") == .midfielder)
+        #expect(SoccerRole(position: "Forward") == .forward)
+        #expect(SoccerRole(position: "Striker") == .forward)
+        #expect(SoccerRole(position: "") == .forward)
+
+        // Every line's first four tiles, by the feeds' names.
+        func shorts(_ role: SoccerRole) -> [String] {
+            Array(soccerKeyStats(role: role).prefix(4).map(\.abbreviation))
+        }
+        #expect(shorts(.goalkeeper) == ["Saves", "Clean Sheets", "Conceded", "Save %"])
+        #expect(shorts(.defender) == ["Apps", "Starts", "Conceded", "Fouls"])
+        #expect(shorts(.midfielder) == ["Apps", "Starts", "Assists", "Fouls Won"])
+        #expect(shorts(.forward) == ["Goals", "Assists", "On Target", "Apps"])
+
+        // One wording a statistic: the tile, the row and the game-log chip.
+        let onTarget = PlayerStatWording.soccer("shotsOnTarget")
+        #expect(onTarget.title == "On Target" && onTarget.short == "On Target" && onTarget.abbreviation == "SOT")
+    }
+
+    @Test("A goalkeeper leads with saves, goals conceded and save percentage")
     func soccerKeeper() throws {
         // sporting_roster.json Stefan Cleveland (249729, Goalkeeper): 17
         // appearances, none off the bench, 59 saves, 38 conceded. The roster
-        // has no clean sheets, so that tile is skipped.
+        // has no clean sheets, so that tile is skipped for appearances.
         let cleveland = try #require(parseSoccerRoster(from: try Fixture.json("sporting_roster")).first { $0.playerID == "249729" })
         #expect(isSoccerGoalkeeper(cleveland.position))
         let grid = cleveland.placeholderStatistics
         let featured = grid.featuredCells(for: cleveland.featuredStatistics)
-        #expect(featured.map(\.cell.title) == ["Goals Saved", "Goals Conceded", "Games Played", "Starts"])
-        #expect(featured.map(\.spokenTitle) == ["Saves", "Goals conceded", "Appearances", "Starts"])
-        #expect(featured.map(\.cell.displayValue) == ["59", "38", "17", "17"])
+        #expect(featured.map(\.cell.title) == ["Saves", "Goals Conceded", "Save Percentage", "Games Played"])
+        #expect(featured.map(\.spokenTitle) == ["Saves", "Goals conceded", "Save percentage", "Appearances"])
+        let values = featured.map(\.cell.displayValue)
+        try #require(values.count == 4)
+        #expect(values[0] == "59" && values[1] == "38" && values[3] == "17")
+        // 97 shots faced: a rate, not "59 of 97".
+        let savePct = try #require(featured.first { $0.cell.title == "Save Percentage" }?.cell.barFraction)
+        #expect(abs(savePct - 59.0 / 97.0) < 0.0001)
 
         let rest = grid.remainingSections(excluding: featured)
-        #expect(rest.map(\.title) == ["Goalkeeping", "Discipline"])
+        #expect(rest.map(\.title) == ["Appearances", "Goalkeeping", "Discipline"])
         let cells = rest.flatMap(\.rows).flatMap { $0 }
-        let saves = try #require(cells.first { $0.title == "Save Percentage" }?.barFraction)
-        #expect(abs(saves - 59.0 / 97.0) < 0.0001)
+        #expect(cells.first { $0.title == "Shots Faced" }?.displayValue == "97")
+        // A keeper's discipline is all zeros but the 2 fouls won.
+        let groups = grid.statGroups(excluding: featured)
+        #expect(cellTitles(groups.shown).filter { ["Fouls Committed", "Fouls Won", "Yellow Cards"].contains($0) } == ["Fouls Won"])
     }
 
     @Test("A football player's key stats come from his position's group")
@@ -774,19 +865,50 @@ struct PlayerSheetKeyStatTests {
         #expect(Array(receiver.map(\.cell.displayValue).prefix(2)) == ["1", "6"])
     }
 
-    @Test("Baseball: a pitcher's ERA, W-L, strikeouts and WHIP; a batter's AVG, HR, RBI and OPS")
+    @Test("Baseball: a reliever's ERA, IP, K and WHIP, a starter's W-L; a batter's AVG, HR, RBI and OPS")
     func baseball() throws {
         let roster = parseBaseballRoster(from: try Fixture.json("royals_roster"))
         let pitcher = try #require(roster.first { $0.position.contains("Pitcher") })
-        let pitching = pitcher.placeholderStatistics.featuredCells(for: pitcher.featuredStatistics)
-        #expect(pitching.map(\.cell.title) == ["Earned Run Avg.", "Win-Loss Record", "Strikeouts", "WHIP"])
         // A line of zeros is still no season (`hasNoFigures`).
         #expect(pitcher.placeholderStatistics.hasNoFigures)
+        #expect(pitcher.placeholderStatistics.seasonState == .noFigures)
 
         let batter = try #require(roster.first { !$0.position.contains("Pitcher") })
         let batting = batter.placeholderStatistics.featuredCells(for: batter.featuredStatistics)
         #expect(batting.map(\.feature.abbreviation) == ["AVG", "HR", "RBI", "OPS"])
         #expect(batting.map(\.cell.displayValue) == [".000", "0", "0", ".000"])
+    }
+
+    @Test("A reliever's tiles are ERA, IP, K and WHIP; his zeros wait behind Show all (P9)")
+    func reliever() throws {
+        // royals_roster.json 5136077, a Relief Pitcher, and his splits:
+        // 9.39 ERA, 0-0, 0 SV of 0, 6 GP, 0 GS, 0 CG, 7.2 IP, 13 H, 10 R,
+        // 8 ER, 1 HR, 6 BB, 12 K, .371.
+        let roster = parseBaseballRoster(from: try Fixture.json("royals_roster"))
+        let reliever = try #require(roster.first { $0.playerID == "5136077" })
+        #expect(reliever.position == "Relief Pitcher")
+        let stats = parseBaseballPlayerStats(from: try Fixture.json("royals_splits_5136077"), playerPosition: reliever.position)
+        let grid = reliever.grid(stats)
+        let featured = grid.featuredCells(for: reliever.featuredStatistics)
+        #expect(featured.map(\.feature.abbreviation) == ["ERA", "IP", "K", "WHIP"])
+        #expect(featured.map(\.cell.displayValue) == ["9.39", "7.2", "12", "2.48"])
+        // No "0-0" record anywhere on a reliever's sheet.
+        #expect(!cellTitles(grid.sections).contains("Win-Loss Record"))
+
+        let groups = grid.statGroups(excluding: featured)
+        #expect(cellTitles(groups.shown) == [
+            "Games Played",
+            "Walks", "Hits Allowed", "Home Runs Allowed", "Runs Allowed", "Earned Runs", "Opponent Avg.",
+        ])
+        // W, L, SV, SVOP, GS and CG.
+        #expect(groups.hiddenCount == 6)
+
+        // A starter keeps his record.
+        var starter = reliever
+        starter.position = "Starting Pitcher"
+        let starting = starter.grid(stats).featuredCells(for: starter.featuredStatistics)
+        #expect(starting.map(\.feature.abbreviation) == ["ERA", "W-L", "K", "WHIP"])
+        #expect(starting.map(\.cell.displayValue) == ["9.39", "0-0", "12", "2.48"])
     }
 
     @Test("Basketball's per-game line and hockey's skater line")
@@ -804,22 +926,113 @@ struct PlayerSheetKeyStatTests {
         #expect(featured.map(\.cell.displayValue) == ["41", "28", "69", "-2"])
     }
 
-    @Test("A quiet stat shows once it isn't zero")
-    func quietCells() {
+    @Test("Zero rows hide in a group with figures; all-zero groups wait behind Show all (P2)")
+    func zeroRows() {
         let grid = PlayerSheetGrid(sections: [
             PlayerSheetGrid.Section(title: "Discipline", rows: [[
                 .stat(title: "Own Goals", info: "0"),
                 .stat(title: "Offsides", info: "3"),
                 .stat(title: "Red Cards", info: "0"),
             ]]),
-            PlayerSheetGrid.Section(title: "Quiet", rows: [[
-                .stat(title: "Own Goals", info: "0"),
-            ]]),
+            PlayerSheetGrid.Section(title: "Quiet", rows: [
+                [.stat(title: "Wins", info: "0"), .stat(title: "Losses", info: "0")],
+                [.percentage(title: "Save Percentage", progress: .nan)],
+            ]),
         ])
-        let rest = grid.remainingSections(excluding: [])
-        // Red cards say something at zero; a section left empty goes.
-        #expect(rest.map(\.title) == ["Discipline"])
-        #expect(cellTitles(rest) == ["Offsides", "Red Cards"])
+        let groups = grid.statGroups(excluding: [])
+        #expect(groups.shown.map(\.title) == ["Discipline"])
+        #expect(cellTitles(groups.shown) == ["Offsides"])
+        // Every group and row is still there for "Show all stats".
+        #expect(groups.all.map(\.title) == ["Discipline", "Quiet"])
+        #expect(cellTitles(groups.all) == ["Own Goals", "Offsides", "Red Cards", "Wins", "Losses", "Save Percentage"])
+        #expect(groups.hiddenCount == 5)
+
+        // Nothing hidden: no button.
+        let full = PlayerSheetGrid(rows: [[.stat(title: "Goals", info: "2")]])
+        #expect(full.statGroups(excluding: []).hiddenCount == 0)
+
+        // All zeros: the sheet's "no figures" state, never an empty card.
+        let zeros = PlayerSheetGrid(rows: [[.stat(title: "Goals", info: "0"), .stat(title: "Assists", info: "0")]])
+        #expect(zeros.hasNoFigures)
+        #expect(zeros.seasonState == .noFigures)
+    }
+
+    @Test("A rate draws a bar over five attempts or more; under that it reads made of attempts (P3)")
+    func rateBars() {
+        let few = PlayerSheetCell.percentage(
+            title: "Shot Accuracy", progress: 0, attempts: MadeAttempted(made: 0, attempted: 3)
+        )
+        #expect(few.displayValue == "0 of 3")
+        #expect(few.barFraction == nil)
+
+        let four = PlayerSheetCell.percentage(
+            title: "Shot Accuracy", progress: 0.75, attempts: MadeAttempted(made: 3, attempted: 4)
+        )
+        #expect(four.displayValue == "3 of 4")
+        #expect(four.barFraction == nil)
+
+        let five = PlayerSheetCell.percentage(
+            title: "Shot Accuracy", progress: 0.4, attempts: MadeAttempted(made: 2, attempted: 5)
+        )
+        #expect(five.displayValue != "2 of 5")
+        #expect(five.barFraction == 0.4)
+
+        // Attempts the feed doesn't give: the bar as before.
+        let unknown = PlayerSheetCell.percentage(title: "Field Goal Percentage", progress: 0.5)
+        #expect(unknown.barFraction == 0.5)
+        // None at all: no bar, and "N/A".
+        let none = PlayerSheetCell.percentage(
+            title: "Save Percentage", progress: .nan, attempts: MadeAttempted(made: 0, attempted: 0)
+        )
+        #expect(none.displayValue == "N/A")
+        #expect(none.barFraction == nil)
+    }
+
+    @Test("Soccer rates rest on the shots; basketball's on the season's attempts")
+    func rateAttempts() throws {
+        // sporting_roster.json Jansen Miller (286804): 2 shots, both on
+        // target, no goals.
+        let miller = try #require(parseSoccerRoster(from: try Fixture.json("sporting_roster")).first { $0.playerID == "286804" })
+        let cells = miller.placeholderStatistics.sections.flatMap(\.rows).flatMap { $0 }
+        let accuracy = try #require(cells.first { $0.title == "Shot Accuracy" })
+        #expect(accuracy.displayValue == "2 of 2")
+        #expect(accuracy.barFraction == nil)
+        #expect(cells.first { $0.title == "Conversion Rate" }?.displayValue == "0 of 2")
+
+        // nba_splits_4869342.json All Splits: 76 games at 5.3-10.2 field
+        // goals, 0.3-1.5 threes, 1.0-1.6 free throws a game.
+        let nba = parseBasketballPlayerStats(from: try Fixture.json("nba_splits_4869342"))
+        #expect(nba.fieldGoals == MadeAttempted(made: 403, attempted: 775))
+        #expect(nba.threePointers == MadeAttempted(made: 23, attempted: 114))
+        #expect(nba.freeThrows == MadeAttempted(made: 76, attempted: 122))
+        // jayhawks_splits_4872739.json: home 18 games at 1.2-3.4, away 14
+        // at 1.6-4.1.
+        let ku = parseBasketballPlayerStats(from: try Fixture.json("jayhawks_splits_4872739"))
+        #expect(ku.fieldGoals == MadeAttempted(made: 44, attempted: 119))
+        // A document without the pairs can't say.
+        #expect(parseBasketballPlayerStats(from: .null).fieldGoals == nil)
+    }
+
+    @Test("A failed or partial load is not a season with no figures (P8)")
+    func loadFailure() throws {
+        // The fetch failed, or came back empty: failed.
+        #expect(splitsLoadFailed(.failure(.httpError(status: 503)), seasons: .empty))
+        #expect(splitsLoadFailed(.empty, seasons: .empty))
+        // A document without its season list: partial, so failed too.
+        let bare = JSON(data: Data(#"{"names": ["gamesPlayed"]}"#.utf8))
+        #expect(splitsLoadFailed(.success(bare), seasons: parseAthleteSeasons(from: bare)))
+        // The feed's own document, with its seasons: loaded.
+        let splits = try Fixture.json("nhl_splits_5080145")
+        #expect(!splitsLoadFailed(.success(splits), seasons: parseAthleteSeasons(from: splits)))
+
+        // The same grid of zeros says "No stats yet" only when it loaded.
+        var zeros = BasketballPlayer.grid(.empty)
+        #expect(zeros.seasonState == .noFigures)
+        zeros.loadFailed = true
+        #expect(zeros.seasonState == .loadFailed)
+
+        let season = BasketballPlayer.grid(parseBasketballPlayerStats(from: try Fixture.json("nba_splits_4869342")))
+        #expect(season.seasonState == .figures)
     }
 }
 
@@ -854,7 +1067,9 @@ struct PlayerSheetHelperTests {
         ])
         #expect(totals.map(\.display) == ["3", "0", "15", "9", "2", "15", "4", "0", "0"])
         #expect(totals.prefix(4).map(\.abbreviation) == ["G", "A", "SH", "SOT"])
-        #expect(totals.first?.label == "Total Goals")
+        // Labelled as the sheet's rows are (P7), not the feed's "Total Goals".
+        #expect(totals.first?.label == "Goals")
+        #expect(totals.first { $0.id == "foulsSuffered" }?.label == "Fouls Won")
 
         // The crest each game's opponent is drawn with.
         #expect(log.rows.first?.opponentLogo == "https://a.espncdn.com/i/teamlogos/soccer/500/331.png")
@@ -900,10 +1115,21 @@ struct PlayerSheetHelperTests {
         #expect(!gameLogEmphasizes(columnID: "homeRuns", value: "–"))
     }
 
-    @Test("A soccer goalkeeper is known by their position")
+    @Test("A soccer goalkeeper and a relief pitcher are known by their positions")
     func goalkeeperPosition() {
         #expect(isSoccerGoalkeeper("Goalkeeper"))
         #expect(!isSoccerGoalkeeper("Forward"))
+        #expect(isReliefPitcher("Relief Pitcher"))
+        #expect(!isReliefPitcher("Starting Pitcher"))
+    }
+
+    @Test("The game-log card counts the games it shows (P7)")
+    func gameLogTitle() {
+        #expect(gameLogCardTitle(shown: 5) == "Last 5 Games")
+        #expect(gameLogCardTitle(shown: 4) == "Last 4 Games")
+        #expect(gameLogCardTitle(shown: 1) == "Last Game")
+        #expect(gameLogCardTitle(shown: 0) == "Recent Games")
+        #expect(gameLogCardTitle(shown: nil) == "Recent Games")
     }
 
     @Test("A nationality's flag, where the name maps to one")

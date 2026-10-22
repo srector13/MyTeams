@@ -26,13 +26,24 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    /// The width the roster carousel gives the card, so four and a half
+    /// fit across (`RosterPeek`, T3); `nil` elsewhere.
+    @Environment(\.rosterCardWidth) private var rosterCardWidth
+
     /// The headshot, which scales with the caption under or beside it
     /// (B-3).
     @ScaledMetric(relativeTo: .caption) private var headshotSize: CGFloat = 60
 
-    /// The caption's width in the carousel: a little wider than the
-    /// headshot, so a long name wraps rather than widening the card (B-17).
+    /// The caption's width in the carousel when it doesn't set one: a
+    /// little wider than the headshot, so a long name wraps rather than
+    /// widening the card (B-17).
     @ScaledMetric(relativeTo: .caption2) private var captionWidth: CGFloat = 80
+
+    /// The headshot's side: its scaled size, never wider than the card.
+    private var photoSize: CGFloat {
+        guard !dynamicTypeSize.isAccessibilitySize, let rosterCardWidth else { return headshotSize }
+        return min(headshotSize, rosterCardWidth)
+    }
 
     var body: some View {
         // At accessibility text sizes the roster is a vertical list, so the
@@ -47,7 +58,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
                     .resizable()
             }
             .aspectRatio(contentMode: .fill)
-            .frame(width: headshotSize, height: headshotSize)
+            .frame(width: photoSize, height: photoSize)
             .clipShape(.circle)
 
             switch state {
@@ -63,13 +74,14 @@ struct PlayerCard<Player: RosterPlayer>: View {
 
     /// The card's caption, in one style whatever the sort (B-17), falling
     /// back to "N/A" when the feed left the field out. In the carousel it
-    /// keeps two lines' room, centred, so every card is the same height; in
-    /// the accessibility-size list it wraps freely beside the headshot.
+    /// keeps two lines' room, centred, so every card is the same height, at
+    /// the card's width; in the accessibility-size list it wraps freely
+    /// beside the headshot. A name, so label ink rather than grey.
     @ViewBuilder
     private func caption(_ text: String) -> some View {
         let label = Text(text.isEmpty ? "N/A" : text)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.primary)
 
         if dynamicTypeSize.isAccessibilitySize {
             label
@@ -77,7 +89,7 @@ struct PlayerCard<Player: RosterPlayer>: View {
             label
                 .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.center)
-                .frame(width: captionWidth)
+                .frame(width: rosterCardWidth ?? captionWidth)
         }
     }
 }

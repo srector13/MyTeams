@@ -36,6 +36,31 @@ struct TabBarTests {
     func allInTheBarWithoutALimit() {
         #expect(HomeTabs.barCount(teamCount: 12, barCapacity: nil) == 12)
     }
+
+    @Test("No tab bar until there's a team to switch to (H9)")
+    func noBarWithoutTeams() {
+        #expect(!HomeTabs.showsTabBar(teamCount: 0))
+        #expect(HomeTabs.showsTabBar(teamCount: 1))
+        #expect(HomeTabs.showsTabBar(teamCount: 6))
+    }
+
+    @Test("A grey theme's selected tab is drawn in label ink; colourful themes keep their accent (A4)")
+    func graphiteSelectedTab() {
+        #expect(HomeTabs.selectedTabUsesLabelInk(.graphite))
+        #expect(!HomeTabs.selectedTabUsesLabelInk(.classic))
+        for theme in BrandTheme.allCases where theme != .graphite {
+            #expect(!HomeTabs.selectedTabUsesLabelInk(theme), "\(theme)")
+        }
+    }
+
+    @Test("Reduce Transparency, the system's or the launch stand-in, makes the bar opaque (A1)")
+    func opaqueBarUnderReduceTransparency() {
+        let off = Theme.LaunchAccessibility(environment: [:])
+        let on = Theme.LaunchAccessibility(environment: [Theme.LaunchAccessibility.reduceTransparencyKey: "1"])
+        #expect(!HomeTabs.opaqueBar(systemReduceTransparency: false, launch: off))
+        #expect(HomeTabs.opaqueBar(systemReduceTransparency: true, launch: off))
+        #expect(HomeTabs.opaqueBar(systemReduceTransparency: false, launch: on))
+    }
 }
 
 /// Choosing a team from the bar's "More" list loads its page, as a tap on
@@ -275,10 +300,16 @@ struct CrestTests {
 struct TeamHeaderSummaryTests {
     private let chiefs = TeamRef.chiefs
 
-    private func game(pointer: Int, opponent: String = "Raiders", home: Bool = true, completed: Bool) -> Game {
+    private func game(
+        pointer: Int,
+        opponent: String = "Raiders",
+        home: Bool = true,
+        completed: Bool,
+        date: Date = .now
+    ) -> Game {
         Game(
             team: "Chiefs", opponent: opponent, score: "", opponentScore: "",
-            time: "", date: "", dateAsDate: .now, opponentLogo: "", channel: "",
+            time: "", date: "", dateAsDate: date, opponentLogo: "", channel: "",
             location: "", gameHome: home, gameID: "\(pointer)", pointer: pointer,
             gameWin: false, completed: completed, competitionName: "",
             cancelled: false, postponed: false, gameClock: "",
@@ -295,11 +326,11 @@ struct TeamHeaderSummaryTests {
         )
     }
 
-    private func standings(_ kind: StandingsKind, rank: Int?) -> Standings {
+    private func standings(_ kind: StandingsKind, rank: Int?, group name: String = "AFC West", shortName: String = "") -> Standings {
         Standings(kind: kind, seasonDisplayName: "", groups: [
-            StandingsGroup(id: "1", name: "AFC West", abbreviation: "AFCW", entries: [
+            StandingsGroup(id: "1", name: name, abbreviation: "AFCW", entries: [
                 entry("13", rank: 1), entry("12", rank: rank),
-            ]),
+            ], shortName: shortName),
         ])
     }
 
@@ -320,15 +351,66 @@ struct TeamHeaderSummaryTests {
             record: Record(wins: 10, losses: 6, format: .winLoss), standings: standings(.records, rank: 2)
         )
         #expect(summary.record == "10-6")
-        #expect(summary.standing == "2nd in AFC West")
-        #expect(summary.recordLine == "10-6 · 2nd in AFC West")
+        #expect(summary.standing == "2nd AFC West")
+        #expect(summary.recordLine == "10-6 · 2nd AFC West")
         #expect(TeamHeaderSummary(record: "4-1-0").recordLine == "4-1-0")
+    }
+
+    @Test("One template: record · short rank, a division bare and anything wider with \"in\" (T1)")
+    func shortRank() {
+        // "4-0 · 1st AFC West", "69-93 · 13th in AL", "6-4-19 · 15th in West".
+        #expect(TeamHeaderSummary(record: "4-0", standing: TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 1)))
+            .recordLine == "4-0 · 1st AFC West")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 13, group: "American League")) == "13th in AL")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 15, group: "Western Conference")) == "15th in West")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 2, group: "AL Central")) == "2nd AL Central")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 3, group: "American Football Conference")) == "3rd in AFC")
+        // The feed's own short name wins: "Big 12" for "Big 12 Conference".
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 4, group: "Big 12 Conference", shortName: "Big 12")) == "4th in Big 12")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 4, group: "Mountain West Conference")) == "4th in Mountain West")
+    }
+
+    @Test("The second line: the next game, else that the season is complete (T1, T8)")
+    func detailLine() {
+        #expect(TeamHeaderSummary(nextGame: "vs Chargers · Sun, Oct 18").detailLine == "Next vs Chargers · Sun, Oct 18")
+        #expect(TeamHeaderSummary(seasonComplete: true).detailLine == "Season complete")
+        #expect(TeamHeaderSummary(nextGame: "vs Chargers · Sun, Oct 18", seasonComplete: true).detailLine == "Next vs Chargers · Sun, Oct 18")
+        #expect(TeamHeaderSummary().detailLine == nil)
+    }
+
+    @Test("A season is complete once every game is played and the last is two weeks past, or the schedule is empty after a season with a record (T8)")
+    func seasonComplete() {
+        let now = Date(timeIntervalSince1970: 1_792_000_000)
+        let day: TimeInterval = 24 * 60 * 60
+        let played = [
+            game(pointer: 0, completed: true, date: now - 40 * day),
+            game(pointer: 1, completed: true, date: now - 20 * day),
+        ]
+        #expect(TeamHeaderSummary.seasonComplete(games: played, nextGame: 1, standingsRecord: nil, scheduleLoaded: true, now: now))
+        // A playoff team's wait for its next round is not the season's end.
+        let recent = [game(pointer: 0, completed: true, date: now - 3 * day)]
+        #expect(!TeamHeaderSummary.seasonComplete(games: recent, nextGame: 0, standingsRecord: nil, scheduleLoaded: true, now: now))
+        // A game still to come.
+        let upcoming = played + [game(pointer: 2, completed: false, date: now + 3 * day)]
+        #expect(!TeamHeaderSummary.seasonComplete(games: upcoming, nextGame: 2, standingsRecord: nil, scheduleLoaded: true, now: now))
+        // An empty schedule after a season with a record: the Royals in October.
+        #expect(TeamHeaderSummary.seasonComplete(games: [], nextGame: 0, standingsRecord: "69-93", scheduleLoaded: true, now: now))
+        #expect(!TeamHeaderSummary.seasonComplete(games: [], nextGame: 0, standingsRecord: nil, scheduleLoaded: true, now: now))
+        // Nothing said before the schedule answers, or when it failed.
+        #expect(!TeamHeaderSummary.seasonComplete(games: [], nextGame: 0, standingsRecord: "69-93", scheduleLoaded: false, now: now))
+
+        let summary = TeamHeaderSummary(
+            team: chiefs, games: played, nextGame: 1,
+            record: Record(wins: 2, losses: 0, format: .winLoss), standings: nil, now: now
+        )
+        #expect(summary.seasonComplete)
+        #expect(summary.detailLine == "Season complete")
     }
 
     @Test("A poll gives a rank; an unranked team or one not in the table gives nothing")
     func standing() {
         #expect(TeamHeaderSummary.standing(of: "12", in: standings(.rankings, rank: 5)) == "No. 5 in AFC West")
-        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.pointsTable, rank: 13)) == "13th in AFC West")
+        #expect(TeamHeaderSummary.standing(of: "12", in: standings(.pointsTable, rank: 13)) == "13th AFC West")
         #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: nil)) == nil)
         #expect(TeamHeaderSummary.standing(of: "12", in: standings(.records, rank: 0)) == nil)
         #expect(TeamHeaderSummary.standing(of: "99", in: standings(.records, rank: 2)) == nil)
