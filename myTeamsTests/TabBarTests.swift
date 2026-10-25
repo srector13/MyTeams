@@ -168,13 +168,105 @@ struct HomeTabTests {
         #expect(TeamRef.parse(id: HomeTabs.homeID) == nil)
     }
 
-    @Test("Home takes one of the compact bar's slots")
-    func homeTakesASlot() {
+    @Test("Home and Search take two of the compact bar's slots")
+    func homeAndSearchTakeSlots() {
+        #expect(HomeTabs.fixedTabCount == 2)
         let teamRoom = HomeTabs.compactCapacity - HomeTabs.fixedTabCount
-        // Home and four teams fill the bar.
-        #expect(HomeTabs.barCount(teamCount: 4, barCapacity: teamRoom) == 4)
-        // A fifth team: Home, three teams and "More".
-        #expect(HomeTabs.barCount(teamCount: 5, barCapacity: teamRoom) == 3)
+        // Home, three teams and Search fill the bar.
+        #expect(HomeTabs.barCount(teamCount: 3, barCapacity: teamRoom) == 3)
+        // A fourth team: Home, two teams, Search and "More" listing the
+        // other two.
+        #expect(HomeTabs.barCount(teamCount: 4, barCapacity: teamRoom) == 2)
+        #expect(HomeTabs.barCount(teamCount: 12, barCapacity: teamRoom) == 2)
+        // However many teams, the bar never holds more than its capacity:
+        // the fixed tabs, the teams in the bar, and "More" once needed.
+        for count in 0...12 {
+            let inBar = HomeTabs.barCount(teamCount: count, barCapacity: teamRoom)
+            let more = inBar < count ? 1 : 0
+            #expect(HomeTabs.fixedTabCount + inBar + more <= HomeTabs.compactCapacity)
+            #expect(inBar <= count)
+        }
+    }
+
+    @Test("With no limit on the bar (iPad) every team is in it beside Home and Search")
+    func regularWidthHoldsEveryTeam() {
+        #expect(HomeTabs.barCount(teamCount: 9, barCapacity: nil) == 9)
+    }
+}
+
+/// The search tab (iOS 26's search role): last in the bar, always there with
+/// it, and never one favorite's.
+@Suite("Search tab")
+struct SearchTabTests {
+    private let chiefs = "football/nfl:12"
+    private let royals = "baseball/mlb:7"
+    /// Duke, which nobody here follows.
+    private var duke: TeamRef {
+        TeamRef.placeholder(id: "basketball/mens-college-basketball:150")!
+    }
+
+    @Test("Search's id never names a team, nor Home's")
+    func searchIsNotATeam() {
+        #expect(TeamRef.parse(id: HomeTabs.searchID) == nil)
+        #expect(HomeTabs.searchID != HomeTabs.homeID)
+        #expect(HomeTabs.isFixedTab(HomeTabs.searchID))
+        #expect(HomeTabs.isFixedTab(HomeTabs.homeID))
+        #expect(!HomeTabs.isFixedTab(chiefs))
+    }
+
+    @Test("Search's tab can be chosen whatever the favorites")
+    func searchChosen() {
+        let onTeam = HomeRouting.State(selection: chiefs, pendingLink: nil)
+        #expect(HomeRouting.teamChosen(onTeam, team: HomeTabs.searchID, teams: [chiefs]).selection == HomeTabs.searchID)
+        let onSearch = HomeRouting.State(selection: HomeTabs.searchID, pendingLink: nil)
+        #expect(HomeRouting.teamChosen(onSearch, team: chiefs, teams: [chiefs]).selection == chiefs)
+    }
+
+    @Test("Following a team from Search adds its tab and stays on Search")
+    func searchSurvivesAFollow() {
+        let onSearch = HomeRouting.State(selection: HomeTabs.searchID, pendingLink: nil)
+        #expect(HomeRouting.favoritesResolved(onSearch, teams: [chiefs]) == onSearch)
+        #expect(HomeRouting.favoritesResolved(onSearch, teams: [chiefs, royals]) == onSearch)
+    }
+
+    @Test("With the last team unfollowed, Search falls back to Home: no bar holds it (H9)")
+    func searchFallsBackWithNoTeams() {
+        let onSearch = HomeRouting.State(selection: HomeTabs.searchID, pendingLink: nil)
+        #expect(HomeRouting.favoritesResolved(onSearch, teams: []).selection == HomeTabs.homeID)
+    }
+
+    @Test("A widget link still opens its team's tab over Search")
+    func linkLeavesSearch() {
+        let linked = HomeRouting.State(selection: HomeTabs.searchID, pendingLink: royals)
+        let next = HomeRouting.linkChanged(linked, teams: [chiefs, royals], favoriteIDs: [chiefs, royals])
+        #expect(next.selection == royals)
+        #expect(next.pendingLink == nil)
+    }
+
+    @Test("No banner is skipped on Home or Search; a team's tab skips its own (C-8)")
+    func alertTeam() {
+        #expect(HomeTabs.alertTeamID(forTab: HomeTabs.homeID) == nil)
+        #expect(HomeTabs.alertTeamID(forTab: HomeTabs.searchID) == nil)
+        #expect(HomeTabs.alertTeamID(forTab: chiefs) == chiefs)
+    }
+
+    @Test("A page on Search's stack pushes any team's page there, once")
+    func searchStackPushes() {
+        var path: [TeamBrowserView.Route] = [.sport(.basketball), .league(.nba)]
+        path = HomeRouting.searchPath(path, opening: duke)
+        #expect(path == [.sport(.basketball), .league(.nba), .team(duke)])
+        // A player on Duke's own page asks for Duke: nothing to push.
+        #expect(HomeRouting.searchPath(path, opening: duke) == path)
+        // A favorite is pushed too: the reader is browsing in Search.
+        let followed = HomeRouting.searchPath(path, opening: .chiefs)
+        #expect(followed.last == TeamBrowserView.Route.team(.chiefs))
+        #expect(followed.count == 4)
+    }
+
+    @Test("teamOpened never touches Search's state: Home pushes on its stack instead")
+    func teamOpenedFromSearch() {
+        let onSearch = HomeRouting.State(selection: HomeTabs.searchID, pendingLink: nil)
+        #expect(HomeRouting.teamOpened(onSearch, team: duke, teams: [chiefs]) == onSearch)
     }
 }
 

@@ -36,6 +36,46 @@ struct ScoreboardCompetitor: Sendable, Hashable {
     var score: Int?
 }
 
+/// One side of a game as a league scoreboard names and ranks it, for Home's
+/// Around Your Leagues rows (`HomeLeagueGame`), which list games between
+/// teams the reader doesn't follow and so can't look them up anywhere else.
+/// Kept apart from `ScoreboardCompetitor`, whose identity the score fan-out
+/// compares, so a renamed crest never reads as a changed score.
+struct ScoreboardTeam: Sendable, Hashable {
+    /// `team.abbreviation`, `"KC"`; empty when the board gives none.
+    var abbreviation: String = ""
+    /// `team.shortDisplayName`, `"Chiefs"`, `"San José St"`.
+    var shortName: String = ""
+    /// `team.displayName`, `"Kansas City Chiefs"`.
+    var displayName: String = ""
+    /// `team.location`, `"Kansas City"`.
+    var location: String = ""
+    /// `team.logo`, the scoreboard's crest.
+    var logoURL: URL? = nil
+    /// `team.color` and `team.alternateColor`, six hex digits, or empty.
+    var colorHex: String = ""
+    var alternateColorHex: String = ""
+    /// The competitor's `curatedRank.current` in a college poll, 1 to 25;
+    /// `nil` when unranked, which the board writes as 99, or not given.
+    var rank: Int? = nil
+    /// The competitor's `winner` flag, set once a game is decided.
+    var winner: Bool = false
+
+    /// The name a compact row shows: the short name, else the abbreviation.
+    var rowName: String {
+        if !shortName.isEmpty { return shortName }
+        if !abbreviation.isEmpty { return abbreviation }
+        return displayName
+    }
+
+    /// The poll's unranked marker and anything outside a top 25 read as
+    /// unranked.
+    static func pollRank(_ value: Int?) -> Int? {
+        guard let value, (1...25).contains(value) else { return nil }
+        return value
+    }
+}
+
 /// One game on a league scoreboard, reduced to what the schedule cards need.
 struct ScoreboardGame: Sendable, Hashable {
     /// The competition id, which is the schedule's `Game.gameID`.
@@ -57,6 +97,37 @@ struct ScoreboardGame: Sendable, Hashable {
     var clock: String = ""
     /// The competition's `date`, its scheduled start. For Live Activities.
     var startDate: Date? = nil
+    /// Each competitor's names, crest, colours, poll rank and `winner` flag,
+    /// by ESPN team id. For Home's Around Your Leagues rows.
+    var teams: [String: ScoreboardTeam] = [:]
+    /// `status.type.shortDetail`: `"0:48 - 4th"`, `"Final/OT"`, `"FT"`,
+    /// `"9/28 - 8:15 PM EDT"`, `"Canceled"`.
+    var statusDetail: String = ""
+    /// `status.type.description == "Halftime"`.
+    var halftime: Bool = false
+    /// Called off, as `gameCalledOff` reads the status: cancelled for good,
+    /// or postponed to another day.
+    var cancelled: Bool = false
+    var postponed: Bool = false
+    /// The national broadcast, `competition.broadcast` (`"CBS"`), else the
+    /// first of `broadcasts[].names`; empty when the board names none.
+    var broadcast: String = ""
+    /// `competition.venue.fullName`.
+    var venue: String = ""
+    /// `competition.neutralSite`: a bowl, a tournament site.
+    var neutralSite: Bool = false
+    /// The event's `name`, `"Los Angeles Rams at Denver Broncos"`.
+    var name: String = ""
+
+    /// The away side of a two-team game, then the home side; `nil` for a
+    /// game the board doesn't list as one team at the other.
+    var awayAndHome: (away: ScoreboardCompetitor, home: ScoreboardCompetitor)? {
+        guard competitors.count == 2,
+              let home = competitors.first(where: { $0.homeAway == "home" }),
+              let away = competitors.first(where: { $0.homeAway == "away" })
+        else { return nil }
+        return (away, home)
+    }
 
     /// The score as `teamID` sees it, or `nil` when the game does not list
     /// that team against one opponent, or has no score worth showing yet.
@@ -134,15 +205,28 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
             if date.string == nil { date = event["date"] }
 
             var teamNames: [String: String] = [:]
+            var teams: [String: ScoreboardTeam] = [:]
             for (_, competitor) in competition["competitors"] {
                 let teamID = competitor["team", "id"].stringValue
+                guard !teamID.isEmpty else { continue }
+                teams[teamID] = scoreboardTeam(competitor)
                 // No name rather than an empty one, so readers fall back
                 // ("Home", "Away") instead of showing a blank.
                 let name = competitor["team", "shortDisplayName"].stringValue
                     .trimmingCharacters(in: .whitespaces)
-                guard !teamID.isEmpty, !name.isEmpty else { continue }
+                guard !name.isEmpty else { continue }
                 teamNames[teamID] = name
             }
+
+            var broadcast = competition["broadcast"].stringValue
+                .trimmingCharacters(in: .whitespaces)
+            if broadcast.isEmpty {
+                broadcast = competition["broadcasts", 0, "names", 0].stringValue
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            let calledOff = gameCalledOff(status)
+            var name = event["name"].stringValue
+            if name.isEmpty { name = event["shortName"].stringValue }
 
             let competitors: [ScoreboardCompetitor] = competition["competitors"].compactMap { _, competitor in
                 let teamID = competitor["team", "id"].stringValue
@@ -162,9 +246,65 @@ func parseScoreboard(from json: JSON) -> LeagueScoreboard {
                 period: period.intValue,
                 teamNames: teamNames,
                 clock: clock.stringValue,
-                startDate: parseGameDate(date.stringValue)
+                startDate: parseGameDate(date.stringValue),
+                teams: teams,
+                statusDetail: status["shortDetail"].stringValue,
+                halftime: status["description"].stringValue == "Halftime",
+                cancelled: calledOff.cancelled,
+                postponed: calledOff.postponed,
+                broadcast: broadcast,
+                venue: competition["venue", "fullName"].stringValue,
+                neutralSite: competition["neutralSite"].boolValue,
+                name: name
             ))
         }
     }
     return LeagueScoreboard(games: games)
+}
+
+/// A scoreboard competitor's names, crest, colours, poll rank and result,
+/// each read by name; whatever the board leaves out stays empty.
+private func scoreboardTeam(_ competitor: JSON) -> ScoreboardTeam {
+    let team = competitor["team"]
+    func text(_ key: String) -> String {
+        team[key].stringValue.trimmingCharacters(in: .whitespaces)
+    }
+    let logo = text("logo")
+    return ScoreboardTeam(
+        abbreviation: text("abbreviation"),
+        shortName: text("shortDisplayName"),
+        displayName: text("displayName"),
+        location: text("location"),
+        logoURL: logo.isEmpty ? nil : URL(string: logo),
+        colorHex: text("color"),
+        alternateColorHex: text("alternateColor"),
+        rank: ScoreboardTeam.pollRank(competitor["curatedRank", "current"].int),
+        winner: competitor["winner"].boolValue
+    )
+}
+
+// MARK: - Around Your Leagues
+
+extension LeagueID {
+    /// The league's scoreboard for Home's Around Your Leagues
+    /// (`HomeViewModel`): one day (`"20261025"`) or a span of days
+    /// (`"20261023-20261101"`, ESPN's range form), one request either way.
+    ///
+    /// A college board is big: with `rankedOnly` it asks for the default
+    /// board (college basketball's featured games, college football's FBS)
+    /// and the rows keep the ranked teams' games; without, basketball names
+    /// all of Division I (`groups=50`), as `scoreboardURL(day:)` does. A span
+    /// or a whole division asks for up to a thousand games, past the board's
+    /// short default page.
+    func roundupScoreboardURL(dates: String, rankedOnly: Bool) -> String {
+        var url = "https://site.api.espn.com/apis/site/v2/sports/\(path)/scoreboard?dates=\(dates)"
+        let wholeDivision = isCollege && !rankedOnly
+        if wholeDivision && sport == "basketball" {
+            url += "&groups=50"
+        }
+        if wholeDivision || dates.contains("-") {
+            url += "&limit=1000"
+        }
+        return url
+    }
 }

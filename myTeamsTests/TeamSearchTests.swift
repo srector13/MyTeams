@@ -364,6 +364,90 @@ struct RecentSearchesTests {
     }
 }
 
+// MARK: - Search tab
+
+/// The search tab's recently viewed teams (`RecentTeams`): ids in one
+/// `@AppStorage` string, newest first, each once, at most eight.
+@Suite("Recently viewed teams")
+struct RecentTeamsTests {
+    @Test("An opened team goes to the front, once")
+    func recordsNewestFirst() {
+        var stored = RecentTeams.recording(chiefs.id, in: "")
+        #expect(stored == chiefs.id)
+        stored = RecentTeams.recording(sporting.id, in: stored)
+        #expect(RecentTeams.ids(from: stored) == [sporting.id, chiefs.id])
+        // Opened again: moved up, not listed twice.
+        stored = RecentTeams.recording(chiefs.id, in: stored)
+        #expect(RecentTeams.ids(from: stored) == [chiefs.id, sporting.id])
+    }
+
+    @Test("Only the last eight are kept")
+    func keepsEight() {
+        var stored = ""
+        for espnID in 1...10 {
+            stored = RecentTeams.recording("football/nfl:\(espnID)", in: stored)
+        }
+        #expect(RecentTeams.limit == 8)
+        #expect(RecentTeams.ids(from: stored) == (3...10).reversed().map { "football/nfl:\($0)" })
+    }
+
+    @Test("Nothing that isn't a team id is recorded or read back")
+    func dropsMalformed() {
+        #expect(RecentTeams.recording("not a team", in: "") == "")
+        #expect(RecentTeams.recording(HomeTabs.searchID, in: chiefs.id) == chiefs.id)
+        #expect(RecentTeams.ids(from: "").isEmpty)
+        // Stored by hand, or by an older build: the junk and repeats go.
+        let stored = "\(chiefs.id),,garbage,\(chiefs.id),\(dodgers.id)"
+        #expect(RecentTeams.ids(from: stored) == [chiefs.id, dodgers.id])
+    }
+
+    @Test("Clearing is the empty string: nothing recently viewed")
+    func clears() {
+        let stored = RecentTeams.recording(malmo.id, in: RecentTeams.recording(chiefs.id, in: ""))
+        #expect(RecentTeams.ids(from: stored).count == 2)
+        #expect(RecentTeams.ids(from: "").isEmpty)
+    }
+
+    @Test("Persists as the plain string @AppStorage keeps")
+    func persists() throws {
+        let defaults = try #require(UserDefaults(suiteName: "RecentTeamsTests.\(UUID().uuidString)"))
+        let stored = RecentTeams.recording(dodgers.id, in: RecentTeams.recording(chiefs.id, in: ""))
+        defaults.set(stored, forKey: RecentTeams.key)
+        #expect(RecentTeams.ids(from: defaults.string(forKey: RecentTeams.key) ?? "") == [dodgers.id, chiefs.id])
+    }
+}
+
+/// The picker's stack (`TeamBrowserView.Route`): a search belongs to the
+/// page it was typed on, but a team's page opened from the search tab's
+/// results keeps it, so back returns to them.
+@Suite("Search tab stack")
+struct SearchTabStackTests {
+    private typealias Route = TeamBrowserView.Route
+
+    @Test("Pushing or popping a sport or league leaves the search's page")
+    func browsingLeaves() {
+        #expect(Route.leavesSearchPage(from: [], to: [.sport(.football)]))
+        #expect(Route.leavesSearchPage(from: [.sport(.football)], to: [.sport(.football), .league(.nfl)]))
+        #expect(Route.leavesSearchPage(from: [.sport(.football), .league(.nfl)], to: [.sport(.football)]))
+    }
+
+    @Test("A team's page pushed over the results, or popped, keeps the search")
+    func teamPagesKeep() {
+        #expect(!Route.leavesSearchPage(from: [], to: [.team(chiefs)]))
+        #expect(!Route.leavesSearchPage(from: [.team(chiefs)], to: [.team(chiefs), .team(sporting)]))
+        #expect(!Route.leavesSearchPage(from: [.team(chiefs), .team(sporting)], to: []))
+        #expect(!Route.leavesSearchPage(from: [.league(.nfl)], to: [.league(.nfl), .team(chiefs)]))
+        #expect(Route.leavesSearchPage(from: [.league(.nfl), .team(chiefs)], to: []))
+    }
+
+    @Test("Only a team's route names a pushed team")
+    func pushedTeam() {
+        #expect(Route.team(chiefs).pushedTeam == chiefs)
+        #expect(Route.sport(.football).pushedTeam == nil)
+        #expect(Route.league(.nfl).pushedTeam == nil)
+    }
+}
+
 /// How the picker writes a sport's leagues (`BrowsableSport.leagueList`,
 /// S4): one line that may wrap only after a separator, so no line starts
 /// with "·" and no league's name is split.

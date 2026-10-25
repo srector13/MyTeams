@@ -522,3 +522,164 @@ extension HomePerformer {
         return "\(team.shortName): \(name), \(row.value) \(board.title)"
     }
 }
+
+// MARK: - Around Your Leagues
+
+/// A league block's heading in Around Your Leagues: its sport's symbol and
+/// the league's name, "Premier League", "NFL", "NCAA Football".
+struct HomeLeagueBlockHeader: View {
+    let league: LeagueID
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.s) {
+            Image(systemName: TeamColors.symbolName(for: league.descriptor.kind))
+                .foregroundStyle(Theme.Palette.metadata)
+                .accessibilityHidden(true)
+            Text(league.descriptor.displayName)
+                .font(.subheadline.bold())
+                .foregroundStyle(Color.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A game in one of Around Your Leagues' blocks, compact: the away side
+/// over the home side, each its crest, poll rank (college), short name and
+/// score, the winner's bold; and where the game stands at the trailing
+/// end — "Live" by a red dot over its stage, its start over the
+/// broadcast, "Final" over its day. A favorite's game (with Include My
+/// Teams' Games on) has a bar in the team's accent at its leading edge and
+/// the star beside its name (F3, T-7). At accessibility sizes the status
+/// goes beneath the teams.
+///
+/// One element to VoiceOver: the button around it carries the game's
+/// label (`HomeLeagueGame.accessibilityLabel(now:)`).
+struct HomeLeagueGameRow: View {
+    let entry: HomeLeagueGame
+    let now: Date
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ScaledMetric(relativeTo: .subheadline) private var crestSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .caption) private var statusWidth: CGFloat = 92
+    @ScaledMetric(relativeTo: .caption2) private var dotSize: CGFloat = 6
+
+    private var stacksStatus: Bool { dynamicTypeSize.isAccessibilitySize }
+
+    var body: some View {
+        let status = HomeFeed.leagueStatus(of: entry, now: now)
+        let layout = stacksStatus
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: Theme.Spacing.xs))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: Theme.Spacing.m))
+        layout {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                sideLine(entry.away, team: entry.awayTeam)
+                sideLine(entry.home, team: entry.homeTeam)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            statusView(status)
+        }
+        .padding(.vertical, Theme.Spacing.s)
+        .padding(.leading, Theme.Spacing.s)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background(alignment: .leading) {
+            if let favorite = entry.favorite {
+                Capsule()
+                    .fill(TeamColors.accent(for: favorite))
+                    .frame(width: 3)
+                    .padding(.vertical, Theme.Spacing.s)
+            }
+        }
+        .contentShape(.rect)
+    }
+
+    /// One side: crest, rank, name and score.
+    private func sideLine(_ competitor: ScoreboardCompetitor, team: TeamRef) -> some View {
+        let isWinner = entry.isWinner(competitor)
+        return HStack(spacing: Theme.Spacing.s) {
+            // On the inset surface, as the standings rows draw theirs.
+            TeamLogo(team: team, size: crestSize)
+            if let badge = PollRanks.badge(rank: entry.rank(of: competitor)) {
+                Text(badge)
+                    .font(.caption2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.Palette.metadata)
+            }
+            Text(team.shortName)
+                .font(.subheadline)
+                .fontWeight(isWinner ? .bold : .regular)
+                .foregroundStyle(Color.primary)
+                .lineLimit(stacksStatus ? nil : 1)
+            if entry.isFavorite(competitor) {
+                FollowedMarker()
+            }
+            Spacer(minLength: Theme.Spacing.s)
+            if let score = entry.shownScore(competitor) {
+                Text(score)
+                    .font(.subheadline)
+                    .fontWeight(isWinner ? .bold : .regular)
+                    .monospacedDigit()
+                    .foregroundStyle(Color.primary)
+            }
+        }
+    }
+
+    /// Where the game stands: the line, the live dot beside it, and the
+    /// detail beneath in the metadata grey (F1).
+    private func statusView(_ status: HomeLeagueStatus) -> some View {
+        VStack(alignment: stacksStatus ? .leading : .trailing, spacing: 2) {
+            HStack(spacing: Theme.Spacing.xs) {
+                if status.isLive {
+                    // The word says it too: never colour alone (G-4).
+                    Circle()
+                        .fill(.red)
+                        .frame(width: dotSize, height: dotSize)
+                        .accessibilityHidden(true)
+                }
+                Text(status.primary)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(status.isLive ? Color.primary : Theme.Palette.metadata)
+            }
+            if let detail = status.detail {
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(Theme.Palette.metadata)
+            }
+        }
+        .monospacedDigit()
+        .multilineTextAlignment(stacksStatus ? .leading : .trailing)
+        .lineLimit(stacksStatus ? nil : 2)
+        .frame(minWidth: stacksStatus ? nil : statusWidth, alignment: stacksStatus ? .leading : .trailing)
+    }
+}
+
+/// A league game's row while its board loads (X-6): two crests and names
+/// and a status, in skeleton blocks, the row's height.
+struct HomeLeagueGameRowPlaceholder: View {
+    @ScaledMetric(relativeTo: .subheadline) private var crestSize: CGFloat = 22
+    @ScaledMetric(relativeTo: .subheadline) private var lineHeight: CGFloat = 12
+
+    var body: some View {
+        HStack(spacing: Theme.Spacing.m) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                ForEach(0..<2, id: \.self) { _ in
+                    HStack(spacing: Theme.Spacing.s) {
+                        LoadingViewCircle()
+                            .frame(width: crestSize, height: crestSize)
+                        LoadingView()
+                            .frame(width: 96, height: lineHeight)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            LoadingView()
+                .frame(width: 56, height: lineHeight)
+        }
+        .padding(.vertical, Theme.Spacing.s)
+        .padding(.leading, Theme.Spacing.s)
+        .accessibilityHidden(true)
+    }
+}

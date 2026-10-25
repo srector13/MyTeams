@@ -119,6 +119,16 @@ struct SettingsView: View {
                     .accessibilityValue(theme.title)
                     .accessibilityHint("Choose the palette for the accent color, the myTeams logo and the app icon.")
                     .accessibilityIdentifier("settings.theme")
+
+                    // Customize Home, as Home's foot opens it: its sections,
+                    // and what Around Your Leagues shows.
+                    NavigationLink {
+                        HomeCustomizeSheet(isPushed: true)
+                    } label: {
+                        Label("Home", systemImage: "house")
+                    }
+                    .accessibilityHint("Show, hide and reorder Home's sections, and choose the league games it shows.")
+                    .accessibilityIdentifier("settings.home")
                 } header: {
                     Text("Display")
                 }

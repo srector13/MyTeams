@@ -15,8 +15,10 @@ import UIKit
 /// The app's root screen: the system tab bar, Home first — every
 /// favorite's live games, the week's upcoming games and results, and
 /// headlines together (`HomeView`, t_0b94af11) — then one tab per favorite
-/// team, each showing that team's scrolling page. The app opens on Home.
-/// Teams are added from Settings (t_fa6748f4), or from Home's empty state.
+/// team, each showing that team's scrolling page, and last the search tab,
+/// which finds any team and opens its page (`TeamBrowserView.SearchTab`).
+/// The app opens on Home. Teams are added from Settings (t_fa6748f4), from
+/// Home's empty state, or by following one found in Search.
 ///
 /// A standard `TabView`, so the platform draws the bar: its Liquid Glass,
 /// selection indicator and animation, the large content viewer, minimizing
@@ -72,6 +74,12 @@ struct Home: View {
     /// How a page asks for another team's page, or for a player's sheet
     /// on one (t_8d15e070).
     @State private var navigator = TeamNavigator()
+
+    /// The search tab's stack: the browser's sports and leagues, and the
+    /// teams' pages opened from them. Here rather than in the browser, so a
+    /// page on it asking for another team's page pushes that page on the
+    /// same stack (`HomeRouting.searchPath`).
+    @State private var searchPath: [TeamBrowserView.Route] = []
 
     /// Bumped when a favorite's crest lands in `LogoStore`, so the tab items
     /// read it again (`TabCrest`).
@@ -160,10 +168,13 @@ struct Home: View {
         }
     }
 
-    /// The teams whose pages are open as visits, whose models `pages`
-    /// keeps alongside the favorites'.
+    /// The teams whose pages are open as visits, over a favorite's page or
+    /// on the search tab's stack, whose models `pages` keeps alongside the
+    /// favorites'.
     private var visitedIDs: [TeamRef.ID] {
-        visits.values.flatMap { $0.map(\.team.id) }
+        let overFavorites = visits.values.flatMap { $0.map(\.team.id) }
+        let onSearch = searchPath.compactMap { $0.pushedTeam?.id }
+        return overFavorites + onSearch
     }
 
     /// The tab view's selection: a tap on a team's tab chooses that team,
@@ -220,10 +231,16 @@ struct Home: View {
             apply(HomeRouting.favoritesResolved(routing, teams: teams.map(\.id)))
         }
         // A page asked for a team's page: a favorite's tab, or the team's
-        // page pushed over the one on screen (t_8d15e070).
+        // page pushed over the one on screen (t_8d15e070). On the search
+        // tab, any team's page is pushed on its stack, the reader still
+        // browsing there.
         .onChange(of: navigator.request) { _, _ in
             guard let team = navigator.takeRequest() else { return }
-            apply(HomeRouting.teamOpened(routing, team: team, teams: teams.map(\.id)))
+            if selection == HomeTabs.searchID {
+                searchPath = HomeRouting.searchPath(searchPath, opening: team)
+            } else {
+                apply(HomeRouting.teamOpened(routing, team: team, teams: teams.map(\.id)))
+            }
         }
         .onChange(of: deepLinkedTeamID, initial: true) { _, _ in
             apply(HomeRouting.linkChanged(routing, teams: teams.map(\.id), favoriteIDs: store.teamIDs))
@@ -278,12 +295,18 @@ struct Home: View {
     /// Home's tab, then the favorites' tabs: those past the bar's room
     /// under the system's "More" (`HomeTabs.barCount`). Teams are added
     /// from Settings (t_fa6748f4).
+    ///
+    /// The search tab is declared after the teams the bar shows and before
+    /// those under "More". iOS 26 draws a search-role tab apart, at the
+    /// bar's trailing end, wherever it is declared; should the system ever
+    /// count it as an ordinary tab instead, this order keeps it in the bar
+    /// rather than under "More" (`HomeTabs.fixedTabCount`).
     @ViewBuilder
     private var tabs: some View {
         let _ = crestRevision
         let barCount = HomeTabs.barCount(
             teamCount: teams.count,
-            // Home always holds the bar's first slot.
+            // Home and Search always hold two of the bar's slots.
             barCapacity: sizeClass == .compact ? HomeTabs.compactCapacity - HomeTabs.fixedTabCount : nil
         )
         TabView(selection: tabSelection) {
@@ -292,6 +315,8 @@ struct Home: View {
             ForEach(Array(teams.prefix(barCount))) { team in
                 teamTab(team, inMore: false)
             }
+
+            searchTab
 
             ForEach(Array(teams.dropFirst(barCount))) { team in
                 teamTab(team, inMore: true)
@@ -308,10 +333,39 @@ struct Home: View {
         // A tick as the team changes (C-4).
         .sensoryFeedback(.selection, trigger: selection)
         // The alerts presenter skips the banner for the team on screen
-        // (C-8); Home is every team's, so no banner is skipped there.
+        // (C-8); Home is every team's, and Search no favorite's, so no
+        // banner is skipped there.
         .onChange(of: selection, initial: true) { _, tab in
-            ScoreAlertForeground.shared.teamID = tab == HomeTabs.homeID ? nil : tab
+            ScoreAlertForeground.shared.teamID = HomeTabs.alertTeamID(forTab: tab)
         }
+    }
+
+    /// Search: any team, followed or not, found by name or browsed by
+    /// sport, and its full page pushed on the tab's stack — the page a
+    /// favorite's tab shows, with the follow button in its bar
+    /// (`TeamBrowserView.SearchTab`). iOS 26's search role: on iPhone the
+    /// round search button at the bar's trailing end, on iPad in the tab
+    /// bar and sidebar.
+    private var searchTab: some TabContent<TeamRef.ID> {
+        Tab("Search", systemImage: "magnifyingglass", value: HomeTabs.searchID, role: .search) {
+            TeamBrowserView(
+                title: "Search",
+                searchTab: TeamBrowserView.SearchTab(
+                    path: $searchPath,
+                    isOnScreen: selection == HomeTabs.searchID,
+                    teamPage: { team in
+                        AnyView(TeamPageBody(
+                            team: team,
+                            pages: pages,
+                            isVisit: true,
+                            showSettings: { showsSettings = true }
+                        ))
+                    }
+                )
+            )
+            .modifier(TabPageChrome(theme: brandTheme))
+        }
+        .accessibilityIdentifier("search.tab")
     }
 
     /// Home: the favorites' live games, the week's upcoming games and
@@ -416,13 +470,19 @@ enum HomeRouting {
     }
 
     /// The favorites have been resolved to `teams`, in order. Home stays
-    /// selected; a team no longer among them falls back to the first, or to
-    /// Home with none left. A link that arrived while the favorites were
-    /// loading is handled now, selecting its team if it resolved and
-    /// dropped either way.
+    /// selected, and so does Search while there's a team (following one
+    /// from Search adds its tab without leaving Search); a team no longer
+    /// among them falls back to the first, or to Home with none left, as
+    /// Search does with none, there being no bar to hold it (H9). A link
+    /// that arrived while the favorites were loading is handled now,
+    /// selecting its team if it resolved and dropped either way.
     static func favoritesResolved(_ state: State, teams: [TeamRef.ID]) -> State {
         var next = state
-        if next.selection != HomeTabs.homeID, !teams.contains(next.selection) {
+        if next.selection == HomeTabs.searchID {
+            if !HomeTabs.showsTabBar(teamCount: teams.count) {
+                next.selection = HomeTabs.homeID
+            }
+        } else if next.selection != HomeTabs.homeID, !teams.contains(next.selection) {
             next.selection = teams.first ?? HomeTabs.homeID
         }
         // A tab that's gone takes the pages pushed over it along.
@@ -440,10 +500,10 @@ enum HomeRouting {
     /// The reader chose `team`: tapped its tab in the bar, or picked it
     /// from the bar's "More" list, whose page coming on screen reports it
     /// (`Home.teamPage`). Either way the same change: the team is selected
-    /// if it's one of `teams`, as Home's tab always is. Settings and a
-    /// pending link are left alone.
+    /// if it's one of `teams`, as Home's and Search's tabs always are.
+    /// Settings and a pending link are left alone.
     static func teamChosen(_ state: State, team: TeamRef.ID, teams: [TeamRef.ID]) -> State {
-        guard team == HomeTabs.homeID || teams.contains(team) else { return state }
+        guard HomeTabs.isFixedTab(team) || teams.contains(team) else { return state }
         var next = state
         next.selection = team
         return next
@@ -457,7 +517,8 @@ enum HomeRouting {
     /// for with it opens on the page on screen. Any other team's page is
     /// pushed over the selected tab's page, unless it's the one on top
     /// already; Home has no page stack, so from Home nothing happens.
-    /// Settings and a pending link are left alone.
+    /// Search has its own stack, which `Home` pushes on instead
+    /// (`searchPath`). Settings and a pending link are left alone.
     static func teamOpened(_ state: State, team: TeamRef, teams: [TeamRef.ID]) -> State {
         var next = state
         if teams.contains(team.id) {
@@ -473,6 +534,16 @@ enum HomeRouting {
         }
         next.visits[next.selection] = path
         return next
+    }
+
+    /// The search tab's stack with `team`'s page pushed on it, for a page
+    /// there that asked for it (`TeamNavigator`): any team, followed or
+    /// not, since the reader is browsing in Search and a favorite's tab is
+    /// a tap away. Not pushed again when it's the page on top, so a player
+    /// asked for on that page opens over it.
+    static func searchPath(_ path: [TeamBrowserView.Route], opening team: TeamRef) -> [TeamBrowserView.Route] {
+        guard path.last?.pushedTeam?.id != team.id else { return path }
+        return path + [.team(team)]
     }
 
     /// A widget link arrived (or `Home` appeared with one). Home's own
@@ -848,13 +919,13 @@ private struct TeamPageBody: View {
             }
 
             // Beside the gear on a team that wasn't followed when its page
-            // opened; never on a favorite's own page (t_8d15e070).
+            // opened, or opened from Search; never on a favorite's own page
+            // (t_8d15e070). Drawn in the bar's ink, not on the shared glass.
             if isVisit {
                 ToolbarItem(placement: .topBarTrailing) {
-                    FollowTeamButton(team: team)
-                        .foregroundStyle(barInk)
-                        .tint(barInk)
+                    FollowTeamButton(team: team, ink: barInk, heroHex: heroHex)
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
 
             ToolbarItem(placement: .topBarTrailing) {
@@ -890,18 +961,26 @@ private struct TeamPageBody: View {
     }
 }
 
-/// The follow button in a visited team's bar (`TeamVisit`, t_8d15e070): a
-/// plus that follows the team (`FavoritesStore.toggle`, which adds it), so
-/// its tab joins the bar.
+/// The follow button in a visited team's bar (`TeamVisit`, t_8d15e070), and
+/// on a page opened from Search: "Follow" with a plus, which follows the
+/// team (`FavoritesStore.toggle`, which adds it), so its tab joins the bar
+/// while the page stays on screen.
 ///
-/// Undo is the same button: once followed it stays in the bar as a filled
-/// checkmark, and a second tap unfollows the team and turns it back into
-/// the plus. A toggle rather than a timed "Added — Undo" banner, so undoing
-/// is never a race against a timer and reads the same to VoiceOver. A
-/// favorite's own page has no button: it's followed already, and Settings
-/// is where teams are unfollowed.
+/// Prominent while the team isn't followed: a capsule filled with the bar's
+/// ink, the words in the team colour (F2). Followed, it quietens to
+/// "Following" with a checkmark on a faint ink wash, like the gear beside it.
+///
+/// Undo is the same button: a second tap unfollows the team and turns it
+/// back into "Follow". A toggle rather than a timed "Added — Undo" banner,
+/// so undoing is never a race against a timer and reads the same to
+/// VoiceOver. A favorite's own page has no button: it's followed already,
+/// and Settings is where teams are unfollowed.
 private struct FollowTeamButton: View {
     let team: TeamRef
+    /// The bar's ink on the team colour (`TeamPageBody.barInk`).
+    let ink: Color
+    /// The team colour behind the bar: the words' colour on the ink fill.
+    let heroHex: String
 
     private var store: FavoritesStore { .shared }
 
@@ -912,10 +991,29 @@ private struct FollowTeamButton: View {
         } label: {
             Label(
                 followed ? "Following" : "Follow",
-                systemImage: followed ? "checkmark.circle.fill" : "plus.circle"
+                systemImage: followed ? "checkmark" : "plus"
             )
+            .labelStyle(.titleAndIcon)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
             .contentTransition(.symbolEffect(.replace))
+            .foregroundStyle(followed ? ink : Color(hexString: heroHex))
+            .padding(.horizontal, Theme.Spacing.m)
+            .frame(minHeight: 44)
+            .background {
+                Capsule().fill(followed ? ink.opacity(0.16) : ink)
+            }
+            .overlay {
+                Capsule().strokeBorder(ink.opacity(followed ? 0.35 : 0), lineWidth: 1)
+            }
+            .contentShape(.capsule)
         }
+        .buttonStyle(.plain)
+        .tint(ink)
+        // The bar doesn't grow with the text: past this, the large content
+        // viewer shows it, as for the system's bar buttons.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityShowsLargeContentViewer()
         .accessibilityLabel(followed ? "Following \(team.displayName)" : "Follow \(team.displayName)")
         .accessibilityHint(followed ? "Unfollows the team." : "Adds the team to your teams.")
         .accessibilityAddTraits(followed ? .isSelected : [])
@@ -1069,9 +1167,34 @@ enum HomeTabs {
     /// always `"sport/league:id"`, so it never names a team.
     static let homeID: TeamRef.ID = "home"
 
-    /// The tabs before the favorites': Home's. The favorites get the rest
-    /// of the bar's room.
-    static let fixedTabCount = 1
+    /// The search tab's value (`Home.selection`): like `homeID`, never a
+    /// team's id.
+    static let searchID: TeamRef.ID = "search"
+
+    /// The tabs that aren't a favorite's: Home's, and Search's. The
+    /// favorites get the rest of the bar's room.
+    ///
+    /// Search counts even though iOS 26 draws a search-role tab apart, at
+    /// the bar's trailing end: whether the system also leaves it out of the
+    /// five slots isn't something the app can read. Counting it can only
+    /// mark one team too many as under "More", whose page is then mounted
+    /// before it's chosen (harmless: its task runs only on screen); not
+    /// counting it could leave a team the system lists under "More" marked
+    /// as in the bar, a blank page that never loads (t_fa6748f4).
+    static let fixedTabCount = 2
+
+    /// Whether `tab` is one of the tabs that's always there with the bar:
+    /// Home's or Search's.
+    static func isFixedTab(_ tab: TeamRef.ID) -> Bool {
+        tab == homeID || tab == searchID
+    }
+
+    /// The team whose score alerts the presenter skips while `tab` is
+    /// selected (`ScoreAlertForeground.teamID`, C-8): the tab's team, or
+    /// none on Home or Search, which aren't one favorite's.
+    static func alertTeamID(forTab tab: TeamRef.ID) -> TeamRef.ID? {
+        isFixedTab(tab) ? nil : tab
+    }
 
     /// How many of `teamCount` favorites' tabs the bar itself shows, in
     /// order, for a bar of `barCapacity` (no limit for `nil`): all of them

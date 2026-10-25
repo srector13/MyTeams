@@ -356,15 +356,31 @@ struct HomeFeedTests {
         #expect(HomeSectionLayout(storage: "") == .standard)
         #expect(HomeSectionLayout(storage: HomeSectionLayout.standard.storage) == .standard)
 
+        // A section the string doesn't name goes in after the one it follows
+        // by default (Top Performers after Standings, Around Your Leagues
+        // after This Week), or last when that one isn't named either.
         let custom = HomeSectionLayout(storage: "news,-standings,bogus,week")
-        #expect(custom.order == [.news, .standings, .week, .myTeams, .performers])
+        #expect(custom.order == [.news, .standings, .performers, .week, .leagues, .myTeams])
         #expect(custom.hidden == [.standings])
-        #expect(custom.visible == [.news, .week, .myTeams, .performers])
+        #expect(custom.visible == [.news, .performers, .week, .leagues, .myTeams])
         #expect(HomeSectionLayout(storage: custom.storage) == custom)
 
-        let moved = HomeSectionLayout.standard.moving(fromOffsets: IndexSet(integer: 4), toOffset: 0)
+        let moved = HomeSectionLayout.standard.moving(fromOffsets: IndexSet(integer: 5), toOffset: 0)
         #expect(moved.order.first == .news)
         #expect(HomeSectionLayout.standard.setting(.news, shown: false).visible.contains(.news) == false)
+    }
+
+    @Test("Around Your Leagues follows This Week by default and in a layout saved before it existed")
+    func leaguesSectionPlacement() {
+        #expect(HomeSectionLayout.standard.order == [.myTeams, .week, .leagues, .standings, .performers, .news])
+        // A reader's reordered layout from before the section.
+        let saved = HomeSectionLayout(storage: "week,myTeams,-standings,performers,news")
+        #expect(saved.order == [.week, .leagues, .myTeams, .standings, .performers, .news])
+        #expect(saved.visible.contains(.leagues))
+        #expect(HomeSectionLayout(storage: "myTeams,-leagues,week").hidden == [.leagues])
+        // Full width on an iPad, beneath the balanced columns.
+        #expect(HomeSectionKind.leagues.regularColumn == .fullWidth)
+        #expect(HomeSectionKind.leagues.title == "Around Your Leagues")
     }
 
     @Test("With no game live, upcoming or recent, Home is the news feed alone")
@@ -435,5 +451,284 @@ struct HomeFeedTests {
         #expect(HomeFeed.combinedState([.loading, .failed]) == .loading)
         #expect(HomeFeed.combinedState([.failed, .loaded]) == .loaded)
         #expect(HomeFeed.combinedState([.failed, .failed]) == .failed)
+    }
+}
+
+@Suite("Home iPad performer grid")
+struct HomePerformerGridTests {
+    @Test("Four performers make a 2 × 2, never 3 + 1; three or fewer sit in one row")
+    func columns() {
+        #expect(HomePerformerGrid.columns(for: 1) == 1)
+        #expect(HomePerformerGrid.columns(for: 3) == 3)
+        #expect(HomePerformerGrid.columns(for: 4) == 2)
+        #expect(HomePerformerGrid.columns(for: 5) == 3)
+        #expect(HomePerformerGrid.columns(for: 6) == 3)
+    }
+}
+
+// MARK: - Around Your Leagues
+
+/// Around Your Leagues (`HomeFeed.leagueGames` and the rest): which of a
+/// league board's games a block lists, in what order, how many, how each
+/// reads, and when a board is fetched again.
+@Suite("Home Around Your Leagues")
+struct HomeLeaguesTests {
+    /// Tuesday, Oct 6, 2026, 16:00 UTC: noon in New York.
+    static let now = Date(timeIntervalSince1970: 1_791_302_400)
+
+    private let chiefs = TeamCatalog.seeded(league: .nfl, espnID: "12")!
+    private let jayhawks = TeamCatalog.seeded(league: .mensCollegeBasketball, espnID: "2305")!
+
+    /// A two-team game on a board, `away` at `home`.
+    private func board(
+        _ id: String,
+        state: String,
+        start: TimeInterval?,
+        away: (id: String, score: Int, rank: Int?) = ("1", 0, nil),
+        home: (id: String, score: Int, rank: Int?) = ("2", 0, nil),
+        completed: Bool? = nil,
+        broadcast: String = ""
+    ) -> ScoreboardGame {
+        ScoreboardGame(
+            gameID: id,
+            state: state,
+            completed: completed ?? (state == "post"),
+            competitors: [
+                ScoreboardCompetitor(teamID: home.id, homeAway: "home", score: home.score),
+                ScoreboardCompetitor(teamID: away.id, homeAway: "away", score: away.score),
+            ],
+            startDate: start.map { Self.now.addingTimeInterval($0) },
+            teams: [
+                home.id: ScoreboardTeam(shortName: "Home \(home.id)", rank: home.rank, winner: home.score > away.score),
+                away.id: ScoreboardTeam(shortName: "Away \(away.id)", rank: away.rank, winner: away.score > home.score),
+            ],
+            broadcast: broadcast
+        )
+    }
+
+    private let hour: TimeInterval = 60 * 60
+
+    @Test("Today asks for today's board; This Week for two days back to seven on, in Eastern days")
+    func dates() {
+        #expect(HomeFeed.leagueDates(scope: .today, now: Self.now) == "20261006")
+        #expect(HomeFeed.leagueDates(scope: .week, now: Self.now) == "20261004-20261013")
+        // 02:00 UTC is still the evening before in New York.
+        let lateNight = Date(timeIntervalSince1970: 1_791_252_000)
+        #expect(HomeFeed.leagueDates(scope: .today, now: lateNight) == "20261005")
+        let site = "https://site.api.espn.com/apis/site/v2/sports"
+        #expect(HomeFeed.leagueURL(.nfl, span: .week, settings: .standard, now: Self.now)
+            == "\(site)/football/nfl/scoreboard?dates=20261004-20261013&limit=1000")
+    }
+
+    @Test("A block lists live games first, then those to come by start, then results newest first")
+    func ordering() {
+        let games = HomeFeed.leagueGames(
+            [
+                board("final-old", state: "post", start: -30 * hour),
+                board("upcoming-late", state: "pre", start: 6 * hour),
+                board("live-late", state: "in", start: -1 * hour),
+                board("final-new", state: "post", start: -4 * hour),
+                board("upcoming-soon", state: "pre", start: 2 * hour),
+                board("live-early", state: "in", start: -2 * hour),
+                board("upcoming-undated", state: "pre", start: nil),
+                // Listed twice, as a range's day and today's board may.
+                board("live-early", state: "in", start: -2 * hour),
+            ],
+            league: .nfl,
+            favorites: [chiefs],
+            settings: .standard
+        )
+        #expect(games.map(\.id) == [
+            "live-early", "live-late", "upcoming-soon", "upcoming-late", "upcoming-undated", "final-new", "final-old",
+        ])
+        #expect(games.map(\.phase) == [.live, .live, .upcoming, .upcoming, .upcoming, .final, .final])
+    }
+
+    @Test("The favorites' own games are left out unless Include My Teams' Games is on, then marked")
+    func favoritesGames() throws {
+        let boards = [
+            board("chiefs", state: "pre", start: hour, away: ("12", 0, nil), home: ("13", 0, nil)),
+            board("other", state: "pre", start: 2 * hour),
+        ]
+        let without = HomeFeed.leagueGames(boards, league: .nfl, favorites: [chiefs], settings: .standard)
+        #expect(without.map(\.id) == ["other"])
+        #expect(without.first?.favorite == nil)
+
+        var settings = HomeLeaguesSettings.standard
+        settings.includesMyTeams = true
+        let with = HomeFeed.leagueGames(boards, league: .nfl, favorites: [chiefs], settings: settings)
+        #expect(with.map(\.id) == ["chiefs", "other"])
+        let chiefsGame = try #require(with.first)
+        #expect(chiefsGame.favorite == chiefs)
+        // The favorite draws as itself, its opponent as the board names it.
+        #expect(chiefsGame.awayTeam == chiefs)
+        #expect(chiefsGame.homeTeam.shortName == "Home 13")
+        #expect(chiefsGame.isFavorite(chiefsGame.away))
+        #expect(!chiefsGame.isFavorite(chiefsGame.home))
+
+        // A favorite in another league is no favorite here.
+        let elsewhere = HomeFeed.leagueGames(boards, league: .nfl, favorites: [jayhawks], settings: .standard)
+        #expect(elsewhere.map(\.id) == ["chiefs", "other"])
+    }
+
+    @Test("Top 25 only keeps a college game with a ranked side, and never filters a pro league")
+    func rankedOnly() {
+        let boards = [
+            board("ranked-home", state: "pre", start: hour, home: ("2", 0, 7)),
+            board("ranked-away", state: "pre", start: 2 * hour, away: ("1", 0, 25)),
+            board("unranked", state: "pre", start: 3 * hour),
+        ]
+        let college = HomeFeed.leagueGames(boards, league: .collegeFootball, favorites: [], settings: .standard)
+        #expect(college.map(\.id) == ["ranked-home", "ranked-away"])
+        #expect(college.first?.rank(of: college[0].home) == 7)
+
+        var everyone = HomeLeaguesSettings.standard
+        everyone.rankedOnly = false
+        #expect(HomeFeed.leagueGames(boards, league: .collegeFootball, favorites: [], settings: everyone).count == 3)
+        #expect(HomeFeed.leagueGames(boards, league: .nfl, favorites: [], settings: .standard).count == 3)
+    }
+
+    @Test("A block shows its first few games until See All opens the rest")
+    func capping() {
+        let games = HomeFeed.leagueGames(
+            (0..<7).map { board("g\($0)", state: "pre", start: TimeInterval($0 + 1) * hour) },
+            league: .nfl,
+            favorites: [],
+            settings: .standard
+        )
+        let three = HomeFeed.cappedLeagueGames(games, limit: .three, expanded: false)
+        #expect(three.shown.map(\.id) == ["g0", "g1", "g2"])
+        #expect(three.hiddenCount == 4)
+        #expect(HomeFeed.cappedLeagueGames(games, limit: .three, expanded: true).shown.count == 7)
+        #expect(HomeFeed.cappedLeagueGames(games, limit: .all, expanded: false).hiddenCount == 0)
+        #expect(HomeFeed.cappedLeagueGames(games, limit: .ten, expanded: false).shown.count == 7)
+        #expect(HomeLeaguesGameLimit.all.count == nil)
+        #expect(HomeLeaguesGameLimit.five.count == 5)
+    }
+
+    @Test("The section shows while a board loads, fails or has games, and goes when every one is empty")
+    func sectionVisibility() {
+        let game = HomeFeed.leagueGames([board("g", state: "pre", start: hour)], league: .nfl, favorites: [], settings: .standard)
+        #expect(!HomeFeed.leaguesSectionShows([]))
+        #expect(!HomeFeed.leaguesSectionShows([HomeLeagueBlock(league: .nfl, games: [], state: .loaded)]))
+        #expect(HomeFeed.leaguesSectionShows([HomeLeagueBlock(league: .nfl, games: [], state: .loading)]))
+        #expect(HomeFeed.leaguesSectionShows([HomeLeagueBlock(league: .nfl, games: [], state: .failed)]))
+        #expect(HomeFeed.leaguesSectionShows([
+            HomeLeagueBlock(league: .nfl, games: game, state: .loaded),
+            HomeLeagueBlock(league: .mlb, games: [], state: .loaded),
+        ]))
+    }
+
+    @Test("Today's board is polled each minute only while a game on it is live or about to start")
+    func pollingCadence() {
+        let quiet = [board("later", state: "pre", start: 3 * hour), board("done", state: "post", start: -5 * hour)]
+        #expect(HomeFeed.todayBoardInterval(quiet, now: Self.now) == HomeFeed.leagueQuietInterval)
+        #expect(HomeFeed.todayBoardInterval(quiet + [board("on", state: "in", start: -hour)], now: Self.now) == HomeFeed.leagueLiveInterval)
+        #expect(HomeFeed.todayBoardInterval([board("soon", state: "pre", start: 10 * 60)], now: Self.now) == HomeFeed.leagueLiveInterval)
+        // A start long past that never came is a stale listing, not a game.
+        #expect(HomeFeed.todayBoardInterval([board("stale", state: "pre", start: -5 * hour)], now: Self.now) == HomeFeed.leagueQuietInterval)
+
+        let url = "today"
+        let fresh = HomeLeagueFetch(url: url, games: quiet, fetchedAt: Self.now.addingTimeInterval(-60))
+        #expect(HomeFeed.leagueBoardIsDue(fetch: nil, url: url, span: .today, failedAt: nil, now: Self.now))
+        #expect(!HomeFeed.leagueBoardIsDue(fetch: fresh, url: url, span: .today, failedAt: nil, now: Self.now))
+        // A new day, or Top 25 switched, is another request.
+        #expect(HomeFeed.leagueBoardIsDue(fetch: fresh, url: "tomorrow", span: .today, failedAt: nil, now: Self.now))
+        #expect(HomeFeed.leagueBoardIsDue(
+            fetch: fresh, url: url, span: .today, failedAt: nil,
+            now: Self.now.addingTimeInterval(HomeFeed.leagueQuietInterval)
+        ))
+        // The week's span keeps half an hour.
+        let week = HomeLeagueFetch(url: url, games: [], fetchedAt: Self.now.addingTimeInterval(-20 * 60))
+        #expect(!HomeFeed.leagueBoardIsDue(fetch: week, url: url, span: .week, failedAt: nil, now: Self.now))
+        // A failure waits before it's asked again.
+        #expect(!HomeFeed.leagueBoardIsDue(fetch: nil, url: url, span: .today, failedAt: Self.now.addingTimeInterval(-30), now: Self.now))
+        #expect(HomeFeed.leagueBoardIsDue(
+            fetch: nil, url: url, span: .today,
+            failedAt: Self.now.addingTimeInterval(-HomeFeed.leagueRetryInterval), now: Self.now
+        ))
+    }
+
+    @Test("Today's board lays its live readings over the week's span, and adds what the span lacks")
+    func overlay() {
+        let week = [board("a", state: "pre", start: hour), board("b", state: "post", start: -30 * hour)]
+        let today = [board("a", state: "in", start: hour, away: ("1", 7, nil)), board("c", state: "pre", start: 2 * hour)]
+        let merged = HomeFeed.overlay(week, with: today, addingNew: true)
+        #expect(merged.map(\.gameID) == ["a", "b", "c"])
+        #expect(merged.first?.state == "in")
+        #expect(HomeFeed.overlay(week, with: today, addingNew: false).map(\.gameID) == ["a", "b"])
+        #expect(HomeFeed.overlay(week, with: [], addingNew: true) == week)
+    }
+
+    @Test("A row reads as the game stands: live with its stage, to come with its start, over as Final")
+    func status() throws {
+        let nfl = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+        var settings = HomeLeaguesSettings.standard
+        settings.includesMyTeams = true
+        let games = HomeFeed.leagueGames(nfl.games, league: .nfl, favorites: [chiefs], settings: settings)
+        // Live first, then the two finals, the later start first.
+        #expect(games.map(\.id) == ["401872962", "401872961", "401872952"])
+
+        let sunday = try #require(parseGameDate("2026-09-27T23:00Z"))
+        let live = HomeFeed.leagueStatus(of: games[0], now: sunday)
+        #expect(live == HomeLeagueStatus(primary: "Live", detail: "4th Quarter · 0:48", isLive: true))
+        #expect(games[0].accessibilityLabel(now: sunday) == "Rams 26, Broncos 23, Live, 4th Quarter · 0:48")
+
+        let result = HomeFeed.leagueStatus(of: games[2], now: sunday)
+        #expect(result.primary == "Final")
+        #expect(!result.isLive)
+        #expect(games[2].isWinner(games[2].away))
+        #expect(!games[2].isWinner(games[2].home))
+        #expect(games[2].accessibilityLabel(now: sunday).hasPrefix("Chiefs 24, Dolphins 10, Final"))
+        #expect(games[2].accessibilityLabel(now: sunday).hasSuffix("your team, Chiefs"))
+
+        // Monday night's, the day before: its start and its networks.
+        let monday = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260928"))
+        let upcoming = try #require(HomeFeed.leagueGames(monday.games, league: .nfl, favorites: [], settings: .standard).first)
+        let pregame = HomeFeed.leagueStatus(of: upcoming, now: sunday)
+        #expect(pregame.detail == "ESPN/ABC")
+        #expect(!pregame.isLive)
+        #expect(upcoming.shownScore(upcoming.home) == nil)
+        #expect(upcoming.accessibilityLabel(now: sunday).hasPrefix("Eagles at Bears, "))
+
+        // A cancelled game reads as one, without its 0–0.
+        let mlb = parseScoreboard(from: try Fixture.json("mlb_scoreboard_20260927"))
+        let cancelled = try #require(HomeFeed.leagueGames(mlb.games, league: .mlb, favorites: [], settings: .standard).first { $0.id == "401817103" })
+        #expect(HomeFeed.leagueStatus(of: cancelled, now: sunday).primary == "Canceled")
+        #expect(cancelled.shownScore(cancelled.home) == nil)
+    }
+
+    @Test("A league row opens a game sheet from the favorite's side, else the home side's")
+    func sheetEntry() throws {
+        let nfl = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+        var settings = HomeLeaguesSettings.standard
+        settings.includesMyTeams = true
+        let games = HomeFeed.leagueGames(nfl.games, league: .nfl, favorites: [chiefs], settings: settings)
+
+        // Rams at Broncos, followed by neither: the Broncos' side.
+        let neutral = HomeFeed.sheetEntry(for: try #require(games.first { $0.id == "401872962" }), now: Self.now)
+        #expect(neutral.team.espnID == "7")
+        #expect(neutral.team.shortName == "Broncos")
+        #expect(neutral.team.colorHex == "0a2343")
+        #expect(neutral.game.gameID == "401872962")
+        #expect(neutral.game.opponent == "Rams")
+        #expect(neutral.game.opponentID == "14")
+        #expect(neutral.game.gameHome)
+        #expect(neutral.game.score == "23")
+        #expect(neutral.game.opponentScore == "26")
+        #expect(!neutral.game.completed)
+        #expect(neutral.game.channel == "NBC")
+        #expect(neutral.game.location == "Empower Field at Mile High")
+        #expect(neutral.game.competition == .nfl)
+        #expect(!neutral.game.date.isEmpty)
+
+        // The Chiefs' win at Miami: theirs.
+        let followed = HomeFeed.sheetEntry(for: try #require(games.first { $0.id == "401872952" }), now: Self.now)
+        #expect(followed.team == chiefs)
+        #expect(!followed.game.gameHome)
+        #expect(followed.game.score == "24")
+        #expect(followed.game.opponentScore == "10")
+        #expect(followed.game.gameWin)
+        #expect(followed.game.completed)
     }
 }
