@@ -151,6 +151,37 @@ enum RecentSearches {
     }
 }
 
+/// The teams last opened from the search tab (`TeamBrowserView.SearchTab`),
+/// offered under "Recently Viewed" before anything is typed: their ids,
+/// newest first, each once, at most `limit`. Stored as one comma-separated
+/// string, which `@AppStorage` keeps as it is; a team id
+/// (`"sport/league:id"`) never holds a comma.
+enum RecentTeams {
+    static let key = "search.recentTeams.v1"
+    static let limit = 8
+
+    /// The ids in `stored`, newest first: only well-formed team ids, each
+    /// once, at most `limit`. Empty for none.
+    static func ids(from stored: String) -> [TeamRef.ID] {
+        var seen: Set<TeamRef.ID> = []
+        var ids: [TeamRef.ID] = []
+        for part in stored.split(separator: ",") {
+            let id = String(part)
+            guard TeamRef.parse(id: id) != nil, seen.insert(id).inserted else { continue }
+            ids.append(id)
+        }
+        return Array(ids.prefix(limit))
+    }
+
+    /// `stored` with `id` moved or added to the front and the oldest past
+    /// `limit` dropped. Anything that isn't a team id changes nothing.
+    static func recording(_ id: TeamRef.ID, in stored: String) -> String {
+        guard TeamRef.parse(id: id) != nil, !id.contains(",") else { return stored }
+        let rest = ids(from: stored).filter { $0 != id }
+        return ([id] + rest).prefix(limit).joined(separator: ",")
+    }
+}
+
 // MARK: - Sports
 
 /// How the picker names and draws a sport.
@@ -271,10 +302,33 @@ struct ConferenceSection: Identifiable, Hashable, Sendable {
 /// the same sports, search and rows, the picks under "Picked", and in place
 /// of the Done checkmark a Skip, and a Done below that stays disabled until
 /// a team is picked (`OnboardingTeamsStep`).
+///
+/// And the search tab's root, given `searchTab`: the same search over
+/// every catalog and the same sports-to-teams drill-down ("Browse by
+/// Sport"), but a team's row opens its full page on the tab's stack, with
+/// a follow button at its trailing end that follows without leaving; the
+/// teams last opened come first, under "Recently Viewed" (`RecentTeams`).
 struct TeamBrowserView: View {
     var title = "Teams"
     /// Set when the picker is onboarding's last step; `nil` everywhere else.
     var onboarding: OnboardingTeams? = nil
+    /// Set when the picker is the search tab's root (`Home`); `nil`
+    /// everywhere else.
+    var searchTab: SearchTab? = nil
+
+    /// What the picker needs from `Home` as the search tab's root.
+    struct SearchTab {
+        /// The tab's stack, which `Home` owns so that a team page on it can
+        /// push another team's page (`HomeRouting.searchPath`).
+        let path: Binding<[Route]>
+        /// Whether the search tab is selected. A team's page on its stack
+        /// is mounted only then, as a favorite's is only while its tab is
+        /// selected, so it polls only on screen.
+        let isOnScreen: Bool
+        /// A team's full page, as a favorite's tab shows it, with the
+        /// follow button in its bar (`TeamPageBody`, `isVisit`).
+        let teamPage: @MainActor (TeamRef) -> AnyView
+    }
 
     /// What onboarding's teams step does when it's left.
     struct OnboardingTeams {
@@ -289,6 +343,22 @@ struct TeamBrowserView: View {
     enum Route: Hashable {
         case sport(SportKind)
         case league(LeagueID)
+        /// A team's page, on the search tab's stack only (`SearchTab`).
+        case team(TeamRef)
+
+        /// The team whose page this is, for `.team`.
+        var pushedTeam: TeamRef? {
+            if case .team(let team) = self { return team }
+            return nil
+        }
+
+        /// Whether moving the stack from `old` to `new` leaves the page a
+        /// search was typed on, which clears the search: a sport or league
+        /// pushed or popped. A team's page pushed over the results, or
+        /// popped back to them, keeps it, so back returns to the results.
+        static func leavesSearchPage(from old: [Route], to new: [Route]) -> Bool {
+            old.filter { $0.pushedTeam == nil } != new.filter { $0.pushedTeam == nil }
+        }
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -307,6 +377,12 @@ struct TeamBrowserView: View {
     @State private var isSearchPresented = false
     @State private var recents: [RecentSearch] = []
 
+    /// The search tab's recently opened teams, as `RecentTeams` stores them.
+    @AppStorage(RecentTeams.key) private var recentTeamIDs: String = ""
+    /// Recently opened teams looked up so far, by id: those opened this
+    /// session, and those `RemoteTeamCatalog` has found since.
+    @State private var resolvedRecents: [TeamRef.ID: TeamRef] = [:]
+
     /// A row's crest, which scales with the team name beside it (B-3).
     @ScaledMetric(relativeTo: .body) private var crestSize: CGFloat = 24
 
@@ -316,13 +392,18 @@ struct TeamBrowserView: View {
 
     private var store: FavoritesStore { .shared }
 
+    /// The picker's stack: the search tab's, which `Home` owns, or its own.
+    private var stackPath: Binding<[Route]> {
+        searchTab?.path ?? $path
+    }
+
     private var isSearching: Bool {
         !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// The league on screen, if the reader has drilled down to one.
     private var currentLeague: LeagueID? {
-        for route in path.reversed() {
+        for route in stackPath.wrappedValue.reversed() {
             if case .league(let league) = route { return league }
         }
         return nil
@@ -333,9 +414,25 @@ struct TeamBrowserView: View {
         onboarding == nil ? "My Teams" : "Picked"
     }
 
-    /// The sports' header: "Browse by Sport" in onboarding (O5).
+    /// The sports' header: "Browse by Sport" in onboarding (O5) and on
+    /// the search tab.
     private var sportsHeader: String {
-        onboarding == nil ? "Sports" : "Browse by Sport"
+        onboarding == nil && searchTab == nil ? "Sports" : "Browse by Sport"
+    }
+
+    /// The search tab's recently opened teams, newest first: those looked
+    /// up so far, from this session, the loaded catalogs or the bundle.
+    /// One not found yet is left out rather than drawn as a stand-in.
+    private var recentTeams: [TeamRef] {
+        RecentTeams.ids(from: recentTeamIDs).compactMap { id in
+            resolvedRecents[id] ?? catalogTeam(id) ?? TeamCatalog.team(id: id)
+        }
+    }
+
+    /// The team with `id` in its league's loaded catalog, if loaded.
+    private func catalogTeam(_ id: TeamRef.ID) -> TeamRef? {
+        guard let league = TeamRef.parse(id: id)?.league else { return nil }
+        return catalogs[league]?.first { $0.id == id }
     }
 
     /// `league`'s teams, alphabetical by location.
@@ -352,45 +449,43 @@ struct TeamBrowserView: View {
     }
 
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: stackPath) {
             // Edit only once there's an order to change or a team to remove
             // in bulk: an empty list has nothing to edit. Onboarding's picks
-            // are a short list, removed with a tap or a swipe.
+            // are a short list, removed with a tap or a swipe. The search
+            // tab's teams are edited in Settings.
             page(
                 onboarding == nil ? title : OnboardingTeamsStep.title,
-                showsEditButton: onboarding == nil && myTeams.count > 1,
+                showsEditButton: onboarding == nil && searchTab == nil && myTeams.count > 1,
                 isRoot: true
             ) {
-                if onboarding != nil {
-                    Section {
-                        Text(OnboardingTeamsStep.caption)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                if searchTab != nil {
+                    searchTabRoot
+                } else {
+                    if onboarding != nil {
+                        Section {
+                            Text(OnboardingTeamsStep.caption)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityIdentifier("onboarding.teams")
                     }
-                    .accessibilityIdentifier("onboarding.teams")
-                }
 
-                if !myTeams.isEmpty {
-                    Section(myTeamsHeader) {
-                        ForEach(myTeams) { team in
-                            row(team)
-                                .swipeActions {
-                                    Button("Remove", role: .destructive) {
-                                        store.remove(team.id)
+                    if !myTeams.isEmpty {
+                        Section(myTeamsHeader) {
+                            ForEach(myTeams) { team in
+                                row(team)
+                                    .swipeActions {
+                                        Button("Remove", role: .destructive) {
+                                            store.remove(team.id)
+                                        }
                                     }
-                                }
+                            }
+                            .onMove { moveMyTeams(from: $0, to: $1) }
                         }
-                        .onMove { moveMyTeams(from: $0, to: $1) }
                     }
-                }
 
-                Section(sportsHeader) {
-                    ForEach(BrowsableSport.all) { sport in
-                        NavigationLink(value: Route.sport(sport.kind)) {
-                            sportRow(sport)
-                        }
-                        .accessibilityIdentifier("teamBrowser.sport.\(sport.kind.rawValue)")
-                    }
+                    sportsSection
                 }
             }
             .navigationDestination(for: Route.self) { route in
@@ -399,6 +494,8 @@ struct TeamBrowserView: View {
                     leaguesPage(kind)
                 case .league(let league):
                     teamsPage(league)
+                case .team(let team):
+                    teamPage(team)
                 }
             }
         }
@@ -419,9 +516,22 @@ struct TeamBrowserView: View {
         .task(id: query) {
             await searchRemotelyIfNeeded()
         }
-        // A search belongs to the page it was typed on.
-        .onChange(of: path) {
-            query = ""
+        // The search tab's recently opened teams that no loaded catalog
+        // or the bundle knows, such as an ESPN search hit's.
+        .task(id: recentTeamIDs) {
+            guard searchTab != nil else { return }
+            for id in RecentTeams.ids(from: recentTeamIDs) where resolvedRecents[id] == nil {
+                if let team = await FavoritesStore.resolve(id, within: .seconds(5)) {
+                    resolvedRecents[id] = team
+                }
+            }
+        }
+        // A search belongs to the page it was typed on; a team's page
+        // pushed over its results keeps it (`Route.leavesSearchPage`).
+        .onChange(of: stackPath.wrappedValue) { old, new in
+            if Route.leavesSearchPage(from: old, to: new) {
+                query = ""
+            }
         }
         // Full height, however it was opened: a searchable list
         // of every league's teams has no useful partial height (X-9).
@@ -448,7 +558,9 @@ struct TeamBrowserView: View {
             if isSearching {
                 searchResults
             } else {
-                if isSearchPresented && !recents.isEmpty {
+                // The search tab offers its recently opened teams instead,
+                // on its first page (`searchTabRoot`).
+                if isSearchPresented && !recents.isEmpty && searchTab == nil {
                     recentSearches
                 }
                 rows
@@ -461,7 +573,9 @@ struct TeamBrowserView: View {
             prompt: "Search all teams"
         )
         .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
+        // The search tab's first page is a tab's root, titled large as
+        // Home's is; the rest are the picker's pages.
+        .navigationBarTitleDisplayMode(isRoot && searchTab != nil ? .large : .inline)
         .toolbar {
             if showsEditButton {
                 ToolbarItem(placement: .topBarLeading) {
@@ -477,8 +591,9 @@ struct TeamBrowserView: View {
                     .accessibilityIdentifier("onboarding.teams.skip")
                 }
             }
-            // Onboarding finishes with its own Done, below the list.
-            if onboarding == nil {
+            // Onboarding finishes with its own Done, below the list; the
+            // search tab is a tab, with nothing to dismiss.
+            if onboarding == nil && searchTab == nil {
                 ToolbarItem(placement: .confirmationAction) {
                     // Following applies as it's tapped, so this confirms
                     // the picks: the system's glass checkmark (X-8).
@@ -533,6 +648,57 @@ struct TeamBrowserView: View {
         }
         .padding(.horizontal, Theme.Spacing.l)
         .padding(.vertical, Theme.Spacing.m)
+    }
+
+    /// The sports, each opening its leagues.
+    private var sportsSection: some View {
+        Section(sportsHeader) {
+            ForEach(BrowsableSport.all) { sport in
+                NavigationLink(value: Route.sport(sport.kind)) {
+                    sportRow(sport)
+                }
+                .accessibilityIdentifier("teamBrowser.sport.\(sport.kind.rawValue)")
+            }
+        }
+    }
+
+    /// The search tab's first page before anything is typed: the teams
+    /// last opened from it, then the sports to browse.
+    @ViewBuilder
+    private var searchTabRoot: some View {
+        let recent = recentTeams
+        if !recent.isEmpty {
+            Section {
+                ForEach(recent) { team in
+                    searchRow(team, identifier: "search.recent")
+                }
+            } header: {
+                HStack {
+                    Text("Recently Viewed")
+                    Spacer()
+                    Button("Clear") {
+                        recentTeamIDs = ""
+                    }
+                    .font(.subheadline)
+                    .accessibilityLabel("Clear recently viewed teams")
+                    .accessibilityIdentifier("search.recent.clear")
+                }
+            }
+        }
+
+        sportsSection
+    }
+
+    /// A team's full page on the search tab's stack, mounted only while the
+    /// tab is selected (`SearchTab.isOnScreen`).
+    @ViewBuilder
+    private func teamPage(_ team: TeamRef) -> some View {
+        if let searchTab, searchTab.isOnScreen {
+            searchTab.teamPage(team)
+        } else {
+            Theme.Surface.content
+                .ignoresSafeArea()
+        }
     }
 
     /// A sport's leagues.
@@ -777,61 +943,96 @@ struct TeamBrowserView: View {
         .accessibilityIdentifier("teamBrowser.recent.\(recent.team.id)")
     }
 
-    /// A team to follow or unfollow. Given its `club`, as search results are,
-    /// the row stands for the club in every league it was found in: it is
-    /// followed under any of them, and the other leagues show as chips.
-    /// Following one from a search records it in `recents`.
-    private func row(_ team: TeamRef, club: ClubGroup? = nil, fromSearch: Bool = false) -> some View {
-        let followed = club == nil ? store.isFavorite(team.id) : !store.followedClubIDs(of: team).isEmpty
-        let otherBadges = club?.otherLeagues.map(\.badge) ?? []
-        // One element per club: "Bayern Munich, Bundesliga, also in UCL".
-        let spokenLabel = otherBadges.isEmpty
+    /// Whether the row's team is followed: given its `club`, under any of
+    /// the club's leagues.
+    private func isFollowed(_ team: TeamRef, club: ClubGroup?) -> Bool {
+        club == nil ? store.isFavorite(team.id) : !store.followedClubIDs(of: team).isEmpty
+    }
+
+    /// What VoiceOver reads for a team's row, one element per club:
+    /// "Bayern Munich, Bundesliga, also in UCL".
+    private func spokenName(_ team: TeamRef, otherBadges: [String]) -> String {
+        otherBadges.isEmpty
             ? "\(team.displayName), \(team.league.badge)"
             : "\(team.displayName), \(team.league.badge), also in \(otherBadges.joined(separator: ", "))"
-        return Button {
-            if club == nil {
-                store.toggle(team)
-            } else {
-                store.toggleClub(team)
-            }
-            // New favorites want alerts (`FavoriteTeam.notify`), so the
-            // first follow is where the reader is asked for them.
-            if !followed {
-                Task { await ScoreAlertsPermissions.requestIfNeeded() }
-                if fromSearch {
-                    recents = RecentSearches.record(query, team: team)
-                }
-            }
-        } label: {
-            HStack(spacing: Theme.Spacing.m) {
-                TeamLogo(team: team, size: crestSize)
-                    .frame(width: crestSize, height: crestSize)
+    }
 
-                // Concrete label colours: in a button, the hierarchical
-                // `.primary` and `.secondary` take the tint, and every team
-                // read as a link.
-                Text(team.displayName)
-                    .foregroundStyle(Color.primary)
+    /// Follows or unfollows a row's team (its whole `club`, given one).
+    /// Following one from a search records it in `recents`.
+    private func toggleFollow(_ team: TeamRef, club: ClubGroup?, wasFollowed: Bool, fromSearch: Bool) {
+        if club == nil {
+            store.toggle(team)
+        } else {
+            store.toggleClub(team)
+        }
+        // New favorites want alerts (`FavoriteTeam.notify`), so the
+        // first follow is where the reader is asked for them.
+        if !wasFollowed {
+            Task { await ScoreAlertsPermissions.requestIfNeeded() }
+            if fromSearch {
+                recents = RecentSearches.record(query, team: team)
+            }
+        }
+    }
 
-                // Always shown: "Kansas City" is four teams in four leagues.
-                Text(team.league.badge)
+    /// A team row's crest, name and league chips.
+    private func teamLabel(_ team: TeamRef, otherBadges: [String]) -> some View {
+        HStack(spacing: Theme.Spacing.m) {
+            TeamLogo(team: team, size: crestSize)
+                .frame(width: crestSize, height: crestSize)
+
+            // Concrete label colours: in a button, the hierarchical
+            // `.primary` and `.secondary` take the tint, and every team
+            // read as a link.
+            Text(team.displayName)
+                .foregroundStyle(Color.primary)
+
+            // Always shown: "Kansas City" is four teams in four leagues.
+            Text(team.league.badge)
+                .font(.caption2.weight(.semibold))
+                .padding(.vertical, 2)
+                .padding(.horizontal, 6)
+                .foregroundStyle(Theme.Palette.metadata)
+                .background(Color.secondary.opacity(0.15))
+                .clipShape(.capsule)
+
+            // The club's other leagues, cups last. Only labels: a tap
+            // anywhere on the row follows (or opens) the club.
+            ForEach(otherBadges, id: \.self) { badge in
+                Text(badge)
                     .font(.caption2.weight(.semibold))
                     .padding(.vertical, 2)
                     .padding(.horizontal, 6)
                     .foregroundStyle(Theme.Palette.metadata)
-                    .background(Color.secondary.opacity(0.15))
-                    .clipShape(.capsule)
+                    .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
+            }
+        }
+    }
 
-                // The club's other leagues, cups last. Only labels: a tap
-                // anywhere on the row follows the club.
-                ForEach(otherBadges, id: \.self) { badge in
-                    Text(badge)
-                        .font(.caption2.weight(.semibold))
-                        .padding(.vertical, 2)
-                        .padding(.horizontal, 6)
-                        .foregroundStyle(Theme.Palette.metadata)
-                        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.3)))
-                }
+    /// A team's row: on the search tab one that opens its page
+    /// (`searchRow`), elsewhere one that follows or unfollows it
+    /// (`followRow`).
+    @ViewBuilder
+    private func row(_ team: TeamRef, club: ClubGroup? = nil, fromSearch: Bool = false) -> some View {
+        if searchTab != nil {
+            searchRow(team, club: club, fromSearch: fromSearch)
+        } else {
+            followRow(team, club: club, fromSearch: fromSearch)
+        }
+    }
+
+    /// A team to follow or unfollow. Given its `club`, as search results are,
+    /// the row stands for the club in every league it was found in: it is
+    /// followed under any of them, and the other leagues show as chips.
+    /// Following one from a search records it in `recents`.
+    private func followRow(_ team: TeamRef, club: ClubGroup?, fromSearch: Bool) -> some View {
+        let followed = isFollowed(team, club: club)
+        let otherBadges = club?.otherLeagues.map(\.badge) ?? []
+        return Button {
+            toggleFollow(team, club: club, wasFollowed: followed, fromSearch: fromSearch)
+        } label: {
+            HStack(spacing: Theme.Spacing.m) {
+                teamLabel(team, otherBadges: otherBadges)
 
                 Spacer(minLength: 0)
 
@@ -852,7 +1053,7 @@ struct TeamBrowserView: View {
         .sensoryFeedback(trigger: followed) { _, nowFollowed in
             nowFollowed ? .success : .impact(weight: .light)
         }
-        .accessibilityLabel(spokenLabel)
+        .accessibilityLabel(spokenName(team, otherBadges: otherBadges))
         .accessibilityAddTraits(followed ? .isSelected : [])
         .accessibilityIdentifier("teamBrowser.team.\(team.id)")
         .task {
@@ -860,7 +1061,80 @@ struct TeamBrowserView: View {
         }
     }
 
+    /// A team on the search tab: a tap on the row opens its full page on
+    /// the tab's stack, and the button at its trailing end follows or
+    /// unfollows it without leaving (`followButton`). Given its `club`, as
+    /// search results are, the row opens the club's canonical team and
+    /// follows the club. `identifier` prefixes the row's identifier:
+    /// `search.result` for results and browsed teams, `search.recent` for
+    /// recently viewed ones.
+    private func searchRow(
+        _ team: TeamRef,
+        club: ClubGroup? = nil,
+        fromSearch: Bool = false,
+        identifier: String = "search.result"
+    ) -> some View {
+        let followed = isFollowed(team, club: club)
+        let otherBadges = club?.otherLeagues.map(\.badge) ?? []
+        return HStack(spacing: Theme.Spacing.s) {
+            // Plain and borderless, so the list leaves each button its own
+            // taps rather than making the whole row one.
+            Button {
+                openTeam(team)
+            } label: {
+                teamLabel(team, otherBadges: otherBadges)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(spokenName(team, otherBadges: otherBadges))
+            .accessibilityHint("Opens the team's page.")
+            .accessibilityIdentifier("\(identifier).\(team.id)")
+
+            followButton(team, club: club, followed: followed, fromSearch: fromSearch)
+        }
+        .task {
+            await RemoteTeamCatalog.shared.prefetchLogos(for: [team])
+        }
+    }
+
+    /// A search row's follow control: a plus, followed a filled checkmark
+    /// in the tint, as the picker's rows show it. Its own 44-point target.
+    private func followButton(_ team: TeamRef, club: ClubGroup?, followed: Bool, fromSearch: Bool) -> some View {
+        Button {
+            toggleFollow(team, club: club, wasFollowed: followed, fromSearch: fromSearch)
+        } label: {
+            Image(systemName: followed ? "checkmark.circle.fill" : "plus.circle")
+                .symbolRenderingMode(.hierarchical)
+                .contentTransition(.symbolEffect(.replace))
+                .foregroundStyle(followed ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
+                .imageScale(.large)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
+                // The store changes outside any animation; the replace
+                // effect needs one to play. None under Reduce Motion.
+                .motionAnimation(Theme.Motion.stateChange, value: followed)
+        }
+        .buttonStyle(.borderless)
+        // A success tap on follow, a lighter one on unfollow (B-4, X-11).
+        .sensoryFeedback(trigger: followed) { _, nowFollowed in
+            nowFollowed ? .success : .impact(weight: .light)
+        }
+        .accessibilityLabel(followed ? "Unfollow \(team.displayName)" : "Follow \(team.displayName)")
+        .accessibilityAddTraits(followed ? .isSelected : [])
+        .accessibilityIdentifier("search.follow.\(team.id)")
+    }
+
     // MARK: Actions
+
+    /// Pushes `team`'s page on the search tab's stack and puts it first
+    /// among the recently viewed.
+    private func openTeam(_ team: TeamRef) {
+        guard let searchTab else { return }
+        resolvedRecents[team.id] = team
+        recentTeamIDs = RecentTeams.recording(team.id, in: recentTeamIDs)
+        searchTab.path.wrappedValue.append(.team(team))
+    }
 
     private func load(_ league: LeagueID) async {
         guard catalogs[league] == nil else { return }

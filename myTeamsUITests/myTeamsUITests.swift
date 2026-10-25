@@ -107,6 +107,49 @@ final class myTeamsUITests: XCTestCase {
         XCTAssertFalse(app.buttons["teamBrowser.sport.basketball"].exists)
     }
 
+    /// The search tab finds a team nobody follows and opens its full page,
+    /// with the Follow button in its bar. The league catalogs are served
+    /// from fixtures, so the NBA's always lists the Lakers; the launch
+    /// follows the four bundled teams, none of them the Lakers.
+    @MainActor
+    func testSearchTabOpensTeamPage() throws {
+        let app = launchWithFixtures()
+        XCTAssertTrue(teamTabs(app).firstMatch.waitForExistence(timeout: 10), "No tab bar: the launch follows four teams.")
+
+        // On a cold launch the bar can redraw under the first tap.
+        let field = app.searchFields.firstMatch
+        for _ in 0..<3 where !field.exists {
+            let tab = searchTab(app)
+            XCTAssertTrue(tab.waitForExistence(timeout: 5), "No search tab in the bar.")
+            tab.tap()
+            _ = field.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(field.exists, "The search tab has no search field.")
+        // Before typing: the sports to browse, as the team browser has.
+        XCTAssertTrue(app.buttons["teamBrowser.sport.basketball"].waitForExistence(timeout: 5), "No Browse by Sport on the search tab.")
+
+        field.tap()
+        field.typeText("Lakers")
+
+        let lakersID = "basketball/nba:13"
+        let result = app.buttons["search.result.\(lakersID)"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 20), "The NBA catalog fixture's Lakers never showed.")
+        // Its follow control, unfollowed: the Lakers aren't followed.
+        let rowFollow = app.buttons["search.follow.\(lakersID)"].firstMatch
+        XCTAssertTrue(rowFollow.exists, "The result has no follow control.")
+        XCTAssertTrue(rowFollow.label.hasPrefix("Follow "), "The Lakers read as followed: \(rowFollow.label)")
+
+        result.tap()
+
+        let header = app.descendants(matching: .any)["teamPage.header"].firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: 10), "The Lakers' page never opened.")
+        XCTAssertTrue(header.label.contains("Lakers"), "Another team's page opened: \(header.label)")
+        let follow = app.buttons["teamPage.follow"].firstMatch
+        XCTAssertTrue(follow.waitForExistence(timeout: 5), "No Follow button on a team that isn't followed.")
+        XCTAssertTrue(follow.label.hasPrefix("Follow "), "The page's button doesn't offer to follow: \(follow.label)")
+        XCTAssertTrue(app.buttons["home.settings"].exists, "No Settings beside the Follow button.")
+    }
+
     /// A first launch shows no teams, only Home's "Add your first team"
     /// (t_afe5c297, t_0b94af11): no favorites are followed by default, and
     /// no sheet opens over the home screen. Its button opens the team
@@ -255,6 +298,23 @@ final class myTeamsUITests: XCTestCase {
     /// Home's tab, first in the bar (t_0b94af11); not a team's tab.
     private static let homeTabLabel = "Home"
 
+    /// The search tab, at the bar's trailing end; not a team's tab.
+    private static let searchTabLabel = "Search"
+
+    /// The search tab, by its identifier, or its label on a launch whose
+    /// bar lost its identifiers (`teamTabs`). iOS 26 draws a search-role
+    /// tab apart from the others, so it's looked for anywhere as well as
+    /// in the tab bar.
+    @MainActor
+    private func searchTab(_ app: XCUIApplication) -> XCUIElement {
+        let candidates = [
+            app.tabBars.buttons["search.tab"],
+            app.tabBars.buttons[Self.searchTabLabel],
+            app.buttons["search.tab"],
+        ]
+        return candidates.first { $0.exists } ?? app.tabBars.buttons[Self.searchTabLabel]
+    }
+
     /// Home's tab, by its identifier, or its label on a launch whose bar
     /// lost its identifiers (`teamTabs`).
     @MainActor
@@ -280,7 +340,7 @@ final class myTeamsUITests: XCTestCase {
 
     /// The favorites' tabs, in bar order: those with a `teamPicker.team.`
     /// identifier, or, on a launch whose bar lost its identifiers, every
-    /// tab but Home and "More".
+    /// tab but Home, Search and "More".
     ///
     /// SwiftUI copies a `Tab`'s accessibility identifier onto the system tab
     /// bar's button only some of the time on the iOS 26 simulator: on the
@@ -289,8 +349,8 @@ final class myTeamsUITests: XCTestCase {
     @MainActor
     private func teamTabs(_ app: XCUIApplication) -> XCUIElementQuery {
         app.tabBars.buttons.matching(NSPredicate(
-            format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@ AND label != %@)",
-            "teamPicker.team.", Self.moreTabLabel, Self.homeTabLabel
+            format: "identifier BEGINSWITH %@ OR (identifier == '' AND label != %@ AND label != %@ AND label != %@)",
+            "teamPicker.team.", Self.moreTabLabel, Self.homeTabLabel, Self.searchTabLabel
         ))
     }
 
