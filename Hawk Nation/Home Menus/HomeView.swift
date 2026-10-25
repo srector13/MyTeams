@@ -13,13 +13,14 @@ import SwiftUI
 /// colour of the game that matters most right now (`HomeHero`), under the
 /// bar's title and date in that colour too; then, on the rounded grouped
 /// page over it, the reader's sections in the reader's order
-/// (`HomeSectionLayout`): My Teams, This Week, the standings, the top
-/// performers and the news.
+/// (`HomeSectionLayout`): My Teams, This Week, Around Your Leagues, the
+/// standings, the top performers and the news.
 ///
 /// Reads what the app already loads (`HomeViewModel`): the scoreboards the
 /// app polls for every favorite, the seasons it loaded to know which, the
 /// shared standings, poll and leaders stores, and each favorite's news
-/// feed. No page of its own to poll.
+/// feed — and, for Around Your Leagues, one board a minute per favorite
+/// league while a game on it is live, only while Home is on screen.
 ///
 /// Glass is the chrome's alone (§5.2): the navigation bar with its gear,
 /// and the tab bar. The sections are content cards on the grouped page, as
@@ -212,6 +213,16 @@ private struct HomeDashboard: View {
 
     @AppStorage(HomeSectionLayout.storageKey) private var layoutStorage = ""
 
+    // Around Your Leagues' settings (`HomeLeaguesSettings`), shared with
+    // Customize Home; the scope is the section header's picker too.
+    @AppStorage(HomeLeaguesSettings.scopeKey) private var leaguesScope: HomeLeaguesScope = .today
+    @AppStorage(HomeLeaguesSettings.hiddenLeaguesKey) private var leaguesHidden = ""
+    @AppStorage(HomeLeaguesSettings.limitKey) private var leaguesLimit: HomeLeaguesGameLimit = .five
+    @AppStorage(HomeLeaguesSettings.rankedOnlyKey) private var leaguesRankedOnly = true
+    @AppStorage(HomeLeaguesSettings.includesMyTeamsKey) private var leaguesIncludeMine = false
+    /// The league blocks the reader has opened past their cap ("See all").
+    @State private var expandedLeagues: Set<LeagueID> = []
+
     @State private var selectedGame: HomeGameSelection?
     @State private var selectedArticle: HomeHeadline?
     @State private var showsCustomize = false
@@ -261,8 +272,23 @@ private struct HomeDashboard: View {
         return min(height, max(Self.maxRegularHeroHeight, heroHeight + Theme.Radius.page * 4))
     }
 
+    /// Around Your Leagues' settings as stored.
+    private var leaguesSettings: HomeLeaguesSettings {
+        HomeLeaguesSettings(
+            scope: leaguesScope,
+            hiddenLeagues: HomeLeaguesSettings.hiddenLeagues(storage: leaguesHidden),
+            limit: leaguesLimit,
+            rankedOnly: leaguesRankedOnly,
+            includesMyTeams: leaguesIncludeMine
+        )
+    }
+
     var body: some View {
         let layout = HomeSectionLayout(storage: layoutStorage)
+        let leaguesConfiguration = HomeLeaguesConfiguration(
+            settings: leaguesSettings,
+            isShown: layout.visible.contains(.leagues)
+        )
         let featured = model.featured
         ZStack(alignment: .top) {
             // The hero colour. It never scrolls: the page covers it.
@@ -329,6 +355,19 @@ private struct HomeDashboard: View {
         }
         .sheet(isPresented: $showsCustomize) {
             HomeCustomizeSheet()
+        }
+        // Around Your Leagues fetches what a change of its settings calls
+        // for at once, not at the next minute.
+        .task(id: leaguesConfiguration) { [model] in
+            await model.configureLeagues(leaguesConfiguration)
+        }
+        // A league no favorite plays in any more forgets it was switched
+        // off, so following a team there again shows it.
+        .onChange(of: FavoritesStore.shared.teamIDs, initial: true) { _, ids in
+            let leagues = HomeLeaguesSettings.favoriteLeagues(teamIDs: ids)
+            if let pruned = HomeLeaguesSettings.pruned(storage: leaguesHidden, favoriteLeagues: leagues) {
+                leaguesHidden = pruned
+            }
         }
     }
 
@@ -401,6 +440,7 @@ private struct HomeDashboard: View {
         switch kind {
         case .myTeams: myTeamsSection
         case .week: weekSection
+        case .leagues: leaguesSection
         case .standings: standingsSection
         case .performers: performersSection
         case .news: newsSection
@@ -616,6 +656,203 @@ private struct HomeDashboard: View {
                     league: entry.team.league.descriptor
                 )
         )
+    }
+
+    // MARK: Around Your Leagues
+
+    /// The other games in the favorites' leagues (`HomeViewModel
+    /// .leagueBlocks`): a block per league on the inset surface, its games
+    /// live first, then to come, then results, capped at the reader's
+    /// games per league with "See all" beneath; skeleton rows while a board
+    /// loads, one line on a quiet day, an error with a retry. Two blocks
+    /// across on an iPad, full width under the columns (H10). Today or This
+    /// Week from the header's picker. Not drawn at all once every board has
+    /// answered with nothing.
+    @ViewBuilder
+    private var leaguesSection: some View {
+        let blocks = model.leagueBlocks
+        if HomeFeed.leaguesSectionShows(blocks) {
+            VStack(alignment: .leading) {
+                leaguesHeader
+                    .padding([.leading, .top, .trailing])
+
+                if isRegular && !usesStackedLayout && blocks.count > 1 {
+                    cardGrid(blocks, matchesHeights: false) { block in
+                        leagueBlock(block)
+                    }
+                } else {
+                    VStack(spacing: Theme.Spacing.m) {
+                        ForEach(blocks) { block in
+                            leagueBlock(block)
+                        }
+                    }
+                    .padding([.horizontal, .bottom])
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentCard()
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("home.section.leagues")
+        }
+    }
+
+    /// The section's header with the Today | This Week picker at its
+    /// trailing end, or beneath the title where the two don't fit on one
+    /// line (large text, a narrow phone).
+    private var leaguesHeader: some View {
+        let kind = HomeSectionKind.leagues
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.s) {
+                SectionHeader(systemImage: kind.systemImage, title: kind.title)
+                    .accessibilityAddTraits(.isHeader)
+                leaguesScopePicker
+                    .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                SectionHeader(systemImage: kind.systemImage, title: kind.title)
+                    .accessibilityAddTraits(.isHeader)
+                leaguesScopePicker
+            }
+        }
+    }
+
+    /// Today or This Week, stored as Customize Home's Show is.
+    private var leaguesScopePicker: some View {
+        Picker("Show", selection: $leaguesScope) {
+            ForEach(HomeLeaguesScope.allCases) { scope in
+                Text(scope.title).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.large)
+        .accessibilityLabel("Show games from")
+        .accessibilityIdentifier("home.leagues.scope")
+    }
+
+    /// One league's block: its heading, then its games, or what stands in
+    /// for them.
+    private func leagueBlock(_ block: HomeLeagueBlock) -> some View {
+        let expanded = expandedLeagues.contains(block.league)
+        let capped = HomeFeed.cappedLeagueGames(block.games, limit: leaguesLimit, expanded: expanded)
+        let canCollapse = expanded && (leaguesLimit.count.map { block.games.count > $0 } ?? false)
+        return VStack(alignment: .leading, spacing: 0) {
+            HomeLeagueBlockHeader(league: block.league)
+                .padding(.bottom, Theme.Spacing.xs)
+
+            if !block.games.isEmpty {
+                ForEach(Array(capped.shown.enumerated()), id: \.element.id) { index, entry in
+                    if index > 0 {
+                        Divider()
+                    }
+                    leagueGameButton(entry)
+                }
+                if capped.hiddenCount > 0 || canCollapse {
+                    Divider()
+                    leagueMoreButton(block, expanded: expanded)
+                }
+            } else if block.state == .loading {
+                VStack(spacing: 0) {
+                    ForEach(0..<3, id: \.self) { index in
+                        if index > 0 {
+                            Divider()
+                        }
+                        HomeLeagueGameRowPlaceholder()
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Loading"))
+            } else if block.state == .failed {
+                HStack {
+                    Text("Couldn't load \(block.title) games")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Palette.metadata)
+                    Spacer(minLength: Theme.Spacing.s)
+                    Button("Retry") {
+                        Task { [model] in
+                            await model.retryLeagueBoards()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("home.leagues.retry.\(block.league.path)")
+                }
+                .padding(.vertical, Theme.Spacing.xs)
+            } else {
+                Text(leaguesEmptyText(block))
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.Palette.metadata)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .accessibilityIdentifier("home.leagues.empty.\(block.league.path)")
+            }
+        }
+        .padding(Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home.leagues.league.\(block.league.path)")
+    }
+
+    /// "No Premier League games today", "No Top 25 NCAA Football games
+    /// this week".
+    private func leaguesEmptyText(_ block: HomeLeagueBlock) -> String {
+        let ranked = leaguesSettings.ranksOnly(block.league) ? "Top 25 " : ""
+        let when = leaguesScope == .today ? "today" : "this week"
+        return "No \(ranked)\(block.title) games \(when)"
+    }
+
+    /// A league game's row as a button that opens its game sheet, as This
+    /// Week's cards do, its teams' pages a long press away.
+    private func leagueGameButton(_ entry: HomeLeagueGame) -> some View {
+        let sourceID = "leagues|\(entry.id)"
+        return Button {
+            selectedGame = HomeGameSelection(entry: model.sheetEntry(for: entry), sourceID: sourceID)
+        } label: {
+            HomeLeagueGameRow(entry: entry, now: model.now)
+        }
+        .buttonStyle(.plain)
+        .zoomSource(id: sourceID, in: cardZoom)
+        .accessibilityLabel(entry.accessibilityLabel(now: model.now))
+        .accessibilityHint("Opens the game.")
+        .accessibilityIdentifier("home.leagues.game.\(entry.id)")
+        .contextMenu {
+            if let navigator {
+                ForEach([entry.awayTeam, entry.homeTeam]) { team in
+                    Button {
+                        navigator.open(teamID: team.id)
+                    } label: {
+                        Label(team.shortName, systemImage: "person.3")
+                    }
+                }
+            }
+        }
+    }
+
+    /// "See All 12 Premier League Games", or "Show Fewer" once open: the
+    /// block's games past its cap, in place.
+    private func leagueMoreButton(_ block: HomeLeagueBlock, expanded: Bool) -> some View {
+        Button {
+            withAnimation(Theme.Motion.animation(Theme.Motion.stateChange, reduceMotion: settings.reduceMotion)) {
+                if expanded {
+                    expandedLeagues.remove(block.league)
+                } else {
+                    expandedLeagues.insert(block.league)
+                }
+            }
+        } label: {
+            HStack(spacing: Theme.Spacing.xs) {
+                Text(expanded ? "Show Fewer" : "See All \(block.games.count) \(block.title) Games")
+                Spacer(minLength: Theme.Spacing.s)
+                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .imageScale(.small)
+                    .accessibilityHidden(true)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.tint)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home.leagues.more.\(block.league.path)")
     }
 
     // MARK: Standings

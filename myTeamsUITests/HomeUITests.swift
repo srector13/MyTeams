@@ -56,9 +56,12 @@ final class HomeUITests: XCTestCase {
     private static let broncos = 1_789_431_300.0   // 401872931, Sep 15 00:15 UTC, final
 
     /// Home's sections on `midSeason` in the default layout, top to bottom.
+    /// Around Your Leagues shows for the Chiefs' NFL: the fixtures serve no
+    /// scoreboard, so its block loads, then offers a retry.
     private static let sections = [
         "home.section.myTeams",
         "home.section.week",
+        "home.section.leagues",
         "home.section.news",
     ]
 
@@ -210,6 +213,63 @@ final class HomeUITests: XCTestCase {
             app.buttons.matching(identifier: "home.news.row").count, shownCount,
             "More News didn't show the rest of the stories."
         )
+    }
+
+    /// Around Your Leagues follows This Week, with a block for the Chiefs'
+    /// league and the Today | This Week picker in its header, which
+    /// switches the scope in place; the block is the NFL's whether its
+    /// board has answered or not.
+    @MainActor
+    func testAroundYourLeaguesShows() throws {
+        let app = launchWithFixtures(following: Self.chiefs, now: Self.midSeason)
+        XCTAssertTrue(element("home.page", in: app).waitForExistence(timeout: 10), "Home's page never showed.")
+
+        let section = element("home.section.leagues", in: app)
+        for _ in 0..<6 where !section.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(section.waitForExistence(timeout: 10), "No Around Your Leagues on Home.")
+        let block = element("home.leagues.league.football/nfl", in: app)
+        XCTAssertTrue(block.waitForExistence(timeout: 10), "No NFL block in Around Your Leagues.")
+
+        let scope = element("home.leagues.scope", in: app)
+        XCTAssertTrue(scope.waitForExistence(timeout: 5), "No Today | This Week picker in the section's header.")
+        let week = app.buttons["This Week"].firstMatch
+        for _ in 0..<3 where !week.isHittable {
+            app.swipeUp()
+        }
+        if week.isHittable {
+            week.tap()
+            XCTAssertTrue(week.isSelected, "This Week didn't take.")
+            XCTAssertTrue(block.waitForExistence(timeout: 10), "The NFL block went with the scope.")
+            // Back to Today, the default, for the tests after.
+            app.buttons["Today"].firstMatch.tap()
+        }
+    }
+
+    /// Settings' Home row opens Customize Home, Around Your Leagues'
+    /// settings among its sections.
+    @MainActor
+    func testSettingsOpensCustomizeHome() throws {
+        let app = launchWithFixtures(following: Self.chiefs, now: Self.midSeason)
+        let gear = app.buttons["home.settings"]
+        XCTAssertTrue(gear.waitForExistence(timeout: 10), "No Settings button in Home's bar.")
+
+        let homeRow = app.buttons["settings.home"]
+        // On a cold launch the bar can redraw under the first tap.
+        for _ in 0..<3 where !homeRow.exists {
+            gear.tap()
+            _ = homeRow.waitForExistence(timeout: 5)
+        }
+        XCTAssertTrue(homeRow.exists, "Settings never opened, or has no Home row.")
+        homeRow.tap()
+
+        XCTAssertTrue(element("home.customize.leagues", in: app).waitForExistence(timeout: 5), "Customize Home didn't open from Settings.")
+        let nflSwitch = element("home.customize.league.football/nfl", in: app)
+        for _ in 0..<4 where !nflSwitch.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(nflSwitch.waitForExistence(timeout: 5), "No switch for the Chiefs' league in Customize Home.")
     }
 
     /// Home's gear opens Settings, the way to alerts and teams from where

@@ -190,6 +190,114 @@ struct HomePerformer: Identifiable, Equatable, Sendable {
     var id: TeamRef.ID { team.id }
 }
 
+/// A game on one of the favorites' league boards, for Around Your Leagues
+/// (`HomeFeed.leagueGames`): the board's reading of it, its two sides — the
+/// reader's favorite where they follow one, else a stand-in built from the
+/// board's names, crest and colours — and where it stands.
+struct HomeLeagueGame: Identifiable, Hashable, Sendable {
+    /// Live first, then still to come, then over: the block's order.
+    enum Phase: Int, Hashable, Sendable, Comparable {
+        case live
+        case upcoming
+        case final
+
+        static func < (lhs: Phase, rhs: Phase) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
+    }
+
+    let league: LeagueID
+    let board: ScoreboardGame
+    let away: ScoreboardCompetitor
+    let home: ScoreboardCompetitor
+    /// The away side to draw: the favorite, or the board's stand-in.
+    let awayTeam: TeamRef
+    let homeTeam: TeamRef
+    /// The reader's favorite in the game, the home side's if both are.
+    let favorite: TeamRef?
+    let phase: Phase
+
+    var id: String { board.gameID }
+
+    /// Whether the board's scores mean anything yet: a game under way or
+    /// played out. A game to come, or called off, reads 0–0 on the board.
+    var hasScore: Bool {
+        board.state == "in" || (board.state == "post" && board.completed)
+    }
+
+    /// `competitor`'s score as the row shows it, or `nil` without one.
+    func shownScore(_ competitor: ScoreboardCompetitor) -> String? {
+        guard hasScore, let score = competitor.score else { return nil }
+        return "\(score)"
+    }
+
+    /// Whether `competitor` won: a played-out game's `winner` flag. Neither
+    /// side of a draw.
+    func isWinner(_ competitor: ScoreboardCompetitor) -> Bool {
+        phase == .final && board.completed && (board.teams[competitor.teamID]?.winner ?? false)
+    }
+
+    /// `competitor`'s poll rank, for a college game.
+    func rank(of competitor: ScoreboardCompetitor) -> Int? {
+        board.teams[competitor.teamID]?.rank
+    }
+
+    /// Whether `competitor` is the reader's favorite.
+    func isFavorite(_ competitor: ScoreboardCompetitor) -> Bool {
+        favorite?.espnID == competitor.teamID
+    }
+}
+
+/// What a league game's row says of its state (`HomeFeed.leagueStatus`):
+/// "Live" over "4th Quarter · 0:48", "Sun 8:25 PM" over "CBS", "Final"
+/// over the day it was played.
+struct HomeLeagueStatus: Equatable, Sendable {
+    let primary: String
+    let detail: String?
+    let isLive: Bool
+}
+
+/// One league's block in Around Your Leagues: every game it lists for the
+/// scope, in order (`HomeFeed.leagueGames`) — the view caps them — and
+/// whether its board has answered.
+struct HomeLeagueBlock: Identifiable, Equatable, Sendable {
+    let league: LeagueID
+    let games: [HomeLeagueGame]
+    let state: SectionLoadState
+
+    var id: LeagueID { league }
+
+    /// "Premier League", "NFL", "NCAA Football".
+    var title: String { league.descriptor.displayName }
+}
+
+/// What Home's view tells its model about Around Your Leagues: the reader's
+/// settings, and whether the section is in the layout at all — a hidden
+/// section fetches nothing.
+struct HomeLeaguesConfiguration: Equatable, Sendable {
+    var settings: HomeLeaguesSettings
+    var isShown: Bool
+
+    /// Before the view has said: nothing fetched.
+    static let unset = HomeLeaguesConfiguration(settings: .standard, isShown: false)
+}
+
+/// A league's board as Around Your Leagues last fetched it: the request it
+/// answered, so a new day, a new scope or Top 25 switched reads as not
+/// loaded, and when.
+struct HomeLeagueFetch: Equatable, Sendable {
+    let url: String
+    let games: [ScoreboardGame]
+    let fetchedAt: Date
+}
+
+/// Which of a league's two boards a request is for: today's, polled live,
+/// or the week's span, fetched rarely.
+enum HomeLeagueSpan: Hashable, Sendable {
+    case today
+    case week
+}
+
 // `HomeGame`, `HomeDay` and Home's ±7-day window (`upcomingWindow`,
 // `games`, `upcomingDays`, `results`) live in HomeFeedWindow.swift, which
 // the widget compiles too (R-9).
@@ -563,6 +671,341 @@ extension HomeFeed {
     }
 }
 
+// MARK: - Around Your Leagues
+
+extension HomeFeed {
+    /// How many days of results This Week reaches back.
+    static let leagueDaysBack = 2
+
+    /// How many days ahead This Week reaches, as This Week's strip does.
+    static let leagueDaysAhead = 7
+
+    /// How often today's board is fetched while a game on it is under way
+    /// or about to start: the scoreboards' own minute.
+    static let leagueLiveInterval: TimeInterval = 60
+
+    /// How often today's board is fetched while nothing on it is live, for
+    /// fixtures moved or added.
+    static let leagueQuietInterval: TimeInterval = 10 * 60
+
+    /// How long the week's span is trusted: today's board, laid over it,
+    /// carries the live scores.
+    static let leagueWeekInterval: TimeInterval = 30 * 60
+
+    /// How long after a failed request the same one is tried again.
+    static let leagueRetryInterval: TimeInterval = 2 * 60
+
+    /// How soon before its start a game makes today's board live.
+    static let leagueStartWindow: TimeInterval = 15 * 60
+
+    /// How long after its start a game that never left "pre" keeps the
+    /// board live: past that, the board's listing is stale, not late.
+    static let leagueOverdueWindow: TimeInterval = 4 * 60 * 60
+
+    /// The days of US Eastern time ESPN files the boards under.
+    private static let easternCalendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York") ?? .gmt
+        return calendar
+    }()
+
+    /// The scoreboard `dates` for `scope` at `now`: today's
+    /// (`scoreboardDay(for:)`), or the span from `leagueDaysBack` before it
+    /// to `leagueDaysAhead` after, as ESPN's range form, `"20261023-20261101"`.
+    static func leagueDates(scope: HomeLeaguesScope, now: Date) -> String {
+        let today = scoreboardDay(for: now)
+        guard scope == .week else { return today }
+        let calendar = easternCalendar
+        let first = calendar.date(byAdding: .day, value: -leagueDaysBack, to: now) ?? now
+        let last = calendar.date(byAdding: .day, value: leagueDaysAhead, to: now) ?? now
+        return "\(scoreboardDay(for: first))-\(scoreboardDay(for: last))"
+    }
+
+    /// The request for `league`'s board over `span`.
+    static func leagueURL(_ league: LeagueID, span: HomeLeagueSpan, settings: HomeLeaguesSettings, now: Date) -> String {
+        let scope: HomeLeaguesScope = span == .today ? .today : .week
+        return league.roundupScoreboardURL(
+            dates: leagueDates(scope: scope, now: now),
+            rankedOnly: settings.ranksOnly(league)
+        )
+    }
+
+    /// How long today's board stays fresh: `leagueLiveInterval` while a game
+    /// on it is under way, or due to start within `leagueStartWindow` (or
+    /// late starting, up to `leagueOverdueWindow`); `leagueQuietInterval`
+    /// otherwise.
+    static func todayBoardInterval(_ games: [ScoreboardGame], now: Date) -> TimeInterval {
+        let busy = games.contains { game in
+            if game.state == "in" { return true }
+            guard game.state == "pre", let start = game.startDate else { return false }
+            let untilStart = start.timeIntervalSince(now)
+            return untilStart <= leagueStartWindow && untilStart >= -leagueOverdueWindow
+        }
+        return busy ? leagueLiveInterval : leagueQuietInterval
+    }
+
+    /// Whether `span`'s board, last fetched as `fetch`, is due: never
+    /// fetched for `url`, or older than its interval. A request that failed
+    /// waits `leagueRetryInterval` before it is tried again.
+    static func leagueBoardIsDue(
+        fetch: HomeLeagueFetch?,
+        url: String,
+        span: HomeLeagueSpan,
+        failedAt: Date?,
+        now: Date
+    ) -> Bool {
+        if let failedAt, now.timeIntervalSince(failedAt) < leagueRetryInterval { return false }
+        guard let fetch, fetch.url == url else { return true }
+        let interval = span == .today ? todayBoardInterval(fetch.games, now: now) : leagueWeekInterval
+        return now.timeIntervalSince(fetch.fetchedAt) >= interval
+    }
+
+    /// `base` with each game `fresher` also lists replaced by its reading
+    /// there, and, with `addingNew`, `fresher`'s other games added after.
+    static func overlay(_ base: [ScoreboardGame], with fresher: [ScoreboardGame], addingNew: Bool) -> [ScoreboardGame] {
+        guard !fresher.isEmpty else { return base }
+        var byID: [String: ScoreboardGame] = [:]
+        for game in fresher where byID[game.gameID] == nil {
+            byID[game.gameID] = game
+        }
+        var seen: Set<String> = []
+        var merged = base.map { game -> ScoreboardGame in
+            seen.insert(game.gameID)
+            return byID[game.gameID] ?? game
+        }
+        if addingNew {
+            for game in fresher where seen.insert(game.gameID).inserted {
+                merged.append(game)
+            }
+        }
+        return merged
+    }
+
+    /// `league`'s games on `boards` as its block lists them, each once:
+    /// only two-team games; the favorites' own only with
+    /// `includesMyTeams`; only those with a ranked side where Top 25 only
+    /// applies (`ranksOnly`). Live first by start, then those to come by
+    /// start, then the rest newest first — results and games called off.
+    static func leagueGames(
+        _ boards: [ScoreboardGame],
+        league: LeagueID,
+        favorites: [TeamRef],
+        settings: HomeLeaguesSettings
+    ) -> [HomeLeagueGame] {
+        let followed = favorites.filter { $0.league == league }
+        var seen: Set<String> = []
+        var games: [HomeLeagueGame] = []
+        for board in boards where !board.gameID.isEmpty {
+            guard let sides = board.awayAndHome, seen.insert(board.gameID).inserted else { continue }
+            let homeFavorite = followed.first { $0.espnID == sides.home.teamID }
+            let awayFavorite = followed.first { $0.espnID == sides.away.teamID }
+            let favorite = homeFavorite ?? awayFavorite
+            if favorite != nil && !settings.includesMyTeams { continue }
+            if settings.ranksOnly(league) {
+                let ranked = board.teams[sides.home.teamID]?.rank != nil || board.teams[sides.away.teamID]?.rank != nil
+                guard ranked else { continue }
+            }
+            let phase: HomeLeagueGame.Phase = switch board.state {
+            case "in": .live
+            case "post": .final
+            default: .upcoming
+            }
+            games.append(HomeLeagueGame(
+                league: league,
+                board: board,
+                away: sides.away,
+                home: sides.home,
+                awayTeam: awayFavorite ?? standIn(sides.away.teamID, on: board, league: league),
+                homeTeam: homeFavorite ?? standIn(sides.home.teamID, on: board, league: league),
+                favorite: favorite,
+                phase: phase
+            ))
+        }
+        return games.sorted(by: leagueOrder)
+    }
+
+    /// The block's order: by phase; live and upcoming soonest first, the
+    /// rest newest first; a game with no start after those with one; then
+    /// by id, so a refresh never reshuffles a tie.
+    private static func leagueOrder(_ a: HomeLeagueGame, _ b: HomeLeagueGame) -> Bool {
+        if a.phase != b.phase { return a.phase < b.phase }
+        switch (a.board.startDate, b.board.startDate) {
+        case let (first?, second?) where first != second:
+            return a.phase == .final ? first > second : first < second
+        case (.some, nil):
+            return true
+        case (nil, .some):
+            return false
+        default:
+            return a.id < b.id
+        }
+    }
+
+    /// A team the reader doesn't follow, as the board names it, for its
+    /// crest (`TeamLogo`, which falls back to a monogram) and the game
+    /// sheet's colours.
+    static func standIn(_ teamID: String, on board: ScoreboardGame, league: LeagueID) -> TeamRef {
+        let team = board.teams[teamID] ?? ScoreboardTeam()
+        let short = team.rowName.isEmpty ? (board.teamNames[teamID] ?? "") : team.rowName
+        return TeamRef(
+            league: league,
+            espnID: teamID,
+            displayName: team.displayName.isEmpty ? short : team.displayName,
+            shortName: short,
+            abbreviation: team.abbreviation,
+            location: team.location,
+            colorHex: team.colorHex,
+            alternateColorHex: team.alternateColorHex,
+            logoURL: team.logoURL,
+            logoDarkURL: nil,
+            logoAsset: nil
+        )
+    }
+
+    /// The games a block shows: the first `limit`, unless the reader has
+    /// expanded it, and how many wait behind its "See all" row.
+    static func cappedLeagueGames(
+        _ games: [HomeLeagueGame],
+        limit: HomeLeaguesGameLimit,
+        expanded: Bool
+    ) -> (shown: [HomeLeagueGame], hiddenCount: Int) {
+        guard !expanded, let count = limit.count, games.count > count else { return (games, 0) }
+        return (Array(games.prefix(count)), games.count - count)
+    }
+
+    /// Whether Around Your Leagues shows at all: while any block loads or
+    /// has failed, or once any has a game. Every board answered with
+    /// nothing hides it, rather than a card of empty lines.
+    static func leaguesSectionShows(_ blocks: [HomeLeagueBlock]) -> Bool {
+        blocks.contains { $0.state != .loaded || !$0.games.isEmpty }
+    }
+
+    /// What `entry`'s row says of its state at `now`.
+    ///
+    /// - Live: "Live", over the stage as the hero and the alerts read it
+    ///   ("4th Quarter · 0:48", `LiveActivityStateMapper`), else the board's
+    ///   own words.
+    /// - To come: its start ("Today 7:00 PM", "Sun 8:25 PM",
+    ///   `GameCardContent.startLabel`), over the broadcast.
+    /// - Over: "Final" (or the board's "Final/OT"), or "Canceled" or
+    ///   "Postponed", over its day when that wasn't today.
+    static func leagueStatus(of entry: HomeLeagueGame, now: Date, calendar: Calendar = .autoupdatingCurrent) -> HomeLeagueStatus {
+        let board = entry.board
+        let detail = board.statusDetail.trimmingCharacters(in: .whitespaces)
+        switch entry.phase {
+        case .live:
+            let stage: String
+            if board.halftime {
+                stage = "Halftime"
+            } else if let state = LiveActivityStateMapper.state(of: board, league: entry.league), state.phase == .live {
+                stage = state.stage
+            } else {
+                stage = detail
+            }
+            return HomeLeagueStatus(primary: "Live", detail: stage.isEmpty ? nil : stage, isLive: true)
+        case .upcoming:
+            let broadcast = board.broadcast.isEmpty ? nil : board.broadcast
+            guard let start = board.startDate else {
+                return HomeLeagueStatus(primary: detail.isEmpty ? "Scheduled" : detail, detail: broadcast, isLive: false)
+            }
+            return HomeLeagueStatus(
+                primary: GameCardContent.startLabel(for: start, now: now, calendar: calendar),
+                detail: broadcast,
+                isLive: false
+            )
+        case .final:
+            let primary: String
+            if board.postponed {
+                primary = "Postponed"
+            } else if board.cancelled || !board.completed {
+                primary = "Canceled"
+            } else if detail.hasPrefix("Final") {
+                primary = detail
+            } else {
+                primary = "Final"
+            }
+            var day: String?
+            if let start = board.startDate, !calendar.isDate(start, inSameDayAs: now) {
+                day = start.formatted(Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone).weekday(.abbreviated).month(.abbreviated).day())
+            }
+            return HomeLeagueStatus(primary: primary, detail: day, isLive: false)
+        }
+    }
+
+    /// The game a league row opens, as its sheet (`GameDetailView`) takes
+    /// one: from the favorite's side where the reader follows a team in
+    /// it, else the home side's, built from the board — the sheet loads
+    /// the rest from the game's summary. A favorite's game its season lists
+    /// opens that listing instead (`HomeViewModel.sheetEntry(for:)`).
+    static func sheetEntry(for entry: HomeLeagueGame, now: Date) -> HomeGame {
+        let board = entry.board
+        let followsAway = entry.favorite != nil && entry.favorite?.espnID == entry.away.teamID
+        let side = followsAway ? entry.away : entry.home
+        let other = followsAway ? entry.home : entry.away
+        let team = followsAway ? entry.awayTeam : entry.homeTeam
+        let opponent = followsAway ? entry.homeTeam : entry.awayTeam
+        let start = board.startDate
+        let game = Game(
+            eventID: board.gameID,
+            team: team.shortName,
+            opponent: opponent.shortName,
+            opponentID: other.teamID,
+            score: entry.shownScore(side) ?? "",
+            opponentScore: entry.shownScore(other) ?? "",
+            time: start.map { $0.formatted(date: .omitted, time: .shortened) } ?? "",
+            date: start.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? "",
+            dateAsDate: start ?? now,
+            opponentLogo: opponent.logoURL?.absoluteString ?? "",
+            channel: board.broadcast.isEmpty ? "TBD" : board.broadcast,
+            location: board.venue,
+            gameHome: side.homeAway == "home",
+            gameID: board.gameID,
+            pointer: 0,
+            gameWin: board.completed && (board.teams[side.teamID]?.winner ?? false),
+            completed: board.completed,
+            competitionName: board.name,
+            cancelled: board.cancelled,
+            postponed: board.postponed,
+            gameClock: board.clock,
+            gamePeriod: "\(board.period)",
+            gameHalftime: board.halftime,
+            competition: entry.league,
+            neutralSite: board.neutralSite
+        )
+        return HomeGame(team: team, game: game)
+    }
+}
+
+extension HomeLeagueGame {
+    /// "Arsenal 2, Chelsea 1, Final": away first, as the row reads; "Eagles
+    /// at Bears, Mon 8:15 PM, ESPN" before a score; ranks spoken, and the
+    /// reader's own team said.
+    func accessibilityLabel(now: Date) -> String {
+        func side(_ competitor: ScoreboardCompetitor, _ team: TeamRef) -> String {
+            var name = team.shortName
+            if let rank = rank(of: competitor) {
+                name = "number \(rank) \(name)"
+            }
+            if let score = shownScore(competitor) {
+                name += " \(score)"
+            }
+            return name
+        }
+        let status = HomeFeed.leagueStatus(of: self, now: now)
+        var parts = hasScore
+            ? [side(away, awayTeam), side(home, homeTeam)]
+            : ["\(side(away, awayTeam)) at \(side(home, homeTeam))"]
+        parts.append(status.primary)
+        if let detail = status.detail {
+            parts.append(detail)
+        }
+        if let favorite {
+            parts.append("your team, \(favorite.shortName)")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
 /// One answer from the tables Home loads per favorite (`HomeViewModel
 /// .loadTables()`).
 private enum HomeTableAnswer: Sendable {
@@ -590,6 +1033,12 @@ private enum HomeTableAnswer: Sendable {
 ///   (`downloadNewsData`, up to the 25 stories `TeamRef.newsURL` asks
 ///   for), fetched again once `TeamFeed.news.timeToLive` has run out, as a
 ///   team page's is.
+/// - Around Your Leagues reads each favorite league's ESPN scoreboard:
+///   today's, fetched each minute only while a game on it is live or about
+///   to start and every ten minutes otherwise, and for This Week one
+///   request for the whole span (`?dates=YYYYMMDD-YYYYMMDD`) every half
+///   hour, kept in the `FeedCache`. Only while Home is on screen with the
+///   section shown; the center's own polling is left as it was.
 ///
 /// One cadence (`refreshInterval`, the center's): the clock moves on for
 /// the hero and This Week, and any news feed past its time-to-live is
@@ -628,11 +1077,29 @@ final class HomeViewModel {
     /// favorites last changed: their sections' placeholders until then.
     private(set) var tablesState: SectionLoadState = .loading
 
+    /// Around Your Leagues' settings and whether it shows, as Home's view
+    /// last passed them (`configureLeagues(_:)`). Until then nothing is
+    /// fetched for it.
+    private(set) var leaguesConfiguration = HomeLeaguesConfiguration.unset
+    /// Each favorite league's board for today, polled live while Home is on
+    /// screen (`HomeFeed.todayBoardInterval`).
+    private var leagueToday: [LeagueID: HomeLeagueFetch] = [:]
+    /// Each favorite league's board for the week's span, while the scope is
+    /// This Week.
+    private var leagueWeek: [LeagueID: HomeLeagueFetch] = [:]
+    /// When each league request last failed, by URL: its block's error
+    /// until it answers, and its retry's pacing.
+    private var leagueFailures: [String: Date] = [:]
+    /// The league requests under way, so the minute's refresh and a change
+    /// of settings never ask twice.
+    @ObservationIgnored private var leagueLoadsInFlight: Set<String> = []
+
     private let scoreboards: LeagueScoreboardCenter
     private let loadNews: @Sendable (String) async -> Result<[News], NetworkError>
     private let loadStandings: @Sendable (LeagueID) async -> Standings?
     private let loadLeaders: @Sendable (TeamRef) async -> [LeaderBoard]
     private let loadPollRanks: @Sendable (LeagueID) async -> PollRanks
+    private let loadLeagueBoard: @Sendable (String, FeedCachePolicy) async -> Result<[ScoreboardGame], NetworkError>
     private let clock: @MainActor () -> Date
 
     init(
@@ -641,6 +1108,9 @@ final class HomeViewModel {
         loadStandings: @escaping @Sendable (LeagueID) async -> Standings? = { await StandingsStore.shared.standings(for: $0) },
         loadLeaders: @escaping @Sendable (TeamRef) async -> [LeaderBoard] = { await TeamLeadersStore.shared.leaders(for: $0) },
         loadPollRanks: @escaping @Sendable (LeagueID) async -> PollRanks = { await PollRankStore.shared.ranks(for: $0) },
+        loadLeagueBoard: @escaping @Sendable (String, FeedCachePolicy) async -> Result<[ScoreboardGame], NetworkError> = { url, policy in
+            await HTTPClient.shared.fetch(url, cache: policy).map(empty: []) { parseScoreboard(from: $0).games }
+        },
         now: @escaping @MainActor () -> Date = { HomeViewModel.launchNow() }
     ) {
         self.scoreboards = scoreboards
@@ -648,6 +1118,7 @@ final class HomeViewModel {
         self.loadStandings = loadStandings
         self.loadLeaders = loadLeaders
         self.loadPollRanks = loadPollRanks
+        self.loadLeagueBoard = loadLeagueBoard
         self.clock = now
         self.now = now()
     }
@@ -763,6 +1234,177 @@ final class HomeViewModel {
         teams.compactMap { newsCachedAt[$0.id] }.min()
     }
 
+    // MARK: Around Your Leagues
+
+    /// The favorites' leagues, each once, in favorites order.
+    var leagues: [LeagueID] {
+        HomeLeaguesSettings.favoriteLeagues(teamIDs: teams.map(\.id))
+    }
+
+    /// Around Your Leagues' blocks: one per favorite league the reader
+    /// hasn't switched off, its games for the scope. This Week's span has
+    /// today's board laid over it, for the live scores; and where the
+    /// center is polling a league for a favorite's game, its reading of the
+    /// games both list, so a row and the hero never disagree. None while
+    /// the section is hidden.
+    var leagueBlocks: [HomeLeagueBlock] {
+        let configuration = leaguesConfiguration
+        guard configuration.isShown else { return [] }
+        let settings = configuration.settings
+        let current = now
+        let polling = scoreboards.pollingLeagues
+        return leagues.filter { settings.shows($0) }.map { league -> HomeLeagueBlock in
+            let todayURL = HomeFeed.leagueURL(league, span: .today, settings: settings, now: current)
+            let today = leagueToday[league].flatMap { $0.url == todayURL ? $0 : nil }
+            var boards: [ScoreboardGame] = []
+            let state: SectionLoadState
+            switch settings.scope {
+            case .today:
+                boards = today?.games ?? []
+                state = today != nil ? .loaded : (leagueFailures[todayURL] != nil ? .failed : .loading)
+            case .week:
+                let weekURL = HomeFeed.leagueURL(league, span: .week, settings: settings, now: current)
+                let week = leagueWeek[league].flatMap { $0.url == weekURL ? $0 : nil }
+                boards = HomeFeed.overlay(week?.games ?? [], with: today?.games ?? [], addingNew: true)
+                if week != nil {
+                    state = .loaded
+                } else if leagueFailures[weekURL] != nil {
+                    // Today's games at least, where today's board answered.
+                    state = today != nil ? .loaded : .failed
+                } else {
+                    state = .loading
+                }
+            }
+            if polling.contains(league) {
+                boards = HomeFeed.overlay(boards, with: scoreboards.games[league] ?? [], addingNew: false)
+            }
+            return HomeLeagueBlock(
+                league: league,
+                games: HomeFeed.leagueGames(boards, league: league, favorites: teams, settings: settings),
+                state: state
+            )
+        }
+    }
+
+    /// The game a league row opens: the favorite's listing where its season
+    /// has the game, so the sheet reads as This Week's does; else the game
+    /// as the board has it (`HomeFeed.sheetEntry(for:now:)`).
+    func sheetEntry(for entry: HomeLeagueGame) -> HomeGame {
+        if let favorite = entry.favorite,
+           let scheduled = seasons[favorite.id]?.first(where: { $0.gameID == entry.id }) {
+            return HomeGame(team: favorite, game: scheduled)
+        }
+        return HomeFeed.sheetEntry(for: entry, now: now)
+    }
+
+    /// Takes the view's settings for Around Your Leagues and fetches what
+    /// they newly call for: a scope switched to This Week, a league
+    /// switched on. Called whenever they change, and as Home appears.
+    func configureLeagues(_ configuration: HomeLeaguesConfiguration) async {
+        leaguesConfiguration = configuration
+        await refreshLeagueBoards(force: false)
+    }
+
+    /// A block's Retry: every failed league request again, at once.
+    func retryLeagueBoards() async {
+        leagueFailures = [:]
+        await refreshLeagueBoards(force: false)
+    }
+
+    /// Fetches the league boards that are due (`HomeFeed.leagueBoardIsDue`)
+    /// — every one when `force`d — for the leagues shown: today's for each,
+    /// and the week's span too while the scope is This Week. One request
+    /// per league and span, all at once. Nothing while the section is
+    /// hidden, and nothing once Home is off screen: only `run`'s minute and
+    /// the view's changes call this.
+    private func refreshLeagueBoards(force: Bool) async {
+        let configuration = leaguesConfiguration
+        guard configuration.isShown else { return }
+        let settings = configuration.settings
+        let current = now
+        // Boards of leagues no longer followed go.
+        let followed = Set(leagues)
+        if leagueToday.keys.contains(where: { !followed.contains($0) }) {
+            leagueToday = leagueToday.filter { followed.contains($0.key) }
+        }
+        if leagueWeek.keys.contains(where: { !followed.contains($0) }) {
+            leagueWeek = leagueWeek.filter { followed.contains($0.key) }
+        }
+
+        let spans: [HomeLeagueSpan] = settings.scope == .week ? [.today, .week] : [.today]
+        var wanted: Set<String> = []
+        var pending: [(league: LeagueID, span: HomeLeagueSpan, url: String, policy: FeedCachePolicy)] = []
+        for league in leagues where settings.shows(league) {
+            for span in spans {
+                let url = HomeFeed.leagueURL(league, span: span, settings: settings, now: current)
+                wanted.insert(url)
+                let fetch = span == .today ? leagueToday[league] : leagueWeek[league]
+                guard !leagueLoadsInFlight.contains(url),
+                      force || HomeFeed.leagueBoardIsDue(
+                        fetch: fetch, url: url, span: span, failedAt: leagueFailures[url], now: current
+                      )
+                else { continue }
+                // Today's is asked of the network each time, the cache only
+                // standing in offline; the week's span is read from the
+                // cache while it is fresh, unless the reader pulled.
+                let policy: FeedCachePolicy = span == .week && !force
+                    ? .preferCache(maxAge: HomeFeed.leagueWeekInterval)
+                    : .persist
+                pending.append((league: league, span: span, url: url, policy: policy))
+            }
+        }
+        // Failures of requests no longer made (yesterday's, another scope's)
+        // are forgotten.
+        if leagueFailures.keys.contains(where: { !wanted.contains($0) }) {
+            leagueFailures = leagueFailures.filter { wanted.contains($0.key) }
+        }
+        let requests = pending
+        guard !requests.isEmpty else { return }
+        for request in requests {
+            leagueLoadsInFlight.insert(request.url)
+        }
+
+        let load = loadLeagueBoard
+        let answers = await withTaskGroup(
+            of: (Int, Result<[ScoreboardGame], NetworkError>).self,
+            returning: [(Int, Result<[ScoreboardGame], NetworkError>)].self
+        ) { group in
+            for (index, request) in requests.enumerated() {
+                let url = request.url
+                let policy = request.policy
+                group.addTask {
+                    (index, await load(url, policy))
+                }
+            }
+            var answers: [(Int, Result<[ScoreboardGame], NetworkError>)] = []
+            for await answer in group {
+                answers.append(answer)
+            }
+            return answers
+        }
+
+        for (index, result) in answers {
+            let request = requests[index]
+            leagueLoadsInFlight.remove(request.url)
+            switch result {
+            case .success(let games):
+                let fetch = HomeLeagueFetch(url: request.url, games: games, fetchedAt: clock())
+                switch request.span {
+                case .today: leagueToday[request.league] = fetch
+                case .week: leagueWeek[request.league] = fetch
+                }
+                if leagueFailures[request.url] != nil {
+                    leagueFailures[request.url] = nil
+                }
+            case .failure(let error):
+                // Home went away mid-load: nothing to report.
+                if case .cancelled = error { continue }
+                // A failure keeps the last board on screen.
+                leagueFailures[request.url] = clock()
+            }
+        }
+    }
+
     /// `game`'s live score for `team` on the scoreboard, for a game that
     /// has got under way since the last `refreshInterval`.
     func liveScore(for game: Game, team: TeamRef) -> LiveGameScore? {
@@ -801,7 +1443,9 @@ final class HomeViewModel {
     private func keepCurrent() async {
         while !Task.isCancelled {
             now = clock()
+            async let leagues: Void = refreshLeagueBoards(force: false)
             await refreshNews(force: false)
+            await leagues
             do {
                 try await Task.sleep(for: Self.refreshInterval)
             } catch {
@@ -819,7 +1463,8 @@ final class HomeViewModel {
         async let news: Void = refreshNews(force: true)
         async let schedules: Void = scoreboards.retryFailedSchedules()
         async let tables: Void = loadTables()
-        _ = await (news, schedules, tables)
+        async let leagues: Void = refreshLeagueBoards(force: true)
+        _ = await (news, schedules, tables, leagues)
     }
 
     /// Retries the news feeds that failed.

@@ -187,6 +187,97 @@ struct LeagueScoreboardParsingTests {
         #expect(parseScoreboard(from: JSON(data: Data())).games.isEmpty)
         #expect(parseScoreboard(from: JSON(data: Data(#"{"events": {"id": "1"}}"#.utf8))).games.isEmpty)
     }
+
+    // MARK: Around Your Leagues' fields
+
+    @Test("A scoreboard names, crests, colours and places each side, and says how the game stands")
+    func roundupFields() throws {
+        let board = parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260927"))
+
+        // events[0]: Rams (14, away) at Broncos (7, home), 0:48 in the 4th, on NBC.
+        let live = try #require(board.games.first { $0.gameID == "401872962" })
+        let broncos = try #require(live.teams["7"])
+        #expect(broncos.abbreviation == "DEN")
+        #expect(broncos.shortName == "Broncos")
+        #expect(broncos.displayName == "Denver Broncos")
+        #expect(broncos.location == "Denver")
+        #expect(broncos.colorHex == "0a2343")
+        #expect(broncos.alternateColorHex == "fc4c02")
+        #expect(broncos.logoURL == URL(string: "https://a.espncdn.com/i/teamlogos/nfl/500/scoreboard/den.png"))
+        // A pro board writes 99, unranked, for every team.
+        #expect(broncos.rank == nil)
+        #expect(!broncos.winner)
+        #expect(live.statusDetail == "0:48 - 4th")
+        #expect(live.broadcast == "NBC")
+        #expect(live.venue == "Empower Field at Mile High")
+        #expect(!live.neutralSite)
+        #expect(live.name == "Los Angeles Rams at Denver Broncos")
+        #expect(!live.halftime && !live.cancelled && !live.postponed)
+        #expect(live.awayAndHome?.away.teamID == "14")
+        #expect(live.awayAndHome?.home.teamID == "7")
+
+        // The Chiefs (12) won at Miami (15), on CBS.
+        let result = try #require(board.games.first { $0.gameID == "401872952" })
+        #expect(result.teams["12"]?.winner == true)
+        #expect(result.teams["15"]?.winner == false)
+        #expect(result.statusDetail == "Final")
+        #expect(result.broadcast == "CBS")
+
+        // Monday night before kickoff: the start and the networks.
+        let monday = try #require(parseScoreboard(from: try Fixture.json("nfl_scoreboard_20260928")).games.first)
+        #expect(monday.statusDetail == "9/28 - 8:15 PM EDT")
+        #expect(monday.broadcast == "ESPN/ABC")
+        #expect(monday.startDate == parseGameDate("2026-09-29T00:15Z"))
+    }
+
+    @Test("College boards carry the poll rank, 99 reading as unranked; a called-off game says so")
+    func roundupRanksAndCalledOff() throws {
+        // ncaaf_scoreboard_20260829: #14 USC (30) beat San José State (23).
+        let college = parseScoreboard(from: try Fixture.json("ncaaf_scoreboard_20260829"))
+        let usc = try #require(college.games.first { $0.gameID == "401864494" })
+        #expect(usc.teams["30"]?.rank == 14)
+        #expect(usc.teams["23"]?.rank == nil)
+        #expect(usc.teams["23"]?.shortName == "San José St")
+
+        // mlb_scoreboard_20260927 id 401817103: STATUS_CANCELED.
+        let mlb = parseScoreboard(from: try Fixture.json("mlb_scoreboard_20260927"))
+        let cancelled = try #require(mlb.games.first { $0.gameID == "401817103" })
+        #expect(cancelled.cancelled)
+        #expect(!cancelled.postponed)
+        #expect(cancelled.statusDetail == "Canceled")
+
+        // epl_scoreboard_20260821: no `broadcast`, so the first of the
+        // `broadcasts` names; full time.
+        let epl = try #require(parseScoreboard(from: try Fixture.json("epl_scoreboard_20260821")).games.first)
+        #expect(epl.broadcast == "USA Net")
+        #expect(epl.statusDetail == "FT")
+        #expect(epl.teams["359"]?.winner == true)
+        #expect(epl.venue == "Emirates Stadium")
+
+        #expect(ScoreboardTeam.pollRank(99) == nil)
+        #expect(ScoreboardTeam.pollRank(0) == nil)
+        #expect(ScoreboardTeam.pollRank(25) == 25)
+        #expect(ScoreboardTeam.pollRank(nil) == nil)
+    }
+
+    @Test("Around Your Leagues asks for a day or a span in one request; college boards follow Top 25 only")
+    func roundupURLs() {
+        let site = "https://site.api.espn.com/apis/site/v2/sports"
+        #expect(LeagueID.nfl.roundupScoreboardURL(dates: day, rankedOnly: true)
+            == "\(site)/football/nfl/scoreboard?dates=20260927")
+        // A span asks for more than the board's short default page.
+        #expect(LeagueID.premierLeague.roundupScoreboardURL(dates: "20260925-20261004", rankedOnly: true)
+            == "\(site)/soccer/eng.1/scoreboard?dates=20260925-20261004&limit=1000")
+        // Top 25 only: the default board, filtered; otherwise all of Division I.
+        #expect(LeagueID.mensCollegeBasketball.roundupScoreboardURL(dates: day, rankedOnly: true)
+            == "\(site)/basketball/mens-college-basketball/scoreboard?dates=20260927")
+        #expect(LeagueID.mensCollegeBasketball.roundupScoreboardURL(dates: day, rankedOnly: false)
+            == "\(site)/basketball/mens-college-basketball/scoreboard?dates=20260927&groups=50&limit=1000")
+        #expect(LeagueID.collegeFootball.roundupScoreboardURL(dates: day, rankedOnly: false)
+            == "\(site)/football/college-football/scoreboard?dates=20260927&limit=1000")
+        // Today's pro board is the very URL the center polls.
+        #expect(LeagueID.nfl.roundupScoreboardURL(dates: day, rankedOnly: true) == LeagueID.nfl.scoreboardURL(day: day))
+    }
 }
 
 // MARK: - Batching
