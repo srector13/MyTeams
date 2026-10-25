@@ -619,6 +619,19 @@ struct HomeLeaguesTests {
         ]))
     }
 
+    @Test("Leagues with no games fold into one closing line; loading and failed boards keep their blocks")
+    func quietLeaguesFold() {
+        let game = HomeFeed.leagueGames([board("g", state: "pre", start: hour)], league: .nfl, favorites: [], settings: .standard)
+        let parts = HomeFeed.partitionLeagueBlocks([
+            HomeLeagueBlock(league: .nfl, games: game, state: .loaded),
+            HomeLeagueBlock(league: .mlb, games: [], state: .loaded),
+            HomeLeagueBlock(league: .nba, games: [], state: .loading),
+            HomeLeagueBlock(league: .nhl, games: [], state: .failed),
+        ])
+        #expect(parts.shown.map(\.league) == [.nfl, .nba, .nhl])
+        #expect(parts.quiet.map(\.league) == [.mlb])
+    }
+
     @Test("Today's board is polled each minute only while a game on it is live or about to start")
     func pollingCadence() {
         let quiet = [board("later", state: "pre", start: 3 * hour), board("done", state: "post", start: -5 * hour)]

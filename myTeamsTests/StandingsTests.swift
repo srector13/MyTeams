@@ -61,6 +61,7 @@ struct StandingsParsingTests {
         #expect(table.kind == .pointsTable)
         // children[0].standings.seasonDisplayName
         #expect(table.seasonDisplayName == "2026-27 English Premier League")
+        #expect(table.seasonLabel == "2026-27")
 
         let group = try #require(table.groups.first)
         #expect(group.id == "1")
@@ -186,6 +187,9 @@ struct StandingsParsingTests {
         let table = try standings("nba_standings", .nba)
         #expect(table.kind == .records)
         #expect(table.seasonDisplayName == "2026-27")
+        #expect(table.seasonLabel == "2026-27")
+        #expect(Standings.seasonLabel("2026") == "2026")
+        #expect(Standings.seasonLabel("Week 8 Poll") == "Week 8 Poll")
         #expect(table.groups.map(\.name) == ["Eastern Conference", "Western Conference"])
         #expect(table.groups.map(\.id) == ["5", "6"])
         #expect(table.groups.map(\.abbreviation) == ["East", "West"])
