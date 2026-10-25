@@ -286,24 +286,20 @@ private func scoreboardTeam(_ competitor: JSON) -> ScoreboardTeam {
 // MARK: - Around Your Leagues
 
 extension LeagueID {
-    /// The league's scoreboard for Home's Around Your Leagues
-    /// (`HomeViewModel`): one day (`"20261025"`) or a span of days
-    /// (`"20261023-20261101"`, ESPN's range form), one request either way.
+    /// The league's scoreboard for one day (`"20261025"`) of Home's Around
+    /// Your Leagues (`HomeViewModel`).
     ///
     /// A college board is big: with `rankedOnly` it asks for the default
     /// board (college basketball's featured games, college football's FBS)
     /// and the rows keep the ranked teams' games; without, basketball names
-    /// all of Division I (`groups=50`), as `scoreboardURL(day:)` does. A span
-    /// or a whole division asks for up to a thousand games, past the board's
-    /// short default page.
+    /// all of Division I (`groups=50&limit=1000`), as `scoreboardURL(day:)`
+    /// does. College football's default board is already its FBS slate, and
+    /// `limit=1000` there answers a shorter one (25 games of 44 on a
+    /// Saturday), so it asks for no more.
     func roundupScoreboardURL(dates: String, rankedOnly: Bool) -> String {
         var url = "https://site.api.espn.com/apis/site/v2/sports/\(path)/scoreboard?dates=\(dates)"
-        let wholeDivision = isCollege && !rankedOnly
-        if wholeDivision && sport == "basketball" {
-            url += "&groups=50"
-        }
-        if wholeDivision || dates.contains("-") {
-            url += "&limit=1000"
+        if isCollege && !rankedOnly && sport == "basketball" {
+            url += "&groups=50&limit=1000"
         }
         return url
     }

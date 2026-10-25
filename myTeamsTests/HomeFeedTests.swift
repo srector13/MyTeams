@@ -508,16 +508,41 @@ struct HomeLeaguesTests {
 
     private let hour: TimeInterval = 60 * 60
 
-    @Test("Today asks for today's board; This Week for two days back to seven on, in Eastern days")
+    @Test("Today asks for today's board; This Week for each day from two back to seven on, in Eastern days")
     func dates() {
-        #expect(HomeFeed.leagueDates(scope: .today, now: Self.now) == "20261006")
-        #expect(HomeFeed.leagueDates(scope: .week, now: Self.now) == "20261004-20261013")
+        #expect(HomeFeed.leagueDays(span: .today, now: Self.now) == ["20261006"])
+        let week = HomeFeed.leagueDays(span: .week, now: Self.now)
+        #expect(week.count == 10)
+        #expect(week.first == "20261004")
+        #expect(week.last == "20261013")
+        #expect(week.contains("20261006"))
         // 02:00 UTC is still the evening before in New York.
         let lateNight = Date(timeIntervalSince1970: 1_791_252_000)
-        #expect(HomeFeed.leagueDates(scope: .today, now: lateNight) == "20261005")
+        #expect(HomeFeed.leagueDays(span: .today, now: lateNight) == ["20261005"])
         let site = "https://site.api.espn.com/apis/site/v2/sports"
-        #expect(HomeFeed.leagueURL(.nfl, span: .week, settings: .standard, now: Self.now)
-            == "\(site)/football/nfl/scoreboard?dates=20261004-20261013&limit=1000")
+        let urls = HomeFeed.leagueURLs(.nfl, span: .week, settings: .standard, now: Self.now)
+        // ESPN's range form answers 400: a request a day.
+        #expect(urls.first == "\(site)/football/nfl/scoreboard?dates=20261004")
+        #expect(!urls.contains { $0.contains("-2026") })
+        #expect(HomeFeed.leagueURL(.nfl, span: .week, settings: .standard, now: Self.now) == urls.joined(separator: " "))
+        #expect(HomeFeed.leagueURL(.nfl, span: .today, settings: .standard, now: Self.now)
+            == "\(site)/football/nfl/scoreboard?dates=20261006")
+    }
+
+    @Test("A span's days load as one board, each game once in day order; any day failing fails the span")
+    func spanLoads() async {
+        let days = ["d1", "d2", "d3"]
+        let boards: [String: [ScoreboardGame]] = [
+            "d1": [board("a", state: "post", start: -hour)],
+            "d2": [board("b", state: "pre", start: hour), board("a", state: "post", start: -hour)],
+            "d3": [board("c", state: "pre", start: 2 * hour)],
+        ]
+        let merged = await HomeFeed.loadBoards(days, policy: .persist) { url, _ in .success(boards[url] ?? []) }
+        #expect((try? merged.get())?.map(\.gameID) == ["a", "b", "c"])
+        let failed = await HomeFeed.loadBoards(days, policy: .persist) { url, _ in
+            url == "d2" ? .failure(.httpError(status: 400)) : .success(boards[url] ?? [])
+        }
+        #expect((try? failed.get()) == nil)
     }
 
     @Test("A block lists live games first, then those to come by start, then results newest first")
