@@ -709,25 +709,70 @@ extension HomeFeed {
         return calendar
     }()
 
-    /// The scoreboard `dates` for `scope` at `now`: today's
-    /// (`scoreboardDay(for:)`), or the span from `leagueDaysBack` before it
-    /// to `leagueDaysAhead` after, as ESPN's range form, `"20261023-20261101"`.
-    static func leagueDates(scope: HomeLeaguesScope, now: Date) -> String {
-        let today = scoreboardDay(for: now)
-        guard scope == .week else { return today }
+    /// The scoreboard days `span` covers at `now`: today's
+    /// (`scoreboardDay(for:)`), or each from `leagueDaysBack` before it to
+    /// `leagueDaysAhead` after.
+    static func leagueDays(span: HomeLeagueSpan, now: Date) -> [String] {
+        guard span == .week else { return [scoreboardDay(for: now)] }
         let calendar = easternCalendar
-        let first = calendar.date(byAdding: .day, value: -leagueDaysBack, to: now) ?? now
-        let last = calendar.date(byAdding: .day, value: leagueDaysAhead, to: now) ?? now
-        return "\(scoreboardDay(for: first))-\(scoreboardDay(for: last))"
+        return (-leagueDaysBack...leagueDaysAhead).map { offset in
+            scoreboardDay(for: calendar.date(byAdding: .day, value: offset, to: now) ?? now)
+        }
     }
 
-    /// The request for `league`'s board over `span`.
+    /// The requests for `league`'s board over `span`, one a day. ESPN's
+    /// range form (`dates=20261023-20261101`) answers 400 for every league,
+    /// and its month form comes back short or empty for college boards, so
+    /// This Week asks a day at a time, as every other board in the app does.
+    static func leagueURLs(_ league: LeagueID, span: HomeLeagueSpan, settings: HomeLeaguesSettings, now: Date) -> [String] {
+        leagueDays(span: span, now: now).map { day in
+            league.roundupScoreboardURL(dates: day, rankedOnly: settings.ranksOnly(league))
+        }
+    }
+
+    /// The key `league`'s board over `span` is filed under, fetched and
+    /// failed by: today's one request, or the week's together.
     static func leagueURL(_ league: LeagueID, span: HomeLeagueSpan, settings: HomeLeaguesSettings, now: Date) -> String {
-        let scope: HomeLeaguesScope = span == .today ? .today : .week
-        return league.roundupScoreboardURL(
-            dates: leagueDates(scope: scope, now: now),
-            rankedOnly: settings.ranksOnly(league)
-        )
+        leagueURLs(league, span: span, settings: settings, now: now).joined(separator: " ")
+    }
+
+    /// `urls`' boards as one, all asked for at once: each game once, in
+    /// `urls`' order. Any request failing fails the lot, so the last board
+    /// stays on screen and the whole span is tried again.
+    static func loadBoards(
+        _ urls: [String],
+        policy: FeedCachePolicy,
+        load: @escaping @Sendable (String, FeedCachePolicy) async -> Result<[ScoreboardGame], NetworkError>
+    ) async -> Result<[ScoreboardGame], NetworkError> {
+        if urls.count == 1 { return await load(urls[0], policy) }
+        let answers = await withTaskGroup(
+            of: (Int, Result<[ScoreboardGame], NetworkError>).self,
+            returning: [Result<[ScoreboardGame], NetworkError>?].self
+        ) { group in
+            for (index, url) in urls.enumerated() {
+                group.addTask { (index, await load(url, policy)) }
+            }
+            var answers = [Result<[ScoreboardGame], NetworkError>?](repeating: nil, count: urls.count)
+            for await (index, answer) in group {
+                answers[index] = answer
+            }
+            return answers
+        }
+        var seen: Set<String> = []
+        var games: [ScoreboardGame] = []
+        for answer in answers {
+            switch answer {
+            case .success(let day)?:
+                for game in day where seen.insert(game.gameID).inserted {
+                    games.append(game)
+                }
+            case .failure(let error)?:
+                return .failure(error)
+            case nil:
+                return .failure(.cancelled)
+            }
+        }
+        return .success(games)
     }
 
     /// How long today's board stays fresh: `leagueLiveInterval` while a game
@@ -1324,8 +1369,8 @@ final class HomeViewModel {
 
     /// Fetches the league boards that are due (`HomeFeed.leagueBoardIsDue`)
     /// — every one when `force`d — for the leagues shown: today's for each,
-    /// and the week's span too while the scope is This Week. One request
-    /// per league and span, all at once. Nothing while the section is
+    /// and the week's span too while the scope is This Week, a request a
+    /// day. Every request at once. Nothing while the section is
     /// hidden, and nothing once Home is off screen: only `run`'s minute and
     /// the view's changes call this.
     private func refreshLeagueBoards(force: Bool) async {
@@ -1344,10 +1389,11 @@ final class HomeViewModel {
 
         let spans: [HomeLeagueSpan] = settings.scope == .week ? [.today, .week] : [.today]
         var wanted: Set<String> = []
-        var pending: [(league: LeagueID, span: HomeLeagueSpan, url: String, policy: FeedCachePolicy)] = []
+        var pending: [(league: LeagueID, span: HomeLeagueSpan, url: String, urls: [String], policy: FeedCachePolicy)] = []
         for league in leagues where settings.shows(league) {
             for span in spans {
-                let url = HomeFeed.leagueURL(league, span: span, settings: settings, now: current)
+                let urls = HomeFeed.leagueURLs(league, span: span, settings: settings, now: current)
+                let url = urls.joined(separator: " ")
                 wanted.insert(url)
                 let fetch = span == .today ? leagueToday[league] : leagueWeek[league]
                 guard !leagueLoadsInFlight.contains(url),
@@ -1361,7 +1407,7 @@ final class HomeViewModel {
                 let policy: FeedCachePolicy = span == .week && !force
                     ? .preferCache(maxAge: HomeFeed.leagueWeekInterval)
                     : .persist
-                pending.append((league: league, span: span, url: url, policy: policy))
+                pending.append((league: league, span: span, url: url, urls: urls, policy: policy))
             }
         }
         // Failures of requests no longer made (yesterday's, another scope's)
@@ -1381,10 +1427,10 @@ final class HomeViewModel {
             returning: [(Int, Result<[ScoreboardGame], NetworkError>)].self
         ) { group in
             for (index, request) in requests.enumerated() {
-                let url = request.url
+                let urls = request.urls
                 let policy = request.policy
                 group.addTask {
-                    (index, await load(url, policy))
+                    (index, await HomeFeed.loadBoards(urls, policy: policy, load: load))
                 }
             }
             var answers: [(Int, Result<[ScoreboardGame], NetworkError>)] = []

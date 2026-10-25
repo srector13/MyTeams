@@ -260,21 +260,21 @@ struct LeagueScoreboardParsingTests {
         #expect(ScoreboardTeam.pollRank(nil) == nil)
     }
 
-    @Test("Around Your Leagues asks for a day or a span in one request; college boards follow Top 25 only")
+    @Test("Around Your Leagues asks for a day's board; college boards follow Top 25 only")
     func roundupURLs() {
         let site = "https://site.api.espn.com/apis/site/v2/sports"
         #expect(LeagueID.nfl.roundupScoreboardURL(dates: day, rankedOnly: true)
             == "\(site)/football/nfl/scoreboard?dates=20260927")
-        // A span asks for more than the board's short default page.
-        #expect(LeagueID.premierLeague.roundupScoreboardURL(dates: "20260925-20261004", rankedOnly: true)
-            == "\(site)/soccer/eng.1/scoreboard?dates=20260925-20261004&limit=1000")
+        #expect(LeagueID.premierLeague.roundupScoreboardURL(dates: day, rankedOnly: true)
+            == "\(site)/soccer/eng.1/scoreboard?dates=20260927")
         // Top 25 only: the default board, filtered; otherwise all of Division I.
         #expect(LeagueID.mensCollegeBasketball.roundupScoreboardURL(dates: day, rankedOnly: true)
             == "\(site)/basketball/mens-college-basketball/scoreboard?dates=20260927")
         #expect(LeagueID.mensCollegeBasketball.roundupScoreboardURL(dates: day, rankedOnly: false)
             == "\(site)/basketball/mens-college-basketball/scoreboard?dates=20260927&groups=50&limit=1000")
+        // College football's default board is its FBS slate; limit=1000 answers a shorter one.
         #expect(LeagueID.collegeFootball.roundupScoreboardURL(dates: day, rankedOnly: false)
-            == "\(site)/football/college-football/scoreboard?dates=20260927&limit=1000")
+            == "\(site)/football/college-football/scoreboard?dates=20260927")
         // Today's pro board is the very URL the center polls.
         #expect(LeagueID.nfl.roundupScoreboardURL(dates: day, rankedOnly: true) == LeagueID.nfl.scoreboardURL(day: day))
     }
