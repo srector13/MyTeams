@@ -880,6 +880,17 @@ extension HomeFeed {
         blocks.contains { $0.state != .loaded || !$0.games.isEmpty }
     }
 
+    /// The blocks Around Your Leagues draws as blocks, and the leagues it
+    /// only names on one closing line ("No games today: MLB · NCAA Men's
+    /// Basketball") because their boards answered with nothing. A league
+    /// still loading, or whose board failed, keeps its block, for its
+    /// placeholder or its Retry.
+    static func partitionLeagueBlocks(_ blocks: [HomeLeagueBlock]) -> (shown: [HomeLeagueBlock], quiet: [HomeLeagueBlock]) {
+        let quiet = blocks.filter { $0.state == .loaded && $0.games.isEmpty }
+        let shown = blocks.filter { !($0.state == .loaded && $0.games.isEmpty) }
+        return (shown, quiet)
+    }
+
     /// What `entry`'s row says of its state at `now`.
     ///
     /// - Live: "Live", over the stage as the hero and the alerts read it

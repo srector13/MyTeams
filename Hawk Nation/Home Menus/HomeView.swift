@@ -670,8 +670,9 @@ private struct HomeDashboard: View {
     /// answered with nothing.
     @ViewBuilder
     private var leaguesSection: some View {
-        let blocks = model.leagueBlocks
-        if HomeFeed.leaguesSectionShows(blocks) {
+        let parts = HomeFeed.partitionLeagueBlocks(model.leagueBlocks)
+        let blocks = parts.shown
+        if HomeFeed.leaguesSectionShows(model.leagueBlocks) {
             VStack(alignment: .leading) {
                 leaguesHeader
                     .padding([.leading, .top, .trailing])
@@ -687,6 +688,17 @@ private struct HomeDashboard: View {
                         }
                     }
                     .padding([.horizontal, .bottom])
+                }
+
+                if !parts.quiet.isEmpty {
+                    // Leagues with nothing on, named once rather than a
+                    // block each saying so.
+                    Text(leaguesQuietText(parts.quiet))
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.Palette.metadata)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding([.horizontal, .bottom])
+                        .accessibilityIdentifier("home.leagues.quiet")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -789,6 +801,15 @@ private struct HomeDashboard: View {
         .background(Theme.Surface.insetCard, in: Theme.Radius.innerShape)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home.leagues.league.\(block.league.path)")
+    }
+
+    /// "No games today: MLB · Top 25 NCAA Men's Basketball".
+    private func leaguesQuietText(_ quiet: [HomeLeagueBlock]) -> String {
+        let when = leaguesScope == .today ? "today" : "this week"
+        let names = quiet.map { block in
+            (leaguesSettings.ranksOnly(block.league) ? "Top 25 " : "") + block.title
+        }
+        return "No games \(when): " + names.joined(separator: " · ")
     }
 
     /// "No Premier League games today", "No Top 25 NCAA Football games
