@@ -544,6 +544,71 @@ final class GUIAuditScreenshotTests: XCTestCase {
 
     // MARK: Helpers
 
+    /// The Search tab (any team, followed or not, and its page) and Home's
+    /// Around Your Leagues section with an English Premier League favorite,
+    /// its scope switch and its settings in Customize Home.
+    @MainActor
+    func test14_SearchAndLeagues() {
+        for dark in [false, true] {
+            run = "14-search-\(dark ? "dark" : "light")"
+            counter = 0
+            let app = launch(dark: dark)
+            guard waitForHome(app) else { app.terminate(); continue }
+            pause(3)
+            let tab = app.tabBars.buttons["Search"].exists
+                ? app.tabBars.buttons["Search"]
+                : app.descendants(matching: .any)["search.tab"].firstMatch
+            guard tab.waitForExistence(timeout: 5) else { miss("search tab"); app.terminate(); continue }
+            tab.tap(); pause(2.5)
+            shot("root")
+            let field = app.searchFields.firstMatch
+            if field.waitForExistence(timeout: 5) {
+                field.tap(); pause(0.8)
+                field.typeText("Arsenal"); pause(4)
+                shot("results")
+                let result = app.descendants(matching: .any)
+                    .matching(NSPredicate(format: "identifier BEGINSWITH %@", "search.result.")).firstMatch
+                if result.waitForExistence(timeout: 10) {
+                    result.tap(); pause(6)
+                    shot("team-page")
+                    app.swipeUp(); pause(1.5); shot("team-page-scroll1")
+                    app.swipeUp(); pause(1.5); shot("team-page-scroll2")
+                } else { miss("search result") }
+            } else { miss("search field") }
+            app.terminate()
+        }
+
+        for dark in [false, true] {
+            run = "14-leagues-\(dark ? "dark" : "light")"
+            counter = 0
+            let app = launch(dark: dark, favorites: Self.bundledTeams + ",soccer/eng.1:359")
+            guard waitForHome(app) else { app.terminate(); continue }
+            pause(6)
+            let section = app.descendants(matching: .any)["home.section.leagues"].firstMatch
+            for _ in 0..<8 where !(section.exists && section.isHittable) { app.swipeUp(); pause(0.8) }
+            if section.exists {
+                pause(2); shot("today")
+                app.swipeUp(); pause(1.2); shot("today-scroll1")
+                app.swipeUp(); pause(1.2); shot("today-scroll2")
+                for _ in 0..<2 { app.swipeDown(); pause(0.6) }
+                let week = app.buttons["This Week"].firstMatch
+                if week.waitForExistence(timeout: 3), week.isHittable {
+                    week.tap(); pause(4); shot("week")
+                    app.swipeUp(); pause(1.2); shot("week-scroll1")
+                } else { miss("scope picker") }
+            } else { miss("leagues section") }
+            let customize = app.buttons["home.customize"]
+            for _ in 0..<12 where !(customize.exists && customize.isHittable) { app.swipeUp(); pause(0.6) }
+            if customize.exists && customize.isHittable {
+                customize.tap(); pause(1.5); shot("customize")
+                app.swipeUp(); pause(1); shot("customize-scroll1")
+                app.swipeUp(); pause(1); shot("customize-scroll2")
+                app.buttons["home.customize.done"].tapIfExists(); pause(1)
+            } else { miss("customize") }
+            app.terminate()
+        }
+    }
+
     private var fixturesPath: String {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

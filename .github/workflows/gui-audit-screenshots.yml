@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'claude/design-signoff-shots'
+      - 'claude/search-leagues-shots'
 
 permissions:
   contents: write
@@ -26,16 +26,13 @@ jobs:
         include:
           - slot: iphone
             prefer: 'iPhone 17 Pro|iPhone 17|iPhone 16 Pro'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test12_PlayerSheets -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test13_SoccerPhotos -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight'
-          - slot: iphone-b
-            prefer: 'iPhone 17 Pro|iPhone 17|iPhone 16 Pro'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test01_Onboarding -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test02_EmptyState -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test04_LiveTourDark -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test05_DynamicTypeAX3 -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test09_Accessibility -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test10_ThemePalette -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test07_FixtureHomeMidSeason'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test14_SearchAndLeagues -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign'
           - slot: iphone-small
             prefer: 'iPhone 17e|iPhone 16e|iPhone SE|iPhone 13 mini|iPhone 16'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test05_DynamicTypeAX3'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test14_SearchAndLeagues'
           - slot: ipad
             prefer: 'iPad Pro 13-inch|iPad Pro 11-inch|iPad Air 13-inch|iPad Air 11-inch|iPad'
-            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test03_LiveTourLight -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test12_PlayerSheets'
+            only: '-only-testing:myTeamsUITests/GUIAuditScreenshotTests/test14_SearchAndLeagues -only-testing:myTeamsUITests/GUIAuditScreenshotTests/test11_HomeRedesign'
     steps:
       - uses: actions/checkout@v4
 
@@ -165,7 +162,7 @@ jobs:
         with:
           path: shots
           pattern: shots-*
-      - name: Commit to claude/signoff-shots-out
+      - name: Commit to claude/leagues-shots-out
         shell: bash
         run: |
           set -euo pipefail
@@ -177,8 +174,8 @@ jobs:
           done
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -b claude/signoff-shots-out
+          git checkout -q -b claude/leagues-shots-out
           git add -A
           git commit -qm "GUI audit screenshots for ${GITHUB_SHA::7} (run ${GITHUB_RUN_ID})"
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push -f origin claude/signoff-shots-out
+          git push -f origin claude/leagues-shots-out
