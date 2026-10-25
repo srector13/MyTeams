@@ -85,6 +85,20 @@ struct Standings: Hashable, Sendable {
     let seasonDisplayName: String
     let groups: [StandingsGroup]
 
+    /// The season as a caption shows it: `"2026-27"`. A soccer feed names
+    /// the season after the competition (`"2026-27 English Premier
+    /// League"`), which the caption already names, so only its years stay.
+    var seasonLabel: String { Self.seasonLabel(seasonDisplayName) }
+
+    static func seasonLabel(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard let first = trimmed.split(separator: " ").first,
+              first.first?.isNumber == true,
+              first.allSatisfy({ $0.isNumber || $0 == "-" || $0 == "/" })
+        else { return trimmed }
+        return String(first)
+    }
+
     /// Standings with no tables, or no rows in any.
     static let empty = Standings(kind: .records, seasonDisplayName: "", groups: [])
 

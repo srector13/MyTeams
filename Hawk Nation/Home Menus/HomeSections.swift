@@ -754,7 +754,7 @@ struct StandingsSection<Player: RosterPlayer>: View {
                         accent: TeamColors.accent(for: team),
                         pollRanks: pollRanks,
                         rows: rows,
-                        season: standings.seasonDisplayName,
+                        season: standings.seasonLabel,
                         footnote: isSnapshot ? snapshotNote(group: group) : nil
                     )
 
@@ -840,7 +840,7 @@ private struct FullStandingsSheet: View {
                         followedID: team.espnID,
                         accent: TeamColors.accent(for: team),
                         pollRanks: pollRanks,
-                        season: standings.seasonDisplayName
+                        season: standings.seasonLabel
                     )
                     .padding(Theme.Spacing.l)
                     .contentCard()
@@ -850,7 +850,7 @@ private struct FullStandingsSheet: View {
             }
             .background(Theme.Surface.content)
             .navigationTitle("Standings")
-            .navigationSubtitle(standings.seasonDisplayName)
+            .navigationSubtitle(standings.seasonLabel)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // Picks the table on show: filters in place, so an icon (F6).
